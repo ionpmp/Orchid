@@ -2128,15 +2128,18 @@ impl DocumentViewer {
         Ok(())
     }
 
-    /// Toggle bottom paragraph border (`w:pBdr/w:bottom`) on selected paragraphs.
+    /// Toggle bottom paragraph border (`w:pBdr/w:bottom`) or table cell box border
+    /// (`w:tcBorders`) on the current selection.
     ///
-    /// If any selected paragraph already has a bottom border, clears borders;
-    /// otherwise applies a single bottom rule.
+    /// When the caret is in a table cell, toggles all four cell edges; otherwise
+    /// toggles a bottom rule on selected paragraphs.
     ///
     /// # Errors
     ///
     /// [`ViewerError::DocumentNotOpen`].
     pub fn toggle_paragraph_border_bottom_selection(&self) -> Result<()> {
+        use crate::document::model::CELL_BORDER_ALL;
+
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
@@ -2145,18 +2148,55 @@ impl DocumentViewer {
             return Ok(());
         }
 
-        let clear = cursors
-            .iter()
-            .any(|c| paragraph_ref(doc, *c).is_some_and(|p| p.border_bottom));
-        let new_border = !clear;
+        let cell_keys: Vec<(usize, usize, usize)> = {
+            let mut keys = Vec::new();
+            for c in &cursors {
+                if let Some(path) = c.cell {
+                    let key = (c.block_idx, path.row, path.col);
+                    if !keys.contains(&key) {
+                        keys.push(key);
+                    }
+                }
+            }
+            keys
+        };
 
         let mut next = doc.blocks.clone();
         let mut changed = false;
-        for cursor in cursors {
-            if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
-                if p.border_bottom != new_border {
-                    p.border_bottom = new_border;
-                    changed = true;
+
+        if !cell_keys.is_empty() {
+            let clear = cell_keys.iter().any(|&(bi, row, col)| {
+                matches!(
+                    next.get(bi),
+                    Some(Block::Table(t))
+                        if t.rows
+                            .get(row)
+                            .and_then(|r| r.cells.get(col))
+                            .is_some_and(|c| c.border_sides != 0)
+                )
+            });
+            let new_sides = if clear { 0 } else { CELL_BORDER_ALL };
+            for (bi, row, col) in cell_keys {
+                if let Some(Block::Table(t)) = next.get_mut(bi) {
+                    if let Some(cell) = t.rows.get_mut(row).and_then(|r| r.cells.get_mut(col)) {
+                        if cell.border_sides != new_sides {
+                            cell.border_sides = new_sides;
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        } else {
+            let clear = cursors
+                .iter()
+                .any(|c| paragraph_ref(doc, *c).is_some_and(|p| p.border_bottom));
+            let new_border = !clear;
+            for cursor in cursors {
+                if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
+                    if p.border_bottom != new_border {
+                        p.border_bottom = new_border;
+                        changed = true;
+                    }
                 }
             }
         }
@@ -3518,7 +3558,18 @@ impl Viewer for DocumentViewer {
         } else {
             para.is_some_and(|p| p.shade_fill.is_some())
         };
-        let border_bottom = para.is_some_and(|p| p.border_bottom);
+        let border_bottom = if let Some(path) = caret.cell {
+            matches!(
+                doc.blocks.get(caret.block_idx),
+                Some(Block::Table(t))
+                    if t.rows
+                        .get(path.row)
+                        .and_then(|r| r.cells.get(path.col))
+                        .is_some_and(|c| c.border_sides != 0)
+            )
+        } else {
+            para.is_some_and(|p| p.border_bottom)
+        };
 
         let source_mode = *self.source_mode.read();
         let (sel_start, sel_end) = {

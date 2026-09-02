@@ -83,6 +83,24 @@ fn pick_with_filter(label: &str, extensions: &[&str]) -> Option<std::path::PathB
     Some(path)
 }
 
+/// Native save dialog for an M3U playlist file.
+#[must_use]
+pub fn save_m3u_file(default_name: &str) -> Option<std::path::PathBuf> {
+    let mut dialog = rfd::FileDialog::new()
+        .set_file_name(default_name)
+        .add_filter("M3U playlist", &["m3u", "m3u8"]);
+    if let Some(dir) = prefs::load().last_folder {
+        if dir.is_dir() {
+            dialog = dialog.set_directory(dir);
+        }
+    }
+    let path = dialog.save_file()?;
+    if let Some(parent) = path.parent() {
+        prefs::store_last_folder(parent);
+    }
+    Some(path)
+}
+
 /// Extensions treated as audio or video.
 pub const MEDIA_FILE_EXTENSIONS: &[&str] = &[
     "mp4", "mkv", "webm", "avi", "mov", "wmv", "m4v", "mpeg", "mpg", "mp3", "wav", "flac", "ogg",

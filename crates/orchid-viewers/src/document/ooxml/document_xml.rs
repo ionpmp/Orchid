@@ -10,7 +10,8 @@ use quick_xml::writer::Writer;
 use crate::document::model::{
     Alignment, Block, Bookmark, CellImage, Document, Hyperlink, ImageFormat, InlineImage,
     LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell,
-    TableRow, VMerge,
+    TableRow, VMerge, CELL_BORDER_BOTTOM, CELL_BORDER_LEFT, CELL_BORDER_RIGHT,
+    CELL_BORDER_TOP,
 };
 use crate::document::ooxml::numbering::NumberingDefs;
 use crate::document::ooxml::styles::StyleDefaults;
@@ -588,6 +589,7 @@ fn parse_table(
     let mut current_cell: Option<TableCell> = None;
     // First-row `w:tcW` widths used when `w:tblGrid` is absent.
     let mut tcw_fallback: Vec<u32> = Vec::new();
+    let mut in_tc_borders = false;
 
     loop {
         match reader.read_event_into(buf) {
@@ -637,6 +639,27 @@ fn parse_table(
                             apply_cell_shading(&e, cell);
                         }
                     }
+                    "tcBorders" => in_tc_borders = true,
+                    "top" if in_tc_borders => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_cell_border_side(cell, CELL_BORDER_TOP, &e);
+                        }
+                    }
+                    "left" if in_tc_borders => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_cell_border_side(cell, CELL_BORDER_LEFT, &e);
+                        }
+                    }
+                    "bottom" if in_tc_borders => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_cell_border_side(cell, CELL_BORDER_BOTTOM, &e);
+                        }
+                    }
+                    "right" if in_tc_borders => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_cell_border_side(cell, CELL_BORDER_RIGHT, &e);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -670,12 +693,33 @@ fn parse_table(
                             apply_cell_shading(&e, cell);
                         }
                     }
+                    "top" if in_tc_borders => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_cell_border_side(cell, CELL_BORDER_TOP, &e);
+                        }
+                    }
+                    "left" if in_tc_borders => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_cell_border_side(cell, CELL_BORDER_LEFT, &e);
+                        }
+                    }
+                    "bottom" if in_tc_borders => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_cell_border_side(cell, CELL_BORDER_BOTTOM, &e);
+                        }
+                    }
+                    "right" if in_tc_borders => {
+                        if let Some(ref mut cell) = current_cell {
+                            apply_cell_border_side(cell, CELL_BORDER_RIGHT, &e);
+                        }
+                    }
                     _ => {}
                 }
             }
             Ok(Event::End(e)) => {
                 let local = local_name(e.name().as_ref());
                 match local.as_str() {
+                    "tcBorders" => in_tc_borders = false,
                     "tc" => {
                         if let (Some(ref mut row), Some(cell)) =
                             (current_row.as_mut(), current_cell.take())
@@ -1142,6 +1186,20 @@ fn apply_cell_shading(e: &BytesStart<'_>, cell: &mut TableCell) {
         .and_then(|v| parse_rgb(&v));
 }
 
+fn border_side_visible(e: &BytesStart<'_>) -> bool {
+    let val = attr_val(e, "val").unwrap_or_else(|| "single".to_string());
+    !matches!(
+        val.to_ascii_lowercase().as_str(),
+        "nil" | "none" | ""
+    )
+}
+
+fn apply_cell_border_side(cell: &mut TableCell, side_bit: u8, e: &BytesStart<'_>) {
+    if border_side_visible(e) {
+        cell.border_sides |= side_bit;
+    }
+}
+
 fn apply_paragraph_border_bottom(e: &BytesStart<'_>, p: &mut Paragraph) {
     let val = attr_val(e, "val").unwrap_or_else(|| "single".to_string());
     p.border_bottom = !matches!(
@@ -1327,6 +1385,40 @@ fn parse_tc_width_dxa(e: &BytesStart<'_>) -> Option<u32> {
         .filter(|&w| w > 0)
 }
 
+fn write_tc_border_side(writer: &mut Writer<Cursor<Vec<u8>>>, tag: &str) -> Result<()> {
+    let mut el = BytesStart::new(format!("w:{tag}"));
+    el.push_attribute(("w:val", "single"));
+    el.push_attribute(("w:sz", "4"));
+    el.push_attribute(("w:space", "0"));
+    el.push_attribute(("w:color", "auto"));
+    writer
+        .write_event(Event::Empty(el))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    Ok(())
+}
+
+fn write_tc_borders(writer: &mut Writer<Cursor<Vec<u8>>>, sides: u8) -> Result<()> {
+    writer
+        .write_event(Event::Start(BytesStart::new("w:tcBorders")))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    if sides & CELL_BORDER_TOP != 0 {
+        write_tc_border_side(writer, "top")?;
+    }
+    if sides & CELL_BORDER_LEFT != 0 {
+        write_tc_border_side(writer, "left")?;
+    }
+    if sides & CELL_BORDER_BOTTOM != 0 {
+        write_tc_border_side(writer, "bottom")?;
+    }
+    if sides & CELL_BORDER_RIGHT != 0 {
+        write_tc_border_side(writer, "right")?;
+    }
+    writer
+        .write_event(Event::End(BytesEnd::new("w:tcBorders")))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    Ok(())
+}
+
 fn write_table(
     writer: &mut Writer<Cursor<Vec<u8>>>,
     t: &Table,
@@ -1362,7 +1454,8 @@ fn write_table(
             let need_tc_pr = width.is_some()
                 || cell.grid_span.is_some()
                 || cell.v_merge.is_some()
-                || cell.shade_fill.is_some();
+                || cell.shade_fill.is_some()
+                || cell.border_sides != 0;
             if need_tc_pr {
                 writer
                     .write_event(Event::Start(BytesStart::new("w:tcPr")))
@@ -1393,6 +1486,9 @@ fn write_table(
                     writer
                         .write_event(Event::Empty(vm_el))
                         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+                }
+                if cell.border_sides != 0 {
+                    write_tc_borders(writer, cell.border_sides)?;
                 }
                 if let Some([r, g, b]) = cell.shade_fill {
                     let mut shd = BytesStart::new("w:shd");
@@ -2250,6 +2346,59 @@ mod tests {
         assert!(
             text.contains("w:shd") && text.contains("AABBCC"),
             "missing cell shade: {text}"
+        );
+    }
+
+    #[test]
+    fn parse_and_write_cell_borders() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:tbl>
+              <w:tr>
+                <w:tc>
+                  <w:tcPr>
+                    <w:tcBorders>
+                      <w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+                      <w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+                      <w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+                      <w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+                    </w:tcBorders>
+                  </w:tcPr>
+                  <w:p><w:r><w:t>Box</w:t></w:r></w:p>
+                </w:tc>
+                <w:tc>
+                  <w:p><w:r><w:t>Plain</w:t></w:r></w:p>
+                </w:tc>
+              </w:tr>
+            </w:tbl>
+          </w:body>
+        </w:document>"#;
+        let (blocks, _, _, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        let Block::Table(t) = &blocks[0] else {
+            panic!("expected table");
+        };
+        assert_eq!(
+            t.rows[0].cells[0].border_sides,
+            CELL_BORDER_TOP | CELL_BORDER_LEFT | CELL_BORDER_BOTTOM | CELL_BORDER_RIGHT
+        );
+        assert_eq!(t.rows[0].cells[1].border_sides, 0);
+        let doc = Document {
+            blocks,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:tcBorders") && text.contains("w:top") && text.contains("w:bottom"),
+            "missing cell borders: {text}"
         );
     }
 

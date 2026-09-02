@@ -209,7 +209,21 @@ pub struct TableCell {
     pub v_merge: Option<VMerge>,
     /// Cell background fill (`w:tcPr/w:shd/@w:fill` as RGB). `None` = no shading.
     pub shade_fill: Option<[u8; 3]>,
+    /// Visible cell borders (`w:tcBorders`); bit0=top, bit1=left, bit2=bottom, bit3=right.
+    pub border_sides: u8,
 }
+
+/// `w:tcBorders` side flags for [`TableCell::border_sides`].
+pub const CELL_BORDER_TOP: u8 = 1;
+/// Left edge.
+pub const CELL_BORDER_LEFT: u8 = 2;
+/// Bottom edge.
+pub const CELL_BORDER_BOTTOM: u8 = 4;
+/// Right edge.
+pub const CELL_BORDER_RIGHT: u8 = 8;
+/// All four edges (box border).
+pub const CELL_BORDER_ALL: u8 =
+    CELL_BORDER_TOP | CELL_BORDER_LEFT | CELL_BORDER_BOTTOM | CELL_BORDER_RIGHT;
 
 impl TableCell {
     /// Cell with paragraphs and no images.
@@ -221,6 +235,7 @@ impl TableCell {
             grid_span: None,
             v_merge: None,
             shade_fill: None,
+            border_sides: 0,
         }
     }
 }

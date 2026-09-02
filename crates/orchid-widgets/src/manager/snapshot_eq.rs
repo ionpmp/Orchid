@@ -143,6 +143,9 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && a.bold == b.bold
                 && a.italic == b.italic
                 && a.underline == b.underline
+                && a.highlight == b.highlight
+                && a.shade == b.shade
+                && a.border_bottom == b.border_bottom
                 && a.font_size_pt.to_bits() == b.font_size_pt.to_bits()
                 && a.font_family == b.font_family
                 && a.color_rgb == b.color_rgb

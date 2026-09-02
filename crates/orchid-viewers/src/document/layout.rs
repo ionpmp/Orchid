@@ -805,6 +805,7 @@ impl DocumentLayout {
                     w,
                     h,
                     shade_fill: cell.shade_fill,
+                    border_sides: cell.border_sides,
                 });
                 let x_pad = x0 + pad;
                 let mut y = y0 + pad;
@@ -1357,7 +1358,27 @@ fn paint_table_grid(
         if let Some([r, g, b]) = rect.shade_fill {
             fill_rect(pixels, buf_w, buf_h, cx, cy, cw, ch, [r, g, b, 255]);
         }
-        fill_rect(pixels, buf_w, buf_h, cx, cy, cw, 1, TABLE_GRID_COLOR);
+        let top = if rect.border_sides & crate::document::model::CELL_BORDER_TOP != 0 {
+            PARA_BORDER_COLOR
+        } else {
+            TABLE_GRID_COLOR
+        };
+        let bottom = if rect.border_sides & crate::document::model::CELL_BORDER_BOTTOM != 0 {
+            PARA_BORDER_COLOR
+        } else {
+            TABLE_GRID_COLOR
+        };
+        let left = if rect.border_sides & crate::document::model::CELL_BORDER_LEFT != 0 {
+            PARA_BORDER_COLOR
+        } else {
+            TABLE_GRID_COLOR
+        };
+        let right = if rect.border_sides & crate::document::model::CELL_BORDER_RIGHT != 0 {
+            PARA_BORDER_COLOR
+        } else {
+            TABLE_GRID_COLOR
+        };
+        fill_rect(pixels, buf_w, buf_h, cx, cy, cw, 1, top);
         fill_rect(
             pixels,
             buf_w,
@@ -1366,9 +1387,9 @@ fn paint_table_grid(
             cy.saturating_add(ch.saturating_sub(1)),
             cw,
             1,
-            TABLE_GRID_COLOR,
+            bottom,
         );
-        fill_rect(pixels, buf_w, buf_h, cx, cy, 1, ch, TABLE_GRID_COLOR);
+        fill_rect(pixels, buf_w, buf_h, cx, cy, 1, ch, left);
         fill_rect(
             pixels,
             buf_w,
@@ -1377,7 +1398,7 @@ fn paint_table_grid(
             cy,
             1,
             ch,
-            TABLE_GRID_COLOR,
+            right,
         );
     }
 }
@@ -1488,6 +1509,7 @@ struct TableCellRect {
     w: f32,
     h: f32,
     shade_fill: Option<[u8; 3]>,
+    border_sides: u8,
 }
 
 struct MeasuredTable {
@@ -2444,6 +2466,36 @@ mod tests {
         assert!(
             bytes[i] > 200 && bytes[i + 1] < 40 && bytes[i + 2] < 40,
             "expected red cell shade at ({vx},{vy}) got rgba({},{},{},{})",
+            bytes[i],
+            bytes[i + 1],
+            bytes[i + 2],
+            bytes[i + 3]
+        );
+    }
+
+    #[test]
+    fn table_cell_border_paints_stronger_edges() {
+        use crate::document::model::CELL_BORDER_ALL;
+
+        let mut dl = DocumentLayout::new();
+        let mut doc = table_2x2_doc();
+        if let Block::Table(t) = &mut doc.blocks[0] {
+            t.rows[0].cells[0].border_sides = CELL_BORDER_ALL;
+        }
+        let content_w = 400.0;
+        let (bytes, w, h) = dl.render_document(&doc, content_w);
+        assert!(w > 100 && h > 40);
+        let s = PREVIEW_RENDER_SCALE;
+        let insets = PreviewInsets::default_letter();
+        // Top edge of bordered cell (first row).
+        let vx = ((insets.left + 20.0) * s).round() as u32;
+        let vy = ((insets.top + 2.0) * s).round() as u32;
+        let i = ((vy as usize) * (w as usize) + (vx as usize)) * 4;
+        assert!(
+            bytes[i] == PARA_BORDER_COLOR[0]
+                && bytes[i + 1] == PARA_BORDER_COLOR[1]
+                && bytes[i + 2] == PARA_BORDER_COLOR[2],
+            "expected strong cell border at ({vx},{vy}) got rgba({},{},{},{})",
             bytes[i],
             bytes[i + 1],
             bytes[i + 2],
