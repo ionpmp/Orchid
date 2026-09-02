@@ -170,21 +170,29 @@ impl PlayQueue {
         }
     }
 
-    /// Jump to the first track in the queue list (display order).
+    /// Jump to the first track in display / play order.
     pub fn jump_first(&mut self) -> bool {
         if self.paths.is_empty() {
             return false;
         }
-        self.index = 0;
+        if self.shuffle && !self.order.is_empty() {
+            self.index = self.order[0];
+        } else {
+            self.index = 0;
+        }
         true
     }
 
-    /// Jump to the last track in the queue list (display order).
+    /// Jump to the last track in display / play order.
     pub fn jump_last(&mut self) -> bool {
         if self.paths.is_empty() {
             return false;
         }
-        self.index = self.paths.len() - 1;
+        if self.shuffle && !self.order.is_empty() {
+            self.index = *self.order.last().unwrap_or(&0);
+        } else {
+            self.index = self.paths.len() - 1;
+        }
         true
     }
 
@@ -244,8 +252,19 @@ impl PlayQueue {
         was_current
     }
 
-    /// Swap `path` with the previous entry. Keeps the current-track index on the same path.
+    /// Swap `path` with the previous entry in display order.
+    /// Keeps the current-track index on the same path.
     pub fn move_up(&mut self, path: &str) -> bool {
+        if self.shuffle && self.order.len() == self.paths.len() {
+            let Some(pos) = self.display_pos_of_path(path) else {
+                return false;
+            };
+            if pos == 0 {
+                return false;
+            }
+            self.order.swap(pos - 1, pos);
+            return true;
+        }
         let Some(i) = self.paths.iter().position(|p| p == path) else {
             return false;
         };
@@ -262,8 +281,19 @@ impl PlayQueue {
         true
     }
 
-    /// Swap `path` with the next entry. Keeps the current-track index on the same path.
+    /// Swap `path` with the next entry in display order.
+    /// Keeps the current-track index on the same path.
     pub fn move_down(&mut self, path: &str) -> bool {
+        if self.shuffle && self.order.len() == self.paths.len() {
+            let Some(pos) = self.display_pos_of_path(path) else {
+                return false;
+            };
+            if pos + 1 >= self.order.len() {
+                return false;
+            }
+            self.order.swap(pos, pos + 1);
+            return true;
+        }
         let Some(i) = self.paths.iter().position(|p| p == path) else {
             return false;
         };
@@ -280,8 +310,24 @@ impl PlayQueue {
         true
     }
 
-    /// Move `path` to `new_index` (0-based final index). Keeps the current-track path stable.
+    /// Move `path` to `new_index` in display order. Keeps the current-track path stable.
     pub fn move_to(&mut self, path: &str, new_index: usize) -> bool {
+        if self.shuffle && self.order.len() == self.paths.len() {
+            let Some(old) = self.display_pos_of_path(path) else {
+                return false;
+            };
+            if self.order.is_empty() {
+                return false;
+            }
+            let new_index = new_index.min(self.order.len() - 1);
+            if old == new_index {
+                return false;
+            }
+            let item = self.order.remove(old);
+            let dest = new_index.min(self.order.len());
+            self.order.insert(dest, item);
+            return true;
+        }
         let Some(old) = self.paths.iter().position(|p| p == path) else {
             return false;
         };
@@ -329,6 +375,29 @@ impl PlayQueue {
 
     pub fn cycle_repeat(&mut self) {
         self.repeat = self.repeat.cycle();
+    }
+
+    /// Paths in UI / play order (shuffle permutation when shuffle is on).
+    #[must_use]
+    pub fn display_paths(&self) -> Vec<String> {
+        if self.shuffle && self.order.len() == self.paths.len() && !self.order.is_empty() {
+            self.order
+                .iter()
+                .filter_map(|&i| self.paths.get(i).cloned())
+                .collect()
+        } else {
+            self.paths.clone()
+        }
+    }
+
+    fn display_pos_of_path(&self, path: &str) -> Option<usize> {
+        if self.shuffle && self.order.len() == self.paths.len() {
+            self.order
+                .iter()
+                .position(|&i| self.paths.get(i).map(String::as_str) == Some(path))
+        } else {
+            self.paths.iter().position(|p| p == path)
+        }
     }
 }
 
@@ -454,6 +523,44 @@ mod tests {
         assert!(q.reshuffle_remaining());
         assert_eq!(q.order[0], 2);
         assert_eq!(q.order.len(), 4);
+    }
+
+    #[test]
+    fn display_paths_follow_shuffle_order() {
+        let mut q = PlayQueue::from_paths(
+            vec!["a".into(), "b".into(), "c".into()],
+            1,
+            true,
+            RepeatMode::Off,
+        );
+        assert_eq!(q.order[0], 1);
+        assert_eq!(q.display_paths()[0], "b");
+        assert_eq!(q.display_paths().len(), 3);
+    }
+
+    #[test]
+    fn move_in_shuffle_reorders_play_order_not_paths() {
+        let mut q = PlayQueue::from_paths(
+            vec!["a".into(), "b".into(), "c".into(), "d".into()],
+            0,
+            true,
+            RepeatMode::Off,
+        );
+        // Force a known order: current (0) first, then 1,2,3
+        q.order = vec![0, 1, 2, 3];
+        let paths_before = q.paths.clone();
+        assert!(q.move_down("a"));
+        assert_eq!(q.paths, paths_before);
+        assert_eq!(q.order, vec![1, 0, 2, 3]);
+        assert_eq!(q.current(), Some("a"));
+        assert_eq!(q.display_paths(), vec!["b", "a", "c", "d"]);
+        assert!(q.move_to("d", 0));
+        assert_eq!(q.order, vec![3, 1, 0, 2]);
+        assert_eq!(q.display_paths()[0], "d");
+        assert!(q.jump_first());
+        assert_eq!(q.current(), Some("d"));
+        assert!(q.jump_last());
+        assert_eq!(q.current(), Some("c"));
     }
 
     #[test]

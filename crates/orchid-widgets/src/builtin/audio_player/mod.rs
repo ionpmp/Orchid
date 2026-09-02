@@ -879,7 +879,7 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             h.publish();
         }
         "save-queue-as-playlist" => {
-            let paths = h.queue.read().paths.clone();
+            let paths = h.queue.read().display_paths();
             if paths.is_empty() {
                 return;
             }
@@ -1045,13 +1045,13 @@ fn browse_track_paths(h: &AudioHandle) -> Vec<String> {
     if cfg.browse_tab == BrowseTab::NowPlaying {
         let search = cfg.search_query.trim().to_lowercase();
         let q = h.queue.read();
-        q.paths
-            .iter()
+        q.display_paths()
+            .into_iter()
             .filter_map(|p| {
-                lib.find_by_path(p)
+                lib.find_by_path(&p)
                     .map(library::track_row)
                     .or_else(|| {
-                        let stem = PathBuf::from(p)
+                        let stem = PathBuf::from(&p)
                             .file_stem()
                             .map(|s| s.to_string_lossy().into_owned())
                             .unwrap_or_else(|| p.clone());
@@ -1060,7 +1060,7 @@ fn browse_track_paths(h: &AudioHandle) -> Vec<String> {
                             title: stem,
                             artist: String::new(),
                             album: String::new(),
-                            subtitle: p.clone(),
+                            subtitle: p,
                             duration_label: String::new(),
                         })
                     })
@@ -1153,7 +1153,7 @@ fn export_m3u(instance_id: Uuid) {
     let cfg = h.config.read().clone();
     let lib = h.library.read();
     let (default_name, paths) = if cfg.browse_tab == BrowseTab::NowPlaying {
-        let paths = h.queue.read().paths.clone();
+        let paths = h.queue.read().display_paths();
         ("queue.m3u".into(), paths)
     } else if cfg.browse_tab == BrowseTab::Playlists {
         if cfg.active_playlist_id.is_empty() {
@@ -1436,13 +1436,13 @@ impl AudioPlayerWidget {
             library::BrowseResult {
                 groups: Vec::new(),
                 tracks: q
-                    .paths
-                    .iter()
+                    .display_paths()
+                    .into_iter()
                     .filter_map(|p| {
-                        lib.find_by_path(p)
+                        lib.find_by_path(&p)
                             .map(library::track_row)
                             .or_else(|| {
-                                let stem = PathBuf::from(p)
+                                let stem = PathBuf::from(&p)
                                     .file_stem()
                                     .map(|s| s.to_string_lossy().into_owned())
                                     .unwrap_or_else(|| p.clone());
@@ -1451,7 +1451,7 @@ impl AudioPlayerWidget {
                                     title: stem,
                                     artist: String::new(),
                                     album: String::new(),
-                                    subtitle: p.clone(),
+                                    subtitle: p,
                                     duration_label: String::new(),
                                 })
                             })
