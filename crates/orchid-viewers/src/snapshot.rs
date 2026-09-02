@@ -60,6 +60,8 @@ pub struct DocumentSnapshot {
     pub highlight: bool,
     /// Paragraph shading (`w:shd`) active at the caret.
     pub shade: bool,
+    /// Bottom paragraph border (`w:pBdr/w:bottom`) active at the caret.
+    pub border_bottom: bool,
     pub superscript: bool,
     pub subscript: bool,
     /// Font size in points at the caret (`0` = document default).

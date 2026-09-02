@@ -296,6 +296,7 @@ impl DocumentLayout {
                         page_break_rule_y: rule_y,
                         shade_fill: p.shade_fill,
                         shade_w: max_w,
+                        border_bottom: p.border_bottom,
                     });
                     plain_offset += body_len;
                     let after = (twips_to_css_px(p.space_after_twips) * scale).max(para_gap);
@@ -332,6 +333,7 @@ impl DocumentLayout {
                         page_break_rule_y: None,
                         shade_fill: None,
                         shade_w: 0.0,
+                        border_bottom: false,
                     });
                     total_h += h + para_gap;
                 }
@@ -520,6 +522,32 @@ impl DocumentLayout {
                 height,
                 insets.left + item.x0 + item.indent_px,
                 insets.top + item.y0,
+            );
+        }
+
+        for item in &layouts {
+            if item.is_image || !item.border_bottom {
+                continue;
+            }
+            let body_h = if item.layout.is_empty() {
+                16.0 * scale
+            } else {
+                item.layout.height().max(16.0 * scale)
+            };
+            let y = (insets.top + item.y0 + body_h).round() as i32;
+            if y < 0 || y as u32 >= height {
+                continue;
+            }
+            let x0 = (insets.left + item.x0).round() as i32;
+            let x1 = (insets.left + item.x0 + item.shade_w).round() as i32;
+            paint_solid_h_line(
+                &mut pixels,
+                width,
+                height,
+                x0,
+                x1,
+                y,
+                PARA_BORDER_COLOR,
             );
         }
 
@@ -796,6 +824,7 @@ impl DocumentLayout {
                             indent_px,
                             shade_fill,
                             shade_w,
+                            border_bottom,
                             ..
                         } => {
                             layouts.push(LaidBlock {
@@ -813,6 +842,7 @@ impl DocumentLayout {
                                 page_break_rule_y: None,
                                 shade_fill,
                                 shade_w,
+                                border_bottom,
                             });
                         }
                         CellItemLayout::Image {
@@ -836,6 +866,7 @@ impl DocumentLayout {
                                 page_break_rule_y: None,
                                 shade_fill: None,
                                 shade_w: 0.0,
+                                border_bottom: false,
                             });
                         }
                     }
@@ -1097,6 +1128,7 @@ impl DocumentLayout {
                 height: h,
                 shade_fill: p.shade_fill,
                 shade_w: inner_w,
+                border_bottom: p.border_bottom,
             });
             *plain_offset += body_len;
             let after_text = *plain_offset;
@@ -1389,6 +1421,8 @@ struct LaidBlock {
     shade_fill: Option<[u8; 3]>,
     /// Content-relative width available for paragraph shade (body column or cell).
     shade_w: f32,
+    /// Bottom paragraph border (`w:pBdr/w:bottom`).
+    border_bottom: bool,
 }
 
 enum CellItemLayout {
@@ -1401,6 +1435,7 @@ enum CellItemLayout {
         height: f32,
         shade_fill: Option<[u8; 3]>,
         shade_w: f32,
+        border_bottom: bool,
     },
     Image {
         /// Caret offset when the image is clicked (end of preceding text).
@@ -1471,6 +1506,7 @@ struct MeasuredRow {
 const TABLE_CELL_PAD: f32 = 4.0;
 const TABLE_CELL_PARA_GAP: f32 = 2.0;
 const TABLE_GRID_COLOR: [u8; 4] = [180, 180, 188, 255];
+const PARA_BORDER_COLOR: [u8; 4] = [120, 120, 128, 255];
 
 const MAX_PREVIEW_IMAGE_H: u32 = 240;
 
@@ -2141,6 +2177,32 @@ fn paint_dashed_h_line(
     }
 }
 
+fn paint_solid_h_line(
+    pixels: &mut [u8],
+    buf_w: u32,
+    buf_h: u32,
+    x0: i32,
+    x1: i32,
+    y: i32,
+    rgba: [u8; 4],
+) {
+    if y < 0 || (y as u32) >= buf_h {
+        return;
+    }
+    let lo = x0.max(0) as u32;
+    let hi = x1.max(0) as u32;
+    let hi = hi.min(buf_w);
+    for px in lo..hi {
+        let i = ((y as usize) * (buf_w as usize) + (px as usize)) * 4;
+        if i + 3 < pixels.len() {
+            pixels[i] = rgba[0];
+            pixels[i + 1] = rgba[1];
+            pixels[i + 2] = rgba[2];
+            pixels[i + 3] = rgba[3];
+        }
+    }
+}
+
 fn fill_rect(
     pixels: &mut [u8],
     buf_w: u32,
@@ -2324,6 +2386,43 @@ mod tests {
             })],
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn paragraph_border_paints_preview_line() {
+        let mut dl = DocumentLayout::new();
+        let mut doc = Document::default();
+        doc.blocks.push(Block::Paragraph(Paragraph {
+            runs: vec![Run {
+                text: "Line".into(),
+                ..Default::default()
+            }],
+            border_bottom: true,
+            ..Default::default()
+        }));
+        let content_w = 400.0;
+        let (bytes, w, h) = dl.render_document(&doc, content_w);
+        assert!(w > 100 && h > 40);
+        let s = PREVIEW_RENDER_SCALE;
+        let insets = PreviewInsets::default_letter();
+        let x_lo = ((insets.left + 8.0) * s).round() as u32;
+        let x_hi = ((insets.left + content_w - 8.0) * s).round() as u32;
+        let y_lo = ((insets.top + 8.0) * s).round() as u32;
+        let y_hi = ((insets.top + 80.0) * s).round() as u32;
+        let mut found = false;
+        'scan: for vy in y_lo..y_hi.min(h) {
+            for vx in x_lo..x_hi.min(w) {
+                let i = ((vy as usize) * (w as usize) + (vx as usize)) * 4;
+                if bytes[i] == PARA_BORDER_COLOR[0]
+                    && bytes[i + 1] == PARA_BORDER_COLOR[1]
+                    && bytes[i + 2] == PARA_BORDER_COLOR[2]
+                {
+                    found = true;
+                    break 'scan;
+                }
+            }
+        }
+        assert!(found, "expected paragraph border pixels in preview band");
     }
 
     #[test]

@@ -146,6 +146,8 @@ pub struct Paragraph {
     pub indent_right_twips: u32,
     /// Paragraph background fill (`w:shd/@w:fill` as RGB). `None` = no shading.
     pub shade_fill: Option<[u8; 3]>,
+    /// Bottom paragraph border (`w:pBdr/w:bottom`).
+    pub border_bottom: bool,
     /// Unsupported child elements preserved for round-trip.
     pub unsupported: Vec<OpaqueXmlNode>,
 }

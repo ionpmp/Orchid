@@ -2128,6 +2128,49 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Toggle bottom paragraph border (`w:pBdr/w:bottom`) on selected paragraphs.
+    ///
+    /// If any selected paragraph already has a bottom border, clears borders;
+    /// otherwise applies a single bottom rule.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn toggle_paragraph_border_bottom_selection(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let cursors = paragraph_cursors_in_selection(doc, sel);
+        if cursors.is_empty() {
+            return Ok(());
+        }
+
+        let clear = cursors
+            .iter()
+            .any(|c| paragraph_ref(doc, *c).is_some_and(|p| p.border_bottom));
+        let new_border = !clear;
+
+        let mut next = doc.blocks.clone();
+        let mut changed = false;
+        for cursor in cursors {
+            if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
+                if p.border_bottom != new_border {
+                    p.border_bottom = new_border;
+                    changed = true;
+                }
+            }
+        }
+
+        if !changed {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Bump left indent (`w:ind/@w:left`) on selected paragraphs.
     ///
     /// Typical steps: `±720` (0.5″). Values clamp to `0..=2880` (0–2″).
@@ -2610,6 +2653,7 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     indent_first_line_twips: prev.indent_first_line_twips,
                     indent_right_twips: prev.indent_right_twips,
                     shade_fill: prev.shade_fill,
+                    border_bottom: prev.border_bottom,
                     unsupported: prev.unsupported.clone(),
                 })
             } else {
@@ -3029,6 +3073,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         indent_first_line_twips: p.indent_first_line_twips,
         indent_right_twips: p.indent_right_twips,
         shade_fill: p.shade_fill,
+        border_bottom: p.border_bottom,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -3046,6 +3091,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         indent_first_line_twips: p.indent_first_line_twips,
         indent_right_twips: p.indent_right_twips,
         shade_fill: p.shade_fill,
+        border_bottom: p.border_bottom,
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -3089,6 +3135,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         indent_first_line_twips: p.indent_first_line_twips,
         indent_right_twips: p.indent_right_twips,
         shade_fill: p.shade_fill,
+        border_bottom: p.border_bottom,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -3106,6 +3153,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         indent_first_line_twips: p.indent_first_line_twips,
         indent_right_twips: p.indent_right_twips,
         shade_fill: p.shade_fill,
+        border_bottom: p.border_bottom,
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -3202,6 +3250,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
         indent_first_line_twips: start_p.indent_first_line_twips,
         indent_right_twips: start_p.indent_right_twips,
         shade_fill: start_p.shade_fill,
+        border_bottom: start_p.border_bottom,
         unsupported: start_p.unsupported.clone(),
     };
     let mut new_paras = Vec::with_capacity(paras.len());
@@ -3290,6 +3339,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
         indent_first_line_twips: start_p.indent_first_line_twips,
         indent_right_twips: start_p.indent_right_twips,
         shade_fill: start_p.shade_fill,
+        border_bottom: start_p.border_bottom,
         unsupported: start_p.unsupported.clone(),
     };
     let mut blocks = Vec::with_capacity(doc.blocks.len());
@@ -3468,6 +3518,7 @@ impl Viewer for DocumentViewer {
         } else {
             para.is_some_and(|p| p.shade_fill.is_some())
         };
+        let border_bottom = para.is_some_and(|p| p.border_bottom);
 
         let source_mode = *self.source_mode.read();
         let (sel_start, sel_end) = {
@@ -3514,6 +3565,7 @@ impl Viewer for DocumentViewer {
             strikethrough,
             highlight,
             shade,
+            border_bottom,
             superscript,
             subscript,
             font_size_pt,
