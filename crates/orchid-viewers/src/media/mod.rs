@@ -101,6 +101,12 @@ pub fn save_m3u_file(default_name: &str) -> Option<std::path::PathBuf> {
     Some(path)
 }
 
+/// Native open dialog for an M3U / M3U8 playlist file.
+#[must_use]
+pub fn pick_m3u_file() -> Option<std::path::PathBuf> {
+    pick_with_filter("M3U playlist", &["m3u", "m3u8"])
+}
+
 /// Extensions treated as audio or video.
 pub const MEDIA_FILE_EXTENSIONS: &[&str] = &[
     "mp4", "mkv", "webm", "avi", "mov", "wmv", "m4v", "mpeg", "mpg", "mp3", "wav", "flac", "ogg",
