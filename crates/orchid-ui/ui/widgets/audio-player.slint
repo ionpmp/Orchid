@@ -673,7 +673,7 @@ export component AudioPlayerView inherits Rectangle {
                                             width: 100%; height: 100%;
                                         }
                                     }
-                                    if root.model.browse-tab != 5 : Rectangle {
+                                    if root.model.browse-tab != 5 && root.model.active-playlist-id != "__recent__" : Rectangle {
                                         width: 28px; height: 28px;
                                         TouchArea { clicked => { root.command("add-to-active-playlist:" + t.path); } }
                                         Text {
