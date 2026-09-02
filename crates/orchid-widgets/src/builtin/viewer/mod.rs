@@ -3632,6 +3632,7 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "strikethrough" | "strike" => doc.toggle_style_all('s'),
                 "all-caps" | "caps" => doc.toggle_style_all('a'),
                 "small-caps" => doc.toggle_style_all('m'),
+                "vanish" | "hidden" => doc.toggle_style_all('v'),
                 "highlight" => doc.toggle_style_all('h'),
                 "shade" => doc.toggle_paragraph_shade_selection(),
                 "border-bottom" => doc.toggle_paragraph_border_bottom_selection(),

@@ -219,7 +219,11 @@ impl DocumentLayout {
             const LINK_BLUE: [u8; 3] = [0x05, 0x63, 0xC1];
             let link_color = is_link.then_some(LINK_BLUE);
             let paint_color = run.style.color.or(link_color);
-            if run.style.highlight || paint_color.is_some() || baseline_shift != 0.0 {
+            if run.style.highlight
+                || paint_color.is_some()
+                || baseline_shift != 0.0
+                || run.style.vanish
+            {
                 let mut brush = ColorBrush::default();
                 if let Some([r, g, b]) = paint_color {
                     brush.r = r;
@@ -228,6 +232,10 @@ impl DocumentLayout {
                 }
                 brush.highlight = run.style.highlight;
                 brush.baseline_shift = baseline_shift * scale;
+                if run.style.vanish {
+                    // Keep hidden text editable/visible in Preview as a faint ghost.
+                    brush.a = 72;
+                }
                 builder.push(StyleProperty::Brush(brush), offset..end);
             }
             offset = end;

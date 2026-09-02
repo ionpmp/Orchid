@@ -191,6 +191,8 @@ pub struct RunStylePatch {
     pub all_caps: Option<bool>,
     /// Set small capitals (`w:smallCaps`).
     pub small_caps: Option<bool>,
+    /// Set hidden (`w:vanish`).
+    pub vanish: Option<bool>,
     /// Set colour (`Some(None)` clears).
     pub color: Option<Option<[u8; 3]>>,
     /// Set font family.
@@ -215,6 +217,7 @@ impl RunStylePatch {
             subscript: Some(false),
             all_caps: Some(false),
             small_caps: Some(false),
+            vanish: Some(false),
             color: Some(None),
             font_family: Some(None),
             font_size_pt: Some(None),
@@ -256,6 +259,9 @@ impl RunStylePatch {
         }
         if let Some(v) = self.small_caps {
             style.small_caps = v;
+        }
+        if let Some(v) = self.vanish {
+            style.vanish = v;
         }
         if let Some(ref c) = self.color {
             style.color = *c;

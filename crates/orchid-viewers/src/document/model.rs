@@ -35,6 +35,8 @@ pub struct RunStyle {
     /// Small capitals (`w:smallCaps`); stored text unchanged, preview uppercases
     /// at a slightly reduced size when [`Self::all_caps`] is off.
     pub small_caps: bool,
+    /// Hidden text (`w:vanish`); still editable, preview draws faded.
+    pub vanish: bool,
     /// RGB colour (`None` = theme/default).
     pub color: Option<[u8; 3]>,
     /// Font family name.

@@ -741,6 +741,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         strikethrough: false,
         all_caps: false,
         small_caps: false,
+        vanish: false,
         highlight: false,
         shade: false,
         border_bottom: false,
@@ -776,6 +777,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         strikethrough_label: locale.tr("viewer-document-strikethrough").into(),
         all_caps_label: locale.tr("viewer-document-all-caps").into(),
         small_caps_label: locale.tr("viewer-document-small-caps").into(),
+        vanish_label: locale.tr("viewer-document-vanish").into(),
         highlight_label: locale.tr("viewer-document-highlight").into(),
         shade_label: locale.tr("viewer-document-shade").into(),
         border_bottom_label: locale.tr("viewer-document-border-bottom").into(),
@@ -801,6 +803,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         tip_strikethrough: locale.tr("viewer-document-tip-strikethrough").into(),
         tip_all_caps: locale.tr("viewer-document-tip-all-caps").into(),
         tip_small_caps: locale.tr("viewer-document-tip-small-caps").into(),
+        tip_vanish: locale.tr("viewer-document-tip-vanish").into(),
         tip_highlight: locale.tr("viewer-document-tip-highlight").into(),
         tip_shade: locale.tr("viewer-document-tip-shade").into(),
         tip_border_bottom: locale.tr("viewer-document-tip-border-bottom").into(),
@@ -1062,6 +1065,7 @@ fn build_document_snapshot(
     model.strikethrough = s.strikethrough;
     model.all_caps = s.all_caps;
     model.small_caps = s.small_caps;
+    model.vanish = s.vanish;
     model.highlight = s.highlight;
     model.shade = s.shade;
     model.border_bottom = s.border_bottom;

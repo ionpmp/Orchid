@@ -62,6 +62,8 @@ pub struct DocumentSnapshot {
     pub all_caps: bool,
     /// Small capitals (`w:smallCaps`) at the caret.
     pub small_caps: bool,
+    /// Hidden text (`w:vanish`) at the caret.
+    pub vanish: bool,
     /// Paragraph shading (`w:shd`) active at the caret.
     pub shade: bool,
     /// Bottom paragraph border (`w:pBdr/w:bottom`) active at the caret.
