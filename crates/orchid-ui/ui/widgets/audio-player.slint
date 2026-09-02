@@ -354,7 +354,7 @@ export component AudioPlayerView inherits Rectangle {
                     }
                 }
 
-                if root.model.browse-tab == 4 && root.model.active-playlist-id != "" : Rectangle {
+                if root.model.browse-tab == 4 && root.model.active-playlist-id != "" && root.model.active-playlist-id != "__recent__" : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
                     width: rename-pl-txt.preferred-width + 16px;

@@ -163,6 +163,8 @@ pub struct AudioPlayerConfig {
     pub replaygain_index: u32,
     /// Playback speed ×100 (100 = 1.0×).
     pub speed_x100: u32,
+    /// Recently played track paths (most recent first).
+    pub recent_tracks: Vec<String>,
 }
 
 impl Default for AudioPlayerConfig {
@@ -186,6 +188,7 @@ impl Default for AudioPlayerConfig {
             eq_index: 0,
             replaygain_index: 0,
             speed_x100: 100,
+            recent_tracks: Vec::new(),
         }
     }
 }
@@ -201,12 +204,14 @@ impl AudioPlayerConfig {
         }
         self.favorites.sort();
         self.favorites.dedup();
+        self.recent_tracks.truncate(50);
         // Ensure a Favorites synthetic playlist is not required — favorites are separate.
         if !self
             .playlists
             .iter()
             .any(|p| p.id == self.active_playlist_id)
             && !self.active_playlist_id.is_empty()
+            && self.active_playlist_id != "__recent__"
         {
             self.active_playlist_id.clear();
         }

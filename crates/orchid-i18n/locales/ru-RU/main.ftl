@@ -482,6 +482,7 @@ audio-player-sort-album = Альбом
 audio-player-sort-year = Год
 audio-player-remove-root = Удалить папку
 audio-player-favorites = Избранное
+audio-player-recent = Недавние
 audio-player-library-stats-tracks = { $tracks } треков
 audio-player-library-stats-folders = { $folders } папок
 audio-player-library-stats-tracks-folders = { $tracks } треков · { $folders } папок

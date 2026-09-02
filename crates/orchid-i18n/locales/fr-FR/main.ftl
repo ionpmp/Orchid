@@ -493,6 +493,7 @@ audio-player-sort-album = Album
 audio-player-sort-year = Year
 audio-player-remove-root = Remove folder
 audio-player-favorites = Favorites
+audio-player-recent = Recent
 audio-player-library-stats-tracks = { $tracks } tracks
 audio-player-library-stats-folders = { $folders } folders
 audio-player-library-stats-tracks-folders = { $tracks } tracks · { $folders } folders

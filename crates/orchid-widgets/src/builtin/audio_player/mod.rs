@@ -43,6 +43,11 @@ use sleep::SleepTimer;
 /// Stable type id.
 pub const TYPE_ID: &str = "audio-player";
 
+/// Synthetic playlist id for recently played tracks (also in widget config validation).
+pub const RECENT_PLAYLIST_ID: &str = "__recent__";
+
+const RECENT_MAX: usize = 50;
+
 static AUDIO_LIVE: LazyLock<DashMap<Uuid, Arc<AudioHandle>>> = LazyLock::new(DashMap::new);
 
 struct AudioHandle {
@@ -84,6 +89,13 @@ impl AudioHandle {
         cfg.speed_x100 = (self.player.speed() * 100.0).round() as u32;
     }
 
+    fn push_recent(&self, path: &str) {
+        let mut cfg = self.config.write();
+        cfg.recent_tracks.retain(|p| p != path);
+        cfg.recent_tracks.insert(0, path.to_string());
+        cfg.recent_tracks.truncate(RECENT_MAX);
+    }
+
     fn load_current(&self) {
         let path = {
             let q = self.queue.read();
@@ -97,6 +109,13 @@ impl AudioHandle {
     }
 
     fn load_path(&self, path: &str) {
+        self.load_path_inner(path, true);
+    }
+
+    fn load_path_inner(&self, path: &str, record_recent: bool) {
+        if record_recent {
+            self.push_recent(path);
+        }
         let p = PathBuf::from(path);
         self.player.load_path(p.as_path());
         *self.lyrics.write() = Lyrics::load_for(p.as_path());
@@ -119,12 +138,13 @@ impl AudioHandle {
         let Some(path) = path else {
             return;
         };
-        self.load_path(&path);
+        self.load_path_inner(&path, false);
         self.player.pause();
     }
 
     /// Sync chrome after mpv already advanced into a prefetched track.
     fn adopt_prefetched(&self, path: &str) {
+        self.push_recent(path);
         let p = PathBuf::from(path);
         self.player.apply_meta(p.as_path());
         *self.lyrics.write() = Lyrics::load_for(p.as_path());
@@ -579,7 +599,9 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         "delete-playlist" => {
             let mut cfg = h.config.write();
             let id = cfg.active_playlist_id.clone();
-            if id.is_empty() {
+            if id == RECENT_PLAYLIST_ID {
+                cfg.recent_tracks.clear();
+            } else if id.is_empty() {
                 // Favorites is synthetic — clear favorites instead.
                 cfg.favorites.clear();
             } else {
@@ -591,7 +613,9 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         }
         "start-rename-playlist" => {
             let mut cfg = h.config.write();
-            if !cfg.active_playlist_id.is_empty() {
+            if !cfg.active_playlist_id.is_empty()
+                && cfg.active_playlist_id != RECENT_PLAYLIST_ID
+            {
                 cfg.renaming_playlist = true;
             }
             drop(cfg);
@@ -749,7 +773,9 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         cmd if let Some(raw) = cmd.strip_prefix("remove-from-active-playlist:") => {
             let mut cfg = h.config.write();
             let id = cfg.active_playlist_id.clone();
-            if id.is_empty() {
+            if id == RECENT_PLAYLIST_ID {
+                cfg.recent_tracks.retain(|p| p != raw);
+            } else if id.is_empty() {
                 cfg.favorites.retain(|p| p != raw);
             } else if let Some(pl) = cfg.playlists.iter_mut().find(|p| p.id == id) {
                 pl.tracks.retain(|t| t != raw);
@@ -882,14 +908,20 @@ fn enqueue_search(h: &AudioHandle) {
     h.publish();
 }
 
+fn active_playlist_tracks(cfg: &AudioPlayerConfig) -> Option<&[String]> {
+    if cfg.active_playlist_id.is_empty() || cfg.active_playlist_id == RECENT_PLAYLIST_ID {
+        None
+    } else {
+        cfg.playlists
+            .iter()
+            .find(|p| p.id == cfg.active_playlist_id)
+            .map(|p| p.tracks.as_slice())
+    }
+}
+
 fn browse_track_paths(h: &AudioHandle) -> Vec<String> {
     let cfg = h.config.read().clone();
     let lib = h.library.read();
-    let playlist_tracks = cfg
-        .playlists
-        .iter()
-        .find(|p| p.id == cfg.active_playlist_id)
-        .map(|p| p.tracks.as_slice());
     if cfg.browse_tab == BrowseTab::NowPlaying {
         let search = cfg.search_query.trim().to_lowercase();
         let q = h.queue.read();
@@ -925,7 +957,9 @@ fn browse_track_paths(h: &AudioHandle) -> Vec<String> {
             cfg.browse_tab,
             &cfg.browse_filter,
             &cfg.search_query,
-            playlist_tracks,
+            &cfg.active_playlist_id,
+            active_playlist_tracks(&cfg),
+            &cfg.recent_tracks,
             &cfg.favorites,
             cfg.library_sort,
         )
@@ -987,7 +1021,9 @@ fn group_track_paths(h: &AudioHandle, group_key: &str) -> Vec<String> {
         cfg.browse_tab,
         group_key,
         &cfg.search_query,
+        "",
         None,
+        &[],
         &cfg.favorites,
         cfg.library_sort,
     );
@@ -1007,6 +1043,8 @@ fn export_m3u(instance_id: Uuid) {
         if cfg.active_playlist_id.is_empty() {
             let paths = cfg.favorites.clone();
             ("favorites.m3u".into(), paths)
+        } else if cfg.active_playlist_id == RECENT_PLAYLIST_ID {
+            ("recent.m3u".into(), cfg.recent_tracks.clone())
         } else if let Some(pl) = cfg
             .playlists
             .iter()
@@ -1196,11 +1234,7 @@ impl AudioPlayerWidget {
         let lib = self.handle.library.read();
         let q = self.handle.queue.read();
         let current = q.current().map(str::to_string);
-        let playlist_tracks = cfg
-            .playlists
-            .iter()
-            .find(|p| p.id == cfg.active_playlist_id)
-            .map(|p| p.tracks.as_slice());
+        let playlist_tracks = active_playlist_tracks(&cfg);
         let browse = if cfg.browse_tab == BrowseTab::NowPlaying {
             let search = cfg.search_query.trim().to_lowercase();
             library::BrowseResult {
@@ -1238,7 +1272,9 @@ impl AudioPlayerWidget {
                 cfg.browse_tab,
                 &cfg.browse_filter,
                 &cfg.search_query,
+                &cfg.active_playlist_id,
                 playlist_tracks,
+                &cfg.recent_tracks,
                 &cfg.favorites,
                 cfg.library_sort,
             )
@@ -1257,6 +1293,15 @@ impl AudioPlayerWidget {
                 .collect();
             rows.insert(
                 0,
+                AudioPlayerPlaylistRow {
+                    id: RECENT_PLAYLIST_ID.into(),
+                    name: "audio-player-recent".into(),
+                    count: cfg.recent_tracks.len() as u32,
+                    is_active: cfg.active_playlist_id == RECENT_PLAYLIST_ID,
+                },
+            );
+            rows.insert(
+                1,
                 AudioPlayerPlaylistRow {
                     id: String::new(),
                     name: "audio-player-favorites".into(),

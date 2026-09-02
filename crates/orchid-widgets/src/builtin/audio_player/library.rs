@@ -110,7 +110,9 @@ impl LibraryIndex {
         tab: BrowseTab,
         filter: &str,
         search: &str,
+        active_playlist_id: &str,
         playlist_tracks: Option<&[String]>,
+        recent_tracks: &[String],
         favorites: &[String],
         sort: LibrarySort,
     ) -> BrowseResult {
@@ -225,7 +227,17 @@ impl LibraryIndex {
                 }
             }
             BrowseTab::Playlists => {
-                if let Some(paths) = playlist_tracks {
+                if active_playlist_id == super::RECENT_PLAYLIST_ID {
+                    BrowseResult {
+                        groups: Vec::new(),
+                        tracks: recent_tracks
+                            .iter()
+                            .filter_map(|p| self.find_by_path(p))
+                            .filter(|t| matches(t))
+                            .map(track_row)
+                            .collect(),
+                    }
+                } else if let Some(paths) = playlist_tracks {
                     let set: BTreeSet<&str> = paths.iter().map(String::as_str).collect();
                     BrowseResult {
                         groups: Vec::new(),
@@ -255,7 +267,9 @@ impl LibraryIndex {
                 tracks: Vec::new(),
             },
         };
-        if tab != BrowseTab::NowPlaying && !result.tracks.is_empty() {
+        let preserve_order =
+            tab == BrowseTab::Playlists && active_playlist_id == super::RECENT_PLAYLIST_ID;
+        if !preserve_order && tab != BrowseTab::NowPlaying && !result.tracks.is_empty() {
             sort_track_rows(&mut result.tracks, self, sort);
         }
         result
@@ -414,7 +428,7 @@ mod tests {
         fs::write(dir.path().join("d.txt"), b"").unwrap();
         let idx = LibraryIndex::scan(&[dir.path().to_string_lossy().into_owned()]);
         assert_eq!(idx.tracks.len(), 2);
-        let artists = idx.browse_rows(BrowseTab::Artists, "", "", None, &[], LibrarySort::default());
+        let artists = idx.browse_rows(BrowseTab::Artists, "", "", "", None, &[], &[], LibrarySort::default());
         assert!(!artists.groups.is_empty());
     }
 
@@ -441,13 +455,13 @@ mod tests {
             year: None,
             folder: "/music".into(),
         });
-        let neon = idx.browse_rows(BrowseTab::Songs, "", "neon", None, &[], LibrarySort::default());
+        let neon = idx.browse_rows(BrowseTab::Songs, "", "neon", "", None, &[], &[], LibrarySort::default());
         assert_eq!(neon.tracks.len(), 1);
         assert_eq!(neon.tracks[0].title, "Neon Lights");
-        let folk = idx.browse_rows(BrowseTab::Artists, "", "folk", None, &[], LibrarySort::default());
+        let folk = idx.browse_rows(BrowseTab::Artists, "", "folk", "", None, &[], &[], LibrarySort::default());
         assert_eq!(folk.groups.len(), 1);
         assert_eq!(folk.groups[0].label, "Folk Duo");
-        let miss = idx.browse_rows(BrowseTab::Songs, "", "zzzz", None, &[], LibrarySort::default());
+        let miss = idx.browse_rows(BrowseTab::Songs, "", "zzzz", "", None, &[], &[], LibrarySort::default());
         assert!(miss.tracks.is_empty());
     }
 
@@ -478,11 +492,44 @@ mod tests {
             BrowseTab::Songs,
             "",
             "",
+            "",
             None,
+            &[],
             &[],
             LibrarySort::Title,
         );
         assert_eq!(sorted.tracks[0].title, "Alpha");
         assert_eq!(sorted.tracks[1].title, "Zulu");
+    }
+
+    #[test]
+    fn recent_playlist_preserves_play_order() {
+        let mut idx = LibraryIndex::default();
+        for (path, title) in [("/a.mp3", "A"), ("/b.mp3", "B"), ("/c.mp3", "C")] {
+            idx.tracks.push(LibraryTrack {
+                path: PathBuf::from(path),
+                title: title.into(),
+                artist: "X".into(),
+                album: "Y".into(),
+                genre: String::new(),
+                track: None,
+                year: None,
+                folder: "/music".into(),
+            });
+        }
+        let recent = vec!["/c.mp3".into(), "/a.mp3".into()];
+        let rows = idx.browse_rows(
+            BrowseTab::Playlists,
+            "",
+            "",
+            crate::builtin::audio_player::RECENT_PLAYLIST_ID,
+            None,
+            &recent,
+            &[],
+            LibrarySort::Title,
+        );
+        assert_eq!(rows.tracks.len(), 2);
+        assert_eq!(rows.tracks[0].path, "/c.mp3");
+        assert_eq!(rows.tracks[1].path, "/a.mp3");
     }
 }
