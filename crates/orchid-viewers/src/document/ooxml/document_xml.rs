@@ -226,7 +226,7 @@ fn parse_paragraph(
         indent_first_line_twips: 0,
         indent_right_twips: 0,
         shade_fill: None,
-        border_bottom: false,
+        border_sides: 0,
         unsupported: Vec::new(),
     };
     let mut images = Vec::new();
@@ -285,8 +285,17 @@ fn parse_paragraph(
                     "pBdr" if in_p_pr => {
                         in_p_bdr = true;
                     }
+                    "top" if in_p_bdr => {
+                        apply_paragraph_border_side(&mut p, CELL_BORDER_TOP, &e);
+                    }
+                    "left" if in_p_bdr => {
+                        apply_paragraph_border_side(&mut p, CELL_BORDER_LEFT, &e);
+                    }
                     "bottom" if in_p_bdr => {
-                        apply_paragraph_border_bottom(&e, &mut p);
+                        apply_paragraph_border_side(&mut p, CELL_BORDER_BOTTOM, &e);
+                    }
+                    "right" if in_p_bdr => {
+                        apply_paragraph_border_side(&mut p, CELL_BORDER_RIGHT, &e);
                     }
                     "hyperlink" => {
                         active_link = resolve_hyperlink(&e, rels);
@@ -329,8 +338,14 @@ fn parse_paragraph(
             }
             Ok(Event::Empty(e)) => {
                 let local = local_name(e.name().as_ref());
-                if in_p_bdr && local == "bottom" {
-                    apply_paragraph_border_bottom(&e, &mut p);
+                if in_p_bdr {
+                    match local.as_str() {
+                        "top" => apply_paragraph_border_side(&mut p, CELL_BORDER_TOP, &e),
+                        "left" => apply_paragraph_border_side(&mut p, CELL_BORDER_LEFT, &e),
+                        "bottom" => apply_paragraph_border_side(&mut p, CELL_BORDER_BOTTOM, &e),
+                        "right" => apply_paragraph_border_side(&mut p, CELL_BORDER_RIGHT, &e),
+                        _ => {}
+                    }
                 }
                 if in_p_pr {
                     match local.as_str() {
@@ -1057,21 +1072,8 @@ fn write_paragraph(
             .write_event(Event::Empty(shd))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
-    if p.border_bottom {
-        writer
-            .write_event(Event::Start(BytesStart::new("w:pBdr")))
-            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-        let mut bottom = BytesStart::new("w:bottom");
-        bottom.push_attribute(("w:val", "single"));
-        bottom.push_attribute(("w:sz", "4"));
-        bottom.push_attribute(("w:space", "1"));
-        bottom.push_attribute(("w:color", "auto"));
-        writer
-            .write_event(Event::Empty(bottom))
-            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-        writer
-            .write_event(Event::End(BytesEnd::new("w:pBdr")))
-            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    if p.border_sides != 0 {
+        write_paragraph_borders(writer, p.border_sides)?;
     }
     if p.list != ListKind::None {
         writer
@@ -1230,12 +1232,44 @@ fn apply_cell_border_side(cell: &mut TableCell, side_bit: u8, e: &BytesStart<'_>
     }
 }
 
-fn apply_paragraph_border_bottom(e: &BytesStart<'_>, p: &mut Paragraph) {
-    let val = attr_val(e, "val").unwrap_or_else(|| "single".to_string());
-    p.border_bottom = !matches!(
-        val.to_ascii_lowercase().as_str(),
-        "nil" | "none" | ""
-    );
+fn apply_paragraph_border_side(p: &mut Paragraph, side_bit: u8, e: &BytesStart<'_>) {
+    if border_side_visible(e) {
+        p.border_sides |= side_bit;
+    }
+}
+
+fn write_paragraph_border_side(writer: &mut Writer<Cursor<Vec<u8>>>, tag: &str) -> Result<()> {
+    let mut el = BytesStart::new(format!("w:{tag}"));
+    el.push_attribute(("w:val", "single"));
+    el.push_attribute(("w:sz", "4"));
+    el.push_attribute(("w:space", "1"));
+    el.push_attribute(("w:color", "auto"));
+    writer
+        .write_event(Event::Empty(el))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    Ok(())
+}
+
+fn write_paragraph_borders(writer: &mut Writer<Cursor<Vec<u8>>>, sides: u8) -> Result<()> {
+    writer
+        .write_event(Event::Start(BytesStart::new("w:pBdr")))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    if sides & CELL_BORDER_TOP != 0 {
+        write_paragraph_border_side(writer, "top")?;
+    }
+    if sides & CELL_BORDER_LEFT != 0 {
+        write_paragraph_border_side(writer, "left")?;
+    }
+    if sides & CELL_BORDER_BOTTOM != 0 {
+        write_paragraph_border_side(writer, "bottom")?;
+    }
+    if sides & CELL_BORDER_RIGHT != 0 {
+        write_paragraph_border_side(writer, "right")?;
+    }
+    writer
+        .write_event(Event::End(BytesEnd::new("w:pBdr")))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    Ok(())
 }
 
 fn resolve_hyperlink(e: &BytesStart<'_>, rels: &Relationships) -> Option<Hyperlink> {
@@ -2605,14 +2639,17 @@ mod tests {
     }
 
     #[test]
-    fn parse_and_write_paragraph_border_bottom() {
+    fn parse_and_write_paragraph_borders() {
         let xml = br#"<?xml version="1.0"?>
         <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
           <w:body>
             <w:p>
               <w:pPr>
                 <w:pBdr>
+                  <w:top w:val="single" w:sz="4" w:space="1" w:color="auto"/>
+                  <w:left w:val="single" w:sz="4" w:space="1" w:color="auto"/>
                   <w:bottom w:val="single" w:sz="4" w:space="1" w:color="auto"/>
+                  <w:right w:val="single" w:sz="4" w:space="1" w:color="auto"/>
                 </w:pBdr>
               </w:pPr>
               <w:r><w:t>Bordered</w:t></w:r>
@@ -2630,14 +2667,17 @@ mod tests {
         .unwrap();
         match &blocks[0] {
             Block::Paragraph(p) => {
-                assert!(p.border_bottom);
+                assert_eq!(
+                    p.border_sides,
+                    CELL_BORDER_TOP | CELL_BORDER_LEFT | CELL_BORDER_BOTTOM | CELL_BORDER_RIGHT
+                );
                 assert_eq!(p.plain_text(), "Bordered");
             }
             _ => panic!("expected paragraph"),
         }
         match &blocks[1] {
             Block::Paragraph(p) => {
-                assert!(!p.border_bottom);
+                assert_eq!(p.border_sides, 0);
             }
             _ => panic!("expected paragraph"),
         }
@@ -2650,8 +2690,12 @@ mod tests {
         let out = write_document_xml(&doc).unwrap();
         let text = String::from_utf8_lossy(&out);
         assert!(
-            text.contains("w:pBdr") && text.contains("w:bottom"),
-            "serialized XML missing paragraph border: {text}"
+            text.contains("w:pBdr")
+                && text.contains("w:top")
+                && text.contains("w:left")
+                && text.contains("w:bottom")
+                && text.contains("w:right"),
+            "serialized XML missing paragraph borders: {text}"
         );
     }
 

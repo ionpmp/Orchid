@@ -319,7 +319,7 @@ impl DocumentLayout {
                         page_break_rule_y: rule_y,
                         shade_fill: p.shade_fill,
                         shade_w: max_w,
-                        border_bottom: p.border_bottom,
+                        border_sides: p.border_sides,
                     });
                     plain_offset += body_len;
                     let after = (twips_to_css_px(p.space_after_twips) * scale).max(para_gap);
@@ -356,7 +356,7 @@ impl DocumentLayout {
                         page_break_rule_y: None,
                         shade_fill: None,
                         shade_w: 0.0,
-                        border_bottom: false,
+                        border_sides: 0,
                     });
                     total_h += h + para_gap;
                 }
@@ -549,7 +549,7 @@ impl DocumentLayout {
         }
 
         for item in &layouts {
-            if item.is_image || !item.border_bottom {
+            if item.is_image || item.border_sides == 0 {
                 continue;
             }
             let body_h = if item.layout.is_empty() {
@@ -557,21 +557,22 @@ impl DocumentLayout {
             } else {
                 item.layout.height().max(16.0 * scale)
             };
-            let y = (insets.top + item.y0 + body_h).round() as i32;
-            if y < 0 || y as u32 >= height {
-                continue;
-            }
             let x0 = (insets.left + item.x0).round() as i32;
-            let x1 = (insets.left + item.x0 + item.shade_w).round() as i32;
-            paint_solid_h_line(
-                &mut pixels,
-                width,
-                height,
-                x0,
-                x1,
-                y,
-                PARA_BORDER_COLOR,
-            );
+            let x1 = (insets.left + item.x0 + item.shade_w.max(1.0)).round() as i32;
+            let y0 = (insets.top + item.y0).round() as i32;
+            let y1 = (insets.top + item.y0 + body_h).round() as i32;
+            if item.border_sides & crate::document::model::CELL_BORDER_TOP != 0 {
+                paint_solid_h_line(&mut pixels, width, height, x0, x1, y0, PARA_BORDER_COLOR);
+            }
+            if item.border_sides & crate::document::model::CELL_BORDER_BOTTOM != 0 {
+                paint_solid_h_line(&mut pixels, width, height, x0, x1, y1, PARA_BORDER_COLOR);
+            }
+            if item.border_sides & crate::document::model::CELL_BORDER_LEFT != 0 {
+                paint_solid_v_line(&mut pixels, width, height, x0, y0, y1, PARA_BORDER_COLOR);
+            }
+            if item.border_sides & crate::document::model::CELL_BORDER_RIGHT != 0 {
+                paint_solid_v_line(&mut pixels, width, height, x1, y0, y1, PARA_BORDER_COLOR);
+            }
         }
 
         (Arc::new(pixels), width, height)
@@ -848,7 +849,7 @@ impl DocumentLayout {
                             indent_px,
                             shade_fill,
                             shade_w,
-                            border_bottom,
+                            border_sides,
                             ..
                         } => {
                             layouts.push(LaidBlock {
@@ -866,7 +867,7 @@ impl DocumentLayout {
                                 page_break_rule_y: None,
                                 shade_fill,
                                 shade_w,
-                                border_bottom,
+                                border_sides,
                             });
                         }
                         CellItemLayout::Image {
@@ -890,7 +891,7 @@ impl DocumentLayout {
                                 page_break_rule_y: None,
                                 shade_fill: None,
                                 shade_w: 0.0,
-                                border_bottom: false,
+                                border_sides: 0,
                             });
                         }
                     }
@@ -1152,7 +1153,7 @@ impl DocumentLayout {
                 height: h,
                 shade_fill: p.shade_fill,
                 shade_w: inner_w,
-                border_bottom: p.border_bottom,
+                border_sides: p.border_sides,
             });
             *plain_offset += body_len;
             let after_text = *plain_offset;
@@ -1465,8 +1466,8 @@ struct LaidBlock {
     shade_fill: Option<[u8; 3]>,
     /// Content-relative width available for paragraph shade (body column or cell).
     shade_w: f32,
-    /// Bottom paragraph border (`w:pBdr/w:bottom`).
-    border_bottom: bool,
+    /// Paragraph borders (`w:pBdr`); same bit layout as cell borders.
+    border_sides: u8,
 }
 
 enum CellItemLayout {
@@ -1479,7 +1480,7 @@ enum CellItemLayout {
         height: f32,
         shade_fill: Option<[u8; 3]>,
         shade_w: f32,
-        border_bottom: bool,
+        border_sides: u8,
     },
     Image {
         /// Caret offset when the image is clicked (end of preceding text).
@@ -2248,6 +2249,34 @@ fn paint_solid_h_line(
     }
 }
 
+
+fn paint_solid_v_line(
+    pixels: &mut [u8],
+    buf_w: u32,
+    buf_h: u32,
+    x: i32,
+    y0: i32,
+    y1: i32,
+    rgba: [u8; 4],
+) {
+    if x < 0 || (x as u32) >= buf_w {
+        return;
+    }
+    let lo = y0.max(0) as u32;
+    let hi = y1.max(0) as u32;
+    let hi = hi.min(buf_h);
+    for py in lo..hi {
+        let i = ((py as usize) * (buf_w as usize) + (x as usize)) * 4;
+        if i + 3 < pixels.len() {
+            pixels[i] = rgba[0];
+            pixels[i + 1] = rgba[1];
+            pixels[i + 2] = rgba[2];
+            pixels[i + 3] = rgba[3];
+        }
+    }
+}
+
+
 fn fill_rect(
     pixels: &mut [u8],
     buf_w: u32,
@@ -2276,7 +2305,7 @@ mod tests {
     use super::*;
     use crate::document::model::{
         CellImage, ImageFormat, InlineImage, LineSpacingRule, Run, RunStyle, Table, TableCell,
-        TableRow, VMerge,
+        TableRow, VMerge, CELL_BORDER_ALL,
     };
 
     fn sample_paragraph() -> Paragraph {
@@ -2442,7 +2471,7 @@ mod tests {
                 text: "Line".into(),
                 ..Default::default()
             }],
-            border_bottom: true,
+            border_sides: CELL_BORDER_ALL,
             ..Default::default()
         }));
         let content_w = 400.0;
