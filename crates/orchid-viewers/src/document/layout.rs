@@ -601,7 +601,73 @@ impl DocumentLayout {
             }
         }
 
+        // Default header / footer stories in page margins (read-only MVP).
+        if !doc.header.is_empty() {
+            self.paint_margin_story(
+                &doc.header,
+                max_w,
+                insets.left,
+                6.0 * scale,
+                scale,
+                &mut pixels,
+                width,
+                height,
+            );
+        }
+        if !doc.footer.is_empty() {
+            self.paint_margin_story(
+                &doc.footer,
+                max_w,
+                insets.left,
+                height as f32 - insets.bottom + 6.0 * scale,
+                scale,
+                &mut pixels,
+                width,
+                height,
+            );
+        }
+
         (Arc::new(pixels), width, height)
+    }
+
+    /// Layout and paint header/footer paragraphs into the page margin band.
+    fn paint_margin_story(
+        &mut self,
+        paragraphs: &[crate::document::model::Paragraph],
+        max_w: f32,
+        origin_x: f32,
+        origin_y: f32,
+        scale: f32,
+        pixels: &mut [u8],
+        width: u32,
+        height: u32,
+    ) {
+        let mut y = origin_y;
+        let gap = 4.0 * scale;
+        for p in paragraphs {
+            let indent = list_indent_px(p) * scale;
+            let layout = self.layout_paragraph(
+                p,
+                (max_w - indent - paragraph_right_indent_px(p) * scale).max(12.0 * scale),
+                scale,
+            );
+            if !layout.is_empty() {
+                render_layout_at(
+                    &mut self.scale_cx,
+                    &layout,
+                    pixels,
+                    width,
+                    height,
+                    origin_x + indent,
+                    y,
+                );
+            }
+            y += layout.height().max(12.0 * scale) + gap;
+            // Keep margin stories from flooding the body canvas.
+            if y > origin_y + 200.0 * scale {
+                break;
+            }
+        }
     }
 
     /// Map a point in preview-image CSS pixels to a document [`Cursor`].
@@ -2423,6 +2489,59 @@ mod tests {
         assert!(
             rtl_off > ltr_off + 20.0,
             "bidi left-align should push the line toward the right edge (ltr_off={ltr_off}, rtl_off={rtl_off})"
+        );
+    }
+
+    #[test]
+    fn preview_paints_header_in_top_margin() {
+        let mut dl = DocumentLayout::new();
+        let mut page_setup = PageSetup::default();
+        page_setup.margin_top_twips = 1440; // 1″
+        let doc = Document {
+            blocks: vec![Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Body".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })],
+            page_setup,
+            header: vec![Paragraph {
+                runs: vec![Run {
+                    text: "HEADERINK".into(),
+                    style: RunStyle {
+                        bold: true,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let (bytes, w, h) = dl.render_document(&doc, 400.0);
+        let s = PREVIEW_RENDER_SCALE;
+        let insets = PreviewInsets::from_page_setup(&doc.page_setup);
+        let margin_bottom = (insets.top * s).round() as u32;
+        assert!(margin_bottom > 8);
+        assert!(h > margin_bottom);
+        let mut ink_in_margin = false;
+        for y in 0..margin_bottom.min(h) {
+            for x in 0..w {
+                let i = ((y as usize) * (w as usize) + (x as usize)) * 4;
+                if bytes[i] < 240 || bytes[i + 1] < 240 || bytes[i + 2] < 240 {
+                    ink_in_margin = true;
+                    break;
+                }
+            }
+            if ink_in_margin {
+                break;
+            }
+        }
+        assert!(
+            ink_in_margin,
+            "expected header glyph ink inside the top margin band"
         );
     }
 

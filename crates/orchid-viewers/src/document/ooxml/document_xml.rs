@@ -201,6 +201,118 @@ pub fn parse_document_xml(
     Ok((blocks, page_setup, unsupported, bookmarks))
 }
 
+/// Parse a header or footer story (`w:hdr` / `w:ftr`) into paragraphs.
+///
+/// # Errors
+///
+/// [`ViewerError::DocumentParse`] on malformed XML.
+pub fn parse_story_xml(
+    bytes: &[u8],
+    root_local: &str,
+    styles: &StyleDefaults,
+    numbering: &NumberingDefs,
+) -> Result<Vec<Paragraph>> {
+    let mut reader = Reader::from_reader(bytes);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut paragraphs = Vec::new();
+    let mut in_root = false;
+    let empty_rels = Relationships::new();
+    let empty_media = HashMap::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                let local = local_name(e.name().as_ref());
+                if local == root_local {
+                    in_root = true;
+                } else if in_root && local == "p" {
+                    let (p, _images, _bms) = parse_paragraph(
+                        &mut reader,
+                        &mut buf,
+                        styles,
+                        numbering,
+                        &empty_rels,
+                        &empty_media,
+                    )?;
+                    paragraphs.push(p);
+                }
+            }
+            Ok(Event::End(e)) => {
+                if local_name(e.name().as_ref()) == root_local {
+                    break;
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => {
+                return Err(ViewerError::DocumentParse(format!("{root_local}: {e}")));
+            }
+            _ => {}
+        }
+        buf.clear();
+    }
+    Ok(paragraphs)
+}
+
+/// Serialise a header or footer story (`w:hdr` / `w:ftr`).
+///
+/// # Errors
+///
+/// [`ViewerError::DocumentSave`] on writer failures.
+pub fn write_story_xml(root_local: &str, paragraphs: &[Paragraph]) -> Result<Vec<u8>> {
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    writer
+        .write_event(Event::Decl(quick_xml::events::BytesDecl::new(
+            "1.0",
+            Some("UTF-8"),
+            Some("yes"),
+        )))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+
+    let root_tag = format!("w:{root_local}");
+    let mut root = BytesStart::new(root_tag.as_str());
+    root.push_attribute((
+        "xmlns:w",
+        "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+    ));
+    root.push_attribute((
+        "xmlns:r",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    ));
+    writer
+        .write_event(Event::Start(root))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+
+    let mut bookmark_id = 0u32;
+    if paragraphs.is_empty() {
+        write_paragraph(&mut writer, &Paragraph::default(), &[], 0, &mut bookmark_id)?;
+    } else {
+        for p in paragraphs {
+            write_paragraph(&mut writer, p, &[], 0, &mut bookmark_id)?;
+        }
+    }
+
+    writer
+        .write_event(Event::End(BytesEnd::new(root_tag.as_str())))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    Ok(writer.into_inner().into_inner())
+}
+
+/// Resolve a document relationship target to a package part path under `word/`.
+#[must_use]
+pub fn word_part_path(target: &str) -> String {
+    let t = target.replace('\\', "/");
+    if t.starts_with("word/") {
+        t
+    } else if let Some(rest) = t.strip_prefix("./") {
+        format!("word/{rest}")
+    } else if t.starts_with('/') {
+        t.trim_start_matches('/').to_string()
+    } else {
+        format!("word/{t}")
+    }
+}
+
 fn parse_paragraph(
     reader: &mut Reader<&[u8]>,
     buf: &mut Vec<u8>,
@@ -3472,6 +3584,37 @@ mod tests {
             !text.contains("rId9"),
             "first-page header should not round-trip yet: {text}"
         );
+    }
+
+    #[test]
+    fn parse_and_write_header_story() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Acme Corp</w:t></w:r></w:p>
+        </w:hdr>"#;
+        let paras = parse_story_xml(
+            xml,
+            "hdr",
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+        )
+        .unwrap();
+        assert_eq!(paras.len(), 1);
+        assert_eq!(paras[0].plain_text(), "Acme Corp");
+        assert!(paras[0].runs[0].style.bold);
+        let out = write_story_xml("hdr", &paras).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(text.contains("<w:hdr"), "missing hdr root: {text}");
+        assert!(text.contains("Acme Corp"), "missing text: {text}");
+        assert!(text.contains("<w:b"), "missing bold: {text}");
+        let again = parse_story_xml(
+            &out,
+            "hdr",
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+        )
+        .unwrap();
+        assert_eq!(again[0].plain_text(), "Acme Corp");
     }
 
     #[test]

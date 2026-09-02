@@ -8,14 +8,16 @@ use std::path::{Path, PathBuf};
 use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
 
-use crate::document::model::{Block, Document, ImageFormat, InlineImage};
+use crate::document::model::{Block, Document, ImageFormat, InlineImage, Paragraph};
 use crate::document::ooxml::document_xml::{
-    parse_document_xml, parse_relationships, write_document_xml,
+    parse_document_xml, parse_relationships, parse_story_xml, word_part_path, write_document_xml,
+    write_story_xml, Relationships,
 };
 use crate::document::ooxml::numbering::{
     assign_orchid_list_ids, document_uses_lists, parse_numbering_xml, write_numbering_xml,
+    NumberingDefs,
 };
-use crate::document::ooxml::styles::parse_styles_xml;
+use crate::document::ooxml::styles::{parse_styles_xml, StyleDefaults};
 use crate::error::{Result, ViewerError};
 
 /// In-memory OOXML package parts keyed by archive path.
@@ -97,6 +99,23 @@ pub fn open_document(path: &Path) -> Result<Document> {
     let (blocks, page_setup, unsupported, bookmarks) =
         parse_document_xml(document_xml, &styles, &numbering, &rels, &media)?;
 
+    let header = load_story_part(
+        &package,
+        &rels,
+        page_setup.header_r_id.as_deref(),
+        "hdr",
+        &styles,
+        &numbering,
+    )?;
+    let footer = load_story_part(
+        &package,
+        &rels,
+        page_setup.footer_r_id.as_deref(),
+        "ftr",
+        &styles,
+        &numbering,
+    )?;
+
     let mut retained = Vec::new();
     for (name, bytes) in &package.parts {
         if name == "word/document.xml" {
@@ -108,6 +127,8 @@ pub fn open_document(path: &Path) -> Result<Document> {
     Ok(Document {
         blocks,
         page_setup,
+        header,
+        footer,
         bookmarks,
         unsupported,
         retained_parts: retained,
@@ -117,6 +138,27 @@ pub fn open_document(path: &Path) -> Result<Document> {
             .get("word/_rels/document.xml.rels")
             .map(|b| b.to_vec()),
     })
+}
+
+fn load_story_part(
+    package: &OoxmlPackage,
+    rels: &Relationships,
+    r_id: Option<&str>,
+    root_local: &str,
+    styles: &StyleDefaults,
+    numbering: &NumberingDefs,
+) -> Result<Vec<Paragraph>> {
+    let Some(id) = r_id else {
+        return Ok(Vec::new());
+    };
+    let Some(target) = rels.get(id) else {
+        return Ok(Vec::new());
+    };
+    let path = word_part_path(target);
+    let Some(bytes) = package.get(&path) else {
+        return Ok(Vec::new());
+    };
+    parse_story_xml(bytes, root_local, styles, numbering)
 }
 
 /// Save a [`Document`] to `output_path` atomically (`.tmp` + rename).
@@ -199,6 +241,26 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
         zip.write_all(&document_rels)?;
         written.insert("word/_rels/document.xml.rels".to_string());
 
+        let rels_map = parse_relationships(&document_rels).unwrap_or_default();
+        write_story_part(
+            &mut zip,
+            opts,
+            &mut written,
+            &rels_map,
+            doc.page_setup.header_r_id.as_deref(),
+            "hdr",
+            &doc.header,
+        )?;
+        write_story_part(
+            &mut zip,
+            opts,
+            &mut written,
+            &rels_map,
+            doc.page_setup.footer_r_id.as_deref(),
+            "ftr",
+            &doc.footer,
+        )?;
+
         for (name, bytes) in &doc.retained_parts {
             if written.contains(name) {
                 continue;
@@ -217,6 +279,30 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
         let _ = std::fs::remove_file(&tmp);
         ViewerError::Io(e)
     })?;
+    Ok(())
+}
+
+fn write_story_part(
+    zip: &mut ZipWriter<File>,
+    opts: SimpleFileOptions,
+    written: &mut std::collections::HashSet<String>,
+    rels: &Relationships,
+    r_id: Option<&str>,
+    root_local: &str,
+    paragraphs: &[Paragraph],
+) -> Result<()> {
+    let Some(id) = r_id else {
+        return Ok(());
+    };
+    let Some(target) = rels.get(id) else {
+        return Ok(());
+    };
+    let path = word_part_path(target);
+    let bytes = write_story_xml(root_local, paragraphs)?;
+    zip.start_file(path.as_str(), opts)
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    zip.write_all(&bytes)?;
+    written.insert(path);
     Ok(())
 }
 
@@ -790,5 +876,86 @@ mod tests {
             }
             _ => panic!("image"),
         }
+    }
+
+    #[test]
+    fn save_and_reopen_header_footer_stories() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hf.docx");
+        let file = File::create(&path).unwrap();
+        let mut zip = ZipWriter::new(file);
+        let opts = SimpleFileOptions::default();
+        zip.start_file("[Content_Types].xml", opts).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>
+  <Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>
+</Types>"#,
+        )
+        .unwrap();
+        zip.start_file("_rels/.rels", opts).unwrap();
+        zip.write_all(MINIMAL_PACKAGE_RELS.as_bytes()).unwrap();
+        zip.start_file("word/document.xml", opts).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <w:body>
+            <w:p><w:r><w:t>Body</w:t></w:r></w:p>
+            <w:sectPr>
+              <w:pgSz w:w="12240" w:h="15840"/>
+              <w:headerReference w:type="default" r:id="rId7"/>
+              <w:footerReference w:type="default" r:id="rId8"/>
+            </w:sectPr>
+          </w:body>
+        </w:document>"#,
+        )
+        .unwrap();
+        zip.start_file("word/_rels/document.xml.rels", opts)
+            .unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>
+  <Relationship Id="rId8" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>
+</Relationships>"#,
+        )
+        .unwrap();
+        zip.start_file("word/header1.xml", opts).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0"?>
+        <w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:p><w:r><w:t>HeaderText</w:t></w:r></w:p>
+        </w:hdr>"#,
+        )
+        .unwrap();
+        zip.start_file("word/footer1.xml", opts).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0"?>
+        <w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:p><w:r><w:t>FooterText</w:t></w:r></w:p>
+        </w:ftr>"#,
+        )
+        .unwrap();
+        zip.finish().unwrap();
+
+        let mut doc = open_document(&path).unwrap();
+        assert_eq!(doc.header.len(), 1);
+        assert_eq!(doc.header[0].plain_text(), "HeaderText");
+        assert_eq!(doc.footer.len(), 1);
+        assert_eq!(doc.footer[0].plain_text(), "FooterText");
+
+        doc.header[0].runs[0].text = "NewHeader".into();
+        doc.footer[0].runs[0].text = "NewFooter".into();
+        save_document_sync(&doc, &path).unwrap();
+        let loaded = open_document(&path).unwrap();
+        assert_eq!(loaded.header[0].plain_text(), "NewHeader");
+        assert_eq!(loaded.footer[0].plain_text(), "NewFooter");
+        assert_eq!(loaded.page_setup.header_r_id.as_deref(), Some("rId7"));
+        assert_eq!(loaded.page_setup.footer_r_id.as_deref(), Some("rId8"));
     }
 }

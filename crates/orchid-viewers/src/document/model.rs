@@ -408,6 +408,10 @@ pub struct Document {
     pub blocks: Vec<Block>,
     /// Page geometry.
     pub page_setup: PageSetup,
+    /// Default header story paragraphs (`word/header*.xml`).
+    pub header: Vec<Paragraph>,
+    /// Default footer story paragraphs (`word/footer*.xml`).
+    pub footer: Vec<Paragraph>,
     /// Named destinations (`w:bookmarkStart`); first occurrence of a name wins on jump.
     pub bookmarks: Vec<Bookmark>,
     /// Unsupported body-level elements preserved for round-trip.
