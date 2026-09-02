@@ -749,6 +749,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         widow_control: false,
         contextual_spacing: false,
         bidi: false,
+        suppress_auto_hyphens: false,
         superscript: false,
         subscript: false,
         font_size_pt: 0.0,
@@ -783,6 +784,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         widow_control_label: locale.tr("viewer-document-widow-control").into(),
         contextual_spacing_label: locale.tr("viewer-document-contextual-spacing").into(),
         bidi_label: locale.tr("viewer-document-bidi").into(),
+        suppress_auto_hyphens_label: locale.tr("viewer-document-suppress-auto-hyphens").into(),
         superscript_label: locale.tr("viewer-document-superscript").into(),
         subscript_label: locale.tr("viewer-document-subscript").into(),
         clear_formatting_label: locale.tr("viewer-document-clear-formatting").into(),
@@ -807,6 +809,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         tip_widow_control: locale.tr("viewer-document-tip-widow-control").into(),
         tip_contextual_spacing: locale.tr("viewer-document-tip-contextual-spacing").into(),
         tip_bidi: locale.tr("viewer-document-tip-bidi").into(),
+        tip_suppress_auto_hyphens: locale.tr("viewer-document-tip-suppress-auto-hyphens").into(),
         tip_color_black: locale.tr("viewer-document-tip-color-black").into(),
         tip_color_red: locale.tr("viewer-document-tip-color-red").into(),
         tip_color_blue: locale.tr("viewer-document-tip-color-blue").into(),
@@ -1067,6 +1070,7 @@ fn build_document_snapshot(
     model.widow_control = s.widow_control;
     model.contextual_spacing = s.contextual_spacing;
     model.bidi = s.bidi;
+    model.suppress_auto_hyphens = s.suppress_auto_hyphens;
     model.superscript = s.superscript;
     model.subscript = s.subscript;
     model.font_size_pt = s.font_size_pt;

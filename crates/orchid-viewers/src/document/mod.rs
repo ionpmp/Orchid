@@ -1916,6 +1916,44 @@ impl DocumentViewer {
         Ok(())
     }
 
+
+    /// Toggle `w:suppressAutoHyphens` on selected paragraphs.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn toggle_suppress_auto_hyphens_selection(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let cursors = paragraph_cursors_in_selection(doc, sel);
+        if cursors.is_empty() {
+            return Ok(());
+        }
+        let clear = cursors
+            .iter()
+            .any(|c| paragraph_ref(doc, *c).is_some_and(|p| p.suppress_auto_hyphens));
+        let new_keep = !clear;
+        let mut next = doc.blocks.clone();
+        let mut changed = false;
+        for cursor in cursors {
+            if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
+                if p.suppress_auto_hyphens != new_keep {
+                    p.suppress_auto_hyphens = new_keep;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Step font size up (`direction > 0`) or down on the selection.
     ///
     /// # Errors
@@ -2911,6 +2949,7 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     widow_control: prev.widow_control,
                     contextual_spacing: prev.contextual_spacing,
                     bidi: prev.bidi,
+                    suppress_auto_hyphens: prev.suppress_auto_hyphens,
                     space_before_twips: prev.space_before_twips,
                     space_after_twips: prev.space_after_twips,
                     line_spacing: prev.line_spacing,
@@ -3347,6 +3386,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         widow_control: p.widow_control,
         contextual_spacing: p.contextual_spacing,
         bidi: p.bidi,
+        suppress_auto_hyphens: p.suppress_auto_hyphens,
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
         line_spacing: p.line_spacing,
@@ -3370,6 +3410,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         widow_control: false,
         contextual_spacing: false,
         bidi: false,
+        suppress_auto_hyphens: false,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
         line_spacing: p.line_spacing,
@@ -3419,6 +3460,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         widow_control: p.widow_control,
         contextual_spacing: p.contextual_spacing,
         bidi: p.bidi,
+        suppress_auto_hyphens: p.suppress_auto_hyphens,
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
         line_spacing: p.line_spacing,
@@ -3442,6 +3484,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         widow_control: false,
         contextual_spacing: false,
         bidi: false,
+        suppress_auto_hyphens: false,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
         line_spacing: p.line_spacing,
@@ -3544,6 +3587,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
         widow_control: start_p.widow_control,
         contextual_spacing: start_p.contextual_spacing,
         bidi: start_p.bidi,
+        suppress_auto_hyphens: start_p.suppress_auto_hyphens,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
         line_spacing: start_p.line_spacing,
@@ -3638,6 +3682,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
         widow_control: start_p.widow_control,
         contextual_spacing: start_p.contextual_spacing,
         bidi: start_p.bidi,
+        suppress_auto_hyphens: start_p.suppress_auto_hyphens,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
         line_spacing: start_p.line_spacing,
@@ -3846,6 +3891,7 @@ impl Viewer for DocumentViewer {
         let widow_control = para.is_some_and(|p| p.widow_control);
         let contextual_spacing = para.is_some_and(|p| p.contextual_spacing);
         let bidi = para.is_some_and(|p| p.bidi);
+        let suppress_auto_hyphens = para.is_some_and(|p| p.suppress_auto_hyphens);
 
         let source_mode = *self.source_mode.read();
         let (sel_start, sel_end) = {
@@ -3900,6 +3946,7 @@ impl Viewer for DocumentViewer {
             widow_control,
             contextual_spacing,
             bidi,
+            suppress_auto_hyphens,
             superscript,
             subscript,
             font_size_pt,

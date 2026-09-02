@@ -76,6 +76,8 @@ pub struct DocumentSnapshot {
     pub contextual_spacing: bool,
     /// Right-to-left paragraph (`w:bidi`) active at the caret.
     pub bidi: bool,
+    /// Suppress auto hyphenation (`w:suppressAutoHyphens`) at the caret.
+    pub suppress_auto_hyphens: bool,
     pub superscript: bool,
     pub subscript: bool,
     /// Font size in points at the caret (`0` = document default).
