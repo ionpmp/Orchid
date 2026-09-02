@@ -182,6 +182,7 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
     }
     prepare_document_images(&mut doc);
     prepare_document_hyperlinks(&mut doc);
+    prepare_document_header_footer(&mut doc);
 
     let tmp = tmp_path(output_path);
     {
@@ -304,6 +305,135 @@ fn write_story_part(
     zip.write_all(&bytes)?;
     written.insert(path);
     Ok(())
+}
+
+/// Allocate default header/footer package parts when the model has story text
+/// but no `w:headerReference` / `w:footerReference` yet.
+fn prepare_document_header_footer(doc: &mut Document) {
+    let need_header = !doc.header.is_empty()
+        && doc
+            .page_setup
+            .header_r_id
+            .as_ref()
+            .is_none_or(|id| !relationship_id_present(doc.document_rels.as_deref(), id));
+    let need_footer = !doc.footer.is_empty()
+        && doc
+            .page_setup
+            .footer_r_id
+            .as_ref()
+            .is_none_or(|id| !relationship_id_present(doc.document_rels.as_deref(), id));
+    if !need_header && !need_footer {
+        return;
+    }
+
+    let mut rels = String::from_utf8_lossy(
+        doc.document_rels
+            .as_deref()
+            .unwrap_or(MINIMAL_DOCUMENT_RELS.as_bytes()),
+    )
+    .into_owned();
+    let mut content_types = String::from_utf8_lossy(
+        doc.content_types
+            .as_deref()
+            .unwrap_or(MINIMAL_CONTENT_TYPES.as_bytes()),
+    )
+    .into_owned();
+
+    if need_header {
+        let n = next_story_part_index(&rels, &doc.retained_parts, "header");
+        let target = format!("header{n}.xml");
+        let rid = next_relationship_id(&rels);
+        inject_story_relationship(
+            &mut rels,
+            &rid,
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
+            &target,
+        );
+        ensure_override_content_type(
+            &mut content_types,
+            &format!("/word/{target}"),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml",
+        );
+        doc.page_setup.header_r_id = Some(rid);
+    }
+    if need_footer {
+        let n = next_story_part_index(&rels, &doc.retained_parts, "footer");
+        let target = format!("footer{n}.xml");
+        let rid = next_relationship_id(&rels);
+        inject_story_relationship(
+            &mut rels,
+            &rid,
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer",
+            &target,
+        );
+        ensure_override_content_type(
+            &mut content_types,
+            &format!("/word/{target}"),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml",
+        );
+        doc.page_setup.footer_r_id = Some(rid);
+    }
+
+    doc.document_rels = Some(rels.into_bytes());
+    doc.content_types = Some(content_types.into_bytes());
+}
+
+fn relationship_id_present(rels: Option<&[u8]>, id: &str) -> bool {
+    let Some(bytes) = rels else {
+        return false;
+    };
+    String::from_utf8_lossy(bytes).contains(&format!("Id=\"{id}\""))
+}
+
+fn next_story_part_index(
+    rels_xml: &str,
+    retained: &[(String, Vec<u8>)],
+    stem: &str,
+) -> u32 {
+    let mut max = 0u32;
+    for piece in rels_xml.split(&format!("Target=\"{stem}")) {
+        let digits: String = piece.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(n) = digits.parse::<u32>() {
+            max = max.max(n);
+        }
+    }
+    for (name, _) in retained {
+        if let Some(rest) = name
+            .strip_prefix(&format!("word/{stem}"))
+            .and_then(|r| r.strip_suffix(".xml"))
+        {
+            if let Ok(n) = rest.parse::<u32>() {
+                max = max.max(n);
+            }
+        }
+    }
+    max + 1
+}
+
+fn inject_story_relationship(rels_xml: &mut String, rid: &str, rel_type: &str, target: &str) {
+    if rels_xml.contains(&format!("Id=\"{rid}\"")) {
+        return;
+    }
+    let injection = format!(
+        r#"  <Relationship Id="{rid}" Type="{rel_type}" Target="{target}"/>
+"#
+    );
+    if let Some(idx) = rels_xml.rfind("</Relationships>") {
+        rels_xml.insert_str(idx, &injection);
+    }
+}
+
+fn ensure_override_content_type(types_xml: &mut String, part_name: &str, content_type: &str) {
+    if types_xml.contains(&format!("PartName=\"{part_name}\"")) {
+        return;
+    }
+    let injection = format!(
+        r#"  <Override PartName="{part_name}" ContentType="{content_type}"/>
+"#
+    );
+    if let Some(idx) = types_xml.rfind("</Types>") {
+        types_xml.insert_str(idx, &injection);
+    }
 }
 
 /// Allocate `word/media/*` parts + document relationships for every inline image.
@@ -957,5 +1087,62 @@ mod tests {
         assert_eq!(loaded.footer[0].plain_text(), "NewFooter");
         assert_eq!(loaded.page_setup.header_r_id.as_deref(), Some("rId7"));
         assert_eq!(loaded.page_setup.footer_r_id.as_deref(), Some("rId8"));
+    }
+
+    #[test]
+    fn save_allocates_header_footer_parts_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("new-hf.docx");
+        let doc = Document {
+            blocks: vec![Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Body".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })],
+            header: vec![Paragraph {
+                runs: vec![Run {
+                    text: "FreshHeader".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            footer: vec![Paragraph {
+                runs: vec![Run {
+                    text: "FreshFooter".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(doc.page_setup.header_r_id.is_none());
+        assert!(doc.page_setup.footer_r_id.is_none());
+        save_document_sync(&doc, &path).unwrap();
+        let loaded = open_document(&path).unwrap();
+        assert!(loaded.page_setup.header_r_id.is_some());
+        assert!(loaded.page_setup.footer_r_id.is_some());
+        assert_eq!(loaded.header[0].plain_text(), "FreshHeader");
+        assert_eq!(loaded.footer[0].plain_text(), "FreshFooter");
+        let rels = {
+            let file = File::open(&path).unwrap();
+            let mut zip = ZipArchive::new(file).unwrap();
+            let mut part = zip.by_name("word/_rels/document.xml.rels").unwrap();
+            let mut s = String::new();
+            part.read_to_string(&mut s).unwrap();
+            s
+        };
+        assert!(
+            rels.contains("/relationships/header") && rels.contains("header1.xml"),
+            "missing header rel: {rels}"
+        );
+        assert!(
+            rels.contains("/relationships/footer") && rels.contains("footer1.xml"),
+            "missing footer rel: {rels}"
+        );
     }
 }
