@@ -121,6 +121,30 @@ export component AudioPlayerView inherits Rectangle {
                 root.command("escape");
                 return accept;
             }
+            if event.text == "1" {
+                root.command("tab:0");
+                return accept;
+            }
+            if event.text == "2" {
+                root.command("tab:1");
+                return accept;
+            }
+            if event.text == "3" {
+                root.command("tab:2");
+                return accept;
+            }
+            if event.text == "4" {
+                root.command("tab:3");
+                return accept;
+            }
+            if event.text == "5" {
+                root.command("tab:4");
+                return accept;
+            }
+            if event.text == "6" {
+                root.command("tab:5");
+                return accept;
+            }
             return reject;
         }
 

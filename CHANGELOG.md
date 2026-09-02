@@ -264,7 +264,8 @@ release yet.
   into mpv paused on startup; browse Back shows a human breadcrumb; now-playing
   shows album; playlist rename prefills the current name; EQ / ReplayGain / speed
   persist in widget config and survive track changes. **Recent** playlist
-  (last 50 played tracks, chronological).
+  (last 50 played tracks, chronological). Digits **1–6** switch browse tabs
+  when the player has focus.
 - Catalog **Video Player** launcher: video-only file picker → in-app libmpv
   viewer on the canvas (alongside **Media Player** for audio/video).
 - Terminal (PTY: PowerShell / cmd / WSL / SSH; tabs + splits).
