@@ -1705,6 +1705,68 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Insert a named bookmark at the start of the current selection (or caret).
+    ///
+    /// Returns the generated bookmark name (e.g. `_OrchidBm1`).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn insert_bookmark_at_selection(&self) -> Result<String> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let (start, _) = sel.normalized();
+        let plain_offset = plain_offset_from_cursor(doc, start);
+        let name = next_bookmark_name(doc);
+        let bookmark = Bookmark {
+            name: name.clone(),
+            plain_offset,
+        };
+        self.undo
+            .lock()
+            .push(doc, EditCommand::AddBookmark { bookmark })?;
+        self.invalidate_preview();
+        Ok(name)
+    }
+
+    /// Toggle `w:keepNext` on selected paragraphs.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn toggle_keep_next_selection(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let cursors = paragraph_cursors_in_selection(doc, sel);
+        if cursors.is_empty() {
+            return Ok(());
+        }
+        let clear = cursors
+            .iter()
+            .any(|c| paragraph_ref(doc, *c).is_some_and(|p| p.keep_next));
+        let new_keep = !clear;
+        let mut next = doc.blocks.clone();
+        let mut changed = false;
+        for cursor in cursors {
+            if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
+                if p.keep_next != new_keep {
+                    p.keep_next = new_keep;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Step font size up (`direction > 0`) or down on the selection.
     ///
     /// # Errors
@@ -2685,6 +2747,7 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     list_level: prev.list_level,
                     num_id: prev.num_id,
                     page_break_before: prev.page_break_before,
+                    keep_next: prev.keep_next,
                     space_before_twips: prev.space_before_twips,
                     space_after_twips: prev.space_after_twips,
                     line_spacing: prev.line_spacing,
@@ -2783,6 +2846,17 @@ const PAGE_LETTER_HEIGHT_TWIPS: u32 = 15840;
 /// ISO A4 page size (twips).
 const PAGE_A4_WIDTH_TWIPS: u32 = 11906;
 const PAGE_A4_HEIGHT_TWIPS: u32 = 16838;
+
+fn next_bookmark_name(doc: &Document) -> String {
+    let mut n = 1u32;
+    loop {
+        let name = format!("_OrchidBm{n}");
+        if !doc.bookmarks.iter().any(|b| b.name == name) {
+            return name;
+        }
+        n += 1;
+    }
+}
 
 fn clamp_spacing_twips(v: i32) -> u32 {
     v.clamp(0, SPACING_TWIPS_MAX) as u32
@@ -3105,6 +3179,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         list_level: p.list_level,
         num_id: p.num_id,
         page_break_before: p.page_break_before,
+        keep_next: p.keep_next,
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
         line_spacing: p.line_spacing,
@@ -3123,6 +3198,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         list_level: 0,
         num_id: None,
         page_break_before: false,
+        keep_next: false,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
         line_spacing: p.line_spacing,
@@ -3167,6 +3243,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         list_level: p.list_level,
         num_id: p.num_id,
         page_break_before: p.page_break_before,
+        keep_next: p.keep_next,
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
         line_spacing: p.line_spacing,
@@ -3185,6 +3262,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         list_level: 0,
         num_id: None,
         page_break_before: false,
+        keep_next: false,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
         line_spacing: p.line_spacing,
@@ -3282,6 +3360,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
         list_level: start_p.list_level,
         num_id: start_p.num_id,
         page_break_before: start_p.page_break_before,
+        keep_next: start_p.keep_next,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
         line_spacing: start_p.line_spacing,
@@ -3371,6 +3450,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
         list_level: start_p.list_level,
         num_id: start_p.num_id,
         page_break_before: start_p.page_break_before,
+        keep_next: start_p.keep_next,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
         line_spacing: start_p.line_spacing,
@@ -3570,6 +3650,7 @@ impl Viewer for DocumentViewer {
         } else {
             para.is_some_and(|p| p.border_bottom)
         };
+        let keep_next = para.is_some_and(|p| p.keep_next);
 
         let source_mode = *self.source_mode.read();
         let (sel_start, sel_end) = {
@@ -3617,6 +3698,7 @@ impl Viewer for DocumentViewer {
             highlight,
             shade,
             border_bottom,
+            keep_next,
             superscript,
             subscript,
             font_size_pt,

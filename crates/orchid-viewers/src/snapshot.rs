@@ -62,6 +62,8 @@ pub struct DocumentSnapshot {
     pub shade: bool,
     /// Bottom paragraph border (`w:pBdr/w:bottom`) active at the caret.
     pub border_bottom: bool,
+    /// Keep-with-next (`w:keepNext`) active at the caret paragraph.
+    pub keep_next: bool,
     pub superscript: bool,
     pub subscript: bool,
     /// Font size in points at the caret (`0` = document default).

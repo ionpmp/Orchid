@@ -2,8 +2,8 @@
 
 use crate::document::cursor::{paragraph_mut, paragraph_ref, Cursor, Selection};
 use crate::document::model::{
-    Alignment, Block, CellImage, Document, Hyperlink, InlineImage, ListKind, PageSetup, Paragraph,
-    Run, RunStyle, Table, TableCell, TableRow,
+    Alignment, Block, Bookmark, CellImage, Document, Hyperlink, InlineImage, ListKind, PageSetup,
+    Paragraph, Run, RunStyle, Table, TableCell, TableRow,
 };
 use crate::error::{Result, ViewerError};
 
@@ -132,6 +132,16 @@ pub enum EditCommand {
     SetPageSetup {
         /// New page geometry.
         setup: PageSetup,
+    },
+    /// Insert a named bookmark at a plain-text offset.
+    AddBookmark {
+        /// Bookmark payload.
+        bookmark: Bookmark,
+    },
+    /// Remove a bookmark by name.
+    RemoveBookmark {
+        /// Bookmark name (`w:name`).
+        name: String,
     },
     /// Remove a block (inverse of insert).
     RemoveBlock {
@@ -691,6 +701,24 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
         EditCommand::SetPageSetup { setup } => {
             let previous = std::mem::replace(&mut doc.page_setup, setup.clone());
             Ok(EditCommand::SetPageSetup { setup: previous })
+        }
+        EditCommand::AddBookmark { bookmark } => {
+            if doc.bookmarks.iter().any(|b| b.name == bookmark.name) {
+                return Err(ViewerError::EditOutOfBounds);
+            }
+            doc.bookmarks.push(bookmark.clone());
+            Ok(EditCommand::RemoveBookmark {
+                name: bookmark.name.clone(),
+            })
+        }
+        EditCommand::RemoveBookmark { name } => {
+            let idx = doc
+                .bookmarks
+                .iter()
+                .position(|b| b.name == *name)
+                .ok_or(ViewerError::EditOutOfBounds)?;
+            let bookmark = doc.bookmarks.remove(idx);
+            Ok(EditCommand::AddBookmark { bookmark })
         }
         EditCommand::RemoveBlock { block_idx } => {
             if *block_idx >= doc.blocks.len() {

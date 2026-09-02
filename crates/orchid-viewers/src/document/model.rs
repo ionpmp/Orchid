@@ -129,6 +129,8 @@ pub struct Paragraph {
     pub num_id: Option<u32>,
     /// Force a page break before this paragraph (`w:pageBreakBefore` / Ctrl+Enter).
     pub page_break_before: bool,
+    /// Keep this paragraph with the next one (`w:keepNext`).
+    pub keep_next: bool,
     /// Space before paragraph in twips (`w:spacing/@w:before`). `0` = none.
     pub space_before_twips: u32,
     /// Space after paragraph in twips (`w:spacing/@w:after`). `0` = none.

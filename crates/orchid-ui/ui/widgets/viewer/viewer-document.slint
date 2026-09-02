@@ -379,6 +379,27 @@ export component ViewerDocumentView inherits Rectangle {
                 Rectangle {
                     width: 28px;
                     height: 28px;
+                    background: tool-bg(model.keep-next, kn-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    kn-ta := TouchArea { clicked => { root.action("keep-next"); } }
+                    Text {
+                        text: model.keep-next-label;
+                        color: tool-btn(model.keep-next);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-keep-next;
+                        show: kn-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
                     background: tool-bg(model.superscript, super-ta.has-hover);
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
@@ -464,6 +485,27 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-link;
                         show: link-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, bm-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    bm-ta := TouchArea { clicked => { root.action("insert-bookmark"); } }
+                    Text {
+                        text: model.bookmark-label;
+                        color: tool-btn(false);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-bookmark;
+                        show: bm-ta.has-hover;
                         below: false;
                     }
                 }
