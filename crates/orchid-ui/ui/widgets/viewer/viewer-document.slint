@@ -484,6 +484,27 @@ export component ViewerDocumentView inherits Rectangle {
                 Rectangle {
                     width: 28px;
                     height: 28px;
+                    background: tool-bg(model.contextual-spacing, cs-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    cs-ta := TouchArea { clicked => { root.action("contextual-spacing"); } }
+                    Text {
+                        text: model.contextual-spacing-label;
+                        color: tool-btn(model.contextual-spacing);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-contextual-spacing;
+                        show: cs-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
                     background: tool-bg(model.superscript, super-ta.has-hover);
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
