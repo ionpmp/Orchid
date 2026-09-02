@@ -266,7 +266,7 @@ release yet.
   persist in widget config and survive track changes. **Recent** playlist
   (last 50 played tracks, chronological). Library / queue rows show ID3
   duration when TLEN is present. Digits **1–7** switch browse tabs
-  when the player has focus.
+  when the player has focus Library/queue rows show cover thumbnails (APIC / folder cover).
 - **Video Player**: dockable local video library (folders + queue, shuffle /
   repeat, libmpv RGBA surface) — catalog creates the widget (no longer a
   one-shot file-picker → viewer launcher). File Manager **Play in Video Player**

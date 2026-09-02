@@ -9,6 +9,7 @@ pub mod m3u;
 pub mod player;
 pub mod queue;
 pub mod sleep;
+pub mod thumbs;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -40,6 +41,7 @@ use lyrics::Lyrics;
 use player::PlayerSession;
 use queue::PlayQueue;
 use sleep::SleepTimer;
+use thumbs::CoverThumbCache;
 
 /// Stable type id.
 pub const TYPE_ID: &str = "audio-player";
@@ -61,6 +63,7 @@ struct AudioHandle {
     lyrics: Arc<RwLock<Lyrics>>,
     /// Path last appended to mpv for gapless advance (if any).
     prefetched: Arc<RwLock<Option<String>>>,
+    thumbs: Arc<RwLock<CoverThumbCache>>,
     bus: Arc<orchid_core::EventBus>,
     scanning: AtomicBool,
     scan_gen: AtomicU64,
@@ -1263,17 +1266,30 @@ fn track_rows_from(
     rows: &[TrackRow],
     current: Option<&str>,
     favorites: &[String],
+    thumbs: &mut CoverThumbCache,
 ) -> Vec<AudioPlayerTrackRow> {
+    let mut budget = thumbs::load_budget();
     rows.iter()
-        .map(|t| AudioPlayerTrackRow {
-            path: t.path.clone(),
-            title: t.title.clone(),
-            artist: t.artist.clone(),
-            album: t.album.clone(),
-            subtitle: t.subtitle.clone(),
-            duration_label: t.duration_label.clone(),
-            is_current: current == Some(t.path.as_str()),
-            is_favorite: favorites.iter().any(|f| f == &t.path),
+        .map(|t| {
+            let thumb = thumbs.get(&t.path, &mut budget);
+            let (has_cover, cover_rgba, cover_width, cover_height) = match thumb {
+                Some(th) => (true, th.rgba, th.width, th.height),
+                None => (false, Arc::new(Vec::new()), 0, 0),
+            };
+            AudioPlayerTrackRow {
+                path: t.path.clone(),
+                title: t.title.clone(),
+                artist: t.artist.clone(),
+                album: t.album.clone(),
+                subtitle: t.subtitle.clone(),
+                duration_label: t.duration_label.clone(),
+                is_current: current == Some(t.path.as_str()),
+                is_favorite: favorites.iter().any(|f| f == &t.path),
+                has_cover,
+                cover_rgba,
+                cover_width,
+                cover_height,
+            }
         })
         .collect()
 }
@@ -1328,6 +1344,7 @@ impl AudioPlayerWidget {
             sleep: Arc::new(RwLock::new(SleepTimer::default())),
             lyrics: Arc::new(RwLock::new(Lyrics::default())),
             prefetched: Arc::new(RwLock::new(None)),
+            thumbs: Arc::new(RwLock::new(CoverThumbCache::default())),
             bus,
             scanning: AtomicBool::new(false),
             scan_gen: AtomicU64::new(0),
@@ -1525,18 +1542,26 @@ impl AudioPlayerWidget {
                     }
                 })
                 .collect(),
-            tracks: track_rows_from(
-                &browse.tracks,
-                current.as_deref(),
-                &cfg.favorites,
-            ),
+            tracks: {
+                let mut thumbs = self.handle.thumbs.write();
+                track_rows_from(
+                    &browse.tracks,
+                    current.as_deref(),
+                    &cfg.favorites,
+                    &mut thumbs,
+                )
+            },
             playlists,
             roots,
-            queue: track_rows_from(
-                &browse.tracks,
-                current.as_deref(),
-                &cfg.favorites,
-            ),
+            queue: {
+                let mut thumbs = self.handle.thumbs.write();
+                track_rows_from(
+                    &browse.tracks,
+                    current.as_deref(),
+                    &cfg.favorites,
+                    &mut thumbs,
+                )
+            },
             queue_index: q.index as i32,
             queue_count: q.paths.len() as u32,
             queue_duration_ms: queue_known_duration_ms(&lib, &q.paths),

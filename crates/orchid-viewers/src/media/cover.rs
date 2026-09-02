@@ -101,21 +101,28 @@ pub fn load_track_meta(path: &Path) -> TrackMeta {
 /// Prefer embedded APIC, then sidecar cover next to the media file.
 #[must_use]
 pub fn load_cover_art(path: &Path) -> Option<FrameBuf> {
-    if let Some(frame) = load_id3_cover(path) {
+    load_cover_art_sized(path, MAX_COVER_EDGE)
+}
+
+/// Like [`load_cover_art`], but caps the longest edge (list thumbnails).
+#[must_use]
+pub fn load_cover_art_sized(path: &Path, max_edge: u32) -> Option<FrameBuf> {
+    let max_edge = max_edge.max(16);
+    if let Some(frame) = load_id3_cover(path, max_edge) {
         return Some(frame);
     }
     for candidate in discover_cover_sidecars(path) {
-        if let Some(frame) = decode_cover_file(&candidate) {
+        if let Some(frame) = decode_cover_file(&candidate, max_edge) {
             return Some(frame);
         }
     }
     None
 }
 
-fn load_id3_cover(path: &Path) -> Option<FrameBuf> {
+fn load_id3_cover(path: &Path, max_edge: u32) -> Option<FrameBuf> {
     let tag = id3::Tag::read_from_path(path).ok()?;
     let pic = tag.pictures().next()?;
-    decode_cover_bytes(&pic.data)
+    decode_cover_bytes(&pic.data, max_edge)
 }
 
 /// Folder covers and same-stem images (`song.jpg`, `cover.png`, …).
@@ -142,19 +149,25 @@ pub fn discover_cover_sidecars(media: &Path) -> Vec<PathBuf> {
     out
 }
 
-fn decode_cover_file(path: &Path) -> Option<FrameBuf> {
+fn decode_cover_file(path: &Path, max_edge: u32) -> Option<FrameBuf> {
     let bytes = std::fs::read(path).ok()?;
-    decode_cover_bytes(&bytes)
+    decode_cover_bytes(&bytes, max_edge)
 }
 
-fn decode_cover_bytes(bytes: &[u8]) -> Option<FrameBuf> {
+/// Decode a cover image file (JPEG/PNG/…) with a max edge (list thumbs).
+#[must_use]
+pub fn load_cover_file(path: &Path, max_edge: u32) -> Option<FrameBuf> {
+    decode_cover_file(path, max_edge.max(16))
+}
+
+fn decode_cover_bytes(bytes: &[u8], max_edge: u32) -> Option<FrameBuf> {
     let img = image::load_from_memory(bytes).ok()?;
     let rgba = img.to_rgba8();
     let (w, h) = rgba.dimensions();
     if w == 0 || h == 0 {
         return None;
     }
-    let (nw, nh) = scale_cover(w, h, MAX_COVER_EDGE);
+    let (nw, nh) = scale_cover(w, h, max_edge);
     let rgba = if nw != w || nh != h {
         image::imageops::resize(&rgba, nw, nh, image::imageops::FilterType::Triangle)
     } else {

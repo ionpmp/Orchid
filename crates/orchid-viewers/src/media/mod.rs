@@ -19,7 +19,10 @@ use crate::error::Result;
 use crate::snapshot::{MediaChapterItem, MediaSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
-pub use cover::{discover_cover_sidecars, load_cover_art, load_media_tags, load_track_meta, MediaTags, TrackMeta};
+pub use cover::{
+    discover_cover_sidecars, load_cover_art, load_cover_art_sized, load_cover_file, load_media_tags,
+    load_track_meta, MediaTags, TrackMeta,
+};
 pub use engine::{EngineMode, FrameBuf, MpvEngine, SharedPlayback};
 pub use ffi::mpv_available;
 pub use sidecars::discover_sidecar_subs;

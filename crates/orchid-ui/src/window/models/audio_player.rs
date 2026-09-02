@@ -296,13 +296,31 @@ pub(crate) fn build_audio_player_model(
             tracks: ModelRc::new(VecModel::from(
                 p.tracks
                     .iter()
-                    .map(|t| AudioPlayerTrackItem {
-                        path: t.path.clone().into(),
-                        title: t.title.clone().into(),
-                        subtitle: t.subtitle.clone().into(),
-                        duration_label: t.duration_label.clone().into(),
-                        is_current: t.is_current,
-                        is_favorite: t.is_favorite,
+                    .map(|t| {
+                        let cover = if t.has_cover
+                            && t.cover_width > 0
+                            && t.cover_height > 0
+                            && !t.cover_rgba.is_empty()
+                        {
+                            let buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+                                t.cover_rgba.as_ref(),
+                                t.cover_width,
+                                t.cover_height,
+                            );
+                            Image::from_rgba8(buf)
+                        } else {
+                            Image::default()
+                        };
+                        AudioPlayerTrackItem {
+                            path: t.path.clone().into(),
+                            title: t.title.clone().into(),
+                            subtitle: t.subtitle.clone().into(),
+                            duration_label: t.duration_label.clone().into(),
+                            is_current: t.is_current,
+                            is_favorite: t.is_favorite,
+                            has_cover: t.has_cover,
+                            cover,
+                        }
                     })
                     .collect::<Vec<_>>(),
             )),

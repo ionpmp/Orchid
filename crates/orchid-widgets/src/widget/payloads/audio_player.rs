@@ -15,7 +15,7 @@ pub struct AudioPlayerGroupRow {
 }
 
 /// One track row in the list.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default)]
 pub struct AudioPlayerTrackRow {
     pub path: String,
     pub title: String,
@@ -25,6 +25,28 @@ pub struct AudioPlayerTrackRow {
     pub duration_label: String,
     pub is_current: bool,
     pub is_favorite: bool,
+    pub has_cover: bool,
+    pub cover_rgba: Arc<Vec<u8>>,
+    pub cover_width: u32,
+    pub cover_height: u32,
+}
+
+impl PartialEq for AudioPlayerTrackRow {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+            && self.title == other.title
+            && self.artist == other.artist
+            && self.album == other.album
+            && self.subtitle == other.subtitle
+            && self.duration_label == other.duration_label
+            && self.is_current == other.is_current
+            && self.is_favorite == other.is_favorite
+            && self.has_cover == other.has_cover
+            && self.cover_width == other.cover_width
+            && self.cover_height == other.cover_height
+            && (std::sync::Arc::ptr_eq(&self.cover_rgba, &other.cover_rgba)
+                || self.cover_rgba.as_ref() == other.cover_rgba.as_ref())
+    }
 }
 
 /// Playlist chip / row.

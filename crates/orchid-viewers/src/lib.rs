@@ -90,7 +90,7 @@ pub use image::{
 };
 pub use media::{
     discover_cover_sidecars, discover_sidecar_subs, is_media_file_extension, is_video_file_extension,
-    load_cover_art, load_media_tags, load_track_meta, media_playlist_panel_default, mpv_available,
+    load_cover_art, load_cover_art_sized, load_cover_file, load_media_tags, load_track_meta, media_playlist_panel_default, mpv_available,
     persist_media_playlist_panel, pick_media_file, pick_media_folder, pick_m3u_file,
     pick_video_file, save_m3u_file, EngineMode,
     FrameBuf, MediaTags, MediaViewer, MpvEngine, SharedPlayback, TrackMeta, MEDIA_FILE_EXTENSIONS,
