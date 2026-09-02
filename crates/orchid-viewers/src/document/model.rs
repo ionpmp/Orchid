@@ -136,6 +136,8 @@ pub struct Paragraph {
     pub page_break_before: bool,
     /// Keep this paragraph with the next one (`w:keepNext`).
     pub keep_next: bool,
+    /// Keep all lines of this paragraph together (`w:keepLines`).
+    pub keep_lines: bool,
     /// Space before paragraph in twips (`w:spacing/@w:before`). `0` = none.
     pub space_before_twips: u32,
     /// Space after paragraph in twips (`w:spacing/@w:after`). `0` = none.

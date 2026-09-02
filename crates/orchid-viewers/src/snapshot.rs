@@ -68,6 +68,8 @@ pub struct DocumentSnapshot {
     pub border_bottom: bool,
     /// Keep-with-next (`w:keepNext`) active at the caret paragraph.
     pub keep_next: bool,
+    /// Keep lines together (`w:keepLines`) active at the caret paragraph.
+    pub keep_lines: bool,
     pub superscript: bool,
     pub subscript: bool,
     /// Font size in points at the caret (`0` = document default).

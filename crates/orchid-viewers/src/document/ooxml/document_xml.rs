@@ -217,6 +217,7 @@ fn parse_paragraph(
         num_id: None,
         page_break_before: false,
         keep_next: false,
+        keep_lines: false,
         space_before_twips: 0,
         space_after_twips: 0,
         line_spacing: 0,
@@ -268,6 +269,9 @@ fn parse_paragraph(
                     }
                     "keepNext" if in_p_pr => {
                         p.keep_next = true;
+                    }
+                    "keepLines" if in_p_pr => {
+                        p.keep_lines = true;
                     }
                     "spacing" if in_p_pr => {
                         apply_paragraph_spacing(&e, &mut p);
@@ -353,6 +357,9 @@ fn parse_paragraph(
                         }
                         "keepNext" => {
                             p.keep_next = true;
+                        }
+                        "keepLines" => {
+                            p.keep_lines = true;
                         }
                         "spacing" => {
                             apply_paragraph_spacing(&e, &mut p);
@@ -979,6 +986,11 @@ fn write_paragraph(
     if p.keep_next {
         writer
             .write_event(Event::Empty(BytesStart::new("w:keepNext")))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if p.keep_lines {
+        writer
+            .write_event(Event::Empty(BytesStart::new("w:keepLines")))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
     if p.space_before_twips > 0
@@ -2701,6 +2713,63 @@ mod tests {
     }
 
     #[test]
+    fn parse_and_write_keep_lines() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:pPr><w:keepLines/></w:pPr>
+              <w:r><w:t>Together</w:t></w:r>
+            </w:p>
+            <w:p><w:r><w:t>Loose</w:t></w:r></w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks[0] {
+            Block::Paragraph(p) => {
+                assert!(p.keep_lines);
+                assert!(!p.keep_next);
+                assert_eq!(p.plain_text(), "Together");
+            }
+            _ => panic!("expected paragraph"),
+        }
+        match &blocks[1] {
+            Block::Paragraph(p) => assert!(!p.keep_lines),
+            _ => panic!("expected paragraph"),
+        }
+        let doc = Document {
+            blocks,
+            page_setup,
+            unsupported,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:keepLines"),
+            "serialized XML missing keepLines: {text}"
+        );
+        let (blocks2, _, _, _) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        match &blocks2[0] {
+            Block::Paragraph(p) => assert!(p.keep_lines),
+            _ => panic!("expected paragraph"),
+        }
+    }
+
     fn parse_and_write_page_break_before() {
         let xml = br#"<?xml version="1.0"?>
         <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">

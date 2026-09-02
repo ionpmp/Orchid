@@ -3633,6 +3633,7 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "shade" => doc.toggle_paragraph_shade_selection(),
                 "border-bottom" => doc.toggle_paragraph_border_bottom_selection(),
                 "keep-next" => doc.toggle_keep_next_selection(),
+                "keep-lines" => doc.toggle_keep_lines_selection(),
                 "insert-bookmark" => doc.insert_bookmark_at_selection().map(|_| ()),
                 "superscript" => doc.toggle_style_all('^'),
                 "subscript" => doc.toggle_style_all('_'),

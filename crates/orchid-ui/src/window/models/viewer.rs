@@ -745,6 +745,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         shade: false,
         border_bottom: false,
         keep_next: false,
+        keep_lines: false,
         superscript: false,
         subscript: false,
         font_size_pt: 0.0,
@@ -775,6 +776,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         shade_label: locale.tr("viewer-document-shade").into(),
         border_bottom_label: locale.tr("viewer-document-border-bottom").into(),
         keep_next_label: locale.tr("viewer-document-keep-next").into(),
+        keep_lines_label: locale.tr("viewer-document-keep-lines").into(),
         superscript_label: locale.tr("viewer-document-superscript").into(),
         subscript_label: locale.tr("viewer-document-subscript").into(),
         clear_formatting_label: locale.tr("viewer-document-clear-formatting").into(),
@@ -795,6 +797,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         tip_shade: locale.tr("viewer-document-tip-shade").into(),
         tip_border_bottom: locale.tr("viewer-document-tip-border-bottom").into(),
         tip_keep_next: locale.tr("viewer-document-tip-keep-next").into(),
+        tip_keep_lines: locale.tr("viewer-document-tip-keep-lines").into(),
         tip_color_black: locale.tr("viewer-document-tip-color-black").into(),
         tip_color_red: locale.tr("viewer-document-tip-color-red").into(),
         tip_color_blue: locale.tr("viewer-document-tip-color-blue").into(),
@@ -1051,6 +1054,7 @@ fn build_document_snapshot(
     model.shade = s.shade;
     model.border_bottom = s.border_bottom;
     model.keep_next = s.keep_next;
+    model.keep_lines = s.keep_lines;
     model.superscript = s.superscript;
     model.subscript = s.subscript;
     model.font_size_pt = s.font_size_pt;
