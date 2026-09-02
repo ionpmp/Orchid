@@ -145,7 +145,7 @@ impl DocumentLayout {
             .runs
             .iter()
             .map(|r| {
-                if r.style.all_caps {
+                if r.style.all_caps || r.style.small_caps {
                     r.text.to_uppercase()
                 } else {
                     r.text.clone()
@@ -167,7 +167,12 @@ impl DocumentLayout {
 
         let mut offset = prefix.len();
         for run in &p.runs {
-            let len = run.text.len();
+            let display = if run.style.all_caps || run.style.small_caps {
+                run.text.to_uppercase()
+            } else {
+                run.text.clone()
+            };
+            let len = display.len();
             if len == 0 {
                 continue;
             }
@@ -186,14 +191,22 @@ impl DocumentLayout {
                 builder.push(StyleProperty::Strikethrough(true), offset..end);
             }
             let base_pt = run.style.font_size_pt.unwrap_or(14.0);
-            let (effective_pt, baseline_shift) = if run.style.superscript {
+            let (mut effective_pt, baseline_shift) = if run.style.superscript {
                 (base_pt * 0.65, -base_pt * 0.4)
             } else if run.style.subscript {
                 (base_pt * 0.65, base_pt * 0.2)
             } else {
                 (base_pt, 0.0)
             };
-            if run.style.font_size_pt.is_some() || run.style.superscript || run.style.subscript {
+            // Approximate small-caps: uppercase glyphs at ~80% size when caps is off.
+            if run.style.small_caps && !run.style.all_caps {
+                effective_pt *= 0.8;
+            }
+            if run.style.font_size_pt.is_some()
+                || run.style.superscript
+                || run.style.subscript
+                || (run.style.small_caps && !run.style.all_caps)
+            {
                 builder.push(StyleProperty::FontSize(effective_pt), offset..end);
             }
             if let Some(ref family) = run.style.font_family {

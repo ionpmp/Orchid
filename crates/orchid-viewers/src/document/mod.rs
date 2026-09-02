@@ -1999,6 +1999,7 @@ impl DocumentViewer {
                 '^' => s.superscript,
                 '_' => s.subscript,
                 'a' => s.all_caps,
+                'm' => s.small_caps,
                 _ => false,
             })
             .unwrap_or(false);
@@ -2035,6 +2036,10 @@ impl DocumentViewer {
             },
             'a' => RunStylePatch {
                 all_caps: Some(!currently_on),
+                ..Default::default()
+            },
+            'm' => RunStylePatch {
+                small_caps: Some(!currently_on),
                 ..Default::default()
             },
             _ => return Ok(()),
@@ -3595,6 +3600,7 @@ impl Viewer for DocumentViewer {
             strikethrough,
             highlight,
             all_caps,
+            small_caps,
             superscript,
             subscript,
             font_size_pt,
@@ -3609,6 +3615,7 @@ impl Viewer for DocumentViewer {
             style.as_ref().is_some_and(|s| s.strikethrough),
             style.as_ref().is_some_and(|s| s.highlight),
             style.as_ref().is_some_and(|s| s.all_caps),
+            style.as_ref().is_some_and(|s| s.small_caps),
             style.as_ref().is_some_and(|s| s.superscript),
             style.as_ref().is_some_and(|s| s.subscript),
             style.as_ref().and_then(|s| s.font_size_pt).unwrap_or(0.0),
@@ -3704,6 +3711,7 @@ impl Viewer for DocumentViewer {
             strikethrough,
             highlight,
             all_caps,
+            small_caps,
             shade,
             border_bottom,
             keep_next,
