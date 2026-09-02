@@ -86,7 +86,10 @@ impl AudioHandle {
         cfg.queue_index = q.index as u32;
         cfg.shuffle = q.shuffle;
         cfg.repeat = q.repeat;
-        cfg.volume = self.player.volume() as f32;
+        // Keep user volume while soft-crossfade ducks the engine level.
+        if cfg.crossfade_secs == 0 {
+            cfg.volume = self.player.volume() as f32;
+        }
         cfg.muted = self.player.muted();
         cfg.eq_index = self.player.eq_index();
         cfg.replaygain_index = self.player.replaygain_index();
@@ -123,7 +126,13 @@ impl AudioHandle {
         let p = PathBuf::from(path);
         self.player.load_path(p.as_path());
         *self.lyrics.write() = Lyrics::load_for(p.as_path());
-        self.player.set_volume(f64::from(self.config.read().volume));
+        let (vol, xf) = {
+            let c = self.config.read();
+            (c.volume, c.crossfade_secs)
+        };
+        // Start quiet so the refresh tick can fade in.
+        self.player
+            .set_volume(if xf > 0 { 0.0 } else { f64::from(vol) });
         self.prefetch_following();
         pause_rival_viewers();
         #[cfg(windows)]
@@ -152,7 +161,12 @@ impl AudioHandle {
         let p = PathBuf::from(path);
         self.player.apply_meta(p.as_path());
         *self.lyrics.write() = Lyrics::load_for(p.as_path());
-        self.player.set_volume(f64::from(self.config.read().volume));
+        let (vol, xf) = {
+            let c = self.config.read();
+            (c.volume, c.crossfade_secs)
+        };
+        self.player
+            .set_volume(if xf > 0 { 0.0 } else { f64::from(vol) });
         self.prefetch_following();
         #[cfg(windows)]
         {
@@ -182,6 +196,39 @@ impl AudioHandle {
                 *self.prefetched.write() = None;
             }
         }
+    }
+
+    /// Duck / restore engine volume for soft crossfade. Returns true if volume changed.
+    fn apply_crossfade_volume(&self) -> bool {
+        let (secs, base, muted) = {
+            let c = self.config.read();
+            (c.crossfade_secs, f64::from(c.volume), c.muted)
+        };
+        if secs == 0 || muted || !self.player.is_playing() {
+            return false;
+        }
+        let pos = self.player.position_ms();
+        let dur = self.player.duration_ms();
+        let window = u64::from(secs) * 1000;
+        // Need room for both fade-in and fade-out.
+        if dur < window.saturating_mul(2) {
+            return false;
+        }
+        let rem = dur.saturating_sub(pos);
+        let factor = if pos < window {
+            pos as f64 / window as f64
+        } else if rem < window {
+            rem as f64 / window as f64
+        } else {
+            1.0
+        };
+        let target = (base * factor.clamp(0.0, 1.0)).round();
+        let current = f64::from(self.player.volume());
+        if (current - target).abs() < 1.0 {
+            return false;
+        }
+        self.player.set_volume(target);
+        true
     }
 
     #[cfg(windows)]
@@ -520,6 +567,17 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         "speed" => {
             h.player.cycle_speed();
             h.sync_queue_to_config();
+            h.publish();
+        }
+        "crossfade" => {
+            h.config.write().cycle_crossfade();
+            let (vol, xf) = {
+                let c = h.config.read();
+                (c.volume, c.crossfade_secs)
+            };
+            if xf == 0 {
+                h.player.set_volume(f64::from(vol));
+            }
             h.publish();
         }
         "sort" => {
@@ -1595,7 +1653,11 @@ impl AudioPlayerWidget {
             progress,
             position_label: format_time(pos),
             duration_label: format_time(dur),
-            volume: self.handle.player.volume(),
+            volume: if cfg.crossfade_secs > 0 {
+                cfg.volume.round().clamp(0.0, 150.0) as u32
+            } else {
+                self.handle.player.volume()
+            },
             muted: self.handle.player.muted(),
             shuffle: q.shuffle,
             repeat: q.repeat.as_u8(),
@@ -1603,6 +1665,7 @@ impl AudioPlayerWidget {
             eq_label: self.handle.player.eq_label(),
             rg_label: self.handle.player.replaygain_label(),
             speed_label: self.handle.player.speed_label(),
+            crossfade_secs: cfg.crossfade_secs,
             lyrics_line: self.handle.lyrics.read().line_at(pos),
             has_lyrics: !self.handle.lyrics.read().is_empty(),
             library_count: lib.tracks.len() as u32,
@@ -1639,6 +1702,9 @@ impl AudioPlayerWidget {
                 }
                 if handle.sleep.write().tick() {
                     handle.player.pause();
+                    dirty = true;
+                }
+                if handle.apply_crossfade_volume() {
                     dirty = true;
                 }
                 if dirty || handle.player.is_playing() || handle.sleep.read().is_active() {

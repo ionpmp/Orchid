@@ -242,8 +242,8 @@ release yet.
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),
   playlists (create / rename / delete / add tracks) and favorites, shuffle /
   repeat, sleep timer, EQ presets, ReplayGain, playback speed presets, soft
-  volume boost (to 150%), library search, add-to-queue / play-next / reorder /
-  clear queue, gapless prefetch, sidecar `.lrc` lyrics, background library scan,
+  soft volume boost (to 150%), library search, add-to-queue / play-next / reorder /
+  clear queue, soft **crossfade** (Off / 3 / 5 / 8 / 12s via button or `X`), gapless prefetch, sidecar `.lrc` lyrics, background library scan,
   focused keyboard transport, Windows SMTC (lock screen / media keys), shared
   audio-only libmpv session (separate from SMTC Now Playing and Viewer media
   chrome); widget-owned volume (not Viewer `media_prefs`); mutual pause with

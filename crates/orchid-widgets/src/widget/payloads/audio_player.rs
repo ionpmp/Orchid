@@ -109,6 +109,8 @@ pub struct AudioPlayerPayload {
     pub eq_label: String,
     pub rg_label: String,
     pub speed_label: String,
+    /// Soft crossfade window in seconds (0 = off).
+    pub crossfade_secs: u8,
     pub lyrics_line: String,
     pub has_lyrics: bool,
     pub library_count: u32,

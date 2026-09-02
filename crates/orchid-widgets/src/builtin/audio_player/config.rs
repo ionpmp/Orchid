@@ -170,6 +170,9 @@ pub struct AudioPlayerConfig {
     pub speed_x100: u32,
     /// Recently played track paths (most recent first).
     pub recent_tracks: Vec<String>,
+    /// Soft crossfade window in seconds (0 = off). Values: 0, 3, 5, 8, 12.
+    #[serde(default)]
+    pub crossfade_secs: u8,
 }
 
 impl Default for AudioPlayerConfig {
@@ -194,6 +197,7 @@ impl Default for AudioPlayerConfig {
             replaygain_index: 0,
             speed_x100: 100,
             recent_tracks: Vec::new(),
+            crossfade_secs: 0,
         }
     }
 }
@@ -225,5 +229,19 @@ impl AudioPlayerConfig {
         if self.speed_x100 == 0 {
             self.speed_x100 = 100;
         }
+        self.crossfade_secs = match self.crossfade_secs {
+            0 | 3 | 5 | 8 | 12 => self.crossfade_secs,
+            _ => 0,
+        };
+    }
+
+    pub fn cycle_crossfade(&mut self) {
+        self.crossfade_secs = match self.crossfade_secs {
+            0 => 3,
+            3 => 5,
+            5 => 8,
+            8 => 12,
+            _ => 0,
+        };
     }
 }

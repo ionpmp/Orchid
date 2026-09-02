@@ -866,6 +866,7 @@ fn audio_player_payload_eq(a: &AudioPlayerPayload, b: &AudioPlayerPayload) -> bo
         && a.eq_label == b.eq_label
         && a.rg_label == b.rg_label
         && a.speed_label == b.speed_label
+        && a.crossfade_secs == b.crossfade_secs
         && a.lyrics_line == b.lyrics_line
         && a.has_lyrics == b.has_lyrics
         && a.library_count == b.library_count
@@ -875,6 +876,7 @@ fn audio_player_payload_eq(a: &AudioPlayerPayload, b: &AudioPlayerPayload) -> bo
         && a.has_cover == b.has_cover
         && a.cover_width == b.cover_width
         && a.cover_height == b.cover_height
+        && a.current_track_index == b.current_track_index
         && (std::sync::Arc::ptr_eq(&a.cover_rgba, &b.cover_rgba)
             || a.cover_rgba.as_ref() == b.cover_rgba.as_ref())
 }

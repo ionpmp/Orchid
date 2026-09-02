@@ -40,6 +40,7 @@ pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerMod
             eq_label: SharedString::new(),
             rg_label: SharedString::new(),
             speed_label: SharedString::new(),
+            crossfade_label: SharedString::new(),
             lyrics_line: SharedString::new(),
             has_lyrics: false,
             roots_label: SharedString::new(),
@@ -85,6 +86,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         eq_label: SharedString::new(),
         rg_label: SharedString::new(),
         speed_label: SharedString::new(),
+        crossfade_label: SharedString::new(),
         lyrics_line: SharedString::new(),
         has_lyrics: false,
         roots_label: SharedString::new(),
@@ -110,6 +112,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         eq_off_label: locale.tr("audio-player-eq-off").into(),
         rg_off_label: locale.tr("audio-player-rg-off").into(),
         speed_off_label: locale.tr("audio-player-speed-off").into(),
+        crossfade_off_label: locale.tr("audio-player-crossfade-off").into(),
         search_placeholder: locale.tr("audio-player-search-placeholder").into(),
         enqueue_label: locale.tr("audio-player-enqueue").into(),
         play_next_label: locale.tr("audio-player-play-next").into(),
@@ -192,6 +195,19 @@ fn format_queue_duration(ms: u64) -> String {
     }
 }
 
+fn crossfade_label(secs: u8, locale: &LocaleManager) -> SharedString {
+    if secs == 0 {
+        SharedString::new()
+    } else {
+        locale
+            .tr_args(
+                "audio-player-crossfade",
+                &FluentArgs::new().with("secs", secs.to_string()),
+            )
+            .into()
+    }
+}
+
 fn queue_stats_label(count: u32, duration_ms: u64, locale: &LocaleManager) -> SharedString {
     if count == 0 {
         return SharedString::new();
@@ -233,6 +249,7 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.eq_off_label = base.eq_off_label;
     m.rg_off_label = base.rg_off_label;
     m.speed_off_label = base.speed_off_label;
+    m.crossfade_off_label = base.crossfade_off_label;
     m.search_placeholder = base.search_placeholder;
     m.enqueue_label = base.enqueue_label;
     m.play_next_label = base.play_next_label;
@@ -366,6 +383,7 @@ pub(crate) fn build_audio_player_model(
             eq_label: p.eq_label.clone().into(),
             rg_label: p.rg_label.clone().into(),
             speed_label: p.speed_label.clone().into(),
+            crossfade_label: crossfade_label(p.crossfade_secs, locale),
             lyrics_line: p.lyrics_line.clone().into(),
             has_lyrics: p.has_lyrics,
             roots_label: library_stats_label(p.library_count, p.library_roots_count, locale),
