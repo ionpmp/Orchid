@@ -153,6 +153,7 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && a.keep_lines == b.keep_lines
                 && a.widow_control == b.widow_control
                 && a.contextual_spacing == b.contextual_spacing
+                && a.bidi == b.bidi
                 && a.superscript == b.superscript
                 && a.subscript == b.subscript
                 && a.font_size_pt.to_bits() == b.font_size_pt.to_bits()

@@ -250,8 +250,9 @@ pub fn pause_all() {
     }
 }
 
-/// Ask all media viewers to pause (fire-and-forget).
+/// Ask all media viewers / video players to pause (fire-and-forget).
 fn pause_rival_viewers() {
+    crate::builtin::video_player::pause_all();
     tokio::spawn(async {
         crate::builtin::viewer::pause_all_media().await;
     });
@@ -797,6 +798,23 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             h.sync_queue_to_config();
             h.publish();
         }
+        "save-queue-as-playlist" => {
+            let paths = h.queue.read().paths.clone();
+            if paths.is_empty() {
+                return;
+            }
+            let mut cfg = h.config.write();
+            let n = cfg.playlists.len() + 1;
+            let mut pl = PlaylistEntry::new(format!("Queue {n}"));
+            pl.tracks = paths;
+            cfg.active_playlist_id = pl.id.clone();
+            cfg.playlists.push(pl);
+            cfg.browse_tab = BrowseTab::Playlists;
+            cfg.browse_filter.clear();
+            cfg.renaming_playlist = true;
+            drop(cfg);
+            h.publish();
+        }
         "export-m3u" => {
             drop(h);
             export_m3u(instance_id);
@@ -1221,6 +1239,15 @@ fn format_time(ms: u64) -> String {
     }
 }
 
+fn queue_known_duration_ms(lib: &library::LibraryIndex, paths: &[String]) -> u64 {
+    paths
+        .iter()
+        .filter_map(|p| lib.find_by_path(p))
+        .filter_map(|t| t.duration_ms)
+        .map(u64::from)
+        .sum()
+}
+
 fn track_rows_from(
     rows: &[TrackRow],
     current: Option<&str>,
@@ -1500,6 +1527,8 @@ impl AudioPlayerWidget {
                 &cfg.favorites,
             ),
             queue_index: q.index as i32,
+            queue_count: q.paths.len() as u32,
+            queue_duration_ms: queue_known_duration_ms(&lib, &q.paths),
             has_track: current.is_some(),
             title,
             artist,
@@ -1725,5 +1754,50 @@ mod tests {
             _ => panic!("expected AudioPlayer"),
         }
         AUDIO_LIVE.remove(&id);
+    }
+
+    #[test]
+    fn queue_known_duration_sums_tlen() {
+        let mut lib = library::LibraryIndex::default();
+        lib.tracks.push(library::LibraryTrack {
+            path: std::path::PathBuf::from("/a.mp3"),
+            title: "A".into(),
+            artist: "X".into(),
+            album: "Y".into(),
+            genre: String::new(),
+            track: None,
+            year: None,
+            folder: "/".into(),
+            duration_ms: Some(60_000),
+        });
+        lib.tracks.push(library::LibraryTrack {
+            path: std::path::PathBuf::from("/b.mp3"),
+            title: "B".into(),
+            artist: "X".into(),
+            album: "Y".into(),
+            genre: String::new(),
+            track: None,
+            year: None,
+            folder: "/".into(),
+            duration_ms: Some(90_000),
+        });
+        lib.tracks.push(library::LibraryTrack {
+            path: std::path::PathBuf::from("/c.mp3"),
+            title: "C".into(),
+            artist: "X".into(),
+            album: "Y".into(),
+            genre: String::new(),
+            track: None,
+            year: None,
+            folder: "/".into(),
+            duration_ms: None,
+        });
+        let paths = vec![
+            "/a.mp3".into(),
+            "/b.mp3".into(),
+            "/c.mp3".into(),
+            "/missing.mp3".into(),
+        ];
+        assert_eq!(queue_known_duration_ms(&lib, &paths), 150_000);
     }
 }

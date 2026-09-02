@@ -46,6 +46,7 @@ pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerMod
             empty_hint: SharedString::new(),
             has_cover: false,
             cover: Image::default(),
+            queue_stats_label: SharedString::new(),
             has_library_roots: false,
             ..labels_only(locale)
         },
@@ -89,6 +90,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         empty_hint: SharedString::new(),
         has_cover: false,
         cover: Image::default(),
+        queue_stats_label: SharedString::new(),
         has_library_roots: false,
         tab_songs: locale.tr("audio-player-tab-songs").into(),
         tab_artists: locale.tr("audio-player-tab-artists").into(),
@@ -111,6 +113,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         play_next_label: locale.tr("audio-player-play-next").into(),
         remove_label: locale.tr("audio-player-remove").into(),
         clear_queue_label: locale.tr("audio-player-clear-queue").into(),
+        save_queue_as_playlist_label: locale.tr("audio-player-save-queue-as-playlist").into(),
         delete_playlist_label: locale.tr("audio-player-delete-playlist").into(),
         rename_playlist_label: locale.tr("audio-player-rename-playlist").into(),
         add_to_playlist_label: locale.tr("audio-player-add-to-playlist").into(),
@@ -173,6 +176,41 @@ fn library_stats_label(tracks: u32, folders: u32, locale: &LocaleManager) -> Sha
     }
 }
 
+fn format_queue_duration(ms: u64) -> String {
+    let total = ms / 1000;
+    let h = total / 3600;
+    let m = (total % 3600) / 60;
+    let s = total % 60;
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
+}
+
+fn queue_stats_label(count: u32, duration_ms: u64, locale: &LocaleManager) -> SharedString {
+    if count == 0 {
+        return SharedString::new();
+    }
+    if duration_ms == 0 {
+        locale
+            .tr_args(
+                "audio-player-queue-stats-tracks",
+                &FluentArgs::new().with("tracks", count.to_string()),
+            )
+            .into()
+    } else {
+        locale
+            .tr_args(
+                "audio-player-queue-stats",
+                &FluentArgs::new()
+                    .with("tracks", count.to_string())
+                    .with("duration", format_queue_duration(duration_ms)),
+            )
+            .into()
+    }
+}
+
 fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerModel {
     let base = labels_only(locale);
     m.tab_songs = base.tab_songs;
@@ -196,6 +234,7 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.play_next_label = base.play_next_label;
     m.remove_label = base.remove_label;
     m.clear_queue_label = base.clear_queue_label;
+    m.save_queue_as_playlist_label = base.save_queue_as_playlist_label;
     m.delete_playlist_label = base.delete_playlist_label;
     m.rename_playlist_label = base.rename_playlist_label;
     m.add_to_playlist_label = base.add_to_playlist_label;
@@ -309,6 +348,7 @@ pub(crate) fn build_audio_player_model(
             empty_hint,
             has_cover: p.has_cover,
             cover,
+            queue_stats_label: queue_stats_label(p.queue_count, p.queue_duration_ms, locale),
             has_library_roots: p.has_library_roots,
             sort_label: sort_label_for(p.library_sort, locale),
             is_current_favorite: p.is_current_favorite,
