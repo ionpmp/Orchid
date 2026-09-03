@@ -343,6 +343,9 @@ release yet.
   force a full-frame COW detach every tick; payload cells rewrite only dirty
   rows; PTY updates patch pane pixels in place instead of rebuilding the
   workspace frame; root `terminal-pixels` is no longer rasterized twice.
+- **rclone I/O**: `read_stream` pipes `cat` stdout instead of buffering the
+  whole file; `metadata` / `exists` use `lsjson --stat` instead of listing
+  the parent directory; copy progress is throttled to 150 ms.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

@@ -3,6 +3,7 @@
 
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use filetime::FileTime;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
@@ -292,6 +293,9 @@ async fn copy_file_with_progress(
 
     let mut buf = vec![0u8; 128 * 1024];
     let mut written: u64 = resume_from;
+    let mut last_progress = Instant::now()
+        .checked_sub(Duration::from_secs(1))
+        .unwrap_or_else(Instant::now);
     loop {
         ctl.wait().await?;
         let n = reader.read(&mut buf).await?;
@@ -304,14 +308,27 @@ async fn copy_file_with_progress(
         writer.write_all(&buf[..n]).await?;
         written += n as u64;
         if let Some(p) = progress {
-            p.send(OperationProgress {
-                total_bytes: total,
-                processed_bytes: bytes_before + written,
-                current_path: to.clone(),
-                items_processed: 0,
-                items_total: 0,
-            });
+            let now = Instant::now();
+            if now.duration_since(last_progress) >= Duration::from_millis(150) {
+                last_progress = now;
+                p.send(OperationProgress {
+                    total_bytes: total,
+                    processed_bytes: bytes_before + written,
+                    current_path: to.clone(),
+                    items_processed: 0,
+                    items_total: 0,
+                });
+            }
         }
+    }
+    if let Some(p) = progress {
+        p.send(OperationProgress {
+            total_bytes: total,
+            processed_bytes: bytes_before + written,
+            current_path: to.clone(),
+            items_processed: 0,
+            items_total: 0,
+        });
     }
     writer.flush().await?;
     drop(writer);

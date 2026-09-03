@@ -360,29 +360,57 @@ impl RcloneProvider {
         })
     }
 
+    /// Stat one path without listing its parent (`rclone lsjson --stat`).
+    async fn run_lsjson_stat(&self, remote: &str) -> Result<RcloneEntry> {
+        let output = Command::new(&self.rclone_bin)
+            .args(["lsjson", "--stat", remote])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .map_err(FsError::Io)?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let msg = redact_secrets(stderr.trim());
+            if msg.contains("not found") || msg.contains("directory not found") {
+                return Err(FsError::NotFound(remote.to_string()));
+            }
+            return Err(FsError::InvalidPath {
+                reason: format!("rclone lsjson --stat failed: {msg}"),
+            });
+        }
+        serde_json::from_slice(&output.stdout).map_err(|e| FsError::InvalidPath {
+            reason: format!("rclone lsjson --stat parse error: {e}"),
+        })
+    }
+
+    fn metadata_from_row(&self, name: &str, row: &RcloneEntry) -> FsMetadata {
+        let modified = row.mod_time.as_deref().and_then(parse_rclone_time);
+        FsMetadata {
+            kind: if row.is_dir {
+                FsEntryKind::Directory
+            } else {
+                FsEntryKind::File
+            },
+            size: row.size.unwrap_or(0),
+            created: None,
+            modified,
+            accessed: None,
+            readonly: false,
+            hidden: name_starts_hidden(name),
+            system: false,
+            mime: row.mime_type.clone(),
+            extended: ExtendedAttributes::default(),
+        }
+    }
+
     fn entry_from_rclone(&self, parent: &FsPath, row: &RcloneEntry) -> Result<FsEntry> {
         let name = row.name.clone();
         let child = parent.join(&name);
-        let modified = row.mod_time.as_deref().and_then(parse_rclone_time);
         Ok(FsEntry {
             name: name.clone(),
             path: child,
-            metadata: FsMetadata {
-                kind: if row.is_dir {
-                    FsEntryKind::Directory
-                } else {
-                    FsEntryKind::File
-                },
-                size: row.size.unwrap_or(0),
-                created: None,
-                modified,
-                accessed: None,
-                readonly: false,
-                hidden: name_starts_hidden(&name),
-                system: false,
-                mime: row.mime_type.clone(),
-                extended: ExtendedAttributes::default(),
-            },
+            metadata: self.metadata_from_row(&name, row),
         })
     }
 }
@@ -426,18 +454,11 @@ impl FsProvider for RcloneProvider {
     }
 
     async fn metadata(&self, path: &FsPath) -> Result<FsMetadata> {
-        let parent = path
-            .parent()
-            .ok_or_else(|| FsError::NotFound(path.as_str().to_string()))?;
-        let name = path
-            .file_name()
-            .ok_or_else(|| FsError::NotFound(path.as_str().to_string()))?;
-        let entries = self.list(&parent).await?;
-        entries
-            .into_iter()
-            .find(|e| e.name == name)
-            .map(|e| e.metadata)
-            .ok_or_else(|| FsError::NotFound(path.as_str().to_string()))
+        let resolved = self.resolve_mount(path)?;
+        let remote = self.rclone_remote_spec(&resolved)?;
+        let row = self.run_lsjson_stat(&remote).await?;
+        let name = path.file_name().unwrap_or(row.name.as_str());
+        Ok(self.metadata_from_row(name, &row))
     }
 
     async fn exists(&self, path: &FsPath) -> Result<bool> {
@@ -471,8 +492,33 @@ impl FsProvider for RcloneProvider {
         &self,
         path: &FsPath,
     ) -> Result<Box<dyn tokio::io::AsyncRead + Unpin + Send>> {
-        let bytes = self.read(path).await?;
-        Ok(Box::new(std::io::Cursor::new(bytes)))
+        let resolved = self.resolve_mount(path)?;
+        let remote = self.rclone_remote_spec(&resolved)?;
+        let mut child = Command::new(&self.rclone_bin)
+            .args(["cat", &remote])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(FsError::Io)?;
+        let stdout = child.stdout.take().ok_or_else(|| FsError::InvalidPath {
+            reason: "rclone cat stdout unavailable".into(),
+        })?;
+        let stderr = child.stderr.take();
+        tokio::spawn(async move {
+            if let Some(mut err) = stderr {
+                use tokio::io::AsyncReadExt;
+                let mut buf = Vec::new();
+                let _ = err.read_to_end(&mut buf).await;
+                let status = child.wait().await;
+                if !matches!(status, Ok(s) if s.success()) {
+                    let msg = redact_secrets(&String::from_utf8_lossy(&buf));
+                    tracing::debug!(error = %msg, "rclone cat stream ended with error");
+                }
+            } else {
+                let _ = child.wait().await;
+            }
+        });
+        Ok(Box::new(stdout))
     }
 
     async fn write(&self, path: &FsPath, bytes: &[u8]) -> Result<()> {
