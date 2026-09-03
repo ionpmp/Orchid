@@ -13,7 +13,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use tokio::task::{AbortHandle, JoinHandle};
@@ -39,6 +39,9 @@ struct Inner {
     /// Single-flight / coalesce gates, keyed independently of interval jobs
     /// (sharing the same string namespace is fine and recommended).
     flights: Mutex<HashMap<String, Arc<Mutex<FlightState>>>>,
+    /// When each key last completed a tick. Survives [`BackgroundJobQueue::pause`]
+    /// so [`BackgroundJobQueue::resume`] can honour the original cadence.
+    last_run: Mutex<HashMap<String, Instant>>,
     shut_down: AtomicBool,
 }
 
@@ -75,6 +78,7 @@ impl BackgroundJobQueue {
                 jobs: Mutex::new(HashMap::new()),
                 handles: Mutex::new(HashMap::new()),
                 flights: Mutex::new(HashMap::new()),
+                last_run: Mutex::new(HashMap::new()),
                 shut_down: AtomicBool::new(false),
             }),
         }
@@ -100,25 +104,84 @@ impl BackgroundJobQueue {
     /// Same as [`Self::schedule`] but accepts a pre-boxed factory (handy when
     /// the caller already holds an `Arc` of shared state).
     pub fn schedule_factory(&self, key: String, interval: Duration, factory: JobFactory) {
+        self.schedule_factory_after(key, Duration::ZERO, interval, factory);
+    }
+
+    /// Re-arm `key` without repeating work it already did.
+    ///
+    /// The first tick is delayed by whatever remains of `interval` since the
+    /// key last completed a tick, so a widget that sleeps and wakes inside one
+    /// refresh window does not trigger a redundant fetch. A key that has never
+    /// run ticks immediately, exactly like [`Self::schedule`].
+    pub fn resume<F, Fut>(&self, key: impl Into<String>, interval: Duration, job: F)
+    where
+        F: Fn() -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        let key = key.into();
+        // Widget create + activate both want the job armed; do not abort a
+        // live ticker just to re-queue the same work.
+        if self.is_scheduled(&key) {
+            return;
+        }
+        let elapsed = self
+            .inner
+            .last_run
+            .lock()
+            .get(&key)
+            .map(Instant::elapsed)
+            .unwrap_or(interval);
+        let factory: JobFactory = Arc::new(move || Box::pin(job()));
+        self.schedule_factory_after(key, interval.saturating_sub(elapsed), interval, factory);
+    }
+
+    /// [`Self::schedule_factory`] with an explicit delay before the first tick.
+    pub fn schedule_factory_after(
+        &self,
+        key: String,
+        first_delay: Duration,
+        interval: Duration,
+        factory: JobFactory,
+    ) {
         if self.inner.shut_down.load(Ordering::SeqCst) {
             return;
         }
-        self.cancel(&key);
+        self.pause(&key);
 
         let key_for_task = key.clone();
+        let inner = Arc::clone(&self.inner);
+        let key_for_stamp = key.clone();
         let handle = tokio::spawn(async move {
-            let mut ticker = tokio::time::interval(interval);
+            let start = tokio::time::Instant::now() + first_delay;
+            let mut ticker = tokio::time::interval_at(start, interval);
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-            // First `tick()` completes immediately — same as PeriodicRefresh.
+            // With a zero delay the first `tick()` completes immediately —
+            // same as PeriodicRefresh.
             loop {
                 ticker.tick().await;
                 factory().await;
+                inner
+                    .last_run
+                    .lock()
+                    .insert(key_for_stamp.clone(), Instant::now());
             }
         });
         let abort = handle.abort_handle();
         self.inner.jobs.lock().insert(key.clone(), abort);
         self.inner.handles.lock().insert(key.clone(), handle);
-        debug!(%key_for_task, ?interval, "background job scheduled");
+        debug!(%key_for_task, ?first_delay, ?interval, "background job scheduled");
+    }
+
+    /// Stop ticking `key` but remember when it last ran.
+    ///
+    /// Pair with [`Self::resume`] for work that should idle while a widget is
+    /// asleep. Use [`Self::cancel`] instead when the work is finished for good.
+    pub fn pause(&self, key: &str) {
+        if let Some(abort) = self.inner.jobs.lock().remove(key) {
+            abort.abort();
+            debug!(%key, "background job paused");
+        }
+        let _ = self.inner.handles.lock().remove(key);
     }
 
     /// Run `factory` under a keyed single-flight gate with trailing coalesce.
@@ -213,6 +276,7 @@ impl BackgroundJobQueue {
         }
         // Drop the join handle without awaiting — abort is enough for cancel.
         let _ = self.inner.handles.lock().remove(key);
+        self.inner.last_run.lock().remove(key);
 
         let mut flights = self.inner.flights.lock();
         if let Some(state) = flights.get(key) {
@@ -260,6 +324,7 @@ impl BackgroundJobQueue {
             let _ = h.await;
         }
         self.inner.flights.lock().clear();
+        self.inner.last_run.lock().clear();
         debug!("background job queue shut down");
     }
 }
@@ -432,6 +497,67 @@ mod tests {
         });
         tokio::time::sleep(Duration::from_millis(40)).await;
         assert_eq!(n.load(Ordering::SeqCst), 1);
+        q.shutdown().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn resume_is_noop_when_already_scheduled() {
+        let q = BackgroundJobQueue::new();
+        let n = Arc::new(AtomicUsize::new(0));
+        let n2 = Arc::clone(&n);
+        q.schedule("r", Duration::from_secs(60), move || {
+            let n2 = Arc::clone(&n2);
+            async move {
+                n2.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(n.load(Ordering::SeqCst), 1);
+
+        let n3 = Arc::clone(&n);
+        q.resume("r", Duration::from_secs(60), move || {
+            let n3 = Arc::clone(&n3);
+            async move {
+                n3.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(
+            n.load(Ordering::SeqCst),
+            1,
+            "resume must not restart an already-running ticker"
+        );
+        q.shutdown().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn resume_honours_remaining_interval() {
+        let q = BackgroundJobQueue::new();
+        let n = Arc::new(AtomicUsize::new(0));
+        let n2 = Arc::clone(&n);
+        q.schedule("p", Duration::from_millis(200), move || {
+            let n2 = Arc::clone(&n2);
+            async move {
+                n2.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(n.load(Ordering::SeqCst), 1);
+        q.pause("p");
+
+        let n3 = Arc::clone(&n);
+        q.resume("p", Duration::from_millis(200), move || {
+            let n3 = Arc::clone(&n3);
+            async move {
+                n3.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        // Still inside the original cadence: resume must not refetch.
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        assert_eq!(n.load(Ordering::SeqCst), 1);
+        // Remaining delay (~160 ms) plus a little slack.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(n.load(Ordering::SeqCst) >= 2);
         q.shutdown().await;
     }
 }

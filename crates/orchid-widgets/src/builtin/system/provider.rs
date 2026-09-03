@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use chrono::Utc;
 use parking_lot::Mutex;
-use starship_battery::{Manager, State};
+use starship_battery::{Battery, Manager, State};
 #[cfg(not(windows))]
 use sysinfo::MINIMUM_CPU_UPDATE_INTERVAL;
 use sysinfo::{Disks, Networks, System};
@@ -18,6 +18,18 @@ struct NetworkPrev {
     at: Option<Instant>,
 }
 
+/// Cached battery handles.
+///
+/// [`Manager::new`] opens platform handles and `batteries()` re-enumerates
+/// devices; doing both on every refresh tick is pure overhead. Keep the
+/// manager for the provider's lifetime and refresh the device in place.
+/// Enumeration is retried while no battery is known so hot-plug still works.
+#[derive(Default)]
+struct BatteryProbe {
+    manager: Option<Manager>,
+    battery: Option<Battery>,
+}
+
 /// Provider owning a [`sysinfo::System`] handle plus previous network
 /// counters for rate calculation. Not `Clone` (the inner `System` holds a
 /// large buffer).
@@ -26,6 +38,7 @@ pub struct SystemProvider {
     disks: Mutex<Disks>,
     networks: Mutex<Networks>,
     previous: Mutex<NetworkPrev>,
+    battery: Mutex<BatteryProbe>,
     /// Last time [`System::refresh_cpu_usage`] ran. CPU % is a delta metric;
     /// Windows PDH in particular returns garbage (often 0% idle → 100% busy)
     /// when samples are taken closer than [`MINIMUM_CPU_UPDATE_INTERVAL`].
@@ -71,6 +84,7 @@ impl SystemProvider {
             disks: Mutex::new(disks),
             networks: Mutex::new(networks),
             previous: Mutex::new(NetworkPrev::default()),
+            battery: Mutex::new(BatteryProbe::default()),
             last_cpu_refresh: Mutex::new(Some(Instant::now())),
             #[cfg(windows)]
             cpu_windows: Mutex::new(super::cpu_windows::baseline()),
@@ -153,10 +167,33 @@ impl SystemProvider {
             swap_used_bytes: swap_used,
             disks: disk_usages,
             networks: network_rates,
-            battery: sample_battery(),
+            battery: self.sample_battery(),
             uptime_seconds,
             captured_at,
         }
+    }
+
+    /// Current battery reading, or `None` when the host has no battery.
+    fn sample_battery(&self) -> Option<BatteryStatus> {
+        let mut probe = self.battery.lock();
+        let BatteryProbe { manager, battery } = &mut *probe;
+
+        let manager = match manager {
+            Some(m) => m,
+            None => manager.insert(Manager::new().ok()?),
+        };
+
+        // Refreshing in place fails once the device disappears (unplugged,
+        // suspended); fall back to a fresh enumeration on the next tick.
+        if let Some(bat) = battery {
+            if manager.refresh(bat).is_ok() {
+                return Some(battery_status(bat));
+            }
+            *battery = None;
+        }
+
+        let found = manager.batteries().ok()?.next()?.ok()?;
+        Some(battery_status(battery.insert(found)))
     }
 
     fn sample_cpu(&self) -> (f32, Vec<f32>) {
@@ -190,29 +227,22 @@ impl SystemProvider {
     }
 }
 
-fn sample_battery() -> Option<BatteryStatus> {
+fn battery_status(bat: &Battery) -> BatteryStatus {
     use starship_battery::units::ratio::ratio;
     use starship_battery::units::time::second;
 
-    let manager = Manager::new().ok()?;
-    let mut batteries = manager.batteries().ok()?;
-    let bat = batteries.next()?.ok()?;
-    let percent = (bat.state_of_charge().get::<ratio>() * 100.0)
-        .round()
-        .clamp(0.0, 100.0) as u8;
-    let charging = matches!(bat.state(), State::Charging);
-    let time_to_empty_seconds = bat
-        .time_to_empty()
-        .map(|t| t.get::<second>().max(0.0).round() as u64);
-    let time_to_full_seconds = bat
-        .time_to_full()
-        .map(|t| t.get::<second>().max(0.0).round() as u64);
-    Some(BatteryStatus {
-        percent,
-        charging,
-        time_to_empty_seconds,
-        time_to_full_seconds,
-    })
+    BatteryStatus {
+        percent: (bat.state_of_charge().get::<ratio>() * 100.0)
+            .round()
+            .clamp(0.0, 100.0) as u8,
+        charging: matches!(bat.state(), State::Charging),
+        time_to_empty_seconds: bat
+            .time_to_empty()
+            .map(|t| t.get::<second>().max(0.0).round() as u64),
+        time_to_full_seconds: bat
+            .time_to_full()
+            .map(|t| t.get::<second>().max(0.0).round() as u64),
+    }
 }
 
 /// Whether a NIC name looks like loopback / tunnel noise we should hide by default.

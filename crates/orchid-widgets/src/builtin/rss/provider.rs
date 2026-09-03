@@ -1,25 +1,46 @@
 //! `feed-rs`-backed RSS / Atom / JSON feed provider.
 
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
 use feed_rs::parser;
 use futures::future::join_all;
+use parking_lot::Mutex;
 
 use super::config::FeedSource;
 use super::types::{FeedData, FeedItem};
 
+/// Last successful response for one feed URL.
+///
+/// Keeping the parsed items here is what makes a `304 Not Modified` useful:
+/// the server sends no body, so the previous items are the answer.
+#[derive(Debug, Clone, Default)]
+struct CachedFeed {
+    etag: Option<String>,
+    last_modified: Option<String>,
+    items: Vec<FeedItem>,
+}
+
 /// Provider that fetches every enabled feed in parallel.
+///
+/// Clones share one validator cache, so a cloned provider keeps issuing
+/// conditional requests.
 #[derive(Debug, Clone)]
 pub struct RssProvider {
     client: reqwest::Client,
+    cache: Arc<Mutex<HashMap<String, CachedFeed>>>,
 }
 
 impl RssProvider {
     /// Construct with a pre-built HTTP client.
     #[must_use]
     pub fn new(client: reqwest::Client) -> Self {
-        Self { client }
+        Self {
+            client,
+            cache: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     /// Default HTTP client with 15 s per-request timeout and Orchid
@@ -40,8 +61,12 @@ impl RssProvider {
     pub async fn fetch_all(&self, feeds: &[FeedSource]) -> FeedData {
         let futs = feeds.iter().filter(|f| f.enabled).map(|feed| {
             let client = self.client.clone();
+            let cache = Arc::clone(&self.cache);
             let source = feed.clone();
-            async move { (source.clone(), fetch_one(&client, &source).await) }
+            async move {
+                let res = fetch_one(&client, &cache, &source).await;
+                (source, res)
+            }
         });
         let results = join_all(futs).await;
 
@@ -70,18 +95,54 @@ impl RssProvider {
 
 async fn fetch_one(
     client: &reqwest::Client,
+    cache: &Mutex<HashMap<String, CachedFeed>>,
     source: &FeedSource,
 ) -> std::result::Result<Vec<FeedItem>, String> {
-    let resp = client
-        .get(&source.url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    use reqwest::header::{ETAG, IF_MODIFIED_SINCE, IF_NONE_MATCH, LAST_MODIFIED};
+
+    let cached = cache.lock().get(&source.url).cloned().unwrap_or_default();
+
+    let mut req = client.get(&source.url);
+    if let Some(etag) = &cached.etag {
+        req = req.header(IF_NONE_MATCH, etag);
+    }
+    if let Some(lm) = &cached.last_modified {
+        req = req.header(IF_MODIFIED_SINCE, lm);
+    }
+
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+
+    // Unchanged: no body was sent, so replay what we parsed last time.
+    if resp.status() == reqwest::StatusCode::NOT_MODIFIED {
+        return Ok(cached.items);
+    }
     if !resp.status().is_success() {
         return Err(format!("HTTP {}", resp.status()));
     }
+
+    let header = |name: reqwest::header::HeaderName| {
+        resp.headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned)
+    };
+    let etag = header(ETAG);
+    let last_modified = header(LAST_MODIFIED);
+
     let body = resp.bytes().await.map_err(|e| e.to_string())?;
-    parse_bytes(&body, &source.name)
+    let items = parse_bytes(&body, &source.name)?;
+
+    if etag.is_some() || last_modified.is_some() {
+        cache.lock().insert(
+            source.url.clone(),
+            CachedFeed {
+                etag,
+                last_modified,
+                items: items.clone(),
+            },
+        );
+    }
+    Ok(items)
 }
 
 /// Parse raw feed bytes; factored out for testing against fixtures.

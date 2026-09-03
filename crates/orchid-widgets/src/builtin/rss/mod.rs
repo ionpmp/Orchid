@@ -71,14 +71,24 @@ impl RssHandle {
         Duration::from_secs(self.config.read().refresh_interval_minutes.max(1) as u64 * 60)
     }
 
-    /// Schedule (or replace) the always-on feed fetch job.
+    /// Schedule (or replace) the feed fetch job, fetching immediately.
     fn schedule_job(self: &Arc<Self>) {
+        self.arm_job(false);
+    }
+
+    /// Re-arm after a sleep without refetching feeds that are still fresh.
+    fn resume_job(self: &Arc<Self>) {
+        self.arm_job(true);
+    }
+
+    fn arm_job(self: &Arc<Self>, resuming: bool) {
         let handle = Arc::clone(self);
         let interval = self.refresh_interval();
         let key = job_key(self.instance_id);
-        self.jobs.schedule(key.clone(), interval, move || {
+        let job_key_owned = key.clone();
+        let job = move || {
             let handle = Arc::clone(&handle);
-            let key = key.clone();
+            let key = job_key_owned.clone();
             async move {
                 handle
                     .jobs
@@ -90,11 +100,21 @@ impl RssHandle {
                     })
                     .await;
             }
-        });
+        };
+        if resuming {
+            self.jobs.resume(key, interval, job);
+        } else {
+            self.jobs.schedule(key, interval, job);
+        }
     }
 
     fn cancel_job(&self) {
         self.jobs.cancel(&job_key(self.instance_id));
+    }
+
+    /// Stop ticking while asleep, but keep the last-run stamp for `resume_job`.
+    fn pause_job(&self) {
+        self.jobs.pause(&job_key(self.instance_id));
     }
 
     /// Trigger a fetch through the coalesce gate (interval + settings share it).
@@ -248,17 +268,21 @@ impl Widget for RssWidget {
         self.instance_id
     }
     async fn on_create(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
-        // Always-on fetch: first tick runs immediately via BackgroundJobQueue.
+        // First tick runs immediately via BackgroundJobQueue.
         self.handle.schedule_job();
         Ok(())
     }
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        // Re-arm on the original cadence: waking does not refetch fresh feeds.
+        self.handle.resume_job();
         Ok(())
     }
     async fn on_sleep(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        self.handle.pause_job();
         Ok(())
     }
     async fn on_unload(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
+        self.handle.pause_job();
         Ok(())
     }
     async fn on_close(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
