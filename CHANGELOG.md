@@ -355,6 +355,9 @@ release yet.
   so page / zoom toggles skip Pdfium when the viewport matches.
 - **Processes widget**: full process census on activate and every 4th
   tick; intervening samples refresh only last-known PIDs.
+- **DOCX preview**: caret / selection paints over a cached page raster
+  instead of relayouting every paragraph; `LayoutCache` is used on the
+  render path.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

@@ -30,8 +30,8 @@ pub use cursor::{
 pub use layout::{DocumentLayout, PreviewInsets, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
     Alignment, Block, Bookmark, CellImage, Document, Hyperlink, ImageFormat, InlineImage,
-    LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell,
-    TableRow, VMerge,
+    LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table,
+    TableCell, TableRow, VMerge,
 };
 pub use sample::{create_sample_docx, sample_document};
 pub use undo::{EditCommand, RunStylePatch, UndoStack};
@@ -442,7 +442,11 @@ impl DocumentViewer {
 
     /// Bump preview display zoom by `steps` tenths (`+1` → +10%). Clamped to 50%–300%.
     pub fn bump_preview_zoom(&self, steps: i32) -> Result<()> {
-        let _ = self.document.read().as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+        let _ = self
+            .document
+            .read()
+            .as_ref()
+            .ok_or(ViewerError::DocumentNotOpen)?;
         let mut z = self.preview_zoom.lock();
         let next = ((*z * 10.0).round() as i32 + steps).clamp(5, 30) as f32 / 10.0;
         *z = next;
@@ -451,7 +455,11 @@ impl DocumentViewer {
 
     /// Reset preview display zoom to 100%.
     pub fn reset_preview_zoom(&self) -> Result<()> {
-        let _ = self.document.read().as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+        let _ = self
+            .document
+            .read()
+            .as_ref()
+            .ok_or(ViewerError::DocumentNotOpen)?;
         *self.preview_zoom.lock() = 1.0;
         Ok(())
     }
@@ -1878,7 +1886,6 @@ impl DocumentViewer {
         Ok(())
     }
 
-
     /// Toggle `w:bidi` on selected paragraphs.
     ///
     /// # Errors
@@ -1916,7 +1923,6 @@ impl DocumentViewer {
         Ok(())
     }
 
-
     /// Toggle `w:suppressAutoHyphens` on selected paragraphs.
     ///
     /// # Errors
@@ -1953,7 +1959,6 @@ impl DocumentViewer {
         self.invalidate_preview();
         Ok(())
     }
-
 
     /// Cycle `w:outlineLvl` on selected paragraphs: body → H1…H9 → body.
     ///
@@ -2616,8 +2621,8 @@ impl DocumentViewer {
         let mut changed = false;
         for cursor in cursors {
             if let Some(p) = paragraph_mut_in_blocks(&mut next, cursor) {
-                let bumped =
-                    (p.indent_first_line_twips + delta_twips).clamp(INDENT_FIRST_LINE_MIN, INDENT_FIRST_LINE_MAX);
+                let bumped = (p.indent_first_line_twips + delta_twips)
+                    .clamp(INDENT_FIRST_LINE_MIN, INDENT_FIRST_LINE_MAX);
                 if bumped != p.indent_first_line_twips {
                     p.indent_first_line_twips = bumped;
                     changed = true;
@@ -2682,7 +2687,8 @@ impl DocumentViewer {
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let mut next = doc.page_setup.clone();
         next.margin_top_twips = clamp_margin_twips(next.margin_top_twips as i32 + delta_twips);
-        next.margin_bottom_twips = clamp_margin_twips(next.margin_bottom_twips as i32 + delta_twips);
+        next.margin_bottom_twips =
+            clamp_margin_twips(next.margin_bottom_twips as i32 + delta_twips);
         next.margin_left_twips = clamp_margin_twips(next.margin_left_twips as i32 + delta_twips);
         next.margin_right_twips = clamp_margin_twips(next.margin_right_twips as i32 + delta_twips);
         if next == doc.page_setup {
@@ -4057,6 +4063,9 @@ impl Viewer for DocumentViewer {
             let sel_changed = prev.sel_start != sel_start || prev.sel_end != sel_end;
             if !prev.valid || sel_changed {
                 let mut layout = self.layout.lock();
+                if !prev.valid {
+                    layout.drop_render_scene();
+                }
                 let (bytes, w, h) = layout.render_document_with_selection(
                     doc,
                     prev.width,
@@ -4123,7 +4132,8 @@ impl Viewer for DocumentViewer {
             find_match_index: *self.find_match_index.lock(),
             find_match_count: *self.find_match_count.lock(),
             find_scroll_y_px: *self.find_scroll_y_px.lock(),
-            preview_zoom_percent: ((*self.preview_zoom.lock() * 100.0).round() as i32).clamp(50, 300),
+            preview_zoom_percent: ((*self.preview_zoom.lock() * 100.0).round() as i32)
+                .clamp(50, 300),
             link_hover: *self.link_hover.lock(),
             link_url,
             page_is_a4,

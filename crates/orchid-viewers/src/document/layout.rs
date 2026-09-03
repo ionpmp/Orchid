@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use parley::layout::{
-    Alignment as ParleyAlignment, AlignmentOptions, Cluster, ClusterSide, GlyphRun,
-    IndentOptions, PositionedLayoutItem,
+    Alignment as ParleyAlignment, AlignmentOptions, Cluster, ClusterSide, GlyphRun, IndentOptions,
+    PositionedLayoutItem,
 };
 use parley::style::{FontFamily, FontStyle, FontWeight, StyleProperty};
 use parley::{FontContext, Layout, LayoutContext, LineHeight, RangedBuilder};
@@ -108,6 +108,9 @@ pub struct DocumentLayout {
     font_cx: FontContext,
     layout_cx: LayoutContext<ColorBrush>,
     scale_cx: ScaleContext,
+    layout_cache: LayoutCache,
+    /// Last full raster without caret / selection, reused on selection-only paints.
+    scene: Option<RenderScene>,
 }
 
 impl std::fmt::Debug for DocumentLayout {
@@ -130,7 +133,18 @@ impl DocumentLayout {
             font_cx: FontContext::new(),
             layout_cx: LayoutContext::new(),
             scale_cx: ScaleContext::new(),
+            layout_cache: LayoutCache::new(),
+            scene: None,
         }
+    }
+
+    /// Drop cached paragraph layouts and the last preview raster.
+    ///
+    /// Call when document content or preview width changes. Selection-only
+    /// updates should leave the scene in place.
+    pub fn drop_render_scene(&mut self) {
+        self.scene = None;
+        self.layout_cache.invalidate_all();
     }
 
     /// Lay out a single paragraph at `max_width` CSS pixels.
@@ -163,10 +177,7 @@ impl DocumentLayout {
         let mut builder: RangedBuilder<'_, ColorBrush> =
             self.layout_cx
                 .ranged_builder(&mut self.font_cx, &text, scale, true);
-        let default_pt = p
-            .outline_level
-            .map(outline_level_font_pt)
-            .unwrap_or(14.0);
+        let default_pt = p.outline_level.map(outline_level_font_pt).unwrap_or(14.0);
         builder.push_default(StyleProperty::FontSize(default_pt));
         if p.outline_level.is_some_and(|lvl| lvl <= 2) {
             builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
@@ -200,10 +211,7 @@ impl DocumentLayout {
             if run.style.strikethrough {
                 builder.push(StyleProperty::Strikethrough(true), offset..end);
             }
-            let base_pt = run
-                .style
-                .font_size_pt
-                .unwrap_or(default_pt);
+            let base_pt = run.style.font_size_pt.unwrap_or(default_pt);
             let (mut effective_pt, baseline_shift) = if run.style.superscript {
                 (base_pt * 0.65, -base_pt * 0.4)
             } else if run.style.subscript {
@@ -259,10 +267,23 @@ impl DocumentLayout {
         let mut layout = builder.build(&text);
         apply_paragraph_text_indent(&mut layout, p);
         layout.break_all_lines(Some(max_width.max(1.0)));
-        layout.align(
-            parley_alignment_for(p),
-            AlignmentOptions::default(),
-        );
+        layout.align(parley_alignment_for(p), AlignmentOptions::default());
+        layout
+    }
+
+    fn cached_paragraph_layout(
+        &mut self,
+        idx: usize,
+        p: &Paragraph,
+        width: f32,
+        scale: f32,
+    ) -> Layout<ColorBrush> {
+        self.layout_cache.prepare(width, scale);
+        if let Some(hit) = self.layout_cache.get_clone(idx) {
+            return hit;
+        }
+        let layout = self.layout_paragraph(p, width, scale);
+        self.layout_cache.insert(idx, layout.clone());
         layout
     }
 
@@ -289,6 +310,11 @@ impl DocumentLayout {
         content_width: f32,
         selection: Option<(usize, usize)>,
     ) -> (Arc<Vec<u8>>, u32, u32) {
+        if let Some(scene) = self.scene.as_ref() {
+            if (scene.content_width - content_width).abs() <= 0.5 {
+                return overlay_selection_on_scene(scene, selection);
+            }
+        }
         let scale = PREVIEW_RENDER_SCALE;
         let base_insets = PreviewInsets::from_page_setup(&doc.page_setup);
         let insets = PreviewInsets {
@@ -307,7 +333,7 @@ impl DocumentLayout {
         let mut emitted_text = false;
         let max_preview_h = MAX_PREVIEW_HEIGHT as f32 * scale;
 
-        for block in &doc.blocks {
+        for (block_idx, block) in doc.blocks.iter().enumerate() {
             match block {
                 Block::Paragraph(p) => {
                     if emitted_text {
@@ -324,11 +350,9 @@ impl DocumentLayout {
                     let body_len = p.plain_text().len();
                     let prefix_len = list_prefix(p).len();
                     let indent = list_indent_px(p) * scale;
-                    let layout = self.layout_paragraph(
-                        p,
-                        (max_w - indent - paragraph_right_indent_px(p) * scale).max(12.0 * scale),
-                        scale,
-                    );
+                    let wrap_w =
+                        (max_w - indent - paragraph_right_indent_px(p) * scale).max(12.0 * scale);
+                    let layout = self.cached_paragraph_layout(block_idx, p, wrap_w, scale);
                     let h = layout.height().max(16.0 * scale);
                     layouts.push(LaidBlock {
                         layout,
@@ -458,58 +482,6 @@ impl DocumentLayout {
             );
         }
 
-        let (sel_lo, sel_hi) = match selection {
-            Some((a, b)) if a != b => (a.min(b), a.max(b)),
-            _ => (0, 0),
-        };
-        let caret_at = match selection {
-            Some((a, b)) if a == b => Some(a),
-            _ => None,
-        };
-
-        // Selection / caret under the glyphs.
-        for item in &layouts {
-            if item.is_image || item.layout.is_empty() {
-                continue;
-            }
-            let origin_x = insets.left + item.x0 + item.indent_px;
-            let origin_y = insets.top + item.y0;
-            if sel_hi > sel_lo {
-                let para_end = item.plain_start + item.body_len;
-                let i0 = sel_lo.max(item.plain_start);
-                let i1 = sel_hi.min(para_end);
-                if i0 < i1 {
-                    let layout_lo = item.prefix_len + (i0 - item.plain_start);
-                    let layout_hi = item.prefix_len + (i1 - item.plain_start);
-                    paint_selection_range(
-                        &item.layout,
-                        &mut pixels,
-                        width,
-                        height,
-                        origin_x,
-                        origin_y,
-                        layout_lo,
-                        layout_hi,
-                    );
-                }
-            }
-            if let Some(caret) = caret_at {
-                let para_end = item.plain_start + item.body_len;
-                if caret >= item.plain_start && caret <= para_end {
-                    let layout_idx = item.prefix_len + (caret - item.plain_start);
-                    paint_caret(
-                        &item.layout,
-                        &mut pixels,
-                        width,
-                        height,
-                        origin_x,
-                        origin_y,
-                        layout_idx,
-                    );
-                }
-            }
-        }
-
         for item in &layouts {
             if item.is_image {
                 let y = (insets.top + item.y0) as u32;
@@ -523,18 +495,6 @@ impl DocumentLayout {
                         .saturating_sub(8)
                         .max(24)
                 };
-                if caret_at == Some(item.plain_start) {
-                    fill_rect(
-                        &mut pixels,
-                        width,
-                        height,
-                        x.saturating_sub(1),
-                        y.saturating_sub(1),
-                        box_w.saturating_add(2),
-                        box_h.saturating_add(2),
-                        [180, 210, 255, 255],
-                    );
-                }
                 if let (Some(rgba), true) = (&item.image_rgba, item.image_w > 0) {
                     blit_rgba(
                         &mut pixels,
@@ -550,10 +510,7 @@ impl DocumentLayout {
                         height,
                         x,
                         y,
-                        (max_w as u32)
-                            .saturating_sub(item.x0 as u32)
-                            .saturating_sub(8)
-                            .max(24),
+                        box_w,
                         box_h,
                         [220, 220, 228, 255],
                     );
@@ -638,7 +595,17 @@ impl DocumentLayout {
             );
         }
 
-        (Arc::new(pixels), width, height)
+        let base = Arc::new(pixels);
+        self.scene = Some(RenderScene {
+            content_width,
+            layouts,
+            insets,
+            max_w,
+            width,
+            height,
+            base: Arc::clone(&base),
+        });
+        overlay_selection_on_scene(self.scene.as_ref().expect("scene just stored"), selection)
     }
 
     /// Layout and paint header/footer paragraphs into the page margin band.
@@ -789,12 +756,7 @@ impl DocumentLayout {
     /// Used to scroll the Preview `Flickable` to a Find match. Returns the top of the
     /// containing paragraph / cell item (line-precise Y is not required for MVP).
     #[must_use]
-    pub fn y_for_plain_offset(
-        &mut self,
-        doc: &Document,
-        content_width: f32,
-        target: usize,
-    ) -> f32 {
+    pub fn y_for_plain_offset(&mut self, doc: &Document, content_width: f32, target: usize) -> f32 {
         let insets = PreviewInsets::from_page_setup(&doc.page_setup);
         let max_w = content_width.max(80.0);
         let para_gap = 10.0;
@@ -1743,6 +1705,112 @@ fn blit_rgba(
 const SELECTION_FILL: [u8; 4] = [147, 197, 253, 140]; // soft blue
 const CARET_FILL: [u8; 4] = [37, 99, 235, 220];
 
+fn overlay_selection_on_scene(
+    scene: &RenderScene,
+    selection: Option<(usize, usize)>,
+) -> (Arc<Vec<u8>>, u32, u32) {
+    if selection.is_none() {
+        return (Arc::clone(&scene.base), scene.width, scene.height);
+    }
+    let mut pixels = scene.base.as_ref().clone();
+    paint_selection_overlay(
+        &scene.layouts,
+        &mut pixels,
+        scene.width,
+        scene.height,
+        scene.insets,
+        scene.max_w,
+        selection,
+    );
+    (Arc::new(pixels), scene.width, scene.height)
+}
+
+fn paint_selection_overlay(
+    layouts: &[LaidBlock],
+    pixels: &mut [u8],
+    width: u32,
+    height: u32,
+    insets: PreviewInsets,
+    max_w: f32,
+    selection: Option<(usize, usize)>,
+) {
+    let (sel_lo, sel_hi) = match selection {
+        Some((a, b)) if a != b => (a.min(b), a.max(b)),
+        _ => (0, 0),
+    };
+    let caret_at = match selection {
+        Some((a, b)) if a == b => Some(a),
+        _ => None,
+    };
+    for item in layouts {
+        if item.is_image {
+            if caret_at == Some(item.plain_start) {
+                let y = (insets.top + item.y0) as u32;
+                let x = (insets.left + item.x0) as u32;
+                let box_h = item.image_h.max(24.0) as u32;
+                let box_w = if item.image_w > 0 {
+                    item.image_w
+                } else {
+                    (max_w as u32)
+                        .saturating_sub(item.x0 as u32)
+                        .saturating_sub(8)
+                        .max(24)
+                };
+                fill_rect_blend(
+                    pixels,
+                    width,
+                    height,
+                    x.saturating_sub(1),
+                    y.saturating_sub(1),
+                    box_w.saturating_add(2),
+                    box_h.saturating_add(2),
+                    [180, 210, 255, 140],
+                );
+            }
+            continue;
+        }
+        if item.layout.is_empty() {
+            continue;
+        }
+        let origin_x = insets.left + item.x0 + item.indent_px;
+        let origin_y = insets.top + item.y0;
+        if sel_hi > sel_lo {
+            let para_end = item.plain_start + item.body_len;
+            let i0 = sel_lo.max(item.plain_start);
+            let i1 = sel_hi.min(para_end);
+            if i0 < i1 {
+                let layout_lo = item.prefix_len + (i0 - item.plain_start);
+                let layout_hi = item.prefix_len + (i1 - item.plain_start);
+                paint_selection_range(
+                    &item.layout,
+                    pixels,
+                    width,
+                    height,
+                    origin_x,
+                    origin_y,
+                    layout_lo,
+                    layout_hi,
+                );
+            }
+        }
+        if let Some(caret) = caret_at {
+            let para_end = item.plain_start + item.body_len;
+            if caret >= item.plain_start && caret <= para_end {
+                let layout_idx = item.prefix_len + (caret - item.plain_start);
+                paint_caret(
+                    &item.layout,
+                    pixels,
+                    width,
+                    height,
+                    origin_x,
+                    origin_y,
+                    layout_idx,
+                );
+            }
+        }
+    }
+}
+
 fn paint_selection_range(
     layout: &Layout<ColorBrush>,
     pixels: &mut [u8],
@@ -1906,7 +1974,6 @@ fn fill_rect_blend(
     }
 }
 
-
 fn outline_level_font_pt(level: u8) -> f32 {
     match level {
         0 => 24.0,
@@ -2001,6 +2068,19 @@ pub struct LayoutCache {
     cache: HashMap<usize, CachedLayout>,
     /// Width the cache was built for.
     width: f32,
+    /// Parley display scale the cache was built for.
+    scale: f32,
+}
+
+/// Raster + geometry from the last content-width pass (no caret / selection).
+struct RenderScene {
+    content_width: f32,
+    layouts: Vec<LaidBlock>,
+    insets: PreviewInsets,
+    max_w: f32,
+    width: u32,
+    height: u32,
+    base: Arc<Vec<u8>>,
 }
 
 struct CachedLayout {
@@ -2027,15 +2107,33 @@ impl LayoutCache {
         p: &Paragraph,
         dl: &mut DocumentLayout,
         width: f32,
+        scale: f32,
     ) -> &Layout<ColorBrush> {
-        if (self.width - width).abs() > 0.5 {
+        if (self.width - width).abs() > 0.5 || (self.scale - scale).abs() > 0.05 {
             self.cache.clear();
             self.width = width;
+            self.scale = scale;
         }
         self.cache.entry(idx).or_insert_with(|| CachedLayout {
-            layout: dl.layout_paragraph(p, width, 1.0),
+            layout: dl.layout_paragraph(p, width, scale),
         });
         &self.cache.get(&idx).expect("just inserted").layout
+    }
+
+    fn prepare(&mut self, width: f32, scale: f32) {
+        if (self.width - width).abs() > 0.5 || (self.scale - scale).abs() > 0.05 {
+            self.cache.clear();
+            self.width = width;
+            self.scale = scale;
+        }
+    }
+
+    fn get_clone(&self, idx: usize) -> Option<Layout<ColorBrush>> {
+        self.cache.get(&idx).map(|c| c.layout.clone())
+    }
+
+    fn insert(&mut self, idx: usize, layout: Layout<ColorBrush>) {
+        self.cache.insert(idx, CachedLayout { layout });
     }
 
     /// Invalidate one paragraph.
@@ -2323,9 +2421,7 @@ fn paragraph_line_height(p: &Paragraph) -> LineHeight {
             };
             LineHeight::FontSizeRelative(rel)
         }
-        LineSpacingRule::Exact => {
-            LineHeight::Absolute(twips_to_css_px(p.line_spacing).max(1.0))
-        }
+        LineSpacingRule::Exact => LineHeight::Absolute(twips_to_css_px(p.line_spacing).max(1.0)),
         // Word "at least": floor line box to the given height. Approximate with
         // Absolute max(value, typical default line box).
         LineSpacingRule::AtLeast => {
@@ -2396,7 +2492,6 @@ fn paint_solid_h_line(
     }
 }
 
-
 fn paint_solid_v_line(
     pixels: &mut [u8],
     buf_w: u32,
@@ -2422,7 +2517,6 @@ fn paint_solid_v_line(
         }
     }
 }
-
 
 fn fill_rect(
     pixels: &mut [u8],
@@ -2487,16 +2581,8 @@ mod tests {
         let width = 400.0;
         let ltr_layout = dl.layout_paragraph(&ltr, width, 1.0);
         let rtl_layout = dl.layout_paragraph(&rtl, width, 1.0);
-        let ltr_off = ltr_layout
-            .get(0)
-            .expect("ltr line")
-            .metrics()
-            .offset;
-        let rtl_off = rtl_layout
-            .get(0)
-            .expect("rtl line")
-            .metrics()
-            .offset;
+        let ltr_off = ltr_layout.get(0).expect("ltr line").metrics().offset;
+        let rtl_off = rtl_layout.get(0).expect("rtl line").metrics().offset;
         assert!(
             rtl_off > ltr_off + 20.0,
             "bidi left-align should push the line toward the right edge (ltr_off={ltr_off}, rtl_off={rtl_off})"
@@ -2624,7 +2710,7 @@ mod tests {
         let mut dl = DocumentLayout::new();
         let mut cache = LayoutCache::new();
         let p = sample_paragraph();
-        let _ = cache.get_or_layout(0, &p, &mut dl, 400.0);
+        let _ = cache.get_or_layout(0, &p, &mut dl, 400.0, 1.0);
         assert!(cache.contains(0));
         cache.invalidate(0);
         assert!(!cache.contains(0));
@@ -2681,7 +2767,12 @@ mod tests {
         };
         // Click near the top of the second paragraph (padding + first para height + gap).
         let offset = dl
-            .hit_test_plain_offset(&doc, 400.0, PreviewInsets::default_letter().left + 8.0, PreviewInsets::default_letter().left + 40.0)
+            .hit_test_plain_offset(
+                &doc,
+                400.0,
+                PreviewInsets::default_letter().left + 8.0,
+                PreviewInsets::default_letter().left + 40.0,
+            )
             .unwrap();
         // "First\n" = 6 bytes; caret should land in the second paragraph.
         assert!(offset >= 6, "offset={offset}");
@@ -2696,7 +2787,12 @@ mod tests {
             ..Default::default()
         };
         let offset = dl
-            .hit_test_plain_offset(&doc, 400.0, PreviewInsets::default_letter().left + 2.0, PreviewInsets::default_letter().left + 2.0)
+            .hit_test_plain_offset(
+                &doc,
+                400.0,
+                PreviewInsets::default_letter().left + 2.0,
+                PreviewInsets::default_letter().left + 2.0,
+            )
             .unwrap();
         assert_eq!(offset, 0);
     }
@@ -2722,6 +2818,26 @@ mod tests {
                 .any(|px| px[2] > px[0] && px[2] > 180),
             "expected bluish selection tint"
         );
+    }
+
+    #[test]
+    fn selection_overlay_reuses_scene() {
+        let mut dl = DocumentLayout::new();
+        let doc = Document {
+            blocks: vec![Block::Paragraph(sample_paragraph())],
+            ..Default::default()
+        };
+        let (first, w, h) = dl.render_document_with_selection(&doc, 400.0, Some((0, 0)));
+        assert!(dl.scene.is_some());
+        let (second, w2, h2) = dl.render_document_with_selection(&doc, 400.0, Some((0, 5)));
+        assert_eq!((w, h), (w2, h2));
+        assert_eq!(first.len(), second.len());
+        assert_ne!(
+            first.as_slice(),
+            second.as_slice(),
+            "selection overlay should tint the cached base raster"
+        );
+        assert!(dl.layout_cache.contains(0));
     }
 
     fn cell(text: &str) -> TableCell {
@@ -2919,7 +3035,12 @@ mod tests {
         let y = PreviewInsets::default_letter().left + TABLE_CELL_PAD + 4.0;
         // 20% into table → narrow left column.
         let left = dl
-            .hit_test_plain_offset(&doc, content_w, PreviewInsets::default_letter().left + content_w * 0.2, y)
+            .hit_test_plain_offset(
+                &doc,
+                content_w,
+                PreviewInsets::default_letter().left + content_w * 0.2,
+                y,
+            )
             .unwrap();
         assert!(
             left >= aa && left <= aa + "AA".len(),
@@ -2927,7 +3048,12 @@ mod tests {
         );
         // 70% into table → wide right column.
         let right = dl
-            .hit_test_plain_offset(&doc, content_w, PreviewInsets::default_letter().left + content_w * 0.7, y)
+            .hit_test_plain_offset(
+                &doc,
+                content_w,
+                PreviewInsets::default_letter().left + content_w * 0.7,
+                y,
+            )
             .unwrap();
         assert!(
             right >= bb && right <= bb + "BB".len(),
@@ -3218,12 +3344,7 @@ mod tests {
         assert!(h as f32 >= (insets.top + insets.bottom + 16.0) * s);
 
         let offset = dl
-            .hit_test_plain_offset(
-                &doc,
-                content_w,
-                insets.left + 2.0,
-                insets.top + 2.0,
-            )
+            .hit_test_plain_offset(&doc, content_w, insets.left + 2.0, insets.top + 2.0)
             .unwrap();
         assert_eq!(offset, 0);
     }
