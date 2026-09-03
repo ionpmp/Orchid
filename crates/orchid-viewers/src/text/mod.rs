@@ -9,6 +9,7 @@ pub mod syntax;
 pub mod undo;
 
 use std::any::Any;
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -47,6 +48,35 @@ pub struct CursorPos {
     pub column: u32,
 }
 
+/// Original file bytes: mmap for local files, heap for remote / after save.
+enum RawBytes {
+    Empty,
+    Heap(Arc<[u8]>),
+    Mapped(memmap2::Mmap),
+}
+
+impl RawBytes {
+    fn from_vec(bytes: Vec<u8>) -> Self {
+        if bytes.is_empty() {
+            Self::Empty
+        } else {
+            Self::Heap(Arc::from(bytes))
+        }
+    }
+
+    fn as_slice(&self) -> &[u8] {
+        match self {
+            Self::Empty => &[],
+            Self::Heap(bytes) => bytes,
+            Self::Mapped(map) => map,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.as_slice().is_empty()
+    }
+}
+
 /// Cached tree-sitter parse of the full document.
 struct ParseCache {
     generation: u64,
@@ -76,7 +106,7 @@ pub struct TextViewer {
     mode: RwLock<TextViewerMode>,
     registry: RwLock<Option<Arc<orchid_fs::FsProviderRegistry>>>,
     size_limit: u64,
-    raw_bytes: RwLock<Vec<u8>>,
+    raw_bytes: RwLock<RawBytes>,
     display_mode: RwLock<TextDisplayMode>,
     display_cache: Mutex<Option<(TextDisplayMode, usize, Arc<str>)>>,
     find_gen: Mutex<i32>,
@@ -115,7 +145,7 @@ impl TextViewer {
             mode: RwLock::new(TextViewerMode::Read),
             registry: RwLock::new(None),
             size_limit: DEFAULT_SIZE_LIMIT,
-            raw_bytes: RwLock::new(Vec::new()),
+            raw_bytes: RwLock::new(RawBytes::Empty),
             display_mode: RwLock::new(TextDisplayMode::Text),
             display_cache: Mutex::new(None),
             find_gen: Mutex::new(0),
@@ -666,7 +696,7 @@ impl TextViewer {
         if mode != TextDisplayMode::Text {
             if let Some(buf) = self.buffer.read().as_ref() {
                 if let Ok(bytes) = buf.to_bytes() {
-                    *self.raw_bytes.write() = bytes;
+                    *self.raw_bytes.write() = RawBytes::from_vec(bytes);
                 }
             }
         }
@@ -686,11 +716,11 @@ impl TextViewer {
     ///
     /// Unknown encoding label.
     pub fn set_encoding(&self, label: &str) -> Result<()> {
-        let bytes = self.raw_bytes.read().clone();
+        let bytes = self.raw_bytes.read();
         if bytes.is_empty() && self.buffer.read().is_none() {
             return Err(ViewerError::EditOutOfBounds);
         }
-        let mut buffer = TextBuffer::from_bytes_with_encoding(&bytes, label)?;
+        let mut buffer = TextBuffer::from_bytes_with_encoding(bytes.as_slice(), label)?;
         buffer.mark_dirty();
         *self.buffer.write() = Some(buffer);
         self.invalidate_parse_cache();
@@ -705,16 +735,16 @@ impl TextViewer {
         let raw = self.raw_bytes.read();
         if mode != TextDisplayMode::Text {
             if let Some((cached_mode, len, text)) = self.display_cache.lock().as_ref() {
-                if *cached_mode == mode && *len == raw.len() {
+                if *cached_mode == mode && *len == raw.as_slice().len() {
                     return Arc::clone(text);
                 }
             }
             let dump: Arc<str> = Arc::from(match mode {
-                TextDisplayMode::Hex => display::format_hex_dump(&raw),
-                TextDisplayMode::Binary => display::format_binary_hex(&raw),
+                TextDisplayMode::Hex => display::format_hex_dump(raw.as_slice()),
+                TextDisplayMode::Binary => display::format_binary_hex(raw.as_slice()),
                 TextDisplayMode::Text => String::new(),
             });
-            *self.display_cache.lock() = Some((mode, raw.len(), Arc::clone(&dump)));
+            *self.display_cache.lock() = Some((mode, raw.as_slice().len(), Arc::clone(&dump)));
             return dump;
         }
         drop(raw);
@@ -866,6 +896,52 @@ impl TextViewer {
     }
 }
 
+async fn load_text_source(
+    path: &orchid_fs::FsPath,
+    provider: &dyn orchid_fs::FsProvider,
+    size_limit: u64,
+) -> Result<(TextBuffer, RawBytes)> {
+    if let Ok(os) = path.to_local() {
+        return tokio::task::spawn_blocking(move || load_local_text(&os, size_limit))
+            .await
+            .map_err(|e| ViewerError::TextDecode(format!("join: {e}")))?;
+    }
+    let bytes = provider.read(path).await?;
+    if bytes.len() as u64 > size_limit {
+        return Err(ViewerError::FileTooLarge {
+            size: bytes.len() as u64,
+            limit: size_limit,
+        });
+    }
+    let buffer = TextBuffer::from_bytes(&bytes)?;
+    Ok((buffer, RawBytes::from_vec(bytes)))
+}
+
+fn load_local_text(os: &Path, size_limit: u64) -> Result<(TextBuffer, RawBytes)> {
+    let meta = std::fs::metadata(os)?;
+    if meta.len() > size_limit {
+        return Err(ViewerError::FileTooLarge {
+            size: meta.len(),
+            limit: size_limit,
+        });
+    }
+    if meta.len() == 0 {
+        return Ok((TextBuffer::from_bytes(b"")?, RawBytes::Empty));
+    }
+    let file = std::fs::File::open(os)?;
+    match unsafe { memmap2::Mmap::map(&file) } {
+        Ok(map) => {
+            let buffer = TextBuffer::from_bytes(&map)?;
+            Ok((buffer, RawBytes::Mapped(map)))
+        }
+        Err(_) => {
+            let bytes = std::fs::read(os)?;
+            let buffer = TextBuffer::from_bytes(&bytes)?;
+            Ok((buffer, RawBytes::from_vec(bytes)))
+        }
+    }
+}
+
 #[async_trait]
 impl Viewer for TextViewer {
     fn type_id(&self) -> &'static str {
@@ -880,18 +956,12 @@ impl Viewer for TextViewer {
         let provider = registry
             .for_path(&path)
             .ok_or_else(|| orchid_fs::FsError::ProviderNotFound(path.scheme().to_string()))?;
-        let bytes = provider.read(&path).await?;
-        if bytes.len() as u64 > self.size_limit {
-            return Err(ViewerError::FileTooLarge {
-                size: bytes.len() as u64,
-                limit: self.size_limit,
-            });
-        }
-        let language = detect_language(&path, &bytes[..bytes.len().min(512)]);
-        let buffer = TextBuffer::from_bytes(&bytes)?;
+        let (buffer, raw) = load_text_source(&path, provider.as_ref(), self.size_limit).await?;
+        let sample = raw.as_slice();
+        let language = detect_language(&path, &sample[..sample.len().min(512)]);
         *self.language.write() = language.to_string();
         *self.buffer.write() = Some(buffer);
-        *self.raw_bytes.write() = bytes;
+        *self.raw_bytes.write() = raw;
         *self.path.write() = Some(path);
         *self.registry.write() = Some(registry);
         *self.cursor.write() = CursorPos::default();
@@ -914,7 +984,7 @@ impl Viewer for TextViewer {
         *self.buffer.write() = None;
         *self.path.write() = None;
         *self.registry.write() = None;
-        *self.raw_bytes.write() = Vec::new();
+        *self.raw_bytes.write() = RawBytes::Empty;
         *self.display_mode.write() = TextDisplayMode::Text;
         *self.display_cache.lock() = None;
         self.content_generation.store(0, Ordering::Relaxed);
@@ -1016,7 +1086,7 @@ impl Viewer for TextViewer {
         if let Some(buffer) = self.buffer.write().as_mut() {
             buffer.mark_clean();
         }
-        *self.raw_bytes.write() = bytes;
+        *self.raw_bytes.write() = RawBytes::from_vec(bytes);
         *self.display_cache.lock() = None;
         Ok(())
     }
@@ -1073,6 +1143,20 @@ mod tests {
 
     fn viewer() -> TextViewer {
         TextViewer::new(Arc::new(SyntaxHighlighter::new()))
+    }
+
+    #[test]
+    fn local_mmap_round_trips_utf8() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("note.txt");
+        std::fs::write(&path, "hello\nворлд\n").unwrap();
+        let (buffer, raw) = load_local_text(&path, DEFAULT_SIZE_LIMIT).unwrap();
+        assert!(matches!(raw, RawBytes::Mapped(_)));
+        assert_eq!(buffer.plain_text(), "hello\nворлд\n");
+        assert_eq!(
+            raw.as_slice(),
+            b"hello\n\xd0\xb2\xd0\xbe\xd1\x80\xd0\xbb\xd0\xb4\n"
+        );
     }
 
     #[test]
@@ -1218,7 +1302,7 @@ mod tests {
     fn hex_mode_exposes_dump_and_forces_read_only() {
         let tv = viewer();
         *tv.buffer.write() = Some(TextBuffer::from_bytes(b"Hi").unwrap());
-        *tv.raw_bytes.write() = b"Hi".to_vec();
+        *tv.raw_bytes.write() = RawBytes::from_vec(b"Hi".to_vec());
         tv.set_mode(TextViewerMode::Edit);
         tv.set_display_mode(TextDisplayMode::Hex);
         let ViewerSnapshot::Text(t) = tv.snapshot() else {
@@ -1236,7 +1320,7 @@ mod tests {
         let bytes = [0xCF, 0xF0, 0xE8, 0xE2, 0xE5, 0xF2];
         *tv.buffer.write() =
             Some(TextBuffer::from_bytes_with_encoding(&bytes, "windows-1251").unwrap());
-        *tv.raw_bytes.write() = bytes.to_vec();
+        *tv.raw_bytes.write() = RawBytes::from_vec(bytes.to_vec());
         tv.set_encoding("windows-1251").unwrap();
         assert!(tv
             .buffer
@@ -1253,7 +1337,7 @@ mod tests {
     fn regex_replace_all_multiline() {
         let tv = viewer();
         *tv.buffer.write() = Some(TextBuffer::from_bytes(b"foo\nbar\nfoo").unwrap());
-        *tv.raw_bytes.write() = b"foo\nbar\nfoo".to_vec();
+        *tv.raw_bytes.write() = RawBytes::from_vec(b"foo\nbar\nfoo".to_vec());
         let n = tv
             .replace_all(
                 "foo",

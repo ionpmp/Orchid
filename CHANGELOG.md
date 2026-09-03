@@ -368,6 +368,9 @@ release yet.
 - **PDF render queue**: worker channel is bounded; queued page / zoom
   flips for the same session collapse to the latest request, and the
   viewer ignores superseded rasters.
+- **Text viewer open**: local files stay memory-mapped; the rope is
+  filled via `from_reader` so UTF-8 is not copied into an extra
+  `String`. Encoding switches re-decode the mapped bytes in place.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

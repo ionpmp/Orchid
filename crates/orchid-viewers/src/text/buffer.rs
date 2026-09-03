@@ -1,5 +1,7 @@
 //! Rope-backed text buffer with encoding detection.
 
+use std::io::{self, Cursor, Read};
+
 use chardetng::{EncodingDetector, Iso2022JpDetection, Utf8Detection};
 use encoding_rs::{Encoding, UTF_8};
 use ropey::Rope;
@@ -72,14 +74,11 @@ impl TextBuffer {
                 "text buffer decoded with replacement characters"
             );
         }
-        let mut s: String = cow.into_owned();
-        // Normalise CRLF → LF in the rope; remember the original ending for save.
-        let line_ending = detect_line_ending(&s);
-        if line_ending == LineEnding::Crlf {
-            s = s.replace("\r\n", "\n");
-        }
+        // Feed the decoded UTF-8 into the rope without a second full String
+        // (UTF-8 files stay borrowed from `bytes` here).
+        let line_ending = detect_line_ending(cow.as_ref());
         Ok(Self {
-            rope: Rope::from_str(&s),
+            rope: Self::rope_from_decoded(cow.as_ref(), line_ending)?,
             line_ending,
             encoding,
             dirty: false,
@@ -102,17 +101,23 @@ impl TextBuffer {
                 "text buffer decoded with replacement characters"
             );
         }
-        let mut s: String = cow.into_owned();
-        let line_ending = detect_line_ending(&s);
-        if line_ending == LineEnding::Crlf {
-            s = s.replace("\r\n", "\n");
-        }
+        let line_ending = detect_line_ending(cow.as_ref());
         Ok(Self {
-            rope: Rope::from_str(&s),
+            rope: Self::rope_from_decoded(cow.as_ref(), line_ending)?,
             line_ending,
             encoding,
             dirty: false,
         })
+    }
+
+    /// Build a rope from decoded UTF-8, dropping CR in CRLF pairs on the fly.
+    fn rope_from_decoded(text: &str, line_ending: LineEnding) -> Result<Rope> {
+        let built = if line_ending == LineEnding::Crlf {
+            Rope::from_reader(SkipCrlf::new(text.as_bytes()))
+        } else {
+            Rope::from_reader(Cursor::new(text.as_bytes()))
+        };
+        built.map_err(|e| ViewerError::TextDecode(e.to_string()))
     }
 
     /// Re-encode the buffer back to bytes for writing.
@@ -510,6 +515,34 @@ fn detect_line_ending(sample: &str) -> LineEnding {
         LineEnding::Crlf
     } else {
         LineEnding::Lf
+    }
+}
+
+/// `Read` adapter that drops CR bytes that precede LF.
+struct SkipCrlf<'a> {
+    data: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> SkipCrlf<'a> {
+    fn new(data: &'a [u8]) -> Self {
+        Self { data, pos: 0 }
+    }
+}
+
+impl Read for SkipCrlf<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let mut written = 0;
+        while self.pos < self.data.len() && written < buf.len() {
+            let b = self.data[self.pos];
+            self.pos += 1;
+            if b == b'\r' && self.data.get(self.pos) == Some(&b'\n') {
+                continue;
+            }
+            buf[written] = b;
+            written += 1;
+        }
+        Ok(written)
     }
 }
 
