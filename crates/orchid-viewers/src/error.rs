@@ -91,6 +91,11 @@ pub enum ViewerError {
     )]
     PdfUnavailable,
 
+    /// A newer page / zoom request superseded this render. Callers treat this
+    /// as a no-op, not a user-visible failure.
+    #[error("PDF render superseded")]
+    PdfStale,
+
     /// libmpv shared library could not be loaded.
     #[error(
         "Media playback unavailable: place mpv-1.dll (or libmpv-2.dll) next to the executable or see docs/BUILDING.md"

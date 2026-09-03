@@ -365,6 +365,9 @@ release yet.
   read; files over 16 MiB hash with `update_mmap_rayon`.
 - **Thumbnail disk cache**: stores packed RGBA instead of PNG so a hit
   does not decode an image.
+- **PDF render queue**: worker channel is bounded; queued page / zoom
+  flips for the same session collapse to the latest request, and the
+  viewer ignores superseded rasters.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

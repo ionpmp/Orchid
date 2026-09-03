@@ -6,8 +6,12 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, Sender, SyncSender, TryRecvError};
 use std::sync::{Arc, OnceLock};
+
+/// Bound on the worker inbox. Excess sends block the caller (back-pressure);
+/// [`take_coalesced`] still drops superseded renders already in the queue.
+const WORKER_QUEUE_CAP: usize = 32;
 
 use pdfium_render::prelude::*;
 
@@ -174,12 +178,12 @@ enum WorkerRequest {
     },
 }
 
-static WORKER_TX: OnceLock<Sender<WorkerRequest>> = OnceLock::new();
+static WORKER_TX: OnceLock<SyncSender<WorkerRequest>> = OnceLock::new();
 
-fn worker_sender() -> Sender<WorkerRequest> {
+fn worker_sender() -> SyncSender<WorkerRequest> {
     WORKER_TX
         .get_or_init(|| {
-            let (tx, rx) = mpsc::channel();
+            let (tx, rx) = mpsc::sync_channel(WORKER_QUEUE_CAP);
             std::thread::Builder::new()
                 .name("orchid-pdfium".into())
                 .spawn(move || worker_loop(rx))
@@ -361,11 +365,65 @@ fn fulfill_pdf_request(document: &PdfDocument<'_>, req: WorkerRequest, cache: &m
     }
 }
 
+fn drain_pending(rx: &Receiver<WorkerRequest>, inbox: &mut VecDeque<WorkerRequest>) {
+    loop {
+        match rx.try_recv() {
+            Ok(req) => inbox.push_back(req),
+            Err(TryRecvError::Empty) => return,
+            Err(TryRecvError::Disconnected) => return,
+        }
+    }
+}
+
+/// Pull the next request, draining the channel first so a burst of page
+/// flips collapses to the latest render per session.
 fn next_request(
     rx: &Receiver<WorkerRequest>,
     inbox: &mut VecDeque<WorkerRequest>,
 ) -> Option<WorkerRequest> {
-    inbox.pop_front().or_else(|| rx.recv().ok())
+    if inbox.is_empty() {
+        match rx.recv() {
+            Ok(req) => inbox.push_back(req),
+            Err(_) => return None,
+        }
+    }
+    drain_pending(rx, inbox);
+    take_coalesced(inbox)
+}
+
+fn take_coalesced(inbox: &mut VecDeque<WorkerRequest>) -> Option<WorkerRequest> {
+    let first = inbox.pop_front()?;
+    if let WorkerRequest::Render { session, .. } = &first {
+        let session = *session;
+        return Some(take_latest_render(inbox, first, session));
+    }
+    Some(first)
+}
+
+fn take_latest_render(
+    inbox: &mut VecDeque<WorkerRequest>,
+    mut latest: WorkerRequest,
+    session: PdfSessionId,
+) -> WorkerRequest {
+    let mut i = 0;
+    while i < inbox.len() {
+        let same_session_render = matches!(
+            &inbox[i],
+            WorkerRequest::Render {
+                session: next_session,
+                ..
+            } if *next_session == session
+        );
+        if same_session_render {
+            let newer = inbox.remove(i).expect("index still in range");
+            if let WorkerRequest::Render { reply, .. } = std::mem::replace(&mut latest, newer) {
+                let _ = reply.send(Err(ViewerError::PdfStale));
+            }
+        } else {
+            i += 1;
+        }
+    }
+    latest
 }
 
 /// Open a PDF in the worker and return `(session, page_count)`.
@@ -688,6 +746,66 @@ startxref
         assert_eq!(a.width_px, b.width_px);
         assert_eq!(a.height_px, b.height_px);
         assert_eq!(a.rgba.as_ref(), b.rgba.as_ref());
+    }
+
+    fn render_req(
+        session: u64,
+        page: u32,
+    ) -> (
+        WorkerRequest,
+        std::sync::mpsc::Receiver<Result<RenderedPage>>,
+    ) {
+        let (reply, rx) = std::sync::mpsc::channel();
+        (
+            WorkerRequest::Render {
+                session: PdfSessionId(session),
+                page,
+                viewport: (100.0, 100.0),
+                fit_mode: FitMode::FitWidth,
+                zoom: 1.0,
+                reply,
+            },
+            rx,
+        )
+    }
+
+    #[test]
+    fn coalesce_keeps_latest_render_per_session() {
+        let (a, ra) = render_req(1, 1);
+        let (other, _ro) = render_req(2, 9);
+        let (b, rb) = render_req(1, 3);
+        let mut inbox = VecDeque::from([a, other, b]);
+        let taken = take_coalesced(&mut inbox).expect("request");
+        match taken {
+            WorkerRequest::Render { session, page, .. } => {
+                assert_eq!(session, PdfSessionId(1));
+                assert_eq!(page, 3);
+            }
+            _ => panic!("expected render"),
+        }
+        assert!(matches!(ra.try_recv(), Ok(Err(ViewerError::PdfStale))));
+        assert!(rb.try_recv().is_err());
+        match inbox.pop_front() {
+            Some(WorkerRequest::Render { session, page, .. }) => {
+                assert_eq!(session, PdfSessionId(2));
+                assert_eq!(page, 9);
+            }
+            _ => panic!("other session should remain"),
+        }
+        assert!(inbox.is_empty());
+    }
+
+    #[test]
+    fn coalesce_leaves_non_render_requests() {
+        let (reply, _rx) = std::sync::mpsc::channel();
+        let mut inbox = VecDeque::from([WorkerRequest::Close {
+            session: PdfSessionId(1),
+            reply,
+        }]);
+        assert!(matches!(
+            take_coalesced(&mut inbox),
+            Some(WorkerRequest::Close { .. })
+        ));
     }
 
     #[test]

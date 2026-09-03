@@ -4,6 +4,7 @@ mod bindings;
 mod render;
 
 use std::any::Any;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -44,6 +45,9 @@ pub struct PdfViewer {
     viewport: RwLock<(f32, f32)>,
     fit_mode: RwLock<FitMode>,
     rendered: RwLock<Option<RenderedPage>>,
+    /// Bumped on every render / close so a slower earlier job cannot overwrite
+    /// a newer page after the user has already moved on.
+    render_gen: AtomicU64,
     size_limit: u64,
 }
 
@@ -78,6 +82,7 @@ impl PdfViewer {
             viewport: RwLock::new(DEFAULT_VIEWPORT),
             fit_mode: RwLock::new(FitMode::FitWidth),
             rendered: RwLock::new(None),
+            render_gen: AtomicU64::new(0),
             size_limit: DEFAULT_SIZE_LIMIT,
         }
     }
@@ -177,18 +182,26 @@ impl PdfViewer {
     }
 
     async fn rerender_at_page(&self, page: u32) -> Result<()> {
+        let gen = self.render_gen.fetch_add(1, Ordering::Relaxed) + 1;
         let session = self.session.read().ok_or(ViewerError::PdfEmpty)?;
         let viewport = *self.viewport.read();
         let fit_mode = *self.fit_mode.read();
         let zoom = *self.zoom.read();
-        let rendered = tokio::task::spawn_blocking(move || {
+        let rendered = match tokio::task::spawn_blocking(move || {
             render::render_page(session, page, viewport, fit_mode, zoom)
         })
         .await
         .map_err(|e| ViewerError::PdfRender {
             page,
             reason: format!("join: {e}"),
-        })??;
+        })? {
+            Ok(page) => page,
+            Err(ViewerError::PdfStale) => return Ok(()),
+            Err(e) => return Err(e),
+        };
+        if self.render_gen.load(Ordering::Relaxed) != gen {
+            return Ok(());
+        }
         *self.page_count.write() = rendered.page_count;
         *self.current_page.write() = rendered.current_page;
         *self.zoom.write() = rendered.zoom;
@@ -255,6 +268,7 @@ impl Viewer for PdfViewer {
             });
         }
 
+        self.render_gen.fetch_add(1, Ordering::Relaxed);
         let viewport = *self.viewport.read();
         let fit_mode = *self.fit_mode.read();
         let zoom = *self.zoom.read();
@@ -287,6 +301,7 @@ impl Viewer for PdfViewer {
     async fn close(&mut self) -> Result<()> {
         // Take the session out before awaiting so the parking_lot guard is not held
         // across `.await` (that would make this future !Send).
+        self.render_gen.fetch_add(1, Ordering::Relaxed);
         let session = self.session.write().take();
         if let Some(session) = session {
             tokio::task::spawn_blocking(move || render::close_document(session))
