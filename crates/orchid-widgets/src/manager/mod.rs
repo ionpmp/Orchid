@@ -198,11 +198,9 @@ impl WidgetManager {
         let Some(snap) = snapshot else {
             return Ok(());
         };
-        // Callers of refresh_snapshot_cache (WidgetSnapshotUpdated, UI actions)
-        // already decided the widget needs a paint. Do not drop the update when
-        // coarse render-equality (rounded labels / bucketed %) matches the cache
-        // — that froze System/Processes while samples kept changing underneath.
-        self.store_snapshot(inst.id, snap, true);
+        // System / Processes compare the live values (not rounded labels), so
+        // a duplicate bus event with an identical snapshot can stay cached.
+        self.store_snapshot(inst.id, snap, false);
         Ok(())
     }
 

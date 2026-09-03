@@ -374,6 +374,8 @@ release yet.
 - **Video player**: publish on a new frame or a one-second progress
   tick instead of every 100 ms while playing; Slint reuses the last
   frame `Image` when the RGBA `Arc` is unchanged.
+- **Snapshot cache**: event-driven refreshes skip the frame when
+  render-equality matches (System / Processes compare live values).
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),
