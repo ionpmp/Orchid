@@ -380,6 +380,8 @@ release yet.
   change instead of waking every 50 ms.
 - **Image checkerboard**: cache the composited RGBA by source `Arc`
   so a viewer rebuild does not copy a full-resolution frame again.
+- **UI tick**: 33 ms (~30 Hz) instead of 16 ms; the first paint shows
+  the shell and rebuilds workspace frames on the first tick.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

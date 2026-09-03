@@ -877,10 +877,11 @@ impl MainWindowController {
         // be empty after the user closed every widget).
         let work = !wss.is_empty();
         g.set_mode(if work { 1 } else { 0 });
+        // Shell first; the first `on_ui_tick` rebuilds frames (terminals included).
+        // A sync rebuild here rasters every pane before `window.show()`.
+        g.set_workspace(build_empty_workspace_model(&self.locale));
         if work {
-            self.rebuild_workspace_model()?;
-        } else {
-            g.set_workspace(build_empty_workspace_model(&self.locale));
+            self.schedule_rebuild();
         }
         Ok(())
     }

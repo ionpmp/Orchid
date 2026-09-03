@@ -407,7 +407,9 @@ export component MainWindow inherits Window {
         padding: 0;
 
         Timer {
-            interval: 16ms;
+            // ~30 Hz idle: canvas sync + dirty-frame patches. Live drag/resize
+            // already defer the heavy rebuild until the gesture ends.
+            interval: 33ms;
             running: AppState.mode == 1;
             triggered => { root.ui-tick(); }
         }
