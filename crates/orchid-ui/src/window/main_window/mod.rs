@@ -227,6 +227,10 @@ pub struct MainWindowController {
     notifications: ModelRc<NotificationItem>,
     /// True after the first startup tip has been pushed (once per window).
     notification_tip_pushed: AtomicBool,
+    /// Set when the notification list changed; the UI tick writes it to redb
+    /// once [`NOTIFICATION_PERSIST_DEBOUNCE`] has elapsed. Persisting inline
+    /// meant an fsync on the UI thread for every push / dismiss.
+    notifications_persist_due: Mutex<Option<Instant>>,
     onboarding: Arc<RwLock<OnboardingUiState>>,
     gesture_recognizer: Arc<Mutex<GestureRecognizer>>,
     input_mapper: Arc<InputMapper>,
@@ -534,6 +538,7 @@ impl MainWindowController {
             navigation: Arc::new(RwLock::new(NavigationUiState::default())),
             notifications,
             notification_tip_pushed: AtomicBool::new(false),
+            notifications_persist_due: Mutex::new(None),
             onboarding: Arc::new(RwLock::new(OnboardingUiState::default())),
             gesture_recognizer,
             input_mapper,
@@ -837,6 +842,11 @@ impl MainWindowController {
 
     fn action_dispatcher(&self) -> ActionDispatcher {
         ActionDispatcher::new().with_middleware(self.history_recorder.clone() as _)
+    }
+
+    /// Recorder holding buffered action history; flush it after the event loop.
+    pub(crate) fn history_recorder(&self) -> Arc<HistoryRecorder> {
+        Arc::clone(&self.history_recorder)
     }
 
     /// Delete persisted action-history rows older than

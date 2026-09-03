@@ -53,6 +53,7 @@ impl MainWindowController {
                     };
                     c.handle_recognized_gestures(gestures);
                     c.check_vault_auto_lock();
+                    c.flush_notifications(false);
                     let scale = c.window.window().scale_factor();
                     let scale_changed = {
                         let mut last = c.last_window_scale.lock();

@@ -331,6 +331,14 @@ release yet.
   / search / recent / calculator (including floating frames); media thumbnails
   pass `Arc<[u8]>` instead of base64; thumbnail service memory LRU, PNG encode
   without RGBA unwrap-clone, and real in-flight coalescing.
+- **Runtime / I/O performance pass**: Windows `mimalloc` global allocator;
+  Slint built with only `winit-skia` (femtovg / software dropped); default
+  log filter `orchid=info`; image decode uses `into_rgba8` instead of
+  `to_rgba8`; system widget reuses the battery `Manager`; weather/RSS pause
+  on sleep and resume on the remaining interval; RSS sends `If-None-Match` /
+  `If-Modified-Since`; weather cities fetch in parallel; action history
+  batches up to 32 entries / 2 s; notification-center writes debounce
+  750 ms; Tantivy `QueryParser`s are built once per engine.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

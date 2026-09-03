@@ -884,7 +884,15 @@ impl OrchidApp {
         // Kick off deferred search indexing before the event loop so crawl/watch
         // cannot block first paint (start() itself sleeps briefly then runs async).
         self.deferred_index.start();
+        // `run` consumes the controller; keep a handle for the post-loop flush.
+        let after_loop = std::sync::Arc::clone(&c);
         c.run()?;
+        // Action history and notifications are batched, so the tail of the
+        // session is still in memory once the event loop returns.
+        after_loop.flush_notifications(true);
+        if let Ok(h) = tokio::runtime::Handle::try_current() {
+            h.block_on(after_loop.history_recorder().flush());
+        }
         Ok(())
     }
 

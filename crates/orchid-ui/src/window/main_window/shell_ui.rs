@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use slint::ComponentHandle;
 use slint::Model;
@@ -51,6 +52,9 @@ const ONBOARDING_STEP_KEYS: [(&str, &str); 4] = [
 
 /// Soft cap so bridges/toasts cannot grow the in-memory list without bound.
 pub(super) const NOTIFICATION_LIST_CAP: usize = 50;
+
+/// How long a notification-center change waits before it is written to redb.
+const NOTIFICATION_PERSIST_DEBOUNCE: Duration = Duration::from_millis(750);
 
 impl MainWindowController {
     pub(super) fn sync_settings_global(self: &Arc<Self>) {
@@ -298,7 +302,28 @@ impl MainWindowController {
         orchid_storage::NotificationCenterState { items }
     }
 
+    /// Queue a notification-center write instead of committing inline.
+    ///
+    /// A burst (startup tips, a run of errors) collapses into one redb
+    /// transaction, and no fsync lands on the UI thread mid-callback.
     pub(super) fn persist_notifications(self: &Arc<Self>) {
+        let mut due = self.notifications_persist_due.lock();
+        if due.is_none() {
+            *due = Some(Instant::now() + NOTIFICATION_PERSIST_DEBOUNCE);
+        }
+    }
+
+    /// Write the notification center if a queued save has come due.
+    ///
+    /// Called from the UI tick; `force` bypasses the debounce for shutdown.
+    pub(crate) fn flush_notifications(self: &Arc<Self>, force: bool) {
+        {
+            let mut due = self.notifications_persist_due.lock();
+            match *due {
+                Some(at) if force || Instant::now() >= at => *due = None,
+                _ => return,
+            }
+        }
         let state = self.snapshot_notifications();
         if let Err(e) = (|| -> Result<()> {
             let mut w = self.storage.write().map_err(UiError::Storage)?;

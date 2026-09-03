@@ -71,6 +71,11 @@ struct SearchEngineInner {
     index: Index,
     reader: IndexReader,
     writer: Mutex<Option<IndexWriter>>,
+    /// Built once: the field sets never change, and rebuilding a parser per
+    /// query re-cloned the tokenizer manager on every keystroke.
+    text_query_parser: tantivy::query::QueryParser,
+    /// Parser for the `path_prefix` wildcard filter.
+    path_query_parser: tantivy::query::QueryParser,
 }
 
 impl std::fmt::Debug for SearchEngine {
@@ -101,12 +106,20 @@ impl SearchEngine {
             .reload_policy(ReloadPolicy::OnCommitWithDelay)
             .try_into()?;
         let writer = index.writer(INDEX_WRITER_BUDGET_BYTES)?;
+        let text_query_parser = tantivy::query::QueryParser::for_index(
+            &index,
+            vec![schema.field_name, schema.field_content],
+        );
+        let path_query_parser =
+            tantivy::query::QueryParser::for_index(&index, vec![schema.field_path]);
         Ok(Self {
             inner: Arc::new(SearchEngineInner {
                 schema,
                 index,
                 reader,
                 writer: Mutex::new(Some(writer)),
+                text_query_parser,
+                path_query_parser,
             }),
         })
     }
@@ -307,19 +320,13 @@ fn remove_sync(inner: &SearchEngineInner, path: &str) -> Result<()> {
 }
 
 fn run_query(inner: &SearchEngineInner, q: &Query) -> Result<SearchResults> {
-    use tantivy::query::QueryParser;
-
     inner.reader.reload()?;
     let searcher = inner.reader.searcher();
 
     let mut clauses: Vec<(Occur, Box<dyn TantivyQuery>)> = Vec::new();
 
     if let Some(text) = q.text.as_ref().filter(|s| !s.trim().is_empty()) {
-        let parser = QueryParser::for_index(
-            &inner.index,
-            vec![inner.schema.field_name, inner.schema.field_content],
-        );
-        match parser.parse_query(text) {
+        match inner.text_query_parser.parse_query(text) {
             Ok(p) => clauses.push((Occur::Must, p)),
             Err(e) => return Err(SearchError::QueryParse(e.to_string())),
         }
@@ -353,9 +360,8 @@ fn run_query(inner: &SearchEngineInner, q: &Query) -> Result<SearchResults> {
         ));
     }
     if let Some(prefix) = q.path_prefix.as_ref().filter(|s| !s.is_empty()) {
-        let parser = QueryParser::for_index(&inner.index, vec![inner.schema.field_path]);
         let wildcard = format!("{prefix}*");
-        if let Ok(p) = parser.parse_query(&wildcard) {
+        if let Ok(p) = inner.path_query_parser.parse_query(&wildcard) {
             clauses.push((Occur::Must, p));
         }
     }

@@ -91,8 +91,8 @@ async fn command_parsed_and_dispatched_end_to_end() {
         .subscribe(EventFilter::of_type("test.echo"), HandlerPriority::Normal)
         .unwrap();
 
-    let dispatcher = ActionDispatcher::new()
-        .with_middleware(Arc::new(HistoryRecorder::new(Arc::clone(&storage), true)) as _);
+    let recorder = Arc::new(HistoryRecorder::new(Arc::clone(&storage), true));
+    let dispatcher = ActionDispatcher::new().with_middleware(recorder.clone() as _);
 
     // Parse → registry → action
     let (parsed, descriptor) =
@@ -112,6 +112,9 @@ async fn command_parsed_and_dispatched_end_to_end() {
         .expect("channel open");
     let payload = env.downcast::<EchoEvent>().expect("downcast");
     assert_eq!(payload.message, "hello");
+
+    // History is batched; flush so the single entry reaches the store.
+    recorder.flush().await;
 
     // History recorded one entry.
     let r = storage.read().unwrap();

@@ -7,13 +7,20 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use bincode_reloaded::{Decode, Encode};
 use chrono::Utc;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use uuid::Uuid;
+
+/// Flush once this many entries are buffered.
+const FLUSH_MAX_ENTRIES: usize = 32;
+/// Flush when the oldest buffered entry is at least this old.
+const FLUSH_MAX_AGE: Duration = Duration::from_secs(2);
 
 use crate::action::context::{ActionContext, ActionOutcome};
 use crate::action::dispatcher::ActionMiddleware;
@@ -36,10 +43,23 @@ struct HistoryMetadata {
     source_label: String,
 }
 
+/// Entries waiting to be written, plus when the oldest one was buffered.
+#[derive(Default)]
+struct PendingHistory {
+    entries: Vec<HistoryEntry>,
+    oldest_at: Option<Instant>,
+}
+
 /// Middleware that writes every dispatched action to the state database.
+///
+/// Writes are batched: one redb transaction (and therefore one fsync) covers
+/// up to [`FLUSH_MAX_ENTRIES`] actions or [`FLUSH_MAX_AGE`] of activity,
+/// instead of one per dispatched action. Call [`HistoryRecorder::flush`]
+/// before shutting down so the tail of the buffer reaches disk.
 pub struct HistoryRecorder {
     storage: Arc<StateStore>,
     enabled: Arc<AtomicBool>,
+    pending: Arc<Mutex<PendingHistory>>,
 }
 
 impl std::fmt::Debug for HistoryRecorder {
@@ -68,10 +88,14 @@ impl HistoryRecorder {
         Self {
             storage,
             enabled: Arc::new(AtomicBool::new(enabled)),
+            pending: Arc::new(Mutex::new(PendingHistory::default())),
         }
     }
 
     /// Enable / disable recording at runtime. Cheap (single atomic store).
+    ///
+    /// Turning recording off leaves already-buffered entries queued; they are
+    /// written by the next [`Self::flush`].
     pub fn set_enabled(&self, enabled: bool) {
         self.enabled.store(enabled, Ordering::Relaxed);
     }
@@ -80,6 +104,48 @@ impl HistoryRecorder {
     #[must_use]
     pub fn is_enabled(&self) -> bool {
         self.enabled.load(Ordering::Relaxed)
+    }
+
+    /// Write every buffered entry in one transaction.
+    ///
+    /// Safe to call when nothing is pending. Call this on shutdown, otherwise
+    /// the last few actions of a session are lost.
+    pub async fn flush(&self) {
+        let entries = self.take_pending();
+        if entries.is_empty() {
+            return;
+        }
+        let storage = Arc::clone(&self.storage);
+        let count = entries.len();
+        let join = tokio::task::spawn_blocking(move || Self::write_batch(&storage, &entries));
+        match join.await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => warn!(error = %e, count, "history flush failed"),
+            Err(e) => warn!(error = %e, count, "history flush join failed"),
+        }
+    }
+
+    fn take_pending(&self) -> Vec<HistoryEntry> {
+        let mut pending = self.pending.lock();
+        pending.oldest_at = None;
+        std::mem::take(&mut pending.entries)
+    }
+
+    /// Queue `entry`, returning `true` when the batch is due to be written.
+    fn push_pending(&self, entry: HistoryEntry) -> bool {
+        let mut pending = self.pending.lock();
+        pending.entries.push(entry);
+        let oldest = *pending.oldest_at.get_or_insert_with(Instant::now);
+        pending.entries.len() >= FLUSH_MAX_ENTRIES || oldest.elapsed() >= FLUSH_MAX_AGE
+    }
+
+    fn write_batch(storage: &StateStore, entries: &[HistoryEntry]) -> Result<()> {
+        let mut w = storage.write()?;
+        for entry in entries {
+            w.put_history(entry)?;
+        }
+        w.commit()?;
+        Ok(())
     }
 }
 
@@ -116,7 +182,10 @@ impl ActionMiddleware for HistoryRecorder {
             correlation_id: ctx.correlation_id,
             source_label: ctx.source.label(),
         };
-        let metadata_bytes = match bincode_reloaded::encode_to_vec(&metadata, bincode_reloaded::config::standard()) {
+        let metadata_bytes = match bincode_reloaded::encode_to_vec(
+            &metadata,
+            bincode_reloaded::config::standard(),
+        ) {
             Ok(b) => b,
             Err(e) => {
                 warn!(error = %e, "failed to encode history metadata; skipping entry");
@@ -135,24 +204,10 @@ impl ActionMiddleware for HistoryRecorder {
             metadata: metadata_bytes,
         };
 
-        let storage = Arc::clone(&self.storage);
-        let action_id = action.id().to_string();
-        // Offload sync DB I/O from the async worker; still await so history
-        // is durable before the middleware returns.
-        let join = tokio::task::spawn_blocking(move || {
-            let mut w = storage.write()?;
-            w.put_history(&entry)?;
-            w.commit()?;
-            Ok::<_, crate::CoreError>(())
-        });
-        match join.await {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => {
-                warn!(error = %e, action.id = %action_id, "history recording failed");
-            }
-            Err(e) => {
-                warn!(error = %e, action.id = %action_id, "history recording join failed");
-            }
+        // Buffer instead of committing per action: a redb commit is an fsync,
+        // and dispatch latency used to include it.
+        if self.push_pending(entry) {
+            self.flush().await;
         }
     }
 }
@@ -214,6 +269,7 @@ mod tests {
         d.dispatch(Box::new(Echo), &make_ctx(Arc::clone(&storage)))
             .await
             .unwrap();
+        rec.flush().await;
 
         let r = storage.read().unwrap();
         let recent = r.iter_history_recent(10).unwrap();
@@ -221,10 +277,12 @@ mod tests {
         assert_eq!(recent[0].action_id, "test.echo");
         assert_eq!(recent[0].command_text, "orc test echo");
 
-        let meta: HistoryMetadata =
-            bincode_reloaded::decode_from_slice(&recent[0].metadata, bincode_reloaded::config::standard())
-                .unwrap()
-                .0;
+        let meta: HistoryMetadata = bincode_reloaded::decode_from_slice(
+            &recent[0].metadata,
+            bincode_reloaded::config::standard(),
+        )
+        .unwrap()
+        .0;
         assert!(meta.success);
     }
 
@@ -236,14 +294,17 @@ mod tests {
         d.dispatch(Box::new(Failer), &make_ctx(Arc::clone(&storage)))
             .await
             .unwrap();
+        rec.flush().await;
 
         let r = storage.read().unwrap();
         let recent = r.iter_history_recent(10).unwrap();
         assert_eq!(recent.len(), 1);
-        let meta: HistoryMetadata =
-            bincode_reloaded::decode_from_slice(&recent[0].metadata, bincode_reloaded::config::standard())
-                .unwrap()
-                .0;
+        let meta: HistoryMetadata = bincode_reloaded::decode_from_slice(
+            &recent[0].metadata,
+            bincode_reloaded::config::standard(),
+        )
+        .unwrap()
+        .0;
         assert!(!meta.success);
     }
 
@@ -256,6 +317,7 @@ mod tests {
             .await
             .unwrap();
 
+        rec.flush().await;
         let r = storage.read().unwrap();
         assert!(r.iter_history_recent(10).unwrap().is_empty());
 
@@ -263,7 +325,44 @@ mod tests {
         d.dispatch(Box::new(Echo), &make_ctx(Arc::clone(&storage)))
             .await
             .unwrap();
+        rec.flush().await;
         let r = storage.read().unwrap();
         assert_eq!(r.iter_history_recent(10).unwrap().len(), 1);
+    }
+
+    /// Asserts *whether* rows exist, not how many: `history_by_timestamp` is
+    /// keyed by unix millis, so entries recorded inside the same millisecond
+    /// share one index row and `iter_history_recent` under-reports.
+    #[tokio::test]
+    async fn entries_are_batched_until_threshold() {
+        let storage = Arc::new(StateStore::open_in_memory("0").unwrap());
+        let rec = Arc::new(HistoryRecorder::new(Arc::clone(&storage), true));
+        let d = ActionDispatcher::new().with_middleware(rec.clone() as _);
+        let ctx = make_ctx(Arc::clone(&storage));
+
+        // Well under FLUSH_MAX_ENTRIES and inside FLUSH_MAX_AGE: nothing written.
+        for _ in 0..FLUSH_MAX_ENTRIES - 1 {
+            d.dispatch(Box::new(Echo), &ctx).await.unwrap();
+        }
+        assert!(
+            storage
+                .read()
+                .unwrap()
+                .iter_history_recent(64)
+                .unwrap()
+                .is_empty(),
+            "entries below the threshold must stay buffered"
+        );
+
+        d.dispatch(Box::new(Echo), &ctx).await.unwrap();
+        assert!(
+            !storage
+                .read()
+                .unwrap()
+                .iter_history_recent(64)
+                .unwrap()
+                .is_empty(),
+            "reaching the entry threshold must write the batch"
+        );
     }
 }
