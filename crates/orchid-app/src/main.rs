@@ -9,9 +9,15 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use orchid_storage::OrchidPaths;
 use orchid_ui::OrchidApp;
 
+#[cfg(windows)]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn init_tracing() -> Result<()> {
+    // `orchid=debug` used to be the default, which kept per-keystroke `debug!`
+    // formatting alive in the terminal input path. Opt in via `RUST_LOG`.
     let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,orchid=debug"));
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,orchid=info"));
 
     tracing_subscriber::registry()
         .with(filter)

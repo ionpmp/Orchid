@@ -96,6 +96,9 @@ tempfile = "3"
 # Concurrency
 parking_lot = "0.12"
 
+# Allocator (Windows only -- see crates/orchid-app/Cargo.toml)
+mimalloc = { version = "0.1", default-features = false }
+
 # Binary encoding / identifiers / time
 bincode_reloaded = { version = "3", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
@@ -194,12 +197,12 @@ unic-langid = { version = "0.9", features = ["macros"] }
 # enables AccessKit on the winit backend. On Windows that can panic with
 # "RefCell already borrowed" (a11y tree build + TerminalView focus) — see
 # winitwindowadapter::handle_focus_change. Re-enable if screen-reader support is required.
+# `main.rs` pins `SLINT_BACKEND=winit-skia`, so femtovg / software / the
+# backend-default selector are dead weight: extra codegen and static init for
+# renderers that can never be reached.
 slint = { version = "1", default-features = false, features = [
     "std",
-    "backend-default",
     "backend-winit",
-    "renderer-femtovg",
-    "renderer-software",
     "renderer-skia",
     "compat-1-2",
     "unstable-winit-030",

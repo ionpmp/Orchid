@@ -29,5 +29,10 @@ orchid-widgets.workspace = true
 orchid-i18n.workspace = true
 orchid-ui.workspace = true
 
+# Orchid's workload is allocation-heavy (Slint models, terminal raster, Tantivy,
+# image decode). The Windows system allocator is the weakest link there.
+[target.'cfg(windows)'.dependencies]
+mimalloc.workspace = true
+
 [build-dependencies]
 winres.workspace = true
