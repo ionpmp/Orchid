@@ -155,9 +155,18 @@ fn draw_missing_glyphs_marker(
     }
 }
 
-/// Retained RGBA buffer for dirty-line terminal updates.
+/// Retained RGBA buffers for dirty-line terminal updates.
+///
+/// Two independent pixel buffers ping-pong so `Image::from_rgba8` never
+/// shares the buffer we paint next. A cheap `clone()` of `SharedPixelBuffer`
+/// only bumps a refcount; the next `make_mut_slice` would otherwise detach
+/// and copy the whole frame (~3.5 MiB at 120×40×2×).
 pub struct RetainedRaster {
-    buffer: SharedPixelBuffer<Rgba8Pixel>,
+    buffers: [SharedPixelBuffer<Rgba8Pixel>; 2],
+    /// Index last handed to Slint as an `Image`.
+    front: usize,
+    /// Rows still dirty on each buffer (the one we skipped last frame).
+    pending: [Vec<u16>; 2],
     cols: u16,
     rows: u16,
     cell_wp: u32,
@@ -355,41 +364,48 @@ pub fn render_terminal_cells_retained(
     let geometry_ok = retained
         .as_ref()
         .is_some_and(|r| r.matches_geometry(cols, rows, cell_wp, cell_hp, size_q));
-    let do_full = full_redraw || !geometry_ok;
+    let do_full = full_redraw || !geometry_ok || retained.is_none();
 
-    if do_full || retained.is_none() {
-        let mut buffer = SharedPixelBuffer::new(tw, th);
-        paint_rows(
-            &mut buffer,
-            cols,
-            rows,
-            cells,
-            0..rows,
-            font,
-            glyph_fallback,
-            size_draw,
-            cell_wp,
-            cell_hp,
-            tw,
-            th,
-            ascent,
-        );
-        paint_cursor(
-            &mut buffer,
-            cols,
-            rows,
-            cursor_col,
-            cursor_row,
-            cursor_visible,
-            cell_wp,
-            cell_hp,
-            tw,
-            th,
-            cursor_color,
-        );
-        let image = Image::from_rgba8(buffer.clone());
+    if do_full {
+        let mut paint_all = |buffer: &mut SharedPixelBuffer<Rgba8Pixel>| {
+            paint_rows(
+                buffer,
+                cols,
+                rows,
+                cells,
+                0..rows,
+                font,
+                glyph_fallback,
+                size_draw,
+                cell_wp,
+                cell_hp,
+                tw,
+                th,
+                ascent,
+            );
+            paint_cursor(
+                buffer,
+                cols,
+                rows,
+                cursor_col,
+                cursor_row,
+                cursor_visible,
+                cell_wp,
+                cell_hp,
+                tw,
+                th,
+                cursor_color,
+            );
+        };
+        let mut a = SharedPixelBuffer::new(tw, th);
+        let mut b = SharedPixelBuffer::new(tw, th);
+        paint_all(&mut a);
+        paint_all(&mut b);
+        let image = Image::from_rgba8(a.clone());
         *retained = Some(RetainedRaster {
-            buffer,
+            buffers: [a, b],
+            front: 0,
+            pending: [Vec::new(), Vec::new()],
             cols,
             rows,
             cell_wp,
@@ -402,51 +418,64 @@ pub fn render_terminal_cells_retained(
         return Some(image);
     }
 
-    let prev = retained.as_ref().expect("checked above");
-    let mut dirty: Vec<u16> = dirty_lines.to_vec();
+    let rast = retained.as_mut().expect("checked above");
+    let mut this_dirty: Vec<u16> = dirty_lines.iter().copied().filter(|&r| r < rows).collect();
     // Re-paint previous + current cursor rows so the tint is cleared/redrawn.
-    if prev.cursor_visible {
-        dirty.push(prev.cursor_row);
+    if rast.cursor_visible {
+        this_dirty.push(rast.cursor_row);
     }
     if cursor_visible {
-        dirty.push(cursor_row);
+        this_dirty.push(cursor_row);
     }
-    dirty.sort_unstable();
-    dirty.dedup();
+    this_dirty.sort_unstable();
+    this_dirty.dedup();
 
-    let rast = retained.as_mut().expect("checked above");
-    paint_rows(
-        &mut rast.buffer,
-        cols,
-        rows,
-        cells,
-        dirty.into_iter(),
-        font,
-        glyph_fallback,
-        size_draw,
-        cell_wp,
-        cell_hp,
-        tw,
-        th,
-        ascent,
-    );
-    paint_cursor(
-        &mut rast.buffer,
-        cols,
-        rows,
-        cursor_col,
-        cursor_row,
-        cursor_visible,
-        cell_wp,
-        cell_hp,
-        tw,
-        th,
-        cursor_color,
-    );
+    let back = 1 - rast.front;
+    let mut paint_set = rast.pending[back].clone();
+    paint_set.extend_from_slice(&this_dirty);
+    paint_set.sort_unstable();
+    paint_set.dedup();
+
+    if !paint_set.is_empty() {
+        paint_rows(
+            &mut rast.buffers[back],
+            cols,
+            rows,
+            cells,
+            paint_set.into_iter(),
+            font,
+            glyph_fallback,
+            size_draw,
+            cell_wp,
+            cell_hp,
+            tw,
+            th,
+            ascent,
+        );
+        paint_cursor(
+            &mut rast.buffers[back],
+            cols,
+            rows,
+            cursor_col,
+            cursor_row,
+            cursor_visible,
+            cell_wp,
+            cell_hp,
+            tw,
+            th,
+            cursor_color,
+        );
+    }
+    rast.pending[back].clear();
+    rast.pending[rast.front].extend_from_slice(&this_dirty);
+    rast.pending[rast.front].sort_unstable();
+    rast.pending[rast.front].dedup();
     rast.cursor_col = cursor_col;
     rast.cursor_row = cursor_row;
     rast.cursor_visible = cursor_visible;
-    Some(Image::from_rgba8(rast.buffer.clone()))
+    let image = Image::from_rgba8(rast.buffers[back].clone());
+    rast.front = back;
+    Some(image)
 }
 
 /// Raster terminal cells to an RGBA image in **physical** pixels (full redraw).

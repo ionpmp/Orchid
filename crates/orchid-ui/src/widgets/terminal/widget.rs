@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use orchid_core::EventBus;
 use orchid_storage::{LifecycleState, StateStore, WidgetSize};
 use orchid_terminal::{
-    resolve_color, BackendKind, BackendSpec, CellFlags, ColorRole, LayoutRoot, PtySize, Rgba,
+    resolve_color, BackendKind, BackendSpec, Cell, CellFlags, ColorRole, LayoutRoot, PtySize, Rgba,
     SessionManager, SplitDirection, TerminalPalette,
 };
 use orchid_widgets::{
@@ -149,6 +149,14 @@ impl std::fmt::Debug for TerminalWidgetDeps {
     }
 }
 
+/// Last converted grid for one session, used to rewrite only dirty rows.
+struct CachedGrid {
+    cols: u16,
+    rows: u16,
+    generation: u64,
+    cells: Vec<TerminalPayloadCell>,
+}
+
 /// Concrete `Widget` implementation for the terminal.
 pub struct TerminalWidget {
     instance_id: Uuid,
@@ -156,6 +164,9 @@ pub struct TerminalWidget {
     state: TerminalWidgetState,
     /// Most recent session size. Updated on `on_resize`.
     size_cells: RwLock<(u16, u16)>,
+    /// Per-session cell buffers so `grid_to_payload` does not rebuild cols×rows
+    /// on every ~30 Hz snapshot when only a few lines changed.
+    cell_cache: RwLock<HashMap<Uuid, CachedGrid>>,
 }
 
 impl std::fmt::Debug for TerminalWidget {
@@ -175,6 +186,7 @@ impl TerminalWidget {
             deps,
             state: TerminalWidgetState::default(),
             size_cells: RwLock::new(default_size_cells()),
+            cell_cache: RwLock::new(HashMap::new()),
         }
     }
 
@@ -197,6 +209,7 @@ impl TerminalWidget {
             .unwrap_or_default();
         self.deps.layouts.lock().remove(&self.instance_id);
         self.deps.session_routing.lock().remove(&self.instance_id);
+        self.cell_cache.write().clear();
         for sid in sessions {
             if let Err(e) = self.deps.sessions.close(sid).await {
                 tracing::warn!(session_id = %sid, error = %e, "terminal close session failed");
@@ -346,7 +359,8 @@ impl Widget for TerminalWidget {
                 let sid = pane_snap.session;
                 if let Ok(session) = self.deps.sessions.get(sid) {
                     let grid = session.emulator.snapshot();
-                    let pane_terminal = grid_to_payload(&grid, &palette);
+                    let pane_terminal =
+                        grid_to_payload(&grid, &palette, &mut self.cell_cache.write(), sid);
                     let is_focused = tab_snap.focused == Some(sid);
                     if is_focused {
                         focused_pane_idx = Some(panes.len());
@@ -414,7 +428,7 @@ impl Widget for TerminalWidget {
             }
         } else {
             let grid = session.emulator.snapshot();
-            grid_to_payload(&grid, &palette)
+            grid_to_payload(&grid, &palette, &mut self.cell_cache.write(), focused)
         };
         terminal.tabs = snap
             .tabs
@@ -545,38 +559,41 @@ fn widget_size_to_terminal_grid(size: WidgetSize) -> (u16, u16) {
 fn grid_to_payload(
     grid: &orchid_terminal::GridSnapshot,
     palette: &TerminalPalette,
+    cache: &mut HashMap<Uuid, CachedGrid>,
+    session_id: Uuid,
 ) -> TerminalPayload {
     let cols = grid.cols;
     let rows = grid.rows;
-    let mut cells = Vec::with_capacity((cols as usize) * (rows as usize));
-    for line in &grid.lines {
-        for cell in line.cells.iter() {
-            let mut fg = resolve_color(cell.fg, palette, ColorRole::Foreground);
-            let mut bg = resolve_color(cell.bg, palette, ColorRole::Background);
-            if cell.flags.contains(CellFlags::INVERSE) {
-                std::mem::swap(&mut fg, &mut bg);
+    let needed = (cols as usize) * (rows as usize);
+
+    let can_patch = cache.get(&session_id).is_some_and(|c| {
+        c.cols == cols && c.rows == rows && c.cells.len() == needed && !grid.full_redraw
+    });
+
+    let cells = if can_patch {
+        let cached = cache.get_mut(&session_id).expect("checked above");
+        if cached.generation != grid.content_generation {
+            for &row in &grid.dirty_lines {
+                write_payload_row(&mut cached.cells, grid, palette, cols, rows, row);
             }
-            if cell.flags.contains(CellFlags::HIDDEN) {
-                fg = bg;
-            }
-            cells.push(TerminalPayloadCell {
-                ch: cell.ch,
-                fg_rgba: rgba_to_bytes(fg),
-                bg_rgba: rgba_to_bytes(bg),
-                bold: cell.flags.contains(CellFlags::BOLD),
-                italic: cell.flags.contains(CellFlags::ITALIC),
-                underline: cell.flags.contains(CellFlags::UNDERLINE),
-            });
+            cached.generation = grid.content_generation;
         }
-        // Pad short rows so row-major indexing remains valid.
-        let missing = cols as usize - line.cells.len();
-        for _ in 0..missing {
-            cells.push(blank_cell(palette));
-        }
-    }
-    while cells.len() < (cols as usize) * (rows as usize) {
-        cells.push(blank_cell(palette));
-    }
+        cached.cells.clone()
+    } else {
+        let mut cells = Vec::with_capacity(needed);
+        fill_payload_cells(&mut cells, grid, palette, cols, rows);
+        cache.insert(
+            session_id,
+            CachedGrid {
+                cols,
+                rows,
+                generation: grid.content_generation,
+                cells: cells.clone(),
+            },
+        );
+        cells
+    };
+
     TerminalPayload {
         cols,
         rows,
@@ -591,6 +608,76 @@ fn grid_to_payload(
         active_tab: 0,
         panes: Vec::new(),
         dividers: Vec::new(),
+    }
+}
+
+fn fill_payload_cells(
+    cells: &mut Vec<TerminalPayloadCell>,
+    grid: &orchid_terminal::GridSnapshot,
+    palette: &TerminalPalette,
+    cols: u16,
+    rows: u16,
+) {
+    let needed = (cols as usize) * (rows as usize);
+    cells.clear();
+    cells.reserve(needed);
+    for line in &grid.lines {
+        for cell in line.cells.iter() {
+            cells.push(encode_cell(cell, palette));
+        }
+        let missing = cols as usize - line.cells.len();
+        for _ in 0..missing {
+            cells.push(blank_cell(palette));
+        }
+    }
+    while cells.len() < needed {
+        cells.push(blank_cell(palette));
+    }
+}
+
+fn write_payload_row(
+    cells: &mut [TerminalPayloadCell],
+    grid: &orchid_terminal::GridSnapshot,
+    palette: &TerminalPalette,
+    cols: u16,
+    rows: u16,
+    row: u16,
+) {
+    if row >= rows {
+        return;
+    }
+    let start = row as usize * cols as usize;
+    let Some(line) = grid.lines.get(row as usize) else {
+        for slot in cells.iter_mut().skip(start).take(cols as usize) {
+            *slot = blank_cell(palette);
+        }
+        return;
+    };
+    for c in 0..cols as usize {
+        cells[start + c] = line
+            .cells
+            .get(c)
+            .map(|cell| encode_cell(cell, palette))
+            .unwrap_or_else(|| blank_cell(palette));
+    }
+}
+
+fn encode_cell(cell: &Cell, palette: &TerminalPalette) -> TerminalPayloadCell {
+    let mut fg = resolve_color(cell.fg, palette, ColorRole::Foreground);
+    let mut bg = resolve_color(cell.bg, palette, ColorRole::Background);
+    if cell.flags.contains(CellFlags::INVERSE) {
+        std::mem::swap(&mut fg, &mut bg);
+    }
+    if cell.flags.contains(CellFlags::HIDDEN) {
+        fg = bg;
+    }
+    TerminalPayloadCell {
+        ch: cell.ch,
+        fg_rgba: rgba_to_bytes(fg),
+        bg_rgba: rgba_to_bytes(bg),
+        bold: cell.flags.contains(CellFlags::BOLD),
+        italic: cell.flags.contains(CellFlags::ITALIC),
+        underline: cell.flags.contains(CellFlags::UNDERLINE),
     }
 }
 

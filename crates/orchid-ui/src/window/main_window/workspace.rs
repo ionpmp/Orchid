@@ -14,26 +14,28 @@ use orchid_widgets::{PlacedWidget, SharedInstance, WidgetPayload};
 
 use crate::error::{Result, UiError};
 use crate::slint_generated::{
-    AppState, CalculatorModel, CalendarModel, ClockModel, FileManagerModel, JyotishModel,
-    AudioPlayerModel, MediaModel, MoonModel, NotesModel, PasswordModel, ProcessesModel, RecentFilesModel, RssModel,
-    SearchModel, SystemModel, TerminalCellModel, VideoPlayerModel, ViewerModel, WeatherModel, WidgetFrameModel,
-    WorkspaceModel, WorkspaceSummary,
+    AppState, AudioPlayerModel, CalculatorModel, CalendarModel, ClockModel, FileManagerModel,
+    JyotishModel, MediaModel, MoonModel, NotesModel, PasswordModel, ProcessesModel,
+    RecentFilesModel, RssModel, SearchModel, SystemModel, TerminalCellModel, TerminalPaneModel,
+    VideoPlayerModel, ViewerModel, WeatherModel, WidgetFrameModel, WorkspaceModel,
+    WorkspaceSummary,
 };
 use crate::window::models::{
-    blank_terminal, build_calculator_model, build_calendar_model, build_clock_model,
-    build_audio_player_model, build_video_player_model, build_file_manager_model, build_jyotish_model, build_media_model, build_moon_model,
-    build_notes_model, build_password_model, build_processes_model, build_recent_files_model,
-    build_rss_model, build_search_model, build_system_model, build_terminal_divider_models,
-    build_terminal_tab_models, build_viewer_model, build_weather_model,
-    default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
+    blank_terminal, build_audio_player_model, build_calculator_model, build_calendar_model,
+    build_clock_model, build_file_manager_model, build_jyotish_model, build_media_model,
+    build_moon_model, build_notes_model, build_password_model, build_processes_model,
+    build_recent_files_model, build_rss_model, build_search_model, build_system_model,
+    build_terminal_divider_models, build_terminal_tab_models, build_video_player_model,
+    build_viewer_model, build_weather_model, default_terminal_divider_models,
+    default_terminal_pane_models, default_terminal_tab_models, empty_audio_player_model,
     empty_calculator_model, empty_calendar_model, empty_clock_model, empty_file_manager_model,
-    empty_audio_player_model, empty_video_player_model, empty_fm_overlays, empty_jyotish_model, empty_media_model, empty_moon_model, empty_notes_model,
+    empty_fm_overlays, empty_jyotish_model, empty_media_model, empty_moon_model, empty_notes_model,
     empty_password_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model,
     empty_rss_model, empty_search_model, empty_system_model, empty_terminal_cells,
-    empty_viewer_model, empty_weather_model, patch_calculator_model, patch_clock_model,
-    patch_file_manager_model, patch_media_model, patch_password_model, patch_processes_model,
-    patch_recent_files_model, patch_search_model, patch_system_model, widget_has_settings,
-    PasswordAddDialogOverlay,
+    empty_video_player_model, empty_viewer_model, empty_weather_model, patch_calculator_model,
+    patch_clock_model, patch_file_manager_model, patch_media_model, patch_password_model,
+    patch_processes_model, patch_recent_files_model, patch_search_model, patch_system_model,
+    widget_has_settings, PasswordAddDialogOverlay,
 };
 
 use super::{sync_vec_model, MainWindowController};
@@ -113,6 +115,16 @@ impl MainWindowController {
                 {
                     continue;
                 }
+                if iref.type_id == "terminal"
+                    && self.try_patch_terminal_row(
+                        &self.workspace_floating_widgets,
+                        *id,
+                        None,
+                        None,
+                    )
+                {
+                    continue;
+                }
                 if self.try_patch_common_content_row(
                     &self.workspace_floating_widgets,
                     *id,
@@ -144,6 +156,23 @@ impl MainWindowController {
             let Ok(iref) = self.widget_manager.get_instance(*id) else {
                 continue;
             };
+            if iref.type_id == "terminal"
+                && self.try_patch_terminal_row(
+                    &self.workspace_widgets,
+                    *id,
+                    Some(bounds),
+                    Some(idx as i32),
+                )
+            {
+                if !ro.contains_key(id) {
+                    let cw = bounds.width.max(1.0);
+                    let ch =
+                        (bounds.height - Self::WIDGET_FRAME_HEADER_PX - Self::TERMINAL_TAB_BAR_PX)
+                            .max(1.0);
+                    let _ = self.resize_terminal_pty_to_content(*id, cw, ch);
+                }
+                continue;
+            }
             if iref.type_id == "terminal" && !ro.contains_key(id) {
                 let cw = bounds.width.max(1.0);
                 let ch = (bounds.height - Self::WIDGET_FRAME_HEADER_PX - Self::TERMINAL_TAB_BAR_PX)
@@ -217,6 +246,120 @@ impl MainWindowController {
             self.sync_floating_widgets_model();
         }
         Ok(())
+    }
+
+    /// Patch terminal pixels and cursor in place. Avoids rebuilding the frame
+    /// (and its ~15 empty sibling models) on every PTY tick.
+    pub(super) fn try_patch_terminal_row(
+        &self,
+        model: &ModelRc<WidgetFrameModel>,
+        id: Uuid,
+        bounds: Option<PixelBounds>,
+        z_order: Option<i32>,
+    ) -> bool {
+        let cache = self.widget_manager.snapshot_cache();
+        let Some(ws) = cache.get(id) else {
+            return false;
+        };
+        let WidgetPayload::Terminal(t) = &ws.payload else {
+            return false;
+        };
+        let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
+            return false;
+        };
+        let needle = id.to_string();
+        for r in 0..v.row_count() {
+            let Some(mut row) = v.row_data(r) else {
+                continue;
+            };
+            if row.instance_id.as_str() != needle.as_str() {
+                continue;
+            }
+            let Some(panes) = row
+                .terminal_panes
+                .as_any()
+                .downcast_ref::<VecModel<TerminalPaneModel>>()
+            else {
+                return false;
+            };
+            if t.panes.is_empty() {
+                if panes.row_count() != 1 {
+                    return false;
+                }
+                let Some(mut pane) = panes.row_data(0) else {
+                    return false;
+                };
+                pane.pixels = self.raster_terminal_payload(t);
+                pane.cols = i32::from(t.cols);
+                pane.rows = i32::from(t.rows);
+                pane.cursor_col = i32::from(t.cursor_col);
+                pane.cursor_row = i32::from(t.cursor_row);
+                pane.cursor_visible = t.cursor_visible;
+                panes.set_row_data(0, pane);
+            } else {
+                if panes.row_count() != t.panes.len() {
+                    return false;
+                }
+                for (i, p) in t.panes.iter().enumerate() {
+                    let Some(mut pane) = panes.row_data(i) else {
+                        return false;
+                    };
+                    if pane.session_id.as_str() != p.session_id {
+                        return false;
+                    }
+                    let key = if p.session_id.is_empty() {
+                        "root"
+                    } else {
+                        p.session_id.as_str()
+                    };
+                    pane.pixels = self.raster_terminal_cells(
+                        key,
+                        p.cols,
+                        p.rows,
+                        &p.cells,
+                        p.cursor_col,
+                        p.cursor_row,
+                        p.cursor_visible,
+                        &p.dirty_lines,
+                        p.full_redraw,
+                    );
+                    pane.left = p.left;
+                    pane.top = p.top;
+                    pane.right = p.right;
+                    pane.bottom = p.bottom;
+                    pane.is_focused = p.is_focused;
+                    pane.show_close = p.show_close;
+                    pane.cols = i32::from(p.cols);
+                    pane.rows = i32::from(p.rows);
+                    pane.cursor_col = i32::from(p.cursor_col);
+                    pane.cursor_row = i32::from(p.cursor_row);
+                    pane.cursor_visible = p.cursor_visible;
+                    panes.set_row_data(i, pane);
+                }
+            }
+            let (tabs, active) = build_terminal_tab_models(t);
+            row.terminal_tabs = tabs;
+            row.terminal_active_tab = active;
+            row.terminal_dividers = build_terminal_divider_models(t);
+            row.terminal_cols = i32::from(t.cols);
+            row.terminal_rows = i32::from(t.rows);
+            row.terminal_cursor_col = i32::from(t.cursor_col);
+            row.terminal_cursor_row = i32::from(t.cursor_row);
+            row.terminal_cursor_visible = t.cursor_visible;
+            row.title = ws.title.clone().into();
+            if let Some(b) = bounds {
+                row.x = b.x;
+                row.y = b.y;
+                row.width = b.width;
+                row.height = b.height;
+            }
+            if let Some(z) = z_order {
+                row.z_order = z;
+            }
+            v.set_row_data(r, row);
+            return true;
+        }
+        false
     }
 
     /// Patch an existing system frame row without replacing nested ModelRcs.
@@ -641,13 +784,14 @@ impl MainWindowController {
             let tstr: SharedString = ws.title.clone().into();
             match &ws.payload {
                 WidgetPayload::Terminal(t) => {
-                    let img = self.raster_terminal_payload(t);
+                    // Slint paints from `terminal_panes[*].pixels` only.
+                    // Rasterizing `terminal_pixels` here duplicated the focused pane.
                     (
                         tstr,
                         i32::from(t.cols),
                         i32::from(t.rows),
                         empty_terminal_cells(),
-                        img,
+                        Image::default(),
                         i32::from(t.cursor_col),
                         i32::from(t.cursor_row),
                         t.cursor_visible,

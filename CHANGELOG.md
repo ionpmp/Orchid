@@ -339,6 +339,10 @@ release yet.
   `If-Modified-Since`; weather cities fetch in parallel; action history
   batches up to 32 entries / 2 s; notification-center writes debounce
   750 ms; Tantivy `QueryParser`s are built once per engine.
+- **Terminal raster**: ping-pong two pixel buffers so Slint's `Image` does not
+  force a full-frame COW detach every tick; payload cells rewrite only dirty
+  rows; PTY updates patch pane pixels in place instead of rebuilding the
+  workspace frame; root `terminal-pixels` is no longer rasterized twice.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),
