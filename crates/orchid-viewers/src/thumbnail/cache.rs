@@ -9,6 +9,11 @@ use crate::error::{Result, ViewerError};
 
 use super::{Thumbnail, ThumbnailSize};
 
+/// `ORTH` + version + width + height, then packed RGBA8.
+const RGBA_MAGIC: &[u8; 4] = b"ORTH";
+const RGBA_VERSION: u8 = 1;
+const RGBA_HEADER_LEN: usize = 13;
+
 /// Cache rooted at a directory; entries keyed by `BLAKE3(path + mtime)`.
 pub struct ThumbnailCache {
     root: PathBuf,
@@ -36,7 +41,7 @@ impl ThumbnailCache {
         let shard = &hex[..2];
         self.root
             .join(shard)
-            .join(format!("{}_{}.png", &hex[2..], size.suffix()))
+            .join(format!("{}_{}.rgba", &hex[2..], size.suffix()))
     }
 
     /// Fetch a cached thumbnail, if present.
@@ -49,23 +54,10 @@ impl ThumbnailCache {
         if !fs::try_exists(&path).await.unwrap_or(false) {
             return Ok(None);
         }
-        let bytes = fs::read(&path).await?;
-        let decoded = tokio::task::spawn_blocking(move || {
-            image::load_from_memory(&bytes)
-                .map_err(|e| ViewerError::ThumbnailFailed(e.to_string()))
-                .map(|img| {
-                    let rgba = img.into_rgba8();
-                    let (w, h) = rgba.dimensions();
-                    Thumbnail {
-                        rgba: Arc::new(rgba.into_raw()),
-                        width: w,
-                        height: h,
-                    }
-                })
-        })
-        .await
-        .map_err(|e| ViewerError::ThumbnailFailed(e.to_string()))??;
-        Ok(Some(decoded))
+        let decoded = tokio::task::spawn_blocking(move || read_rgba_file(&path))
+            .await
+            .map_err(|e| ViewerError::ThumbnailFailed(e.to_string()))??;
+        Ok(decoded)
     }
 
     /// Store a thumbnail.
@@ -78,22 +70,8 @@ impl ThumbnailCache {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).await?;
         }
-        // Encode from a borrowed slice so we do not force a full RGBA clone when
-        // the UI (or memory LRU) still holds the `Arc`.
-        let rgba = Arc::clone(&thumb.rgba);
-        let w = thumb.width;
-        let h = thumb.height;
-        let bytes = tokio::task::spawn_blocking(move || {
-            use image::ImageEncoder;
-            let mut buf = Vec::new();
-            image::codecs::png::PngEncoder::new(&mut buf)
-                .write_image(rgba.as_slice(), w, h, image::ExtendedColorType::Rgba8)
-                .map_err(|e| ViewerError::ThumbnailFailed(e.to_string()))?;
-            Ok::<_, ViewerError>(buf)
-        })
-        .await
-        .map_err(|e| ViewerError::ThumbnailFailed(e.to_string()))??;
-        fs::write(path, bytes).await?;
+        let blob = encode_rgba_blob(thumb);
+        fs::write(path, blob).await?;
         Ok(())
     }
 
@@ -115,6 +93,46 @@ impl ThumbnailCache {
         }
         Ok(())
     }
+}
+
+fn encode_rgba_blob(thumb: &Thumbnail) -> Vec<u8> {
+    let pixels = thumb.rgba.as_slice();
+    let mut out = Vec::with_capacity(RGBA_HEADER_LEN + pixels.len());
+    out.extend_from_slice(RGBA_MAGIC);
+    out.push(RGBA_VERSION);
+    out.extend_from_slice(&thumb.width.to_le_bytes());
+    out.extend_from_slice(&thumb.height.to_le_bytes());
+    out.extend_from_slice(pixels);
+    out
+}
+
+fn parse_rgba_blob(bytes: &[u8]) -> Option<Thumbnail> {
+    if bytes.len() < RGBA_HEADER_LEN || bytes[..4] != *RGBA_MAGIC || bytes[4] != RGBA_VERSION {
+        return None;
+    }
+    let width = u32::from_le_bytes(bytes[5..9].try_into().ok()?);
+    let height = u32::from_le_bytes(bytes[9..13].try_into().ok()?);
+    let expected = (width as usize)
+        .checked_mul(height as usize)?
+        .checked_mul(4)?;
+    let pixels = bytes.get(RGBA_HEADER_LEN..)?;
+    if pixels.len() != expected {
+        return None;
+    }
+    Some(Thumbnail {
+        rgba: Arc::new(pixels.to_vec()),
+        width,
+        height,
+    })
+}
+
+fn read_rgba_file(path: &Path) -> Result<Option<Thumbnail>> {
+    let file = std::fs::File::open(path)?;
+    let map = unsafe { memmap2::Mmap::map(&file) }?;
+    if let Some(thumb) = parse_rgba_blob(&map) {
+        return Ok(Some(thumb));
+    }
+    Ok(None)
 }
 
 fn hex_lower(bytes: &[u8; 32]) -> String {
@@ -148,7 +166,12 @@ mod tests {
             .unwrap();
         assert_eq!(got.width, 4);
         assert_eq!(got.height, 4);
-        assert_eq!(got.rgba.len(), rgba.len());
+        assert_eq!(got.rgba.as_slice(), rgba.as_slice());
+    }
+
+    #[test]
+    fn parse_rejects_truncated_header() {
+        assert!(parse_rgba_blob(b"ORTH").is_none());
     }
 
     #[tokio::test]

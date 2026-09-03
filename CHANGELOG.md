@@ -363,6 +363,8 @@ release yet.
   is missing.
 - **Managed-folder ingest**: FastCDC and the whole-file BLAKE3 share one
   read; files over 16 MiB hash with `update_mmap_rayon`.
+- **Thumbnail disk cache**: stores packed RGBA instead of PNG so a hit
+  does not decode an image.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),
