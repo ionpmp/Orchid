@@ -16,7 +16,7 @@ use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
 use crate::content::chunker::{Chunker, ChunkerConfig};
-use crate::content::hash::{hash_file, hex};
+use crate::content::hash::hex;
 use crate::content::store::ChunkStore;
 use crate::error::{CryptoError, Result};
 
@@ -100,15 +100,14 @@ impl Deduplicator {
     ///
     /// Propagates I/O, chunker, and chunk-store errors.
     pub async fn ingest_file(&self, path: &Path) -> Result<FileManifest> {
-        let content_hash = hash_file(path).await?;
         let meta = fs::metadata(path).await?;
         let total_size = meta.len();
 
         let store = Arc::clone(&self.store);
         let mut refs: Vec<ChunkRef> = Vec::new();
-        let chunks_meta = self
+        let (chunks_meta, content_hash) = self
             .chunker
-            .chunk_file(path, |chunk, data| {
+            .chunk_file_hashed(path, |chunk, data| {
                 let store = Arc::clone(&store);
                 async move {
                     store.put_with_hash(chunk.hash, data.as_slice()).await?;

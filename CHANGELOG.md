@@ -361,6 +361,8 @@ release yet.
 - **rclone list/stat**: one localhost `rclone rcd` serves `operations/list`
   and `operations/stat` over RC HTTP; CLI is the fallback if the daemon
   is missing.
+- **Managed-folder ingest**: FastCDC and the whole-file BLAKE3 share one
+  read; files over 16 MiB hash with `update_mmap_rayon`.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

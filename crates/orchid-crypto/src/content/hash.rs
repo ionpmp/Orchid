@@ -30,8 +30,8 @@ pub fn hash_bytes(data: &[u8]) -> [u8; 32] {
 
 /// BLAKE3 hash of a file on disk.
 ///
-/// For files larger than ~16 MiB this uses `update_mmap_rayon` for parallel
-/// hashing; below that threshold it streams 1 MiB chunks asynchronously.
+/// For files larger than ~16 MiB this uses `update_mmap_rayon` so large
+/// files hash across cores; below that threshold it streams 1 MiB chunks.
 ///
 /// # Errors
 ///
@@ -42,7 +42,7 @@ pub async fn hash_file(path: &Path) -> Result<[u8; 32]> {
         let path_owned = path.to_path_buf();
         let digest = tokio::task::spawn_blocking(move || {
             let mut hasher = blake3::Hasher::new();
-            hasher.update_mmap(&path_owned)?;
+            hasher.update_mmap_rayon(&path_owned)?;
             Ok::<_, std::io::Error>(*hasher.finalize().as_bytes())
         })
         .await

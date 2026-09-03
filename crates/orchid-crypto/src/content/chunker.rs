@@ -13,7 +13,13 @@ use crate::secret::zeroizing::ZeroizingBytes;
 /// Tunables for [`Chunker`]. `avg_size` is a target; actual chunks vary
 /// between `min_size` and `max_size` depending on content.
 #[derive(
-    Debug, Clone, Copy, serde::Serialize, serde::Deserialize, bincode_reloaded::Encode, bincode_reloaded::Decode,
+    Debug,
+    Clone,
+    Copy,
+    serde::Serialize,
+    serde::Deserialize,
+    bincode_reloaded::Encode,
+    bincode_reloaded::Decode,
 )]
 pub struct ChunkerConfig {
     /// Lower bound on a single chunk's length in bytes.
@@ -91,16 +97,30 @@ impl Chunker {
     /// # Errors
     ///
     /// Propagates I/O errors and whatever the sink returns.
-    pub async fn chunk_file<F, Fut>(&self, path: &Path, mut sink: F) -> Result<Vec<Chunk>>
+    pub async fn chunk_file<F, Fut>(&self, path: &Path, sink: F) -> Result<Vec<Chunk>>
     where
         F: FnMut(Chunk, ZeroizingBytes) -> Fut + Send,
         Fut: Future<Output = Result<()>> + Send,
     {
-        // Hand the chunker a synchronous `Read`: we open the file via
-        // `tokio::fs::File`, then convert to `std::fs::File` via
-        // `into_std()`. StreamCDC operates synchronously, so we drive it on
-        // the current task with small blocking reads — acceptable for
-        // desktop-scale files.
+        Ok(self.chunk_file_hashed(path, sink).await?.0)
+    }
+
+    /// Like [`Self::chunk_file`], and also return a whole-file BLAKE3 of the
+    /// same bytes so callers do not need a second read.
+    ///
+    /// # Errors
+    ///
+    /// Propagates I/O errors and whatever the sink returns.
+    pub async fn chunk_file_hashed<F, Fut>(
+        &self,
+        path: &Path,
+        mut sink: F,
+    ) -> Result<(Vec<Chunk>, [u8; 32])>
+    where
+        F: FnMut(Chunk, ZeroizingBytes) -> Fut + Send,
+        Fut: Future<Output = Result<()>> + Send,
+    {
+        // StreamCDC is synchronous: open via tokio, then `into_std()`.
         let file = File::open(path).await?.into_std().await;
         let cdc = StreamCDC::new(
             file,
@@ -109,11 +129,13 @@ impl Chunker {
             self.config.max_size as usize,
         );
 
+        let mut hasher = blake3::Hasher::new();
         let mut out = Vec::new();
         for result in cdc {
             let chunk =
                 result.map_err(|e| crate::error::CryptoError::Io(std::io::Error::other(e)))?;
             let data = ZeroizingBytes::new(chunk.data);
+            hasher.update(data.as_slice());
             let meta = Chunk {
                 offset: chunk.offset,
                 length: chunk.length as u32,
@@ -123,7 +145,7 @@ impl Chunker {
             sink(meta_for_sink, data).await?;
             out.push(meta);
         }
-        Ok(out)
+        Ok((out, *hasher.finalize().as_bytes()))
     }
 }
 
@@ -183,5 +205,20 @@ mod tests {
             .map(|(c, _)| c.hash)
             .collect();
         assert_eq!(a, b);
+    }
+
+    #[tokio::test]
+    async fn chunk_file_hashed_matches_one_shot() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("blob.bin");
+        let data = test_data();
+        std::fs::write(&path, &data).unwrap();
+        let chunker = Chunker::new(test_cfg());
+        let (chunks, digest) = chunker
+            .chunk_file_hashed(&path, |_c, _d| async { Ok(()) })
+            .await
+            .unwrap();
+        assert!(!chunks.is_empty());
+        assert_eq!(digest, hash_bytes(&data));
     }
 }
