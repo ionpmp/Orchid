@@ -54,7 +54,7 @@ impl ThumbnailCache {
             image::load_from_memory(&bytes)
                 .map_err(|e| ViewerError::ThumbnailFailed(e.to_string()))
                 .map(|img| {
-                    let rgba = img.to_rgba8();
+                    let rgba = img.into_rgba8();
                     let (w, h) = rgba.dimensions();
                     Thumbnail {
                         rgba: Arc::new(rgba.into_raw()),

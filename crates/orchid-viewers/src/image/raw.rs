@@ -95,7 +95,7 @@ pub(crate) fn decode_embedded_preview(bytes: &[u8], size: u64) -> Result<LoadedI
     })?;
     let orientation = crate::image::exif::orientation_from_bytes(jpeg);
     let img = crate::image::exif::apply_orientation(img, orientation);
-    let rgba = img.to_rgba8();
+    let rgba = img.into_rgba8();
     let (w, h) = rgba.dimensions();
     Ok(LoadedImage {
         rgba: std::sync::Arc::new(rgba.into_raw()),
@@ -202,7 +202,7 @@ fn develop_demosaic(bytes: &[u8], size: u64, develop: RawDevelop) -> Result<Load
             .ok_or_else(|| ViewerError::ImageDecode("RAW RGB buffer".into()))?,
     );
     let dynimg = crate::image::exif::apply_orientation(dynimg, orientation);
-    let rgba = dynimg.to_rgba8();
+    let rgba = dynimg.into_rgba8();
     let (w, h) = rgba.dimensions();
     Ok(LoadedImage {
         rgba: std::sync::Arc::new(rgba.into_raw()),

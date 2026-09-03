@@ -398,7 +398,7 @@ fn finish_decoded(
     let (bit_depth, color_model) = crate::image::metadata::color_type_label(&img);
     let img = crate::image::exif::apply_orientation(img, orientation);
     let (w, h) = img.dimensions();
-    let mut rgba = img.to_rgba8().into_raw();
+    let mut rgba = img.into_rgba8().into_raw();
     let color = crate::image::color::apply_embedded_icc(&mut rgba, file_bytes);
     LoadedImage {
         rgba: Arc::new(rgba),

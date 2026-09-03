@@ -162,7 +162,7 @@ pub fn load_cover_file(path: &Path, max_edge: u32) -> Option<FrameBuf> {
 
 fn decode_cover_bytes(bytes: &[u8], max_edge: u32) -> Option<FrameBuf> {
     let img = image::load_from_memory(bytes).ok()?;
-    let rgba = img.to_rgba8();
+    let rgba = img.into_rgba8();
     let (w, h) = rgba.dimensions();
     if w == 0 || h == 0 {
         return None;

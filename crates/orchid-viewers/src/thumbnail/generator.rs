@@ -36,7 +36,7 @@ fn decode_fit(bytes: &[u8], target_px: u32) -> Result<Thumbnail> {
         image::load_from_memory(bytes).map_err(|e| ViewerError::ThumbnailFailed(e.to_string()))?;
     let (w, h) = img.dimensions();
     let (tw, th) = fit(w, h, target_px);
-    let resized = img.resize(tw, th, FilterType::Lanczos3).to_rgba8();
+    let resized = img.resize(tw, th, FilterType::Lanczos3).into_rgba8();
     let (fw, fh) = resized.dimensions();
     Ok(Thumbnail {
         rgba: Arc::new(resized.into_raw()),

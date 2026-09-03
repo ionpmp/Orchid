@@ -280,7 +280,7 @@ pub(crate) fn sequence_from_frames(frames: Vec<AnimFrame>, kind: AnimKind) -> An
 }
 
 pub(crate) fn frame_from_dynamic(img: image::DynamicImage) -> Option<AnimFrame> {
-    let rgba = img.to_rgba8();
+    let rgba = img.into_rgba8();
     let (width, height) = rgba.dimensions();
     if width == 0 || height == 0 {
         return None;

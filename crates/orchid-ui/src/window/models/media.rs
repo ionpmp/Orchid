@@ -35,7 +35,7 @@ fn thumb_image_cached(bytes: Option<&Arc<[u8]>>) -> (bool, Image) {
 
 fn decode_thumb_image(bytes: &[u8]) -> Option<Image> {
     let dyn_img = image::load_from_memory(bytes).ok()?;
-    let rgba = dyn_img.to_rgba8();
+    let rgba = dyn_img.into_rgba8();
     let (w, h) = rgba.dimensions();
     if w == 0 || h == 0 {
         return None;

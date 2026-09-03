@@ -443,7 +443,7 @@ fn decode_preview_raster(bytes: &[u8], size: u64, format: ImageFormat) -> Result
         .map_err(|e| ViewerError::ImageDecode(format!("vector preview: {e}")))?;
     let (width, height) = image::GenericImageView::dimensions(&img);
     Ok(loaded(
-        img.to_rgba8().into_raw(),
+        img.into_rgba8().into_raw(),
         width,
         height,
         format,

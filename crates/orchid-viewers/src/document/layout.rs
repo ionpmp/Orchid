@@ -1698,7 +1698,7 @@ fn prepare_preview_image(
     let Ok(decoded) = image::load_from_memory(&img.bytes) else {
         return (None, disp_w, disp_h);
     };
-    let rgba = decoded.to_rgba8();
+    let rgba = decoded.into_rgba8();
     let (src_w, src_h) = rgba.dimensions();
     if disp_w == src_w && disp_h == src_h {
         return (Some(rgba.into_raw()), disp_w, disp_h);
