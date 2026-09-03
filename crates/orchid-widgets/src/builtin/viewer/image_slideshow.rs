@@ -30,6 +30,8 @@ pub struct SlideshowState {
     pub prev_h: u32,
     pub shuffled: Vec<usize>,
     pub shuffle_at: usize,
+    /// Milliseconds accumulated in the current slide (not persisted).
+    pub elapsed_ms: u32,
 }
 
 impl Default for SlideshowState {
@@ -50,7 +52,32 @@ impl Default for SlideshowState {
             prev_h: 0,
             shuffled: Vec::new(),
             shuffle_at: 0,
+            elapsed_ms: 0,
         }
+    }
+}
+
+/// How long the slideshow task should sleep before the next useful wake.
+///
+/// During a transition this is 50 ms (Slint drives `slide-t` from `gen * 50`).
+/// Between slides it is the remaining interval. Pause polls every 200 ms.
+#[must_use]
+pub fn slideshow_wait_ms(
+    paused: bool,
+    elapsed_ms: u32,
+    interval_ms: u32,
+    trans_ms: u32,
+    slide_gen: u32,
+) -> u32 {
+    if paused {
+        return 200;
+    }
+    let interval = interval_ms.max(400);
+    let remain_slide = interval.saturating_sub(elapsed_ms).max(1);
+    if slide_gen.saturating_mul(50) >= trans_ms.max(1) {
+        remain_slide
+    } else {
+        50.min(remain_slide)
     }
 }
 
@@ -322,5 +349,12 @@ mod tests {
         assert_eq!(s.interval_ms, 1000);
         s.cycle_interval(false);
         assert_eq!(s.interval_ms, 2000);
+    }
+
+    #[test]
+    fn wait_sleeps_remaining_interval_after_transition() {
+        assert_eq!(slideshow_wait_ms(false, 500, 4000, 500, 10), 3500);
+        assert_eq!(slideshow_wait_ms(false, 0, 4000, 500, 0), 50);
+        assert_eq!(slideshow_wait_ms(true, 0, 4000, 500, 0), 200);
     }
 }

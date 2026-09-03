@@ -566,11 +566,7 @@ impl ViewerWidgetInner {
                     let guard = inner.viewer.lock().await;
                     if let Some(v) = guard.as_ref() {
                         if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
-                            Some((
-                                media.take_dirty(),
-                                media.take_eof(),
-                                media.is_playing(),
-                            ))
+                            Some((media.take_dirty(), media.take_eof(), media.is_playing()))
                         } else {
                             None
                         }
@@ -582,45 +578,43 @@ impl ViewerWidgetInner {
                     return;
                 };
                 if eof {
-                    let _ = inner
-                        .navigate_media(media_nav::MediaNavStep::Next)
-                        .await;
+                    let _ = inner.navigate_media(media_nav::MediaNavStep::Next).await;
                     continue;
                 }
                 if dirty {
-                        // Re-apply playlist chrome then publish.
-                        let (idx, count, shuffle, loop_playlist) = {
-                            let nav = inner.media_nav.read();
-                            (
-                                nav.index as u32,
-                                nav.siblings.len() as u32,
-                                nav.shuffle,
-                                nav.loop_playlist,
-                            )
-                        };
-                        {
-                            let guard = inner.viewer.lock().await;
-                            if let Some(v) = guard.as_ref() {
-                                if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
-                                    media.set_playlist_info(idx, count, shuffle, loop_playlist);
-                                }
-                                let snap = apply_image_overlay(
-                                    v.snapshot(),
-                                    &inner.image_nav.read(),
-                                    Some(&inner.image_thumbs.read()),
-                                    Some(&inner.slideshow.read()),
-                                    Some(&inner.inspect.read()),
-                                    Some(&inner.media_nav.read()),
-                                    inner.playlist_panel_open.load(Ordering::Relaxed),
-                                );
-                                #[cfg(windows)]
-                                if let ViewerSnapshot::Media(ref m) = snap {
-                                    smtc_publisher::publish(inner.instance_id, m);
-                                }
-                                *inner.snapshot.write() = Some(snap);
+                    // Re-apply playlist chrome then publish.
+                    let (idx, count, shuffle, loop_playlist) = {
+                        let nav = inner.media_nav.read();
+                        (
+                            nav.index as u32,
+                            nav.siblings.len() as u32,
+                            nav.shuffle,
+                            nav.loop_playlist,
+                        )
+                    };
+                    {
+                        let guard = inner.viewer.lock().await;
+                        if let Some(v) = guard.as_ref() {
+                            if let Some(media) = v.as_any().downcast_ref::<MediaViewer>() {
+                                media.set_playlist_info(idx, count, shuffle, loop_playlist);
                             }
+                            let snap = apply_image_overlay(
+                                v.snapshot(),
+                                &inner.image_nav.read(),
+                                Some(&inner.image_thumbs.read()),
+                                Some(&inner.slideshow.read()),
+                                Some(&inner.inspect.read()),
+                                Some(&inner.media_nav.read()),
+                                inner.playlist_panel_open.load(Ordering::Relaxed),
+                            );
+                            #[cfg(windows)]
+                            if let ViewerSnapshot::Media(ref m) = snap {
+                                smtc_publisher::publish(inner.instance_id, m);
+                            }
+                            *inner.snapshot.write() = Some(snap);
                         }
-                        inner.publish_refresh();
+                    }
+                    inner.publish_refresh();
                 }
                 // ~30 Hz while playing (frames + progress); idle slower when paused.
                 let wait_ms = if playing { 33 } else { 200 };
@@ -891,6 +885,7 @@ impl ViewerWidgetInner {
         sl.prev_w = s.width_px;
         sl.prev_h = s.height_px;
         sl.gen = 0;
+        sl.elapsed_ms = 0;
     }
 
     fn patch_slide_clock(&self) {
@@ -921,40 +916,50 @@ impl ViewerWidgetInner {
             Arc::clone(entry.value())
         };
         tokio::spawn(async move {
-            let mut elapsed = 0u32;
             loop {
                 if inner.slide_tick.load(Ordering::Relaxed) != gen {
                     return;
                 }
-                let (playing, paused, interval, trans_ms) = {
+                let (playing, paused, interval, trans_ms, slide_gen, elapsed) = {
                     let sl = inner.slideshow.read();
-                    (sl.playing, sl.paused, sl.interval_ms, sl.transition_ms)
+                    (
+                        sl.playing,
+                        sl.paused,
+                        sl.interval_ms,
+                        sl.transition_ms,
+                        sl.gen,
+                        sl.elapsed_ms,
+                    )
                 };
                 if !playing {
                     return;
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                let wait = image_slideshow::slideshow_wait_ms(
+                    paused, elapsed, interval, trans_ms, slide_gen,
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(u64::from(wait))).await;
                 if inner.slide_tick.load(Ordering::Relaxed) != gen {
                     return;
                 }
                 if paused {
                     continue;
                 }
-                elapsed = elapsed.saturating_add(50);
-                let bumped = {
+                let (elapsed, bumped) = {
                     let mut sl = inner.slideshow.write();
-                    if sl.gen.saturating_mul(50) < trans_ms.max(1) {
-                        sl.gen = sl.gen.saturating_add(1);
+                    sl.elapsed_ms = sl.elapsed_ms.saturating_add(wait);
+                    let bumped = if sl.gen.saturating_mul(50) < trans_ms.max(1) {
+                        sl.gen = sl.gen.saturating_add((wait / 50).max(1));
                         true
                     } else {
                         false
-                    }
+                    };
+                    (sl.elapsed_ms, bumped)
                 };
                 if bumped {
                     inner.patch_slide_clock();
                 }
                 if elapsed >= interval.max(400) {
-                    elapsed = 0;
+                    inner.slideshow.write().elapsed_ms = 0;
                     if let Err(e) = inner.navigate_images(image_nav::NavStep::Next).await {
                         warn!(error = %e, "slideshow advance failed");
                         return;
@@ -962,6 +967,12 @@ impl ViewerWidgetInner {
                 }
             }
         });
+    }
+
+    fn reschedule_slideshow_ticks(&self) {
+        if self.slideshow.read().playing {
+            self.schedule_slideshow_ticks();
+        }
     }
 
     async fn attach_animation_if_needed(&self, path: &orchid_fs::FsPath) {
@@ -1101,6 +1112,8 @@ impl ViewerWidgetInner {
             let mut sl = self.slideshow.write();
             sl.playing = true;
             sl.paused = false;
+            sl.elapsed_ms = 0;
+            sl.gen = 0;
             sl.music_path = music.clone();
             if sl.random {
                 sl.rebuild_shuffle(&nav);
@@ -1842,9 +1855,7 @@ impl ViewerWidget {
                 slide_tick: AtomicU64::new(0),
                 anim_tick: AtomicU64::new(0),
                 media_tick: AtomicU64::new(0),
-                playlist_panel_open: AtomicBool::new(
-                    orchid_viewers::media_playlist_panel_default(),
-                ),
+                playlist_panel_open: AtomicBool::new(orchid_viewers::media_playlist_panel_default()),
                 media_viewport: RwLock::new((0.0, 0.0)),
                 music_child: parking_lot::Mutex::new(None),
                 inspect: RwLock::new(image_inspect::InspectState::default()),
@@ -2067,10 +2078,7 @@ fn apply_image_overlay(
                     .iter()
                     .enumerate()
                     .map(|(i, p)| orchid_viewers::MediaPlaylistItem {
-                        name: p
-                            .file_name()
-                            .unwrap_or_else(|| p.as_str())
-                            .to_string(),
+                        name: p.file_name().unwrap_or_else(|| p.as_str()).to_string(),
                         index: i as u32,
                         selected: i == nav.index,
                     })
@@ -2757,15 +2765,18 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
             if inner.slideshow.read().playing {
                 let next = !inner.slideshow.read().paused;
                 inner.slideshow.write().paused = next;
+                inner.reschedule_slideshow_ticks();
                 inner.refresh_snapshot().await;
             }
         }
         "slideshow-faster" => {
             inner.slideshow.write().cycle_interval(true);
+            inner.reschedule_slideshow_ticks();
             inner.refresh_snapshot().await;
         }
         "slideshow-slower" => {
             inner.slideshow.write().cycle_interval(false);
+            inner.reschedule_slideshow_ticks();
             inner.refresh_snapshot().await;
         }
         "slideshow-random" => {
@@ -2787,6 +2798,7 @@ pub async fn image_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
         }
         "slideshow-trans-ms" => {
             inner.slideshow.write().cycle_transition_ms();
+            inner.reschedule_slideshow_ticks();
             inner.refresh_snapshot().await;
         }
         "slideshow-overlay" => {
@@ -3481,27 +3493,19 @@ pub async fn media_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
     let inner = live_inner(instance_id)?;
     match command {
         "next" => {
-            inner
-                .navigate_media(media_nav::MediaNavStep::Next)
-                .await?;
+            inner.navigate_media(media_nav::MediaNavStep::Next).await?;
             return Ok(());
         }
         "prev" => {
-            inner
-                .navigate_media(media_nav::MediaNavStep::Prev)
-                .await?;
+            inner.navigate_media(media_nav::MediaNavStep::Prev).await?;
             return Ok(());
         }
         "first" => {
-            inner
-                .navigate_media(media_nav::MediaNavStep::First)
-                .await?;
+            inner.navigate_media(media_nav::MediaNavStep::First).await?;
             return Ok(());
         }
         "last" => {
-            inner
-                .navigate_media(media_nav::MediaNavStep::Last)
-                .await?;
+            inner.navigate_media(media_nav::MediaNavStep::Last).await?;
             return Ok(());
         }
         "loop" => {
@@ -3518,9 +3522,7 @@ pub async fn media_command(instance_id: Uuid, command: &str) -> WidgetResult<()>
         }
         "playlist-toggle" => {
             let next = !inner.playlist_panel_open.load(Ordering::Relaxed);
-            inner
-                .playlist_panel_open
-                .store(next, Ordering::Relaxed);
+            inner.playlist_panel_open.store(next, Ordering::Relaxed);
             orchid_viewers::persist_media_playlist_panel(next);
             {
                 let (w, h) = *inner.media_viewport.read();

@@ -376,6 +376,8 @@ release yet.
   frame `Image` when the RGBA `Arc` is unchanged.
 - **Snapshot cache**: event-driven refreshes skip the frame when
   render-equality matches (System / Processes compare live values).
+- **Image slideshow**: sleep until the next transition tick or slide
+  change instead of waking every 50 ms.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),
