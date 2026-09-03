@@ -23,6 +23,8 @@ pub struct ProcessesProvider {
     app_pids: Mutex<(Instant, HashSet<u32>)>,
     /// Sample counter for cheap vs full refreshes.
     sample_n: AtomicU32,
+    /// PIDs from the last census. Cheap ticks refresh only these.
+    last_pids: Mutex<Vec<Pid>>,
 }
 
 impl std::fmt::Debug for ProcessesProvider {
@@ -49,6 +51,7 @@ impl ProcessesProvider {
             prev_io: Mutex::new(HashMap::new()),
             app_pids: Mutex::new((Instant::now(), HashSet::new())),
             sample_n: AtomicU32::new(0),
+            last_pids: Mutex::new(Vec::new()),
         }
     }
 
@@ -57,25 +60,37 @@ impl ProcessesProvider {
         let captured_at = Utc::now();
         let now = Instant::now();
         let n = self.sample_n.fetch_add(1, Ordering::Relaxed);
-        // Disk/IO + user list every 3rd sample keeps the hot path lighter.
-        let full = n.is_multiple_of(3);
+        // Census (all PIDs + disk + users) on first sample and every 4th tick.
+        // In between, only re-sample last-known PIDs so a busy box is not
+        // fully enumerated every interval.
+        let census = n.is_multiple_of(4) || self.last_pids.lock().is_empty();
 
         // Do not sleep here: the widget interval already spaces samples.
         // A blocking sleep on the worker made every tick feel like a hitch.
         *self.last_refresh.lock() = Some(now);
 
-        if full {
+        if census {
             let mut users = self.users.lock();
             users.refresh();
         }
 
         {
             let mut system = self.system.lock();
-            system.refresh_processes_specifics(
-                ProcessesToUpdate::All,
-                true,
-                process_refresh_kind(full),
-            );
+            if census {
+                system.refresh_processes_specifics(
+                    ProcessesToUpdate::All,
+                    true,
+                    process_refresh_kind(true),
+                );
+            } else {
+                let pids = self.last_pids.lock().clone();
+                system.refresh_processes_specifics(
+                    ProcessesToUpdate::Some(&pids),
+                    true,
+                    process_refresh_kind(false),
+                );
+            }
+            *self.last_pids.lock() = system.processes().keys().copied().collect();
         }
 
         let app_pids = self.app_pids_cached();
@@ -233,5 +248,16 @@ mod tests {
         let me = sysinfo::get_current_pid().expect("pid").as_u32();
         let tree = provider.collect_tree_pids(me);
         assert!(tree.contains(&me));
+    }
+
+    #[test]
+    fn cheap_refresh_reuses_last_pids() {
+        let provider = ProcessesProvider::new();
+        let first = provider.refresh();
+        assert!(!first.processes.is_empty());
+        assert!(!provider.last_pids.lock().is_empty());
+        let second = provider.refresh();
+        assert!(!second.processes.is_empty());
+        assert!(!provider.last_pids.lock().is_empty());
     }
 }

@@ -353,6 +353,8 @@ release yet.
   then a cheap Triangle resize instead of a full Lanczos3 decode.
 - **PDF page cache**: worker keeps up to 8 rasterized pages (32 MiB)
   so page / zoom toggles skip Pdfium when the viewport matches.
+- **Processes widget**: full process census on activate and every 4th
+  tick; intervening samples refresh only last-known PIDs.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),
