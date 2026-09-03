@@ -351,6 +351,8 @@ release yet.
   canvas group resize uses a single `move_and_resize`.
 - **JPEG thumbnails**: decode via libjpeg-turbo IDCT scale (1/2–1/8)
   then a cheap Triangle resize instead of a full Lanczos3 decode.
+- **PDF page cache**: worker keeps up to 8 rasterized pages (32 MiB)
+  so page / zoom toggles skip Pdfium when the viewport matches.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

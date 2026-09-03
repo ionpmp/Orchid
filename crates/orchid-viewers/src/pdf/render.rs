@@ -15,7 +15,7 @@ use super::bindings::with_pdfium;
 use crate::error::{Result, ViewerError};
 
 /// How the viewer chooses the raster width for the current page.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FitMode {
     /// Scale so the page width matches the viewport width.
     FitWidth,
@@ -47,6 +47,108 @@ pub struct RenderedPage {
 pub struct PdfSessionId(u64);
 
 static NEXT_SESSION: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct RasterKey {
+    session: PdfSessionId,
+    page: u32,
+    vw: u32,
+    vh: u32,
+    fit: FitMode,
+    zoom_milli: u32,
+}
+
+impl RasterKey {
+    fn new(
+        session: PdfSessionId,
+        page: u32,
+        viewport: (f32, f32),
+        fit: FitMode,
+        zoom: f32,
+    ) -> Self {
+        Self {
+            session,
+            page,
+            vw: quantize_px(viewport.0),
+            vh: quantize_px(viewport.1),
+            fit,
+            zoom_milli: (zoom.clamp(0.05, 16.0) * 100.0).round() as u32,
+        }
+    }
+}
+
+fn quantize_px(v: f32) -> u32 {
+    ((v.max(1.0) / 8.0).round() as u32).max(1) * 8
+}
+
+/// LRU of rasterized pages so page/zoom toggles skip Pdfium when the
+/// quantized viewport matches a recent render.
+struct RasterLru {
+    map: HashMap<RasterKey, RenderedPage>,
+    order: VecDeque<RasterKey>,
+    bytes: usize,
+}
+
+impl RasterLru {
+    const MAX_BYTES: usize = 32 * 1024 * 1024;
+    const MAX_PAGES: usize = 8;
+
+    fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+            bytes: 0,
+        }
+    }
+
+    fn get(&mut self, key: &RasterKey) -> Option<RenderedPage> {
+        if !self.map.contains_key(key) {
+            return None;
+        }
+        self.touch(*key);
+        self.map.get(key).cloned()
+    }
+
+    fn insert(&mut self, key: RasterKey, page: RenderedPage) {
+        if let Some(old) = self.map.remove(&key) {
+            self.bytes = self.bytes.saturating_sub(old.rgba.len());
+            self.order.retain(|k| k != &key);
+        }
+        self.bytes = self.bytes.saturating_add(page.rgba.len());
+        self.map.insert(key, page);
+        self.order.push_back(key);
+        self.evict();
+    }
+
+    fn touch(&mut self, key: RasterKey) {
+        self.order.retain(|k| k != &key);
+        self.order.push_back(key);
+    }
+
+    fn evict(&mut self) {
+        while self.map.len() > Self::MAX_PAGES || self.bytes > Self::MAX_BYTES {
+            let Some(old_key) = self.order.pop_front() else {
+                break;
+            };
+            if let Some(old) = self.map.remove(&old_key) {
+                self.bytes = self.bytes.saturating_sub(old.rgba.len());
+            }
+        }
+    }
+
+    fn remove_session(&mut self, session: PdfSessionId) {
+        self.order.retain(|k| {
+            if k.session == session {
+                if let Some(old) = self.map.remove(k) {
+                    self.bytes = self.bytes.saturating_sub(old.rgba.len());
+                }
+                false
+            } else {
+                true
+            }
+        });
+    }
+}
 
 enum WorkerRequest {
     Open {
@@ -90,6 +192,7 @@ fn worker_sender() -> Sender<WorkerRequest> {
 fn worker_loop(rx: Receiver<WorkerRequest>) {
     let mut inbox: VecDeque<WorkerRequest> = VecDeque::new();
     let mut documents: HashMap<PdfSessionId, Arc<Vec<u8>>> = HashMap::new();
+    let mut raster_cache = RasterLru::new();
 
     while let Some(req) = next_request(&rx, &mut inbox) {
         match req {
@@ -120,6 +223,7 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
             }
             WorkerRequest::Close { session, reply } => {
                 documents.remove(&session);
+                raster_cache.remove_session(session);
                 let _ = reply.send(());
             }
             // Render and ExtractText share a warm parsed document for the
@@ -180,12 +284,12 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
                         }
                     };
 
-                    fulfill_pdf_request(&document, req);
+                    fulfill_pdf_request(&document, req, &mut raster_cache);
 
                     // Keep the parsed document warm for a bounded burst of
                     // same-session Render/ExtractText. Cap the burst so other
                     // sessions (Open/Close/render) are not starved.
-                    const MAX_WARM_FOLLOWUPS: usize = 16;
+                    const MAX_WARM_FOLLOWUPS: usize = 64;
                     let mut followups = 0usize;
                     loop {
                         match next_request(&rx, &mut inbox) {
@@ -204,7 +308,7 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
                                     // loop can service other sessions first.
                                     return Ok(Some(next));
                                 }
-                                fulfill_pdf_request(&document, next);
+                                fulfill_pdf_request(&document, next, &mut raster_cache);
                                 followups += 1;
                             }
                             Some(other) => return Ok(Some(other)),
@@ -226,17 +330,25 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
     }
 }
 
-fn fulfill_pdf_request(document: &PdfDocument<'_>, req: WorkerRequest) {
+fn fulfill_pdf_request(document: &PdfDocument<'_>, req: WorkerRequest, cache: &mut RasterLru) {
     match req {
         WorkerRequest::Render {
+            session,
             page,
             viewport,
             fit_mode,
             zoom,
             reply,
-            ..
         } => {
+            let key = RasterKey::new(session, page, viewport, fit_mode, zoom);
+            if let Some(hit) = cache.get(&key) {
+                let _ = reply.send(Ok(hit));
+                return;
+            }
             let rendered = render_from_document(document, page, viewport, fit_mode, zoom);
+            if let Ok(ref page) = rendered {
+                cache.insert(key, page.clone());
+            }
             let _ = reply.send(rendered);
         }
         WorkerRequest::ExtractText { page, reply, .. } => {
@@ -564,6 +676,18 @@ startxref
             page.rgba.len(),
             (page.width_px * page.height_px * 4) as usize
         );
+    }
+
+    #[test]
+    fn raster_cache_returns_same_pixels_for_repeat_render() {
+        let bytes = Arc::new(MINIMAL_PDF.to_vec());
+        let (session, _) = open_document(Arc::clone(&bytes)).expect("open");
+        let a = render_page(session, 1, (640.0, 480.0), FitMode::FitWidth, 1.0).expect("a");
+        let b = render_page(session, 1, (640.0, 480.0), FitMode::FitWidth, 1.0).expect("b");
+        close_document(session);
+        assert_eq!(a.width_px, b.width_px);
+        assert_eq!(a.height_px, b.height_px);
+        assert_eq!(a.rgba.as_ref(), b.rgba.as_ref());
     }
 
     #[test]
