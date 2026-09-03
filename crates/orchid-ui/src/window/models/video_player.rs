@@ -1,22 +1,45 @@
 //! Slint model for the local video library player.
 
+use std::cell::RefCell;
+use std::sync::Arc;
+
 use orchid_i18n::LocaleManager;
 use orchid_widgets::VideoPlayerPayload;
 use slint::{Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel};
 
 use crate::slint_generated::{VideoPlayerItem, VideoPlayerModel, VideoPlayerRootItem};
 
-fn slint_image_from_rgba(rgba: &std::sync::Arc<Vec<u8>>, width: u32, height: u32) -> Image {
+thread_local! {
+    /// Reuse the last uploaded frame when the payload still points at the
+    /// same `Arc` (progress ticks and workspace rebuilds).
+    static FRAME_CACHE: RefCell<Option<(usize, u32, u32, Image)>> = const { RefCell::new(None) };
+}
+
+fn slint_image_from_rgba(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
     if width == 0 || height == 0 || rgba.is_empty() {
+        FRAME_CACHE.with(|c| *c.borrow_mut() = None);
         return Image::default();
     }
-    let expected = (width as usize).saturating_mul(height as usize).saturating_mul(4);
+    let expected = (width as usize)
+        .saturating_mul(height as usize)
+        .saturating_mul(4);
     if rgba.len() < expected {
+        FRAME_CACHE.with(|c| *c.borrow_mut() = None);
         return Image::default();
+    }
+    let ptr = Arc::as_ptr(rgba) as *const u8 as usize;
+    if let Some(img) = FRAME_CACHE.with(|c| {
+        c.borrow().as_ref().and_then(|(p, w, h, img)| {
+            (*p == ptr && *w == width && *h == height).then(|| img.clone())
+        })
+    }) {
+        return img;
     }
     let mut buf = SharedPixelBuffer::<Rgba8Pixel>::new(width, height);
     buf.make_mut_bytes()[..expected].copy_from_slice(&rgba[..expected]);
-    Image::from_rgba8(buf)
+    let img = Image::from_rgba8(buf);
+    FRAME_CACHE.with(|c| *c.borrow_mut() = Some((ptr, width, height, img.clone())));
+    img
 }
 
 pub(crate) fn empty_video_player_model(locale: &LocaleManager) -> VideoPlayerModel {

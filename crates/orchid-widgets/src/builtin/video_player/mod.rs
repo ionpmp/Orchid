@@ -47,6 +47,9 @@ struct VideoHandle {
     bus: Arc<orchid_core::EventBus>,
     scanning: AtomicBool,
     scan_gen: AtomicU64,
+    /// Last published `position_ms / 1000` so a playing tick without a new
+    /// frame / property change does not republish the whole library snapshot.
+    last_pos_sec: AtomicU64,
 }
 
 impl VideoHandle {
@@ -86,8 +89,7 @@ impl VideoHandle {
     fn load_path(&self, path: &str) {
         let p = PathBuf::from(path);
         self.player.load_path(p.as_path());
-        self.player
-            .set_volume(f64::from(self.config.read().volume));
+        self.player.set_volume(f64::from(self.config.read().volume));
         pause_rivals();
     }
 
@@ -515,10 +517,7 @@ fn format_time(ms: u64) -> String {
     }
 }
 
-fn item_rows(
-    rows: &[VideoRow],
-    current: Option<&str>,
-) -> Vec<VideoPlayerItemRow> {
+fn item_rows(rows: &[VideoRow], current: Option<&str>) -> Vec<VideoPlayerItemRow> {
     rows.iter()
         .map(|r| VideoPlayerItemRow {
             path: r.path.clone(),
@@ -576,6 +575,7 @@ impl VideoPlayerWidget {
             bus,
             scanning: AtomicBool::new(false),
             scan_gen: AtomicU64::new(0),
+            last_pos_sec: AtomicU64::new(u64::MAX),
         });
         VIDEO_LIVE.insert(instance_id, Arc::clone(&handle));
         handle.restore_current_paused();
@@ -757,7 +757,9 @@ impl VideoPlayerWidget {
                         dirty = true;
                     }
                 }
-                if dirty || handle.player.is_playing() {
+                let pos_sec = handle.player.position_ms() / 1000;
+                let last_sec = handle.last_pos_sec.swap(pos_sec, Ordering::Relaxed);
+                if dirty || pos_sec != last_sec {
                     handle.publish();
                 }
             }

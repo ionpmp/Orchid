@@ -371,6 +371,9 @@ release yet.
 - **Text viewer open**: local files stay memory-mapped; the rope is
   filled via `from_reader` so UTF-8 is not copied into an extra
   `String`. Encoding switches re-decode the mapped bytes in place.
+- **Video player**: publish on a new frame or a one-second progress
+  tick instead of every 100 ms while playing; Slint reuses the last
+  frame `Image` when the RGBA `Arc` is unchanged.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),
