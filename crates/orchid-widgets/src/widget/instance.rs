@@ -44,6 +44,9 @@ pub struct WidgetInstanceRuntime {
     pub last_snapshot: RwLock<Option<WidgetSnapshot>>,
     /// Monotonic "last touched" timestamp, used by the idle sweeper.
     pub last_touched: RwLock<DateTime<Utc>>,
+    /// Last `Widget::save_state` bytes written to (or loaded from) storage.
+    /// Layout-only mutations reuse this instead of re-serializing the widget.
+    pub last_config: RwLock<Vec<u8>>,
 }
 
 impl WidgetInstanceRuntime {

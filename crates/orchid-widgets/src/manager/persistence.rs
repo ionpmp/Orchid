@@ -6,8 +6,8 @@ use uuid::Uuid;
 use crate::error::Result;
 use crate::widget::instance::WidgetInstanceRuntime;
 
-/// Persist a single widget instance. `state_bytes` is written into the
-/// instance's `config` field.
+/// Persist a single widget instance. `Some(state_bytes)` updates the
+/// cached config; `None` reuses [`WidgetInstanceRuntime::last_config`].
 ///
 /// # Errors
 ///
@@ -17,9 +17,29 @@ pub fn save_instance(
     instance: &WidgetInstanceRuntime,
     state_bytes: Option<Vec<u8>>,
 ) -> Result<()> {
-    let row = instance.to_storage(state_bytes.unwrap_or_default());
+    let config = match state_bytes {
+        Some(bytes) => {
+            *instance.last_config.write() = bytes.clone();
+            bytes
+        }
+        None => instance.last_config.read().clone(),
+    };
+    save_instances_batch(storage, &[instance.to_storage(config)])
+}
+
+/// Write many widget rows in one redb transaction (one fsync).
+///
+/// # Errors
+///
+/// Propagates storage errors.
+pub fn save_instances_batch(storage: &StateStore, rows: &[WidgetInstance]) -> Result<()> {
+    if rows.is_empty() {
+        return Ok(());
+    }
     let mut w = storage.write()?;
-    w.put_widget(&row)?;
+    for row in rows {
+        w.put_widget(row)?;
+    }
     w.commit()?;
     Ok(())
 }

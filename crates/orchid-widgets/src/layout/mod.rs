@@ -637,6 +637,7 @@ mod tests {
             widget: Mutex::new(Box::new(Stub)),
             last_snapshot: RwLock::new(None),
             last_touched: RwLock::new(now),
+            last_config: RwLock::new(Vec::new()),
         })
     }
 

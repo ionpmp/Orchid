@@ -548,8 +548,7 @@ impl MainWindowController {
                     let _ = c.group_manager.update_slot(group.id, pos, size).await;
                     for mid in &group.members {
                         if *mid != u {
-                            let _ = wm.move_to(*mid, pos).await;
-                            let _ = wm.resize(*mid, size).await;
+                            let _ = wm.move_and_resize(*mid, pos, size).await;
                         }
                     }
                 }
@@ -602,11 +601,8 @@ impl MainWindowController {
             let (pos, size) = le.snap(pos, size);
             let all = Self::docked_instances(&c.widget_manager.instances_for_workspace(w.id));
             if le.can_place(w.id, u, pos, size, &all).is_ok() {
-                if let Err(e) = wm.move_to(u, pos).await {
-                    warn!(?e, "floating dock move");
-                }
-                if let Err(e) = wm.resize(u, size).await {
-                    warn!(?e, "floating dock resize");
+                if let Err(e) = wm.move_and_resize(u, pos, size).await {
+                    warn!(?e, "floating dock move/resize");
                 }
                 if let Err(e) = wm.dock_to_grid(u).await {
                     warn!(?e, "floating dock placement");
@@ -739,8 +735,10 @@ impl MainWindowController {
             }
             let slot_pos = target_group.position;
             let slot_size = target_group.size;
-            let _ = self.widget_manager.move_to(dragged, slot_pos).await;
-            let _ = self.widget_manager.resize(dragged, slot_size).await;
+            let _ = self
+                .widget_manager
+                .move_and_resize(dragged, slot_pos, slot_size)
+                .await;
             let _ = self
                 .group_manager
                 .switch_active(target_group.id, dragged)
@@ -775,8 +773,10 @@ impl MainWindowController {
             if let Ok(inst) = self.widget_manager.get_instance(mid) {
                 *inst.group_id.write() = Some(gid);
             }
-            let _ = self.widget_manager.move_to(mid, slot_pos).await;
-            let _ = self.widget_manager.resize(mid, slot_size).await;
+            let _ = self
+                .widget_manager
+                .move_and_resize(mid, slot_pos, slot_size)
+                .await;
         }
         let _ = self.group_manager.switch_active(gid, dragged).await;
         Ok(())
@@ -1198,10 +1198,7 @@ impl MainWindowController {
                 c.schedule_rebuild();
                 return;
             }
-            if let Err(e) = wm.move_to(u, new_pos).await {
-                warn!(?e, "resize move");
-            }
-            if let Err(e) = wm.resize(u, new_size).await {
+            if let Err(e) = wm.move_and_resize(u, new_pos, new_size).await {
                 warn!(?e, "resize");
             }
             if let Some(group) = c.group_manager.find_for_instance(u) {
@@ -1212,8 +1209,7 @@ impl MainWindowController {
                         .await;
                     for mid in &group.members {
                         if *mid != u {
-                            let _ = wm.move_to(*mid, new_pos).await;
-                            let _ = wm.resize(*mid, new_size).await;
+                            let _ = wm.move_and_resize(*mid, new_pos, new_size).await;
                         }
                     }
                 }
@@ -1262,11 +1258,8 @@ impl MainWindowController {
                     return;
                 }
             };
-            if let Err(e) = wm.resize(u, preferred).await {
-                warn!(?e, "dock: resize");
-            }
-            if let Err(e) = wm.move_to(u, pos).await {
-                warn!(?e, "dock: move_to");
+            if let Err(e) = wm.move_and_resize(u, pos, preferred).await {
+                warn!(?e, "dock: move/resize");
                 return;
             }
             if let Err(e) = wm.dock_to_grid(u).await {

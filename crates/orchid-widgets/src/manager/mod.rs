@@ -78,6 +78,10 @@ pub(crate) struct WidgetManagerInner {
     snapshot_dirty: parking_lot::Mutex<HashSet<Uuid>>,
     /// Unsubscribed in [`WidgetManager::shutdown`] so disk handles are not kept alive by the bus.
     snapshot_refresh_sub: parking_lot::Mutex<Option<SubscriptionHandle>>,
+    /// Instances whose grid/float layout changed and need a batched persist.
+    layout_dirty: parking_lot::Mutex<HashSet<Uuid>>,
+    /// Debounced flusher for [`layout_dirty`]; aborted on shutdown.
+    layout_flush: parking_lot::Mutex<Option<JoinHandle<()>>>,
 }
 
 /// Public handle to the widget manager.
@@ -127,6 +131,8 @@ impl WidgetManager {
                 frame_dirty: parking_lot::Mutex::new(HashSet::new()),
                 snapshot_dirty: parking_lot::Mutex::new(HashSet::new()),
                 snapshot_refresh_sub: parking_lot::Mutex::new(None),
+                layout_dirty: parking_lot::Mutex::new(HashSet::new()),
+                layout_flush: parking_lot::Mutex::new(None),
             }),
         }
     }
@@ -335,15 +341,67 @@ impl WidgetManager {
     ///
     /// Propagates storage errors.
     pub async fn snapshot_to_storage(&self) -> Result<()> {
+        self.inner.layout_dirty.lock().clear();
+        let mut rows = Vec::with_capacity(self.inner.instances.len());
         for entry in self.inner.instances.iter() {
             let instance = Arc::clone(entry.value());
             let bytes = {
                 let widget = instance.widget.lock().await;
                 widget.save_state().unwrap_or_default()
             };
-            persistence::save_instance(&self.inner.storage, &instance, Some(bytes))?;
+            *instance.last_config.write() = bytes.clone();
+            rows.push(instance.to_storage(bytes));
         }
-        Ok(())
+        persistence::save_instances_batch(&self.inner.storage, &rows)
+    }
+
+    /// Queue a layout-only persist (position / size / placement) using the
+    /// cached config. Coalesces into one redb txn after 200 ms.
+    pub(crate) fn queue_layout_save(&self, id: Uuid) {
+        self.inner.layout_dirty.lock().insert(id);
+        self.ensure_layout_flusher();
+    }
+
+    fn ensure_layout_flusher(&self) {
+        let mut slot = self.inner.layout_flush.lock();
+        if slot.is_some() {
+            return;
+        }
+        let inner = Arc::clone(&self.inner);
+        *slot = Some(tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            let wm = WidgetManager {
+                inner: Arc::clone(&inner),
+            };
+            wm.flush_layout_saves();
+            *inner.layout_flush.lock() = None;
+            if !inner.layout_dirty.lock().is_empty() {
+                WidgetManager { inner }.ensure_layout_flusher();
+            }
+        }));
+    }
+
+    fn flush_layout_saves(&self) {
+        let ids: Vec<Uuid> = mem::take(&mut *self.inner.layout_dirty.lock())
+            .into_iter()
+            .collect();
+        if ids.is_empty() {
+            return;
+        }
+        let mut rows = Vec::with_capacity(ids.len());
+        for id in ids {
+            let Some(inst) = self.inner.instances.get(&id).map(|e| Arc::clone(e.value())) else {
+                continue;
+            };
+            let config = inst.last_config.read().clone();
+            rows.push(inst.to_storage(config));
+        }
+        if let Err(e) = persistence::save_instances_batch(&self.inner.storage, &rows) {
+            warn!(error = %e, "batched layout persist failed");
+            for row in &rows {
+                self.inner.layout_dirty.lock().insert(row.id);
+            }
+        }
     }
 
     /// Restore every persisted instance, invoking the factory for each.
@@ -407,6 +465,7 @@ impl WidgetManager {
                 widget: Mutex::new(widget),
                 last_snapshot: RwLock::new(None),
                 last_touched: RwLock::new(now),
+                last_config: RwLock::new(row.config.clone()),
             });
 
             // Give the widget a chance to warm up. Release the lock between
@@ -516,6 +575,9 @@ impl WidgetManager {
             h.abort();
         }
         if let Some(h) = self.inner.snapshot_pump.lock().await.take() {
+            h.abort();
+        }
+        if let Some(h) = self.inner.layout_flush.lock().take() {
             h.abort();
         }
         // Final snapshot before closing.
@@ -638,6 +700,7 @@ impl WidgetManager {
             let mut w = instance.widget.lock().await;
             w.on_close(&ctx).await?;
         }
+        self.inner.layout_dirty.lock().remove(&id);
         if delete_storage_row {
             persistence::delete_instance(&self.inner.storage, id)?;
         }

@@ -346,6 +346,9 @@ release yet.
 - **rclone I/O**: `read_stream` pipes `cat` stdout instead of buffering the
   whole file; `metadata` / `exists` use `lsjson --stat` instead of listing
   the parent directory; copy progress is throttled to 150 ms.
+- **Widget layout persist**: move / resize / placement reuse the last
+  `save_state` blob and flush in one redb transaction after 200 ms;
+  canvas group resize uses a single `move_and_resize`.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

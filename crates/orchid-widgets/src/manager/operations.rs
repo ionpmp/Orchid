@@ -100,6 +100,7 @@ impl WidgetManager {
             widget: Mutex::new(widget),
             last_snapshot: RwLock::new(None),
             last_touched: RwLock::new(now),
+            last_config: RwLock::new(Vec::new()),
         });
 
         // Do not hold the widget mutex across both hooks: `on_*` methods may
@@ -161,29 +162,8 @@ impl WidgetManager {
     ///
     /// Propagates storage errors.
     pub async fn move_to(&self, id: Uuid, position: GridPosition) -> Result<()> {
-        let instance = self.get_instance(id)?;
-        let from = *instance.position.read();
-        if from == position {
-            return Ok(());
-        }
-        *instance.position.write() = position;
-        *instance.updated_at.write() = Utc::now();
-
-        let bytes = {
-            let w = instance.widget.lock().await;
-            w.save_state().unwrap_or_default()
-        };
-        persistence::save_instance(&self.inner.storage, &instance, Some(bytes))?;
-
-        self.inner.bus.publish(
-            orchid_core::EventSource::Subsystem("widgets".into()),
-            WidgetMoved {
-                instance_id: id,
-                from,
-                to: position,
-            },
-        );
-        Ok(())
+        let size = *self.get_instance(id)?.size.read();
+        self.move_and_resize(id, position, size).await
     }
 
     /// Resize a widget.
@@ -193,6 +173,22 @@ impl WidgetManager {
     /// * [`WidgetError::InvalidSize`] when the size violates capabilities.
     /// * Propagates `on_resize` and storage errors.
     pub async fn resize(&self, id: Uuid, size: WidgetSize) -> Result<()> {
+        let position = *self.get_instance(id)?.position.read();
+        self.move_and_resize(id, position, size).await
+    }
+
+    /// Apply position and size in one persist (one debounced layout write).
+    ///
+    /// # Errors
+    ///
+    /// * [`WidgetError::InvalidSize`] when the size violates capabilities.
+    /// * Propagates `on_resize` and storage errors.
+    pub async fn move_and_resize(
+        &self,
+        id: Uuid,
+        position: GridPosition,
+        size: WidgetSize,
+    ) -> Result<()> {
         let instance = self.get_instance(id)?;
         let descriptor = self
             .inner
@@ -201,33 +197,48 @@ impl WidgetManager {
             .ok_or_else(|| WidgetError::UnknownWidgetType(instance.type_id.clone()))?;
         validate_size(&descriptor, size)?;
 
-        let from = *instance.size.read();
-        if from == size {
+        let from_pos = *instance.position.read();
+        let from_size = *instance.size.read();
+        let pos_changed = from_pos != position;
+        let size_changed = from_size != size;
+        if !pos_changed && !size_changed {
             return Ok(());
         }
 
-        let ctx = self.context_for(&instance);
-        {
-            let mut w = instance.widget.lock().await;
-            w.on_resize(&ctx, size).await?;
+        if size_changed {
+            let ctx = self.context_for(&instance);
+            {
+                let mut w = instance.widget.lock().await;
+                w.on_resize(&ctx, size).await?;
+            }
+            *instance.size.write() = size;
         }
-        *instance.size.write() = size;
+        if pos_changed {
+            *instance.position.write() = position;
+        }
         *instance.updated_at.write() = Utc::now();
+        self.queue_layout_save(id);
 
-        let bytes = {
-            let w = instance.widget.lock().await;
-            w.save_state().unwrap_or_default()
-        };
-        persistence::save_instance(&self.inner.storage, &instance, Some(bytes))?;
-
-        self.inner.bus.publish(
-            orchid_core::EventSource::Subsystem("widgets".into()),
-            WidgetResized {
-                instance_id: id,
-                from,
-                to: size,
-            },
-        );
+        if pos_changed {
+            self.inner.bus.publish(
+                orchid_core::EventSource::Subsystem("widgets".into()),
+                WidgetMoved {
+                    instance_id: id,
+                    from: from_pos,
+                    to: position,
+                },
+            );
+        }
+        if size_changed {
+            self.inner.bus.publish(
+                orchid_core::EventSource::Subsystem("widgets".into()),
+                WidgetResized {
+                    instance_id: id,
+                    from: from_size,
+                    to: size,
+                },
+            );
+        }
         Ok(())
     }
 
@@ -307,6 +318,7 @@ impl WidgetManager {
             }),
             last_snapshot: RwLock::new(instance.last_snapshot.read().clone()),
             last_touched: RwLock::new(now),
+            last_config: RwLock::new(bytes.clone()),
         });
         persistence::save_instance(&self.inner.storage, &new_runtime, Some(bytes))?;
         self.inner.instances.insert(instance.id, new_runtime);
@@ -341,11 +353,7 @@ impl WidgetManager {
         let instance = self.get_instance(id)?;
         *instance.placement.write() = placement;
         *instance.updated_at.write() = Utc::now();
-        let bytes = {
-            let w = instance.widget.lock().await;
-            w.save_state().unwrap_or_default()
-        };
-        persistence::save_instance(&self.inner.storage, &instance, Some(bytes))?;
+        self.queue_layout_save(id);
         Ok(())
     }
 
