@@ -383,6 +383,12 @@ pub struct PageSetup {
     pub header_r_id: Option<String>,
     /// Default footer relationship id (`w:footerReference/@r:id`, `w:type="default"`).
     pub footer_r_id: Option<String>,
+    /// First-page header relationship id (`w:type="first"`).
+    pub header_first_r_id: Option<String>,
+    /// First-page footer relationship id (`w:type="first"`).
+    pub footer_first_r_id: Option<String>,
+    /// Different first page (`w:titlePg`).
+    pub title_page: bool,
 }
 
 impl Default for PageSetup {
@@ -397,6 +403,9 @@ impl Default for PageSetup {
             margin_right_twips: 1440,
             header_r_id: None,
             footer_r_id: None,
+            header_first_r_id: None,
+            footer_first_r_id: None,
+            title_page: false,
         }
     }
 }
@@ -412,6 +421,10 @@ pub struct Document {
     pub header: Vec<Paragraph>,
     /// Default footer story paragraphs (`word/footer*.xml`).
     pub footer: Vec<Paragraph>,
+    /// First-page header story paragraphs (when [`PageSetup::title_page`]).
+    pub header_first: Vec<Paragraph>,
+    /// First-page footer story paragraphs (when [`PageSetup::title_page`]).
+    pub footer_first: Vec<Paragraph>,
     /// Named destinations (`w:bookmarkStart`); first occurrence of a name wins on jump.
     pub bookmarks: Vec<Bookmark>,
     /// Unsupported body-level elements preserved for round-trip.

@@ -985,19 +985,26 @@ fn parse_sect_pr(reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>) -> Result<PageSe
                     }
                     "headerReference" => {
                         let ty = attr_val(&e, "type").unwrap_or_else(|| "default".into());
-                        if ty == "default" {
-                            if let Some(id) = attr_val(&e, "id").filter(|s| !s.is_empty()) {
-                                setup.header_r_id = Some(id);
+                        if let Some(id) = attr_val(&e, "id").filter(|s| !s.is_empty()) {
+                            match ty.as_str() {
+                                "first" => setup.header_first_r_id = Some(id),
+                                "default" => setup.header_r_id = Some(id),
+                                _ => {}
                             }
                         }
                     }
                     "footerReference" => {
                         let ty = attr_val(&e, "type").unwrap_or_else(|| "default".into());
-                        if ty == "default" {
-                            if let Some(id) = attr_val(&e, "id").filter(|s| !s.is_empty()) {
-                                setup.footer_r_id = Some(id);
+                        if let Some(id) = attr_val(&e, "id").filter(|s| !s.is_empty()) {
+                            match ty.as_str() {
+                                "first" => setup.footer_first_r_id = Some(id),
+                                "default" => setup.footer_r_id = Some(id),
+                                _ => {}
                             }
                         }
+                    }
+                    "titlePg" => {
+                        setup.title_page = true;
                     }
                     _ => {}
                 }
@@ -1893,6 +1900,27 @@ fn write_sect_pr(writer: &mut Writer<Cursor<Vec<u8>>>, setup: &PageSetup) -> Res
         fref.push_attribute(("r:id", id.as_str()));
         writer
             .write_event(Event::Empty(fref))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if let Some(ref id) = setup.header_first_r_id {
+        let mut href = BytesStart::new("w:headerReference");
+        href.push_attribute(("w:type", "first"));
+        href.push_attribute(("r:id", id.as_str()));
+        writer
+            .write_event(Event::Empty(href))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if let Some(ref id) = setup.footer_first_r_id {
+        let mut fref = BytesStart::new("w:footerReference");
+        fref.push_attribute(("w:type", "first"));
+        fref.push_attribute(("r:id", id.as_str()));
+        writer
+            .write_event(Event::Empty(fref))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if setup.title_page {
+        writer
+            .write_event(Event::Empty(BytesStart::new("w:titlePg")))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
     writer
@@ -3566,6 +3594,10 @@ mod tests {
         .unwrap();
         assert_eq!(page_setup.header_r_id.as_deref(), Some("rId7"));
         assert_eq!(page_setup.footer_r_id.as_deref(), Some("rId8"));
+        assert_eq!(page_setup.header_first_r_id.as_deref(), Some("rId9"));
+        assert!(!page_setup.title_page);
+        let mut page_setup = page_setup;
+        page_setup.title_page = true;
         let doc = Document {
             page_setup,
             ..Default::default()
@@ -3581,9 +3613,40 @@ mod tests {
             "missing default footerReference: {text}"
         );
         assert!(
-            !text.contains("rId9"),
-            "first-page header should not round-trip yet: {text}"
+            text.contains("w:type=\"first\"") && text.contains("r:id=\"rId9\""),
+            "missing first-page headerReference: {text}"
         );
+        assert!(
+            text.contains("<w:titlePg") || text.contains("<w:titlePg/>"),
+            "missing titlePg: {text}"
+        );
+    }
+
+    #[test]
+    fn parse_title_page_flag() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <w:body>
+            <w:p><w:r><w:t>Body</w:t></w:r></w:p>
+            <w:sectPr>
+              <w:titlePg/>
+              <w:headerReference w:type="first" r:id="rId1"/>
+              <w:footerReference w:type="first" r:id="rId2"/>
+            </w:sectPr>
+          </w:body>
+        </w:document>"#;
+        let (_, page_setup, _, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert!(page_setup.title_page);
+        assert_eq!(page_setup.header_first_r_id.as_deref(), Some("rId1"));
+        assert_eq!(page_setup.footer_first_r_id.as_deref(), Some("rId2"));
     }
 
     #[test]

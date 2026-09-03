@@ -601,10 +601,21 @@ impl DocumentLayout {
             }
         }
 
-        // Default header / footer stories in page margins (read-only MVP).
-        if !doc.header.is_empty() {
+        // Header / footer stories in page margins. With `w:titlePg`, the single
+        // Preview canvas prefers first-page stories when present.
+        let header_story = if doc.page_setup.title_page && !doc.header_first.is_empty() {
+            &doc.header_first
+        } else {
+            &doc.header
+        };
+        let footer_story = if doc.page_setup.title_page && !doc.footer_first.is_empty() {
+            &doc.footer_first
+        } else {
+            &doc.footer
+        };
+        if !header_story.is_empty() {
             self.paint_margin_story(
-                &doc.header,
+                header_story,
                 max_w,
                 insets.left,
                 6.0 * scale,
@@ -614,9 +625,9 @@ impl DocumentLayout {
                 height,
             );
         }
-        if !doc.footer.is_empty() {
+        if !footer_story.is_empty() {
             self.paint_margin_story(
-                &doc.footer,
+                footer_story,
                 max_w,
                 insets.left,
                 height as f32 - insets.bottom + 6.0 * scale,
@@ -2542,6 +2553,69 @@ mod tests {
         assert!(
             ink_in_margin,
             "expected header glyph ink inside the top margin band"
+        );
+    }
+
+    #[test]
+    fn preview_paints_first_header_when_title_page() {
+        let mut dl = DocumentLayout::new();
+        let mut page_setup = PageSetup::default();
+        page_setup.margin_top_twips = 1440;
+        page_setup.title_page = true;
+        let doc = Document {
+            blocks: vec![Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Body".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })],
+            page_setup,
+            header: vec![Paragraph {
+                runs: vec![Run {
+                    text: "DEFAULTONLY".into(),
+                    style: RunStyle {
+                        bold: true,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            header_first: vec![Paragraph {
+                runs: vec![Run {
+                    text: "FIRSTPAGEHDR".into(),
+                    style: RunStyle {
+                        bold: true,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let (bytes, w, h) = dl.render_document(&doc, 400.0);
+        let s = PREVIEW_RENDER_SCALE;
+        let insets = PreviewInsets::from_page_setup(&doc.page_setup);
+        let margin_bottom = (insets.top * s).round() as u32;
+        let mut ink_in_margin = false;
+        for y in 0..margin_bottom.min(h) {
+            for x in 0..w {
+                let i = ((y as usize) * (w as usize) + (x as usize)) * 4;
+                if bytes[i] < 240 || bytes[i + 1] < 240 || bytes[i + 2] < 240 {
+                    ink_in_margin = true;
+                    break;
+                }
+            }
+            if ink_in_margin {
+                break;
+            }
+        }
+        assert!(
+            ink_in_margin,
+            "expected first-page header glyph ink inside the top margin"
         );
     }
 
