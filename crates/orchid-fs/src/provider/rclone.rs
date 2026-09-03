@@ -328,6 +328,20 @@ impl RcloneProvider {
     }
 
     async fn run_lsjson(&self, remote: &str) -> Result<Vec<RcloneEntry>> {
+        match super::rclone_rc::list_json(&self.rclone_bin, remote).await {
+            Some(Ok(bytes)) => {
+                if bytes.is_empty() || bytes == b"null" {
+                    return Ok(Vec::new());
+                }
+                return serde_json::from_slice(&bytes).map_err(|e| FsError::InvalidPath {
+                    reason: format!("rclone rc lsjson parse error: {e}"),
+                });
+            }
+            Some(Err(e)) => return Err(e),
+            None => {
+                tracing::debug!("rclone rcd list unavailable; using CLI");
+            }
+        }
         let output = Command::new(&self.rclone_bin)
             .args(["lsjson", remote])
             .stdout(Stdio::piped())
@@ -362,6 +376,18 @@ impl RcloneProvider {
 
     /// Stat one path without listing its parent (`rclone lsjson --stat`).
     async fn run_lsjson_stat(&self, remote: &str) -> Result<RcloneEntry> {
+        match super::rclone_rc::stat_json(&self.rclone_bin, remote).await {
+            Some(Ok(Some(bytes))) => {
+                return serde_json::from_slice(&bytes).map_err(|e| FsError::InvalidPath {
+                    reason: format!("rclone rc stat parse error: {e}"),
+                });
+            }
+            Some(Ok(None)) => return Err(FsError::NotFound(remote.to_string())),
+            Some(Err(e)) => return Err(e),
+            None => {
+                tracing::debug!("rclone rcd stat unavailable; using CLI");
+            }
+        }
         let output = Command::new(&self.rclone_bin)
             .args(["lsjson", "--stat", remote])
             .stdout(Stdio::piped())

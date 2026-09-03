@@ -358,6 +358,9 @@ release yet.
 - **DOCX preview**: caret / selection paints over a cached page raster
   instead of relayouting every paragraph; `LayoutCache` is used on the
   render path.
+- **rclone list/stat**: one localhost `rclone rcd` serves `operations/list`
+  and `operations/stat` over RC HTTP; CLI is the fallback if the daemon
+  is missing.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

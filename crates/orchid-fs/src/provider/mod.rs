@@ -8,6 +8,7 @@
 pub mod archive;
 pub mod local;
 pub mod rclone;
+mod rclone_rc;
 pub mod registry;
 
 use std::sync::Arc;
