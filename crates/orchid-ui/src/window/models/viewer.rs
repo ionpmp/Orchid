@@ -624,10 +624,7 @@ fn build_media_snapshot(
         &orchid_i18n::FluentArgs::new().with("n", format!("{:.1}", s.speed)),
     );
     if !s.pitch_preserve {
-        speed_label = format!(
-            "{speed_label} · {}",
-            locale.tr("viewer-media-pitch-off")
-        );
+        speed_label = format!("{speed_label} · {}", locale.tr("viewer-media-pitch-off"));
     }
     let playlist_label = if s.playlist_count > 0 {
         let base = locale.tr_args(
@@ -823,7 +820,9 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         tip_widow_control: locale.tr("viewer-document-tip-widow-control").into(),
         tip_contextual_spacing: locale.tr("viewer-document-tip-contextual-spacing").into(),
         tip_bidi: locale.tr("viewer-document-tip-bidi").into(),
-        tip_suppress_auto_hyphens: locale.tr("viewer-document-tip-suppress-auto-hyphens").into(),
+        tip_suppress_auto_hyphens: locale
+            .tr("viewer-document-tip-suppress-auto-hyphens")
+            .into(),
         tip_outline_level: locale.tr("viewer-document-tip-outline-level").into(),
         tip_color_black: locale.tr("viewer-document-tip-color-black").into(),
         tip_color_red: locale.tr("viewer-document-tip-color-red").into(),
@@ -1154,7 +1153,21 @@ fn document_page_size_label(
     locale.tr(key).into()
 }
 
+thread_local! {
+    /// Last checkerboard composite, keyed by source `Arc` pointer + size.
+    static CHECKER_CACHE: std::cell::RefCell<Option<(usize, u32, u32, Arc<Vec<u8>>)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 fn composite_checkerboard(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Arc<Vec<u8>> {
+    let ptr = Arc::as_ptr(rgba) as usize;
+    if let Some(hit) = CHECKER_CACHE.with(|c| {
+        c.borrow().as_ref().and_then(|(p, w, h, out)| {
+            (*p == ptr && *w == width && *h == height).then(|| Arc::clone(out))
+        })
+    }) {
+        return hit;
+    }
     const TILE: u32 = 8;
     let mut out = rgba.as_ref().clone();
     let w = width as usize;
@@ -1184,7 +1197,11 @@ fn composite_checkerboard(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Arc<V
             }
         }
     }
-    Arc::new(out)
+    let out = Arc::new(out);
+    CHECKER_CACHE.with(|c| {
+        *c.borrow_mut() = Some((ptr, width, height, Arc::clone(&out)));
+    });
+    out
 }
 
 fn build_image_snapshot(

@@ -378,6 +378,8 @@ release yet.
   render-equality matches (System / Processes compare live values).
 - **Image slideshow**: sleep until the next transition tick or slide
   change instead of waking every 50 ms.
+- **Image checkerboard**: cache the composited RGBA by source `Arc`
+  so a viewer rebuild does not copy a full-resolution frame again.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),
