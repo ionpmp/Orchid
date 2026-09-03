@@ -349,6 +349,8 @@ release yet.
 - **Widget layout persist**: move / resize / placement reuse the last
   `save_state` blob and flush in one redb transaction after 200 ms;
   canvas group resize uses a single `move_and_resize`.
+- **JPEG thumbnails**: decode via libjpeg-turbo IDCT scale (1/2–1/8)
+  then a cheap Triangle resize instead of a full Lanczos3 decode.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),
