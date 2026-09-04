@@ -241,3 +241,11 @@ opt-level = 2
 [profile.dev-fast]
 inherits = "dev"
 opt-level = 1
+
+# Packaged / PGO builds. Same as release, but abort on panic so LLVM can
+# prune unwind landing pads. Do not set this on `[profile.release]` — the
+# desktop app should unwind so a widget panic does not kill the process.
+# Use via `cargo build --profile dist -p orchid-app`.
+[profile.dist]
+inherits = "release"
+panic = "abort"

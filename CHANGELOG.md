@@ -396,6 +396,16 @@ release yet.
 - **Viewer archive / document / media**: keep listing and playlist
   `VecModel`s across extract, caret, and playback ticks.
 - **Event bus**: OSC 52 clipboard writes leave the sync dispatcher.
+- **Commands**: shortcuts and the command palette patch dirty widget frames
+  instead of rebuilding the workspace grid; structural commands still rebuild.
+- **Command palette**: query keystrokes debounce 50 ms and skip candidate
+  rows that already compare equal.
+- **Local copy**: same-volume files use `CopyFileExW` (Windows) or
+  `std::fs::copy` instead of a 128 KiB user-space stream.
+- **Event bus dispatch**: typed subscribers are indexed by event type so
+  each publish skips unrelated filters.
+- **Dist profile**: `cargo build --profile dist` inherits release and sets
+  `panic = "abort"` for packaged / PGO builds.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

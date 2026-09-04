@@ -67,6 +67,27 @@ cargo build --release
 
 Binary: `target/release/orchid.exe`
 
+Packaged / PGO builds use the `dist` profile (same as release, plus
+`panic = "abort"` so LLVM can drop unwind tables). Default `release`
+keeps unwinding so a widget panic does not kill the process.
+
+```bash
+cargo build --profile dist -p orchid-app
+```
+
+Binary: `target/dist/orchid.exe`
+
+Optional Haswell+ CPU targeting (do not use `native` if you ship the
+binary):
+
+```powershell
+$env:RUSTFLAGS = "-C target-cpu=x86-64-v3"
+cargo build --profile dist -p orchid-app
+```
+
+Profile-guided optimization: `.\scripts\pgo_build.ps1` (see the comments
+in that script). It needs `rustup component add llvm-tools-preview`.
+
 ## Running
 
 ```bash
