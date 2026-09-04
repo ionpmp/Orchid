@@ -46,8 +46,17 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "1.1"
 
-# Async runtime
-tokio = { version = "1", features = ["full"] }
+# Async runtime. `net` / `process` are enabled only in orchid-fs (rclone).
+# `signal` and `io-std` stay off — nothing in the workspace uses them.
+tokio = { version = "1", default-features = false, features = [
+    "rt-multi-thread",
+    "macros",
+    "sync",
+    "time",
+    "fs",
+    "io-util",
+    "parking_lot",
+] }
 # Bridge Tokio futures into Slint's `spawn_local` executor (see Slint + Tokio docs).
 async-compat = "0.2"
 
@@ -125,7 +134,23 @@ arboard = "3"
 # Viewers / archives / file IO
 pdfium-render = "0.9"
 libloading = "0.8"
-image = "0.25"
+# AVIF goes through WIC; JXL / RAW / PSD / SVG have their own crates.
+# Drop `avif` (ravif), `qoi`, and `ff` (farbfeld) from the default set.
+image = { version = "0.25", default-features = false, features = [
+    "rayon",
+    "bmp",
+    "dds",
+    "exr",
+    "gif",
+    "hdr",
+    "ico",
+    "jpeg",
+    "png",
+    "pnm",
+    "tga",
+    "tiff",
+    "webp",
+] }
 jxl-oxide = { version = "0.12", default-features = false, features = ["moxcms"] }
 psd = "0.3"
 rawler = "0.7"

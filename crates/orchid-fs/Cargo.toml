@@ -9,7 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["net", "process"] }
 tokio-util.workspace = true
 notify.workspace = true
 notify-debouncer-full.workspace = true
