@@ -177,7 +177,11 @@ impl RcloneProvider {
         let arg_refs: Vec<&str> = cmd_args.iter().map(String::as_str).collect();
         let mut child = Command::new(&self.rclone_bin)
             .args(&arg_refs)
-            .stdout(Stdio::piped())
+            .stdout(if progress.is_some() {
+                Stdio::null()
+            } else {
+                Stdio::piped()
+            })
             .stderr(Stdio::piped())
             .kill_on_drop(true)
             .spawn()

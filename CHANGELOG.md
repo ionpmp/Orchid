@@ -408,6 +408,12 @@ release yet.
   `panic = "abort"` for packaged / PGO builds.
 - **Widget lookup**: `instances_for_workspace` uses a workspace id index
   instead of scanning every live instance.
+- **Tokio**: workspace features are `rt-multi-thread` / `macros` / `sync` /
+  `time` / `fs` / `io-util` / `parking_lot`; `net` and `process` stay on
+  orchid-fs only. `signal` and `io-std` are off.
+- **image**: default decoders drop `avif` (WIC), `qoi`, and `farbfeld`.
+- **rclone copy progress**: stdout is discarded (`Stdio::null`) so a full
+  pipe cannot stall the child while only stderr is read.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),
