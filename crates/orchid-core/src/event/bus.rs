@@ -2,6 +2,7 @@
 //!
 //! See the module-level documentation in [`crate::event`] for an overview.
 
+use std::collections::HashSet;
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -96,6 +97,10 @@ struct SubscriptionEntry {
 pub(crate) struct EventBusInner {
     config: EventBusConfig,
     subs: DashMap<SubscriptionId, SubscriptionEntry>,
+    /// Filters with an empty type allow-list (match every event type).
+    wildcard: DashMap<SubscriptionId, ()>,
+    /// Subscriptions that listed this event type in their filter.
+    by_type: DashMap<&'static str, HashSet<SubscriptionId>>,
     next_seq: AtomicU64,
     shutdown: AtomicBool,
     in_flight: AtomicUsize,
@@ -110,6 +115,8 @@ impl EventBusInner {
         Self {
             config,
             subs: DashMap::new(),
+            wildcard: DashMap::new(),
+            by_type: DashMap::new(),
             next_seq: AtomicU64::new(0),
             shutdown: AtomicBool::new(false),
             in_flight: AtomicUsize::new(0),
@@ -119,8 +126,35 @@ impl EventBusInner {
         }
     }
 
-    pub(crate) fn remove_subscription(&self, id: SubscriptionId) {
-        self.subs.remove(&id);
+    pub(crate) fn remove_subscription(&self, id: SubscriptionId) -> bool {
+        if let Some((_, entry)) = self.subs.remove(&id) {
+            self.unindex(&id, &entry.filter);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn index(&self, id: SubscriptionId, filter: &EventFilter) {
+        if filter.types.is_empty() {
+            self.wildcard.insert(id, ());
+            return;
+        }
+        for ty in &filter.types {
+            self.by_type.entry(*ty).or_default().insert(id);
+        }
+    }
+
+    fn unindex(&self, id: &SubscriptionId, filter: &EventFilter) {
+        if filter.types.is_empty() {
+            self.wildcard.remove(id);
+            return;
+        }
+        for ty in &filter.types {
+            if let Some(mut set) = self.by_type.get_mut(ty) {
+                set.remove(id);
+            }
+        }
     }
 }
 
@@ -264,10 +298,11 @@ impl EventBus {
             SubscriptionEntry {
                 priority,
                 seq,
-                filter,
+                filter: filter.clone(),
                 handler: HandlerKind::Channel(tx),
             },
         );
+        self.inner.index(id, &filter);
         let handle = SubscriptionHandle {
             id,
             bus: Arc::downgrade(&self.inner),
@@ -306,10 +341,11 @@ impl EventBus {
             SubscriptionEntry {
                 priority,
                 seq,
-                filter,
+                filter: filter.clone(),
                 handler: HandlerKind::Async(wrapped),
             },
         );
+        self.inner.index(id, &filter);
         Ok(SubscriptionHandle {
             id,
             bus: Arc::downgrade(&self.inner),
@@ -341,10 +377,11 @@ impl EventBus {
             SubscriptionEntry {
                 priority,
                 seq,
-                filter,
+                filter: filter.clone(),
                 handler: HandlerKind::Sync(Arc::new(handler)),
             },
         );
+        self.inner.index(id, &filter);
         Ok(SubscriptionHandle {
             id,
             bus: Arc::downgrade(&self.inner),
@@ -355,7 +392,7 @@ impl EventBus {
     /// Remove a subscription by id. Returns `true` if a subscription was
     /// actually removed.
     pub fn unsubscribe(&self, id: SubscriptionId) -> bool {
-        self.inner.subs.remove(&id).is_some()
+        self.inner.remove_subscription(id)
     }
 
     /// Shut the bus down, rejecting future publishes and waiting for any
@@ -376,6 +413,8 @@ impl EventBus {
         // Clear subscription set so channel senders are dropped and any
         // receivers observe `None` on their next `recv()`.
         self.inner.subs.clear();
+        self.inner.wildcard.clear();
+        self.inner.by_type.clear();
         Ok(())
     }
 
@@ -387,19 +426,17 @@ impl EventBus {
         self.inner.published.fetch_add(1, Ordering::Relaxed);
 
         // Snapshot matching entries and sort by (priority rank, registration
-        // sequence) for deterministic ordering.
-        let mut matching: Vec<(HandlerPriority, u64, SubscriptionId)> = self
-            .inner
-            .subs
-            .iter()
-            .filter_map(|e| {
-                if e.value().filter.matches(envelope) {
-                    Some((e.value().priority, e.value().seq, *e.key()))
-                } else {
-                    None
-                }
-            })
-            .collect();
+        // sequence) for deterministic ordering. Typed filters are looked up by
+        // event type; wildcard filters (no type allow-list) are always visited.
+        let mut matching: Vec<(HandlerPriority, u64, SubscriptionId)> = Vec::new();
+        for e in self.inner.wildcard.iter() {
+            self.collect_if_match(*e.key(), envelope, &mut matching);
+        }
+        if let Some(typed) = self.inner.by_type.get(envelope.event_type) {
+            for id in typed.iter() {
+                self.collect_if_match(*id, envelope, &mut matching);
+            }
+        }
         matching.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
 
         let mut handles = Vec::new();
@@ -437,6 +474,20 @@ impl EventBus {
         }
 
         (count, handles)
+    }
+
+    fn collect_if_match(
+        &self,
+        id: SubscriptionId,
+        envelope: &EventEnvelope,
+        matching: &mut Vec<(HandlerPriority, u64, SubscriptionId)>,
+    ) {
+        let Some(entry) = self.inner.subs.get(&id) else {
+            return;
+        };
+        if entry.filter.matches(envelope) {
+            matching.push((entry.priority, entry.seq, id));
+        }
     }
 
     /// Push `envelope` into a channel applying the configured slow-consumer
