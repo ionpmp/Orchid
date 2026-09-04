@@ -261,6 +261,47 @@ async fn copy_file_with_progress(
         bytes_total
     };
 
+    if resume_from == 0 && !options.verify_content_hash && from.is_local() && to.is_local() {
+        if let (Ok(src), Ok(dst)) = (from.to_local(), to.to_local()) {
+            match copy_local_kernel(&src, &dst).await {
+                Ok(()) => {
+                    if options.preserve_timestamps {
+                        if let Some(modified) = src_meta.modified {
+                            let os = dst.clone();
+                            let ft = FileTime::from_unix_time(
+                                modified.timestamp(),
+                                modified.timestamp_subsec_nanos(),
+                            );
+                            let _ = tokio::task::spawn_blocking(move || {
+                                filetime::set_file_mtime(&os, ft)
+                            })
+                            .await;
+                        }
+                    }
+                    if options.preserve_attributes {
+                        apply_attributes(&dst, src_meta.readonly, src_meta.hidden, src_meta.system);
+                    }
+                    if options.copy_ads {
+                        copy_ads_best_effort(&src, &dst);
+                    }
+                    if let Some(p) = progress {
+                        p.send(OperationProgress {
+                            total_bytes: total,
+                            processed_bytes: bytes_before + src_meta.size,
+                            current_path: to.clone(),
+                            items_processed: 0,
+                            items_total: 0,
+                        });
+                    }
+                    return Ok(src_meta.size);
+                }
+                Err(e) => {
+                    tracing::debug!(error = %e, "kernel copy fallback to stream");
+                }
+            }
+        }
+    }
+
     let mut reader = src_provider.read_stream(from).await?;
     if resume_from > 0 {
         let mut skipped = 0u64;
@@ -376,6 +417,47 @@ async fn copy_file_with_progress(
     }
 
     Ok(written)
+}
+
+async fn copy_local_kernel(from: &Path, to: &Path) -> Result<()> {
+    let src = from.to_path_buf();
+    let dst = to.to_path_buf();
+    tokio::task::spawn_blocking(move || copy_local_kernel_sync(&src, &dst))
+        .await
+        .map_err(|e| std::io::Error::other(e.to_string()))?
+}
+
+fn copy_local_kernel_sync(from: &Path, to: &Path) -> Result<()> {
+    if let Some(parent) = to.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::core::PCWSTR;
+        use windows::Win32::Storage::FileSystem::CopyFileExW;
+        let src: Vec<u16> = from.as_os_str().encode_wide().chain([0]).collect();
+        let dst: Vec<u16> = to.as_os_str().encode_wide().chain([0]).collect();
+        unsafe {
+            CopyFileExW(
+                PCWSTR(src.as_ptr()),
+                PCWSTR(dst.as_ptr()),
+                None,
+                None,
+                None,
+                windows::Win32::Storage::FileSystem::COPYFILE_FLAGS(0),
+            )
+        }
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        std::fs::copy(from, to)?;
+        Ok(())
+    }
 }
 
 fn apply_attributes(path: &Path, readonly: bool, hidden: bool, system: bool) {
@@ -541,6 +623,29 @@ mod tests {
         .unwrap();
         assert!(dst.join("sub").is_dir());
         assert!(!dst.join("sub/a.txt").exists());
+    }
+
+    #[tokio::test]
+    async fn local_file_copy_rewrites_dest() {
+        let td = tempfile::tempdir().unwrap();
+        let src = td.path().join("src.txt");
+        let dst = td.path().join("dst.txt");
+        std::fs::write(&src, b"payload").unwrap();
+        std::fs::write(&dst, b"old").unwrap();
+        copy(
+            &registry(),
+            &FsPath::from_local(&src).unwrap(),
+            &FsPath::from_local(&dst).unwrap(),
+            CopyOptions {
+                overwrite: true,
+                ..CopyOptions::default()
+            },
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(std::fs::read(&dst).unwrap(), b"payload");
     }
 
     #[tokio::test]
