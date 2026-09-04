@@ -7,6 +7,8 @@ use orchid_i18n::LocaleManager;
 use orchid_widgets::VideoPlayerPayload;
 use slint::{Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel};
 
+use super::sync_eq_rows;
+
 use crate::slint_generated::{VideoPlayerItem, VideoPlayerModel, VideoPlayerRootItem};
 
 thread_local! {
@@ -187,4 +189,53 @@ pub(crate) fn build_video_player_model(
         },
         locale,
     )
+}
+
+/// Update an existing [`VideoPlayerModel`] in place, keeping nested `ModelRc`s.
+pub(crate) fn patch_video_player_model(
+    model: &mut VideoPlayerModel,
+    p: &VideoPlayerPayload,
+    locale: &LocaleManager,
+) {
+    let roots: Vec<VideoPlayerRootItem> = p
+        .roots
+        .iter()
+        .map(|r| VideoPlayerRootItem {
+            path: r.path.clone().into(),
+            label: r.label.clone().into(),
+        })
+        .collect();
+    let items: Vec<VideoPlayerItem> = p
+        .items
+        .iter()
+        .map(|t| VideoPlayerItem {
+            path: t.path.clone().into(),
+            title: t.title.clone().into(),
+            subtitle: t.subtitle.clone().into(),
+            duration_label: t.duration_label.clone().into(),
+            is_current: t.is_current,
+        })
+        .collect();
+    sync_eq_rows(&model.roots, roots);
+    sync_eq_rows(&model.items, items);
+    model.engine_available = p.engine_available;
+    model.browse_tab = i32::from(p.browse_tab);
+    model.search_query = p.search_query.clone().into();
+    model.has_track = p.has_track;
+    model.title = p.title.clone().into();
+    model.is_playing = p.is_playing;
+    model.progress = p.progress;
+    model.position_label = p.position_label.clone().into();
+    model.duration_label = p.duration_label.clone().into();
+    model.volume = p.volume as i32;
+    model.muted = p.muted;
+    model.shuffle = p.shuffle;
+    model.repeat = i32::from(p.repeat);
+    model.speed_label = p.speed_label.clone().into();
+    model.empty_hint = resolve_hint(&p.empty_hint, locale);
+    model.has_library_roots = p.has_library_roots;
+    model.has_video = p.has_video;
+    model.frame = slint_image_from_rgba(&p.frame_rgba, p.frame_width, p.frame_height);
+    model.queue_count = p.queue_count as i32;
+    model.library_count = p.library_count as i32;
 }

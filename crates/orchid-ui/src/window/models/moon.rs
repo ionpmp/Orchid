@@ -1,6 +1,8 @@
 use orchid_i18n::LocaleManager;
 use slint::{ModelRc, SharedString, VecModel};
 
+use super::sync_eq_rows;
+
 use crate::slint_generated::{MoonModel, MoonValueEntry};
 
 pub(crate) fn empty_moon_model(locale: &LocaleManager) -> MoonModel {
@@ -17,6 +19,17 @@ pub(crate) fn build_moon_model(
     p: &orchid_widgets::MoonPayload,
     locale: &LocaleManager,
 ) -> MoonModel {
+    let mut model = empty_moon_model(locale);
+    patch_moon_model(&mut model, p, locale);
+    model
+}
+
+/// Update an existing [`MoonModel`] in place, keeping the values `ModelRc`.
+pub(crate) fn patch_moon_model(
+    model: &mut MoonModel,
+    p: &orchid_widgets::MoonPayload,
+    locale: &LocaleManager,
+) {
     let phase_label = if p.is_loading {
         locale.tr("moon-loading")
     } else {
@@ -136,14 +149,12 @@ pub(crate) fn build_moon_model(
         });
     }
 
-    MoonModel {
-        phase_label: phase_label.into(),
-        phase_icon: p.phase_icon.into(),
-        illumination: illumination.into(),
-        illumination_fraction: p
-            .illumination_percent
-            .map(|pct| (pct / 100.0).clamp(0.0, 1.0))
-            .unwrap_or(0.0),
-        values: ModelRc::new(VecModel::from(values)),
-    }
+    sync_eq_rows(&model.values, values);
+    model.phase_label = phase_label.into();
+    model.phase_icon = p.phase_icon.into();
+    model.illumination = illumination.into();
+    model.illumination_fraction = p
+        .illumination_percent
+        .map(|pct| (pct / 100.0).clamp(0.0, 1.0))
+        .unwrap_or(0.0);
 }

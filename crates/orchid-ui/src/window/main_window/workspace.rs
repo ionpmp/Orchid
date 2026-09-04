@@ -32,11 +32,12 @@ use crate::window::models::{
     empty_fm_overlays, empty_jyotish_model, empty_media_model, empty_moon_model, empty_notes_model,
     empty_password_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model,
     empty_rss_model, empty_search_model, empty_system_model, empty_terminal_cells,
-    empty_video_player_model, empty_viewer_model, empty_weather_model, patch_calculator_model,
-    patch_calendar_model, patch_clock_model, patch_file_manager_model, patch_media_model,
-    patch_notes_model, patch_password_model, patch_processes_model, patch_recent_files_model,
-    patch_search_model, patch_system_model, patch_viewer_model, patch_weather_model,
-    widget_has_settings, PasswordAddDialogOverlay,
+    empty_video_player_model, empty_viewer_model, empty_weather_model, patch_audio_player_model,
+    patch_calculator_model, patch_calendar_model, patch_clock_model, patch_file_manager_model,
+    patch_jyotish_model, patch_media_model, patch_moon_model, patch_notes_model,
+    patch_password_model, patch_processes_model, patch_recent_files_model, patch_rss_model,
+    patch_search_model, patch_system_model, patch_video_player_model, patch_viewer_model,
+    patch_weather_model, widget_has_settings, PasswordAddDialogOverlay,
 };
 
 use super::{sync_vec_model, MainWindowController};
@@ -730,6 +731,26 @@ impl MainWindowController {
                 }
                 (orchid_widgets::builtin::calendar::TYPE_ID, WidgetPayload::Calendar(p)) => {
                     patch_calendar_model(&mut row.calendar, p, &self.locale);
+                    true
+                }
+                (orchid_widgets::builtin::jyotish::TYPE_ID, WidgetPayload::Jyotish(p)) => {
+                    patch_jyotish_model(&mut row.jyotish, p, &self.locale);
+                    true
+                }
+                (orchid_widgets::builtin::moon::TYPE_ID, WidgetPayload::Moon(p)) => {
+                    patch_moon_model(&mut row.moon, p, &self.locale);
+                    true
+                }
+                (orchid_widgets::builtin::rss::TYPE_ID, WidgetPayload::RssFeed(p)) => {
+                    patch_rss_model(&mut row.rss, p, &self.locale);
+                    true
+                }
+                (orchid_widgets::builtin::audio_player::TYPE_ID, WidgetPayload::AudioPlayer(p)) => {
+                    patch_audio_player_model(&mut row.audio_player, p, &self.locale);
+                    true
+                }
+                (orchid_widgets::builtin::video_player::TYPE_ID, WidgetPayload::VideoPlayer(p)) => {
+                    patch_video_player_model(&mut row.video_player, p, &self.locale);
                     true
                 }
                 _ => false,

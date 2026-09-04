@@ -1070,6 +1070,19 @@ pub(crate) fn patch_viewer_model(
         Vs::Pdf(s) if model.kind == 4 => {
             model.pdf = build_pdf_snapshot(s, locale);
         }
+        Vs::Archive(s) if model.kind == 6 => {
+            patch_archive_snapshot(&mut model.archive, s, locale);
+        }
+        Vs::Document(s) if model.kind == 7 => {
+            patch_document_snapshot(&mut model.document, s, locale);
+        }
+        Vs::Media(s) if model.kind == 8 => {
+            patch_media_snapshot(&mut model.media, s, locale);
+        }
+        Vs::Html(s) if model.kind == 9 => {
+            model.html.path_display = s.path_display.clone().into();
+            model.html.source_preview = SharedString::from(s.source_preview.as_ref());
+        }
         _ => {
             *model = build_viewer_model(p, locale);
         }
@@ -1248,6 +1261,95 @@ fn sync_model_rows<T: Clone + 'static>(
             v.push(row);
         }
     }
+}
+
+fn patch_document_snapshot(
+    model: &mut ViewerDocumentModel,
+    s: &orchid_viewers::DocumentSnapshot,
+    locale: &LocaleManager,
+) {
+    let built = build_document_snapshot(s, locale);
+    if model.plain_text.as_str() != built.plain_text.as_str() {
+        model.plain_text = built.plain_text;
+    }
+    model.path_display = built.path_display;
+    model.dirty = built.dirty;
+    model.info_text = built.info_text;
+    model.bold = built.bold;
+    model.italic = built.italic;
+    model.underline = built.underline;
+    model.strikethrough = built.strikethrough;
+    model.all_caps = built.all_caps;
+    model.small_caps = built.small_caps;
+    model.vanish = built.vanish;
+    model.shadow = built.shadow;
+    model.highlight = built.highlight;
+    model.shade = built.shade;
+    model.border_bottom = built.border_bottom;
+    model.keep_next = built.keep_next;
+    model.keep_lines = built.keep_lines;
+    model.widow_control = built.widow_control;
+    model.contextual_spacing = built.contextual_spacing;
+    model.bidi = built.bidi;
+    model.suppress_auto_hyphens = built.suppress_auto_hyphens;
+    model.outline_level = built.outline_level;
+    model.outline_level_label = built.outline_level_label;
+    model.superscript = built.superscript;
+    model.subscript = built.subscript;
+    model.font_size_pt = built.font_size_pt;
+    model.font_size_label = built.font_size_label;
+    model.font_family = built.font_family;
+    model.font_family_label = built.font_family_label;
+    model.color_rgb = built.color_rgb;
+    model.alignment = built.alignment;
+    model.list_kind = built.list_kind;
+    model.can_undo = built.can_undo;
+    model.can_redo = built.can_redo;
+    model.source_mode = built.source_mode;
+    model.preview_width_px = built.preview_width_px;
+    model.preview_height_px = built.preview_height_px;
+    model.preview_render_scale = built.preview_render_scale;
+    model.preview_image = built.preview_image;
+    model.find_gen = built.find_gen;
+    model.find_anchor = built.find_anchor;
+    model.find_cursor = built.find_cursor;
+    model.find_match_index = built.find_match_index;
+    model.find_match_count = built.find_match_count;
+    model.find_scroll_y_px = built.find_scroll_y_px;
+    model.preview_zoom_percent = built.preview_zoom_percent;
+    model.link_hover = built.link_hover;
+    model.link_url = built.link_url;
+    model.header_text = built.header_text;
+    model.footer_text = built.footer_text;
+    model.page_size_label = built.page_size_label;
+}
+
+fn patch_archive_snapshot(
+    model: &mut ViewerArchiveModel,
+    s: &orchid_viewers::ArchiveSnapshot,
+    locale: &LocaleManager,
+) {
+    let breadcrumbs = model.breadcrumbs.clone();
+    let entries = model.entries.clone();
+    *model = build_archive_snapshot(s, locale);
+    super::adopt_eq_rows(&breadcrumbs, &model.breadcrumbs);
+    model.breadcrumbs = breadcrumbs;
+    super::adopt_eq_rows(&entries, &model.entries);
+    model.entries = entries;
+}
+
+fn patch_media_snapshot(
+    model: &mut ViewerMediaModel,
+    s: &orchid_viewers::MediaSnapshot,
+    locale: &LocaleManager,
+) {
+    let playlist_items = model.playlist_items.clone();
+    let chapter_items = model.chapter_items.clone();
+    *model = build_media_snapshot(s, locale);
+    super::adopt_eq_rows(&playlist_items, &model.playlist_items);
+    model.playlist_items = playlist_items;
+    super::adopt_eq_rows(&chapter_items, &model.chapter_items);
+    model.chapter_items = chapter_items;
 }
 
 fn slint_map_pin(p: &orchid_viewers::MapPinItem) -> ViewerMapPin {

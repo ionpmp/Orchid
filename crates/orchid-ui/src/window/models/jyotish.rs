@@ -2,6 +2,8 @@ use orchid_i18n::LocaleManager;
 use orchid_widgets::{JyotishRectifyView, JyotishYearSummary};
 use slint::{ModelRc, SharedString, VecModel};
 
+use super::adopt_eq_rows;
+
 use crate::slint_generated::{
     JyotishAntarRowModel, JyotishCityEntry, JyotishDayChipModel, JyotishFactorEntry, JyotishModel,
     JyotishMonthCellModel, JyotishMonthRowModel, JyotishPanchangaRow, JyotishPlanetEntry,
@@ -542,6 +544,87 @@ pub(crate) fn build_jyotish_model(
         export_day_label: locale.tr("jyotish-export-day").into(),
         export_week_label: locale.tr("jyotish-export-week").into(),
     }
+}
+
+/// Update an existing [`JyotishModel`] in place, keeping nested `VecModel` identities.
+pub(crate) fn patch_jyotish_model(
+    model: &mut JyotishModel,
+    p: &orchid_widgets::JyotishPayload,
+    locale: &LocaleManager,
+) {
+    let cities = model.cities.clone();
+    let search_results = model.search_results.clone();
+    let profiles = model.profiles.clone();
+    let profile_search_results = model.profile_search_results.clone();
+    let profile_cal_cells = model.profile_cal_cells.clone();
+    let profile_hour_items = model.profile_hour_items.clone();
+    let profile_minute_items = model.profile_minute_items.clone();
+    let gender_labels = model.gender_labels.clone();
+    let panchanga = model.panchanga.clone();
+    let planets = model.planets.clone();
+    let tab_labels = model.tab_labels.clone();
+    let factors = model.factors.clone();
+    let influences = model.influences.clone();
+    let advice = model.advice.clone();
+    let week_strip = model.week_strip.clone();
+    let month_cells = model.month_cells.clone();
+    let year_months = model.year_months.clone();
+    let life_years = model.life_years.clone();
+    let life_antars = model.life_antars.clone();
+    let weekday_headers = model.weekday_headers.clone();
+    let rectify_options = model.rectify.options.clone();
+    let rectify_events = model.rectify.events.clone();
+    let rectify_event_kinds = model.rectify.event_kinds.clone();
+    let rectify_candidates = model.rectify.candidates.clone();
+    let rectify_window_labels = model.rectify.window_labels.clone();
+
+    *model = build_jyotish_model(p, locale);
+
+    adopt_eq_rows(&cities, &model.cities);
+    model.cities = cities;
+    adopt_eq_rows(&search_results, &model.search_results);
+    model.search_results = search_results;
+    adopt_eq_rows(&profiles, &model.profiles);
+    model.profiles = profiles;
+    adopt_eq_rows(&profile_search_results, &model.profile_search_results);
+    model.profile_search_results = profile_search_results;
+    adopt_eq_rows(&profile_cal_cells, &model.profile_cal_cells);
+    model.profile_cal_cells = profile_cal_cells;
+    model.profile_hour_items = profile_hour_items;
+    model.profile_minute_items = profile_minute_items;
+    model.gender_labels = gender_labels;
+    adopt_eq_rows(&panchanga, &model.panchanga);
+    model.panchanga = panchanga;
+    adopt_eq_rows(&planets, &model.planets);
+    model.planets = planets;
+    model.tab_labels = tab_labels;
+    adopt_eq_rows(&factors, &model.factors);
+    model.factors = factors;
+    adopt_eq_rows(&influences, &model.influences);
+    model.influences = influences;
+    adopt_eq_rows(&advice, &model.advice);
+    model.advice = advice;
+    adopt_eq_rows(&week_strip, &model.week_strip);
+    model.week_strip = week_strip;
+    adopt_eq_rows(&month_cells, &model.month_cells);
+    model.month_cells = month_cells;
+    adopt_eq_rows(&year_months, &model.year_months);
+    model.year_months = year_months;
+    adopt_eq_rows(&life_years, &model.life_years);
+    model.life_years = life_years;
+    adopt_eq_rows(&life_antars, &model.life_antars);
+    model.life_antars = life_antars;
+    model.weekday_headers = weekday_headers;
+    adopt_eq_rows(&rectify_options, &model.rectify.options);
+    model.rectify.options = rectify_options;
+    adopt_eq_rows(&rectify_events, &model.rectify.events);
+    model.rectify.events = rectify_events;
+    adopt_eq_rows(&rectify_event_kinds, &model.rectify.event_kinds);
+    model.rectify.event_kinds = rectify_event_kinds;
+    adopt_eq_rows(&rectify_candidates, &model.rectify.candidates);
+    model.rectify.candidates = rectify_candidates;
+    adopt_eq_rows(&rectify_window_labels, &model.rectify.window_labels);
+    model.rectify.window_labels = rectify_window_labels;
 }
 
 fn jyotish_profile_entries(p: &orchid_widgets::JyotishPayload) -> Vec<JyotishProfileEntry> {

@@ -1,8 +1,13 @@
 //! Slint model for the local audio library player.
 
+use std::cell::RefCell;
+use std::sync::Arc;
+
 use orchid_i18n::{FluentArgs, LocaleManager};
 use orchid_widgets::AudioPlayerPayload;
-use slint::{Image, ModelRc, SharedString, VecModel};
+use slint::{Image, Model, ModelRc, SharedPixelBuffer, SharedString, VecModel};
+
+use super::sync_eq_rows;
 
 use crate::slint_generated::{
     AudioPlayerGroupItem, AudioPlayerModel, AudioPlayerPlaylistItem, AudioPlayerRootItem,
@@ -277,17 +282,17 @@ pub(crate) fn build_audio_player_model(
     p: &AudioPlayerPayload,
     locale: &LocaleManager,
 ) -> AudioPlayerModel {
-    let cover = if p.has_cover && p.cover_width > 0 && p.cover_height > 0 && !p.cover_rgba.is_empty()
-    {
-        let buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
-            p.cover_rgba.as_ref(),
-            p.cover_width,
-            p.cover_height,
-        );
-        Image::from_rgba8(buf)
-    } else {
-        Image::default()
-    };
+    let cover =
+        if p.has_cover && p.cover_width > 0 && p.cover_height > 0 && !p.cover_rgba.is_empty() {
+            let buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+                p.cover_rgba.as_ref(),
+                p.cover_width,
+                p.cover_height,
+            );
+            Image::from_rgba8(buf)
+        } else {
+            Image::default()
+        };
 
     let empty_hint = if p.empty_hint.is_empty() {
         SharedString::new()
@@ -325,11 +330,12 @@ pub(crate) fn build_audio_player_model(
                             && t.cover_height > 0
                             && !t.cover_rgba.is_empty()
                         {
-                            let buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
-                                t.cover_rgba.as_ref(),
-                                t.cover_width,
-                                t.cover_height,
-                            );
+                            let buf =
+                                slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+                                    t.cover_rgba.as_ref(),
+                                    t.cover_width,
+                                    t.cover_height,
+                                );
                             Image::from_rgba8(buf)
                         } else {
                             Image::default()
@@ -399,4 +405,187 @@ pub(crate) fn build_audio_player_model(
         },
         locale,
     )
+}
+
+thread_local! {
+    static COVER_CACHE: RefCell<Option<(usize, u32, u32, Image)>> = const { RefCell::new(None) };
+}
+
+fn slint_cover(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
+    if width == 0 || height == 0 || rgba.is_empty() {
+        COVER_CACHE.with(|c| *c.borrow_mut() = None);
+        return Image::default();
+    }
+    let expected = (width as usize)
+        .saturating_mul(height as usize)
+        .saturating_mul(4);
+    if rgba.len() < expected {
+        COVER_CACHE.with(|c| *c.borrow_mut() = None);
+        return Image::default();
+    }
+    let ptr = rgba.as_ptr() as usize;
+    if let Some(img) = COVER_CACHE.with(|c| {
+        c.borrow().as_ref().and_then(|(p, w, h, img)| {
+            (*p == ptr && *w == width && *h == height).then(|| img.clone())
+        })
+    }) {
+        return img;
+    }
+    let buf =
+        SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(rgba.as_ref(), width, height);
+    let img = Image::from_rgba8(buf);
+    COVER_CACHE.with(|c| *c.borrow_mut() = Some((ptr, width, height, img.clone())));
+    img
+}
+
+/// Update an existing [`AudioPlayerModel`] in place, keeping nested `ModelRc`s.
+pub(crate) fn patch_audio_player_model(
+    model: &mut AudioPlayerModel,
+    p: &AudioPlayerPayload,
+    locale: &LocaleManager,
+) {
+    let cover =
+        if p.has_cover && p.cover_width > 0 && p.cover_height > 0 && !p.cover_rgba.is_empty() {
+            slint_cover(&p.cover_rgba, p.cover_width, p.cover_height)
+        } else {
+            Image::default()
+        };
+    let empty_hint = if p.empty_hint.is_empty() {
+        SharedString::new()
+    } else {
+        locale.tr(&p.empty_hint).into()
+    };
+    sync_eq_rows(
+        &model.groups,
+        p.groups
+            .iter()
+            .map(|g| AudioPlayerGroupItem {
+                key: g.key.clone().into(),
+                label: g.label.clone().into(),
+                count: g.count as i32,
+                is_library_root: g.is_library_root,
+            })
+            .collect(),
+    );
+    sync_audio_tracks(
+        &model.tracks,
+        p.tracks
+            .iter()
+            .map(|t| {
+                let cover = if t.has_cover
+                    && t.cover_width > 0
+                    && t.cover_height > 0
+                    && !t.cover_rgba.is_empty()
+                {
+                    let buf = SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+                        t.cover_rgba.as_ref(),
+                        t.cover_width,
+                        t.cover_height,
+                    );
+                    Image::from_rgba8(buf)
+                } else {
+                    Image::default()
+                };
+                AudioPlayerTrackItem {
+                    path: t.path.clone().into(),
+                    title: t.title.clone().into(),
+                    subtitle: t.subtitle.clone().into(),
+                    duration_label: t.duration_label.clone().into(),
+                    is_current: t.is_current,
+                    is_favorite: t.is_favorite,
+                    has_cover: t.has_cover,
+                    cover,
+                }
+            })
+            .collect(),
+    );
+    sync_eq_rows(
+        &model.playlists,
+        p.playlists
+            .iter()
+            .map(|pl| AudioPlayerPlaylistItem {
+                id: pl.id.clone().into(),
+                name: playlist_name(&pl.name, locale),
+                count: pl.count as i32,
+                is_active: pl.is_active,
+            })
+            .collect(),
+    );
+    sync_eq_rows(
+        &model.roots,
+        p.roots
+            .iter()
+            .map(|r| AudioPlayerRootItem {
+                path: r.path.clone().into(),
+                label: r.label.clone().into(),
+            })
+            .collect(),
+    );
+    model.engine_available = p.engine_available;
+    model.browse_tab = i32::from(p.browse_tab);
+    model.browse_filter = p.browse_filter.clone().into();
+    model.browse_filter_label = p.browse_filter_label.clone().into();
+    model.search_query = p.search_query.clone().into();
+    model.renaming_playlist = p.renaming_playlist;
+    model.rename_playlist_draft = p.rename_playlist_draft.clone().into();
+    model.active_playlist_id = p.active_playlist_id.clone().into();
+    model.has_track = p.has_track;
+    model.title = p.title.clone().into();
+    model.artist = p.artist.clone().into();
+    model.album = p.album.clone().into();
+    model.is_playing = p.is_playing;
+    model.progress = p.progress.clamp(0.0, 1.0);
+    model.position_label = p.position_label.clone().into();
+    model.duration_label = p.duration_label.clone().into();
+    model.volume = p.volume as i32;
+    model.muted = p.muted;
+    model.shuffle = p.shuffle;
+    model.repeat = i32::from(p.repeat);
+    model.sleep_label = p.sleep_label.clone().into();
+    model.eq_label = p.eq_label.clone().into();
+    model.rg_label = p.rg_label.clone().into();
+    model.speed_label = p.speed_label.clone().into();
+    model.crossfade_label = crossfade_label(p.crossfade_secs, locale);
+    model.lyrics_line = p.lyrics_line.clone().into();
+    model.has_lyrics = p.has_lyrics;
+    model.roots_label = library_stats_label(p.library_count, p.library_roots_count, locale);
+    model.empty_hint = empty_hint;
+    model.has_cover = p.has_cover;
+    model.cover = cover;
+    model.queue_stats_label = queue_stats_label(p.queue_count, p.queue_duration_ms, locale);
+    model.current_track_index = p.current_track_index;
+    model.has_library_roots = p.has_library_roots;
+    model.sort_label = sort_label_for(p.library_sort, locale);
+    model.is_current_favorite = p.is_current_favorite;
+}
+
+fn sync_audio_tracks(model: &ModelRc<AudioPlayerTrackItem>, rows: Vec<AudioPlayerTrackItem>) {
+    let Some(v) = model
+        .as_any()
+        .downcast_ref::<VecModel<AudioPlayerTrackItem>>()
+    else {
+        return;
+    };
+    while v.row_count() > rows.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, row) in rows.into_iter().enumerate() {
+        if i < v.row_count() {
+            if let Some(old) = v.row_data(i) {
+                if old.path == row.path
+                    && old.title == row.title
+                    && old.subtitle == row.subtitle
+                    && old.duration_label == row.duration_label
+                    && old.is_current == row.is_current
+                    && old.is_favorite == row.is_favorite
+                    && old.has_cover == row.has_cover
+                {
+                    continue;
+                }
+            }
+            v.set_row_data(i, row);
+        } else {
+            v.push(row);
+        }
+    }
 }

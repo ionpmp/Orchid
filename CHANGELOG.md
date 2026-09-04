@@ -391,6 +391,10 @@ release yet.
   instead of rebuilding the workspace grid.
 - **Command palette**: arrow selection updates `selected_index` without
   rebuilding the candidate list.
+- **Jyotish / Moon / RSS / audio / video**: snapshot ticks patch nested
+  lists and reuse cover / frame `Image`s instead of remounting the widget.
+- **Viewer archive / document / media**: keep listing and playlist
+  `VecModel`s across extract, caret, and playback ticks.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

@@ -1,6 +1,8 @@
 use orchid_i18n::LocaleManager;
 use slint::{ModelRc, SharedString, VecModel};
 
+use super::sync_eq_rows;
+
 use crate::slint_generated::{RssItemEntry, RssModel};
 
 pub(crate) fn empty_rss_model(locale: &LocaleManager) -> RssModel {
@@ -14,6 +16,17 @@ pub(crate) fn empty_rss_model(locale: &LocaleManager) -> RssModel {
 }
 
 pub(crate) fn build_rss_model(p: &orchid_widgets::RssPayload, locale: &LocaleManager) -> RssModel {
+    let mut model = empty_rss_model(locale);
+    patch_rss_model(&mut model, p, locale);
+    model
+}
+
+/// Update an existing [`RssModel`] in place, keeping the items `ModelRc`.
+pub(crate) fn patch_rss_model(
+    model: &mut RssModel,
+    p: &orchid_widgets::RssPayload,
+    locale: &LocaleManager,
+) {
     let items: Vec<RssItemEntry> = p
         .items
         .iter()
@@ -50,11 +63,9 @@ pub(crate) fn build_rss_model(p: &orchid_widgets::RssPayload, locale: &LocaleMan
     } else {
         locale.tr("rss-no-feeds").into()
     };
-    RssModel {
-        items: ModelRc::new(VecModel::from(items)),
-        last_updated: p.last_updated_text.clone().into(),
-        error_summary,
-        has_items,
-        empty_state_text,
-    }
+    sync_eq_rows(&model.items, items);
+    model.last_updated = p.last_updated_text.clone().into();
+    model.error_summary = error_summary;
+    model.has_items = has_items;
+    model.empty_state_text = empty_state_text;
 }
