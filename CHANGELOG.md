@@ -387,8 +387,8 @@ release yet.
 - **Weather / Notes / Calendar**: content ticks patch nested `VecModel`s
   instead of remounting the widget frame.
 - **Content refresh**: clock / weather / notes / calendar / processes /
-  jyotish / FM navigation patch one frame instead of rebuilding the
-  workspace grid.
+  jyotish / FM navigation / password / widget settings patch one frame
+  instead of rebuilding the workspace grid.
 - **Command palette**: arrow selection updates `selected_index` without
   rebuilding the candidate list.
 

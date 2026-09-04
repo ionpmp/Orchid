@@ -87,7 +87,7 @@ impl MainWindowController {
                 tracing::warn!(%u, error = %e, "widget settings: persist failed");
             }
             let _ = c.widget_manager.refresh_snapshot_cache(u).await;
-            c.schedule_rebuild();
+            c.schedule_instance_patch(u);
         });
     }
 

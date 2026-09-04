@@ -53,7 +53,7 @@ impl MainWindowController {
         spawn::spawn_local_compat(async move {
             let _ = wm.refresh_snapshot_cache(inst_id).await;
             if let Some(c) = t.upgrade() {
-                c.schedule_rebuild();
+                c.schedule_instance_patch(inst_id);
             }
         });
     }
@@ -69,7 +69,7 @@ impl MainWindowController {
         spawn::spawn_local_compat(async move {
             let _ = wm.refresh_snapshot_cache(inst_id).await;
             if let Some(c) = t.upgrade() {
-                c.schedule_rebuild();
+                c.schedule_instance_patch(inst_id);
             }
         });
     }
@@ -135,13 +135,13 @@ impl MainWindowController {
                 .write()
                 .insert(inst_id, (msg.clone(), true));
             c.push_notification(&title, &msg, 1);
-            c.schedule_rebuild();
+            c.schedule_instance_patch(inst_id);
 
             let t2 = Arc::downgrade(&c);
             tokio::time::sleep(std::time::Duration::from_secs(3)).await;
             if let Some(cc) = t2.upgrade() {
                 cc.password_toasts.write().remove(&inst_id);
-                cc.schedule_rebuild();
+                cc.schedule_instance_patch(inst_id);
             }
         });
     }
@@ -187,7 +187,7 @@ impl MainWindowController {
         spawn::spawn_local_compat(async move {
             let _ = wm.refresh_snapshot_cache(inst_id).await;
             if let Some(c) = t.upgrade() {
-                c.schedule_rebuild();
+                c.schedule_instance_patch(inst_id);
             }
         });
     }

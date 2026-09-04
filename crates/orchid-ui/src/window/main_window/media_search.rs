@@ -7,8 +7,8 @@ use tracing::warn;
 use uuid::Uuid;
 
 use orchid_storage::LifecycleState;
-use orchid_widgets::manager::CreateWidgetRequest;
 use orchid_widgets::builtin::search::{self as search_widget, ActionTarget};
+use orchid_widgets::manager::CreateWidgetRequest;
 use orchid_widgets::WidgetPayload;
 
 use crate::window::errors::media_localized_error;
@@ -158,6 +158,7 @@ impl MainWindowController {
                 .into_iter()
                 .find(|i| i.type_id == orchid_widgets::builtin::audio_player::TYPE_ID)
                 .map(|i| i.id);
+            let existed = audio_id.is_some();
             let id = match audio_id {
                 Some(id) => id,
                 None => {
@@ -189,7 +190,11 @@ impl MainWindowController {
                 warn!(?e, widget_id = %id, "prime audio player before play");
             }
             orchid_widgets::builtin::audio_player::play_paths(id, paths);
-            c.schedule_rebuild();
+            if existed {
+                c.schedule_instance_patch(id);
+            } else {
+                c.schedule_rebuild();
+            }
         });
     }
 
@@ -212,6 +217,7 @@ impl MainWindowController {
                 .into_iter()
                 .find(|i| i.type_id == orchid_widgets::builtin::audio_player::TYPE_ID)
                 .map(|i| i.id);
+            let existed = audio_id.is_some();
             let id = match audio_id {
                 Some(id) => id,
                 None => {
@@ -243,7 +249,11 @@ impl MainWindowController {
                 warn!(?e, widget_id = %id, "prime audio player before enqueue");
             }
             orchid_widgets::builtin::audio_player::enqueue_paths(id, &paths);
-            c.schedule_rebuild();
+            if existed {
+                c.schedule_instance_patch(id);
+            } else {
+                c.schedule_rebuild();
+            }
         });
     }
 
@@ -266,6 +276,7 @@ impl MainWindowController {
                 .into_iter()
                 .find(|i| i.type_id == orchid_widgets::builtin::video_player::TYPE_ID)
                 .map(|i| i.id);
+            let existed = video_id.is_some();
             let id = match video_id {
                 Some(id) => id,
                 None => {
@@ -297,7 +308,11 @@ impl MainWindowController {
                 warn!(?e, widget_id = %id, "prime video player before play");
             }
             orchid_widgets::builtin::video_player::play_paths(id, paths);
-            c.schedule_rebuild();
+            if existed {
+                c.schedule_instance_patch(id);
+            } else {
+                c.schedule_rebuild();
+            }
         });
     }
 
@@ -320,6 +335,7 @@ impl MainWindowController {
                 .into_iter()
                 .find(|i| i.type_id == orchid_widgets::builtin::video_player::TYPE_ID)
                 .map(|i| i.id);
+            let existed = video_id.is_some();
             let id = match video_id {
                 Some(id) => id,
                 None => {
@@ -351,7 +367,11 @@ impl MainWindowController {
                 warn!(?e, widget_id = %id, "prime video player before enqueue");
             }
             orchid_widgets::builtin::video_player::enqueue_paths(id, &paths);
-            c.schedule_rebuild();
+            if existed {
+                c.schedule_instance_patch(id);
+            } else {
+                c.schedule_rebuild();
+            }
         });
     }
 
@@ -479,7 +499,7 @@ impl MainWindowController {
                 spawn::spawn_local_compat(async move {
                     let _ = wm.refresh_snapshot_cache(cal_id).await;
                     if let Some(c) = t.upgrade() {
-                        c.schedule_rebuild();
+                        c.schedule_instance_patch(cal_id);
                     }
                 });
             }
@@ -497,7 +517,7 @@ impl MainWindowController {
                 spawn::spawn_local_compat(async move {
                     let _ = wm.refresh_snapshot_cache(jyotish_id).await;
                     if let Some(c) = t.upgrade() {
-                        c.schedule_rebuild();
+                        c.schedule_instance_patch(jyotish_id);
                     }
                 });
             }
