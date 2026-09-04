@@ -395,6 +395,7 @@ release yet.
   lists and reuse cover / frame `Image`s instead of remounting the widget.
 - **Viewer archive / document / media**: keep listing and playlist
   `VecModel`s across extract, caret, and playback ticks.
+- **Event bus**: OSC 52 clipboard writes leave the sync dispatcher.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

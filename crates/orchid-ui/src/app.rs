@@ -397,13 +397,18 @@ impl OrchidApp {
                                 let Some(ev) = env.downcast::<TerminalClipboardWrite>() else {
                                     return;
                                 };
-                                if let Err(e) = cb.copy(&ev.text) {
-                                    warn!(
-                                        error = %e,
-                                        session = %ev.session_id,
-                                        "terminal OSC 52 clipboard write failed"
-                                    );
-                                }
+                                let cb = Arc::clone(&cb);
+                                let text = ev.text.clone();
+                                let session = ev.session_id;
+                                std::thread::spawn(move || {
+                                    if let Err(e) = cb.copy(&text) {
+                                        warn!(
+                                            error = %e,
+                                            session = %session,
+                                            "terminal OSC 52 clipboard write failed"
+                                        );
+                                    }
+                                });
                             }
                         },
                     )
