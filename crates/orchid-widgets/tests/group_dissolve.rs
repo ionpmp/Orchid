@@ -31,6 +31,8 @@ async fn group_dissolve_releases_members() {
         .unwrap();
 
     assert_eq!(mgr.get(group_id).unwrap().members.len(), 3);
+    assert_eq!(mgr.find_for_instance(a).unwrap().id, group_id);
+    assert_eq!(mgr.list_for_workspace(ws).len(), 1);
 
     let released = mgr.dissolve_group(group_id).await.unwrap();
     assert_eq!(released.len(), 3);
@@ -39,4 +41,6 @@ async fn group_dissolve_releases_members() {
     assert!(released.contains(&c));
 
     assert!(mgr.get(group_id).is_err());
+    assert!(mgr.find_for_instance(a).is_none());
+    assert!(mgr.list_for_workspace(ws).is_empty());
 }

@@ -2,6 +2,7 @@
 
 pub mod operations;
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use bincode_reloaded::{Decode, Encode};
@@ -133,6 +134,10 @@ impl WidgetGroup {
 /// Owns all groups and persists them through [`orchid_storage::StateStore::raw_database`].
 pub struct GroupManager {
     groups: DashMap<Uuid, WidgetGroup>,
+    /// Group ids on each workspace.
+    by_workspace: DashMap<Uuid, HashSet<Uuid>>,
+    /// Widget instance id → group id (an instance is in at most one group).
+    by_instance: DashMap<Uuid, Uuid>,
     storage: Arc<orchid_storage::StateStore>,
     bus: Arc<orchid_core::EventBus>,
 }
@@ -152,8 +157,31 @@ impl GroupManager {
     pub fn new(bus: Arc<orchid_core::EventBus>, storage: Arc<orchid_storage::StateStore>) -> Self {
         Self {
             groups: DashMap::new(),
+            by_workspace: DashMap::new(),
+            by_instance: DashMap::new(),
             storage,
             bus,
+        }
+    }
+
+    fn index_group(&self, group: &WidgetGroup) {
+        self.by_workspace
+            .entry(group.workspace_id)
+            .or_default()
+            .insert(group.id);
+        for member in &group.members {
+            self.by_instance.insert(*member, group.id);
+        }
+    }
+
+    fn unindex_group(&self, group: &WidgetGroup) {
+        if let Some(mut set) = self.by_workspace.get_mut(&group.workspace_id) {
+            set.remove(&group.id);
+        }
+        for member in &group.members {
+            if self.by_instance.get(member).is_some_and(|g| *g == group.id) {
+                self.by_instance.remove(member);
+            }
         }
     }
 
@@ -176,6 +204,7 @@ impl GroupManager {
         for entry in table.iter().map_err(orchid_storage::StorageError::from)? {
             let (_k, v) = entry.map_err(orchid_storage::StorageError::from)?;
             let group = v.value();
+            self.index_group(&group);
             self.groups.insert(group.id, group);
             count += 1;
         }
@@ -246,6 +275,7 @@ impl GroupManager {
         }
         let id = group.id;
         self.persist(&group)?;
+        self.index_group(&group);
         self.groups.insert(id, group);
 
         self.bus.publish(
@@ -269,6 +299,7 @@ impl GroupManager {
             .groups
             .remove(&group_id)
             .ok_or(WidgetError::GroupNotFound(group_id))?;
+        self.unindex_group(&group);
         self.delete_persisted(group_id)?;
         self.bus.publish(
             orchid_core::EventSource::Subsystem("widgets".into()),
@@ -290,6 +321,7 @@ impl GroupManager {
         entry.value_mut().add_member(instance_id);
         let group = entry.value().clone();
         drop(entry);
+        self.by_instance.insert(instance_id, group_id);
         self.persist(&group)?;
         Ok(())
     }
@@ -307,6 +339,7 @@ impl GroupManager {
         entry.value_mut().remove_member(instance_id)?;
         let group = entry.value().clone();
         drop(entry);
+        self.by_instance.remove(&instance_id);
         self.persist(&group)?;
         Ok(())
     }
@@ -390,20 +423,19 @@ impl GroupManager {
     /// Every group attached to the given workspace.
     #[must_use]
     pub fn list_for_workspace(&self, workspace_id: Uuid) -> Vec<WidgetGroup> {
-        self.groups
-            .iter()
-            .filter(|g| g.value().workspace_id == workspace_id)
-            .map(|g| g.value().clone())
+        let Some(ids) = self.by_workspace.get(&workspace_id) else {
+            return Vec::new();
+        };
+        ids.iter()
+            .filter_map(|id| self.groups.get(id).map(|e| e.value().clone()))
             .collect()
     }
 
     /// Find the group that contains `instance_id`, if any.
     #[must_use]
     pub fn find_for_instance(&self, instance_id: Uuid) -> Option<WidgetGroup> {
-        self.groups
-            .iter()
-            .find(|g| g.value().members.contains(&instance_id))
-            .map(|g| g.value().clone())
+        let group_id = *self.by_instance.get(&instance_id)?;
+        self.groups.get(&group_id).map(|e| e.value().clone())
     }
 
     /// Every in-memory group (all workspaces).
