@@ -215,6 +215,8 @@ pub struct MainWindowController {
     catalog: Arc<RwLock<CatalogUiState>>,
     command_palette: Arc<CommandPalette>,
     palette: Arc<RwLock<PaletteUiState>>,
+    /// Bumped on each palette keystroke so stale debounce tasks skip the rebuild.
+    palette_query_seq: AtomicU32,
     palette_candidates: ModelRc<SearchCandidateEntry>,
     settings: Arc<RwLock<SettingsUiState>>,
     config_file_path: PathBuf,
@@ -529,6 +531,7 @@ impl MainWindowController {
             os_drop_batch: Arc::new(Mutex::new(OsDropBatch::default())),
             catalog: Arc::new(RwLock::new(CatalogUiState::default())),
             palette: Arc::new(RwLock::new(PaletteUiState::default())),
+            palette_query_seq: AtomicU32::new(0),
             palette_candidates,
             settings: Arc::new(RwLock::new(SettingsUiState::default())),
             config_file_path,
@@ -899,6 +902,22 @@ impl MainWindowController {
     pub(super) fn schedule_instance_patch(self: &Arc<Self>, id: Uuid) {
         if let Err(e) = self.patch_workspace_frames(&[id]) {
             warn!(?e, %id, "instance patch failed");
+            self.schedule_rebuild();
+        }
+    }
+
+    /// After a shortcut or palette command: patch dirty frames. Callers that
+    /// change grid membership already set [`Self::schedule_rebuild`].
+    pub(super) fn refresh_after_command(self: &Arc<Self>) {
+        if self.rebuild_pending.load(Ordering::Acquire) {
+            return;
+        }
+        let dirty = self.widget_manager.drain_frame_dirty_ids();
+        if dirty.is_empty() {
+            return;
+        }
+        if let Err(e) = self.patch_workspace_frames(&dirty) {
+            warn!(?e, "post-command patch");
             self.schedule_rebuild();
         }
     }

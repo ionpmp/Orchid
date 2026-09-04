@@ -85,7 +85,8 @@ impl MainWindowController {
                 return;
             }
             if let Some(c) = tw.upgrade() {
-                c.schedule_rebuild();
+                let _ = c.widget_manager.refresh_snapshot_cache(inst).await;
+                c.schedule_instance_patch(inst);
             }
         });
         true
@@ -194,7 +195,7 @@ impl MainWindowController {
         let this = Arc::clone(self);
         spawn::spawn_local_compat(async move {
             this.dispatch_command(&cmd_id).await;
-            this.schedule_rebuild();
+            this.refresh_after_command();
         });
     }
 

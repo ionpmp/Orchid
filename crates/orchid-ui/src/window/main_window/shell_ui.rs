@@ -509,7 +509,7 @@ impl MainWindowController {
                 .find(|inst| inst.type_id == "universal-search" || inst.type_id == "search")
             {
                 *self.search_autofocus_pending.lock() = Some(inst.id);
-                self.schedule_rebuild();
+                self.schedule_instance_patch(inst.id);
                 return;
             }
         }
@@ -541,7 +541,7 @@ impl MainWindowController {
             &st.query,
             COMMAND_PALETTE_LIMIT,
         );
-        sync_vec_model(&self.palette_candidates, candidates);
+        crate::window::models::sync_eq_rows(&self.palette_candidates, candidates);
         let count = self.palette_candidates.row_count();
         let selected = if count == 0 {
             -1
@@ -608,7 +608,18 @@ impl MainWindowController {
             st.query = query.to_string();
             st.selected_index = 0;
         }
-        self.sync_command_palette_global();
+        let seq = self.palette_query_seq.fetch_add(1, Ordering::AcqRel) + 1;
+        let t = Arc::downgrade(self);
+        spawn::spawn_local(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            let Some(c) = t.upgrade() else {
+                return;
+            };
+            if c.palette_query_seq.load(Ordering::Acquire) != seq {
+                return;
+            }
+            c.sync_command_palette_global();
+        });
     }
 
     pub(super) fn on_command_palette_selection_changed(self: &Arc<Self>, new_idx: i32) {
@@ -636,7 +647,7 @@ impl MainWindowController {
         let this = Arc::clone(self);
         spawn::spawn_local_compat(async move {
             this.dispatch_command(&id).await;
-            this.schedule_rebuild();
+            this.refresh_after_command();
         });
     }
 }

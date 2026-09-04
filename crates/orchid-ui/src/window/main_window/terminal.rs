@@ -269,7 +269,7 @@ impl MainWindowController {
             return;
         }
         if self.resize_terminal_pty_to_content(inst, w, h) {
-            self.schedule_rebuild();
+            self.schedule_instance_patch(inst);
         }
     }
 
