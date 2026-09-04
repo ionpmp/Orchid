@@ -2,7 +2,7 @@
 
 #![allow(missing_docs)]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use orchid_viewers::is_video_file_extension;
@@ -52,6 +52,7 @@ pub struct VideoRow {
 #[derive(Debug, Default, Clone)]
 pub struct LibraryIndex {
     pub videos: Vec<LibraryVideo>,
+    by_path: HashMap<String, usize>,
 }
 
 impl LibraryIndex {
@@ -73,12 +74,22 @@ impl LibraryIndex {
                 .cmp(&b.title.to_lowercase())
                 .then_with(|| a.path.cmp(&b.path))
         });
-        Self { videos }
+        let by_path = videos
+            .iter()
+            .enumerate()
+            .map(|(i, v)| (v.path.to_string_lossy().into_owned(), i))
+            .collect();
+        Self { videos, by_path }
     }
 
     #[must_use]
     pub fn find_by_path(&self, path: &str) -> Option<&LibraryVideo> {
-        self.videos.iter().find(|v| v.path.to_string_lossy() == path)
+        if let Some(&i) = self.by_path.get(path) {
+            return self.videos.get(i);
+        }
+        self.videos
+            .iter()
+            .find(|v| v.path.to_string_lossy() == path)
     }
 
     /// Filtered library rows for the browse list.

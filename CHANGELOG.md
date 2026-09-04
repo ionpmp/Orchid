@@ -414,6 +414,9 @@ release yet.
 - **image**: default decoders drop `avif` (WIC), `qoi`, and `farbfeld`.
 - **rclone copy progress**: stdout is discarded (`Stdio::null`) so a full
   pipe cannot stall the child while only stderr is read.
+- **Widget groups**: workspace lists and `find_for_instance` use id indexes
+  instead of scanning every tab stack.
+- **Audio / video libraries**: `find_by_path` is a HashMap lookup after scan.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

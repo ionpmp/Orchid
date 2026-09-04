@@ -2,7 +2,7 @@
 
 #![allow(missing_docs)]
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use orchid_viewers::{is_media_file_extension, load_track_meta, TrackMeta};
@@ -75,6 +75,7 @@ impl LibraryTrack {
 #[derive(Debug, Default, Clone)]
 pub struct LibraryIndex {
     pub tracks: Vec<LibraryTrack>,
+    by_path: HashMap<String, usize>,
 }
 
 impl LibraryIndex {
@@ -98,12 +99,22 @@ impl LibraryIndex {
                 .then_with(|| a.track.cmp(&b.track))
                 .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
         });
-        Self { tracks }
+        let by_path = tracks
+            .iter()
+            .enumerate()
+            .map(|(i, t)| (t.path.to_string_lossy().into_owned(), i))
+            .collect();
+        Self { tracks, by_path }
     }
 
     #[must_use]
     pub fn find_by_path(&self, path: &str) -> Option<&LibraryTrack> {
-        self.tracks.iter().find(|t| t.path.to_string_lossy() == path)
+        if let Some(&i) = self.by_path.get(path) {
+            return self.tracks.get(i);
+        }
+        self.tracks
+            .iter()
+            .find(|t| t.path.to_string_lossy() == path)
     }
 
     /// Flat list for the current browse tab / filter / search.
@@ -498,7 +509,16 @@ mod tests {
         fs::write(dir.path().join("d.txt"), b"").unwrap();
         let idx = LibraryIndex::scan(&[dir.path().to_string_lossy().into_owned()]);
         assert_eq!(idx.tracks.len(), 2);
-        let artists = idx.browse_rows(BrowseTab::Artists, "", "", "", None, &[], &[], LibrarySort::default());
+        let artists = idx.browse_rows(
+            BrowseTab::Artists,
+            "",
+            "",
+            "",
+            None,
+            &[],
+            &[],
+            LibrarySort::default(),
+        );
         assert!(!artists.groups.is_empty());
     }
 
@@ -527,13 +547,40 @@ mod tests {
             folder: "/music".into(),
             duration_ms: None,
         });
-        let neon = idx.browse_rows(BrowseTab::Songs, "", "neon", "", None, &[], &[], LibrarySort::default());
+        let neon = idx.browse_rows(
+            BrowseTab::Songs,
+            "",
+            "neon",
+            "",
+            None,
+            &[],
+            &[],
+            LibrarySort::default(),
+        );
         assert_eq!(neon.tracks.len(), 1);
         assert_eq!(neon.tracks[0].title, "Neon Lights");
-        let folk = idx.browse_rows(BrowseTab::Artists, "", "folk", "", None, &[], &[], LibrarySort::default());
+        let folk = idx.browse_rows(
+            BrowseTab::Artists,
+            "",
+            "folk",
+            "",
+            None,
+            &[],
+            &[],
+            LibrarySort::default(),
+        );
         assert_eq!(folk.groups.len(), 1);
         assert_eq!(folk.groups[0].label, "Folk Duo");
-        let miss = idx.browse_rows(BrowseTab::Songs, "", "zzzz", "", None, &[], &[], LibrarySort::default());
+        let miss = idx.browse_rows(
+            BrowseTab::Songs,
+            "",
+            "zzzz",
+            "",
+            None,
+            &[],
+            &[],
+            LibrarySort::default(),
+        );
         assert!(miss.tracks.is_empty());
     }
 
@@ -647,8 +694,14 @@ mod tests {
             LibrarySort::Title,
         );
         assert_eq!(groups.groups.len(), 2);
-        assert!(groups.groups.iter().any(|g| g.key == "Rock" && g.count == 2));
-        assert!(groups.groups.iter().any(|g| g.key == "Jazz" && g.count == 1));
+        assert!(groups
+            .groups
+            .iter()
+            .any(|g| g.key == "Rock" && g.count == 2));
+        assert!(groups
+            .groups
+            .iter()
+            .any(|g| g.key == "Jazz" && g.count == 1));
         let rock = idx.browse_rows(
             BrowseTab::Genres,
             "Rock",
@@ -695,8 +748,8 @@ mod tests {
                 track: None,
                 year: None,
                 folder: "/music".into(),
-            duration_ms: None,
-        });
+                duration_ms: None,
+            });
         }
         let recent = vec!["/c.mp3".into(), "/a.mp3".into()];
         let rows = idx.browse_rows(
