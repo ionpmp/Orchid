@@ -619,7 +619,12 @@ impl MainWindowController {
             new_idx.clamp(0, count as i32 - 1)
         };
         self.palette.write().selected_index = clamped;
-        self.sync_command_palette_global();
+        let g = self.window.global::<CommandPaletteGlobal>();
+        let mut model = g.get_model();
+        if model.selected_index != clamped {
+            model.selected_index = clamped;
+            g.set_model(model);
+        }
     }
 
     pub(super) fn on_command_palette_candidate_activated(self: &Arc<Self>, cmd_id: &SharedString) {
