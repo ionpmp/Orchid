@@ -1,6 +1,6 @@
 use orchid_i18n::LocaleManager;
 use orchid_widgets::NotesPayload;
-use slint::{ModelRc, VecModel};
+use slint::{Model, ModelRc, VecModel};
 
 use crate::slint_generated::{NotesModel, NotesTabEntry};
 
@@ -28,6 +28,67 @@ pub(crate) fn empty_notes_model(locale: &LocaleManager) -> NotesModel {
 
 pub(crate) fn build_notes_model(p: &NotesPayload, locale: &LocaleManager) -> NotesModel {
     base_model(locale, p)
+}
+
+/// Update an existing [`NotesModel`] in place, keeping the tabs `ModelRc`.
+pub(crate) fn patch_notes_model(model: &mut NotesModel, p: &NotesPayload, locale: &LocaleManager) {
+    let tabs: Vec<NotesTabEntry> = p
+        .tabs
+        .iter()
+        .map(|t| NotesTabEntry {
+            id: t.id.clone().into(),
+            title: t.title.clone().into(),
+            is_active: t.is_active,
+        })
+        .collect();
+    sync_rows(&model.tabs, tabs);
+    let stats_label = locale.tr_args(
+        "notes-stats",
+        &orchid_i18n::FluentArgs::new()
+            .with("chars", p.char_count.to_string())
+            .with("words", p.word_count.to_string())
+            .with("lines", p.line_count.to_string()),
+    );
+    let font_size_label = locale.tr_args(
+        "notes-font-size",
+        &orchid_i18n::FluentArgs::new().with("size", p.font_size.to_string()),
+    );
+    model.active_index = p.active_index;
+    model.title = p.title.clone().into();
+    model.body = p.body.clone().into();
+    model.font_size = p.font_size;
+    model.word_wrap = p.word_wrap;
+    model.mono_font = p.mono_font;
+    model.show_status_bar = p.show_status_bar;
+    model.char_count = p.char_count;
+    model.word_count = p.word_count;
+    model.line_count = p.line_count;
+    model.find_gen = p.find_gen;
+    model.find_cursor = p.find_cursor;
+    model.find_anchor = p.find_anchor;
+    model.stats_label = stats_label.into();
+    model.font_size_label = font_size_label.into();
+}
+
+fn sync_rows<T: Clone + PartialEq + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<T>>() else {
+        return;
+    };
+    while v.row_count() > new_rows.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, row) in new_rows.into_iter().enumerate() {
+        if i < v.row_count() {
+            if let Some(old) = v.row_data(i) {
+                if old == row {
+                    continue;
+                }
+            }
+            v.set_row_data(i, row);
+        } else {
+            v.push(row);
+        }
+    }
 }
 
 fn base_model(locale: &LocaleManager, p: &NotesPayload) -> NotesModel {

@@ -1,5 +1,5 @@
 use orchid_i18n::LocaleManager;
-use slint::{ModelRc, SharedString, VecModel};
+use slint::{Model, ModelRc, SharedString, VecModel};
 
 use crate::slint_generated::{
     WeatherCityEntry, WeatherForecastEntry, WeatherHourlyEntry, WeatherModel, WeatherSearchHit,
@@ -45,6 +45,17 @@ pub(crate) fn build_weather_model(
     p: &orchid_widgets::WeatherPayload,
     locale: &LocaleManager,
 ) -> WeatherModel {
+    let mut model = empty_weather_model(locale);
+    patch_weather_model(&mut model, p, locale);
+    model
+}
+
+/// Update an existing [`WeatherModel`] in place, keeping nested `ModelRc`s.
+pub(crate) fn patch_weather_model(
+    model: &mut WeatherModel,
+    p: &orchid_widgets::WeatherPayload,
+    locale: &LocaleManager,
+) {
     let condition_label = if p.is_loading {
         locale.tr("weather-loading")
     } else if p.status == orchid_widgets::WeatherStatusTag::Error {
@@ -190,46 +201,54 @@ pub(crate) fn build_weather_model(
     };
 
     let status = weather_status_to_int(&p.status);
-    WeatherModel {
-        location: p.location_name.clone().into(),
-        cities: ModelRc::new(VecModel::from(cities)),
-        active_city_index: p.active_city_index as i32,
-        picker_open: p.picker_open,
-        search_query: p.search_query.clone().into(),
-        search_results: ModelRc::new(VecModel::from(search_results)),
-        search_busy: p.search_busy,
-        locating: false,
-        picker_title: locale.tr("weather-cities-title").into(),
-        search_placeholder: locale.tr("weather-city-search-placeholder").into(),
-        add_city_hint: locale.tr("weather-city-add").into(),
-        remove_city_hint: locale.tr("weather-city-remove").into(),
-        close_picker_label: locale.tr("weather-cities-close").into(),
-        my_location_label: locale.tr("weather-my-location").into(),
-        cities_hint: locale.tr("weather-cities-hint").into(),
-        no_results_label: locale.tr("weather-city-no-results").into(),
-        searching_label: locale.tr("weather-city-searching").into(),
-        locating_label: locale.tr("weather-locating").into(),
-        current_temp: if p.is_loading {
-            SharedString::new()
+    sync_rows(&model.cities, cities);
+    sync_rows(&model.search_results, search_results);
+    sync_rows(&model.forecast, forecast);
+    model.location = p.location_name.clone().into();
+    model.active_city_index = p.active_city_index as i32;
+    model.picker_open = p.picker_open;
+    model.search_query = p.search_query.clone().into();
+    model.search_busy = p.search_busy;
+    model.locating = false;
+    model.current_temp = if p.is_loading {
+        SharedString::new()
+    } else {
+        p.current_temp_text.clone().into()
+    };
+    model.condition_label = condition_label.into();
+    model.condition_icon = if p.is_loading {
+        SharedString::new()
+    } else {
+        p.condition_icon.into()
+    };
+    model.feels_like = feels_like.into();
+    model.humidity = humidity.into();
+    model.wind = wind.into();
+    model.selected_day_index = p.selected_day_index as i32;
+    model.day_detail = day_detail.into();
+    model.last_updated = last_updated.into();
+    model.status = status;
+    model.status_label = locale.tr(weather_status_i18n_key(status)).into();
+}
+
+fn sync_rows<T: Clone + PartialEq + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<T>>() else {
+        return;
+    };
+    while v.row_count() > new_rows.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, row) in new_rows.into_iter().enumerate() {
+        if i < v.row_count() {
+            if let Some(old) = v.row_data(i) {
+                if old == row {
+                    continue;
+                }
+            }
+            v.set_row_data(i, row);
         } else {
-            p.current_temp_text.clone().into()
-        },
-        condition_label: condition_label.into(),
-        condition_icon: if p.is_loading {
-            SharedString::new()
-        } else {
-            p.condition_icon.into()
-        },
-        feels_like: feels_like.into(),
-        humidity: humidity.into(),
-        wind: wind.into(),
-        selected_day_index: p.selected_day_index as i32,
-        day_detail: day_detail.into(),
-        forecast: ModelRc::new(VecModel::from(forecast)),
-        hourly: ModelRc::new(VecModel::<WeatherHourlyEntry>::default()),
-        last_updated: last_updated.into(),
-        status,
-        status_label: locale.tr(weather_status_i18n_key(status)).into(),
+            v.push(row);
+        }
     }
 }
 

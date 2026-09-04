@@ -382,6 +382,10 @@ release yet.
   so a viewer rebuild does not copy a full-resolution frame again.
 - **UI tick**: 33 ms (~30 Hz) instead of 16 ms; the first paint shows
   the shell and rebuilds workspace frames on the first tick.
+- **Viewer patch**: text lines and image strips keep their nested
+  `VecModel`s; only changed rows are rewritten.
+- **Weather / Notes / Calendar**: content ticks patch nested `VecModel`s
+  instead of remounting the widget frame.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

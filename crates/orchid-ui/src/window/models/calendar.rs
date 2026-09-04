@@ -1,7 +1,7 @@
 use orchid_i18n::LocaleManager;
 use orchid_widgets::builtin::calendar::{format_minutes, parse_date};
 use orchid_widgets::CalendarPayload;
-use slint::{ModelRc, VecModel};
+use slint::{Model, ModelRc, VecModel};
 
 use crate::slint_generated::{
     CalendarDayEntry, CalendarEventEntry, CalendarModel, CalendarUpcomingEntry,
@@ -43,6 +43,163 @@ pub(crate) fn empty_calendar_model(locale: &LocaleManager) -> CalendarModel {
 
 pub(crate) fn build_calendar_model(p: &CalendarPayload, locale: &LocaleManager) -> CalendarModel {
     base_model(locale, p)
+}
+
+/// Update an existing [`CalendarModel`] in place, keeping nested `ModelRc`s.
+pub(crate) fn patch_calendar_model(
+    model: &mut CalendarModel,
+    p: &CalendarPayload,
+    locale: &LocaleManager,
+) {
+    let weekdays = weekday_labels(locale, p.first_day_of_week);
+    let events: Vec<CalendarEventEntry> = p
+        .events
+        .iter()
+        .map(|e| CalendarEventEntry {
+            id: e.id.clone().into(),
+            title: e.title.clone().into(),
+            time_label: e.time_label.clone().into(),
+            notes_preview: e.notes_preview.clone().into(),
+            all_day: e.all_day,
+            color: e.color,
+        })
+        .collect();
+    let upcoming: Vec<CalendarUpcomingEntry> = p
+        .upcoming
+        .iter()
+        .map(|u| CalendarUpcomingEntry {
+            id: u.id.clone().into(),
+            title: u.title.clone().into(),
+            date_key: u.date_key.clone().into(),
+            date_label: selected_day_label(locale, &u.date_key).into(),
+            time_label: u.time_label.clone().into(),
+            all_day: u.all_day,
+            color: u.color,
+        })
+        .collect();
+    let month_title = locale.tr_args(
+        "calendar-month-title",
+        &orchid_i18n::FluentArgs::new()
+            .with("month", month_name(locale, p.month))
+            .with("year", p.year.to_string()),
+    );
+    sync_rows(&model.weekdays, weekdays);
+    sync_calendar_days(&model.days, p);
+    sync_rows(&model.events, events);
+    sync_rows(&model.upcoming, upcoming);
+    model.year = p.year;
+    model.month = p.month;
+    model.selected_date = p.selected_date.clone().into();
+    model.today_date = p.today_date.clone().into();
+    model.first_day_of_week = p.first_day_of_week;
+    model.month_title = month_title.into();
+    model.selected_label = selected_day_label(locale, &p.selected_date).into();
+    model.show_upcoming = p.show_upcoming;
+    model.show_notes_preview = p.show_notes_preview;
+    model.time_step_minutes = p.time_step_minutes;
+    model.color_filter = p.color_filter;
+    model.events_count_label = locale
+        .tr_args(
+            "calendar-events-count",
+            &orchid_i18n::FluentArgs::new().with("count", p.events.len().to_string()),
+        )
+        .into();
+    model.editor_open = p.editor_open;
+    model.editor_event_id = p.editor_event_id.clone().into();
+    model.editor_is_new = p.editor_is_new;
+    model.editor_title = p.editor_title.clone().into();
+    model.editor_date = p.editor_date.clone().into();
+    model.editor_all_day = p.editor_all_day;
+    model.editor_start_hour = p.editor_start_hour;
+    model.editor_start_min = p.editor_start_min;
+    model.editor_end_hour = p.editor_end_hour;
+    model.editor_end_min = p.editor_end_min;
+    model.editor_start_text = format_hm(p.editor_start_hour, p.editor_start_min).into();
+    model.editor_end_text = format_hm(p.editor_end_hour, p.editor_end_min).into();
+    model.editor_notes = p.editor_notes.clone().into();
+    model.editor_color = p.editor_color;
+    model.editor_date_label = selected_day_label(locale, &p.editor_date).into();
+    model.delete_confirm_open = p.delete_confirm_open;
+    model.tip_time_minus = locale
+        .tr_args(
+            "calendar-tip-time-minus",
+            &orchid_i18n::FluentArgs::new().with("minutes", p.time_step_minutes.to_string()),
+        )
+        .into();
+    model.tip_time_plus = locale
+        .tr_args(
+            "calendar-tip-time-plus",
+            &orchid_i18n::FluentArgs::new().with("minutes", p.time_step_minutes.to_string()),
+        )
+        .into();
+}
+
+fn sync_calendar_days(model: &ModelRc<CalendarDayEntry>, p: &CalendarPayload) {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<CalendarDayEntry>>() else {
+        return;
+    };
+    while v.row_count() > p.days.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, d) in p.days.iter().enumerate() {
+        if i < v.row_count() {
+            if let Some(mut old) = v.row_data(i) {
+                if old.date_key.as_str() == d.date_key
+                    && old.day == d.day
+                    && old.in_month == d.in_month
+                    && old.is_today == d.is_today
+                    && old.is_selected == d.is_selected
+                    && old.event_count == d.event_count
+                {
+                    sync_i32_rows(&old.dot_colors, d.dot_colors.to_vec());
+                    continue;
+                }
+                old.date_key = d.date_key.clone().into();
+                old.day = d.day;
+                old.in_month = d.in_month;
+                old.is_today = d.is_today;
+                old.is_selected = d.is_selected;
+                old.event_count = d.event_count;
+                sync_i32_rows(&old.dot_colors, d.dot_colors.to_vec());
+                v.set_row_data(i, old);
+                continue;
+            }
+        }
+        v.push(CalendarDayEntry {
+            date_key: d.date_key.clone().into(),
+            day: d.day,
+            in_month: d.in_month,
+            is_today: d.is_today,
+            is_selected: d.is_selected,
+            dot_colors: ModelRc::new(VecModel::from(d.dot_colors.to_vec())),
+            event_count: d.event_count,
+        });
+    }
+}
+
+fn sync_i32_rows(model: &ModelRc<i32>, new_rows: Vec<i32>) {
+    sync_rows(model, new_rows);
+}
+
+fn sync_rows<T: Clone + PartialEq + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<T>>() else {
+        return;
+    };
+    while v.row_count() > new_rows.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, row) in new_rows.into_iter().enumerate() {
+        if i < v.row_count() {
+            if let Some(old) = v.row_data(i) {
+                if old == row {
+                    continue;
+                }
+            }
+            v.set_row_data(i, row);
+        } else {
+            v.push(row);
+        }
+    }
 }
 
 fn base_model(locale: &LocaleManager, p: &CalendarPayload) -> CalendarModel {

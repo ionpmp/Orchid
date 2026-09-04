@@ -33,8 +33,9 @@ use crate::window::models::{
     empty_password_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model,
     empty_rss_model, empty_search_model, empty_system_model, empty_terminal_cells,
     empty_video_player_model, empty_viewer_model, empty_weather_model, patch_calculator_model,
-    patch_clock_model, patch_file_manager_model, patch_media_model, patch_password_model,
-    patch_processes_model, patch_recent_files_model, patch_search_model, patch_system_model,
+    patch_calendar_model, patch_clock_model, patch_file_manager_model, patch_media_model,
+    patch_notes_model, patch_password_model, patch_processes_model, patch_recent_files_model,
+    patch_search_model, patch_system_model, patch_viewer_model, patch_weather_model,
     widget_has_settings, PasswordAddDialogOverlay,
 };
 
@@ -625,7 +626,7 @@ impl MainWindowController {
             }
             row.is_floating = is_floating;
             row.title = ws.title.clone().into();
-            row.viewer = build_viewer_model(vp, &self.locale);
+            patch_viewer_model(&mut row.viewer, vp, &self.locale);
             let (group_id, group_tabs) = self.build_group_tab_models(id);
             row.group_id = group_id;
             row.group_tabs = group_tabs;
@@ -717,6 +718,18 @@ impl MainWindowController {
                 }
                 (orchid_widgets::builtin::calculator::TYPE_ID, WidgetPayload::Calculator(p)) => {
                     patch_calculator_model(&mut row.calculator, p, &self.locale);
+                    true
+                }
+                (orchid_widgets::builtin::weather::TYPE_ID, WidgetPayload::Weather(p)) => {
+                    patch_weather_model(&mut row.weather, p, &self.locale);
+                    true
+                }
+                (orchid_widgets::builtin::notes::TYPE_ID, WidgetPayload::Notes(p)) => {
+                    patch_notes_model(&mut row.notes, p, &self.locale);
+                    true
+                }
+                (orchid_widgets::builtin::calendar::TYPE_ID, WidgetPayload::Calendar(p)) => {
+                    patch_calendar_model(&mut row.calendar, p, &self.locale);
                     true
                 }
                 _ => false,

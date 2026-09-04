@@ -1,7 +1,6 @@
 //! Slint model builders for workspace widget frames.
 
 mod audio_player;
-mod video_player;
 mod calculator;
 mod calendar;
 mod clock;
@@ -19,16 +18,16 @@ mod search;
 mod settings;
 mod system;
 mod terminal;
+mod video_player;
 mod viewer;
 mod weather;
 mod widget_settings;
 
 pub(crate) use audio_player::{build_audio_player_model, empty_audio_player_model};
-pub(crate) use video_player::{build_video_player_model, empty_video_player_model};
 pub(crate) use calculator::{
     build_calculator_model, empty_calculator_model, patch_calculator_model,
 };
-pub(crate) use calendar::{build_calendar_model, empty_calendar_model};
+pub(crate) use calendar::{build_calendar_model, empty_calendar_model, patch_calendar_model};
 pub(crate) use clock::{build_clock_model, empty_clock_model, patch_clock_model};
 pub(crate) use file_manager::{
     build_context_menu, build_file_manager_model, build_managed_policy_state, empty_confirm_dialog,
@@ -42,7 +41,7 @@ pub(crate) use file_manager::{
 pub(crate) use jyotish::{build_jyotish_model, empty_jyotish_model};
 pub(crate) use media::{build_media_model, empty_media_model, patch_media_model};
 pub(crate) use moon::{build_moon_model, empty_moon_model};
-pub(crate) use notes::{build_notes_model, empty_notes_model};
+pub(crate) use notes::{build_notes_model, empty_notes_model, patch_notes_model};
 pub(crate) use palette::build_palette_candidates;
 pub(crate) use password::{
     build_password_model, empty_password_model, patch_password_model, PasswordAddDialogOverlay,
@@ -65,8 +64,9 @@ pub(crate) use terminal::{
     default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
     empty_terminal_cells,
 };
-pub(crate) use viewer::{build_viewer_model, empty_viewer_model};
-pub(crate) use weather::{build_weather_model, empty_weather_model};
+pub(crate) use video_player::{build_video_player_model, empty_video_player_model};
+pub(crate) use viewer::{build_viewer_model, empty_viewer_model, patch_viewer_model};
+pub(crate) use weather::{build_weather_model, empty_weather_model, patch_weather_model};
 pub(crate) use widget_settings::{
     apply_widget_setting, build_widget_settings_fields, widget_has_settings,
 };

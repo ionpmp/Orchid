@@ -1,6 +1,6 @@
 use orchid_i18n::LocaleManager;
 use orchid_widgets::ViewerPayload;
-use slint::{Image, ModelRc, SharedString, VecModel};
+use slint::{Image, Model, ModelRc, SharedString, VecModel};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -1051,6 +1051,236 @@ pub(crate) fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> V
     model
 }
 
+/// Patch an existing [`ViewerModel`] in place so text lines / image strips keep
+/// their nested `VecModel` identities across caret, pan, and slideshow ticks.
+pub(crate) fn patch_viewer_model(
+    model: &mut ViewerModel,
+    p: &ViewerPayload,
+    locale: &LocaleManager,
+) {
+    use orchid_viewers::ViewerSnapshot as Vs;
+
+    match &p.snapshot {
+        Vs::Text(s) if model.kind == 5 => {
+            patch_text_snapshot(&mut model.text, s, locale);
+        }
+        Vs::Image(s) if model.kind == 3 => {
+            patch_image_snapshot(&mut model.image, s, locale);
+        }
+        Vs::Pdf(s) if model.kind == 4 => {
+            model.pdf = build_pdf_snapshot(s, locale);
+        }
+        _ => {
+            *model = build_viewer_model(p, locale);
+        }
+    }
+}
+
+fn patch_text_snapshot(
+    model: &mut ViewerTextModel,
+    s: &orchid_viewers::TextSnapshot,
+    locale: &LocaleManager,
+) {
+    let lines = model.visible_lines.clone();
+    let encodings = model.encodings.clone();
+    *model = build_text_snapshot(s, locale);
+    model.visible_lines = lines;
+    model.encodings = encodings;
+    sync_syntax_lines(&model.visible_lines, &s.visible_lines);
+}
+
+fn patch_image_snapshot(
+    model: &mut ViewerImageModel,
+    s: &orchid_viewers::ImageSnapshot,
+    locale: &LocaleManager,
+) {
+    let thumbs = model.thumbs.clone();
+    let timeline = model.timeline.clone();
+    let map_pins = model.map_pins.clone();
+    let cal_days = model.cal_days.clone();
+    let recent = model.recent_paths.clone();
+    *model = build_image_snapshot(s, locale);
+    model.thumbs = thumbs;
+    model.timeline = timeline;
+    model.map_pins = map_pins;
+    model.cal_days = cal_days;
+    model.recent_paths = recent;
+    sync_image_thumbs(
+        &model.thumbs,
+        s.thumbs
+            .iter()
+            .map(|t| slint_folder_thumb(t, locale))
+            .collect(),
+    );
+    sync_image_thumbs(
+        &model.timeline,
+        s.timeline
+            .iter()
+            .map(|t| slint_folder_thumb(t, locale))
+            .collect(),
+    );
+    sync_map_pins(
+        &model.map_pins,
+        s.map_pins.iter().map(|p| slint_map_pin(p)).collect(),
+    );
+    sync_cal_days(
+        &model.cal_days,
+        s.cal_days.iter().map(|d| slint_cal_day(d)).collect(),
+    );
+    sync_shared_strings(
+        &model.recent_paths,
+        s.recent_paths.iter().map(|p| p.clone().into()).collect(),
+    );
+}
+
+fn sync_syntax_lines(model: &ModelRc<ViewerSyntaxLine>, lines: &[orchid_viewers::SyntaxLine]) {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<ViewerSyntaxLine>>() else {
+        return;
+    };
+    while v.row_count() > lines.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, line) in lines.iter().enumerate() {
+        let built = syntax_line_from_snapshot(line);
+        if i < v.row_count() {
+            if let Some(old) = v.row_data(i) {
+                if old.line_number == built.line_number {
+                    sync_syntax_segments(&old.segments, line);
+                    continue;
+                }
+            }
+            v.set_row_data(i, built);
+        } else {
+            v.push(built);
+        }
+    }
+}
+
+fn sync_syntax_segments(model: &ModelRc<ViewerSyntaxSegment>, line: &orchid_viewers::SyntaxLine) {
+    let Some(v) = model
+        .as_any()
+        .downcast_ref::<VecModel<ViewerSyntaxSegment>>()
+    else {
+        return;
+    };
+    while v.row_count() > line.segments.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, seg) in line.segments.iter().enumerate() {
+        let next = ViewerSyntaxSegment {
+            text: seg.text.clone().into(),
+            scope: syntax_scope_to_int(&seg.scope),
+        };
+        if i < v.row_count() {
+            if let Some(old) = v.row_data(i) {
+                if old.text == next.text && old.scope == next.scope {
+                    continue;
+                }
+            }
+            v.set_row_data(i, next);
+        } else {
+            v.push(next);
+        }
+    }
+}
+
+fn syntax_line_from_snapshot(line: &orchid_viewers::SyntaxLine) -> ViewerSyntaxLine {
+    let segments: Vec<ViewerSyntaxSegment> = line
+        .segments
+        .iter()
+        .map(|seg| ViewerSyntaxSegment {
+            text: seg.text.clone().into(),
+            scope: syntax_scope_to_int(&seg.scope),
+        })
+        .collect();
+    ViewerSyntaxLine {
+        line_number: line.line_number as i32,
+        segments: ModelRc::new(VecModel::from(segments)),
+    }
+}
+
+fn sync_image_thumbs(model: &ModelRc<ViewerImageThumb>, rows: Vec<ViewerImageThumb>) {
+    sync_model_rows(model, rows, |a, b| {
+        a.path == b.path
+            && a.selected == b.selected
+            && a.index == b.index
+            && a.has_image == b.has_image
+            && a.rating == b.rating
+    });
+}
+
+fn sync_map_pins(model: &ModelRc<ViewerMapPin>, rows: Vec<ViewerMapPin>) {
+    sync_model_rows(model, rows, |a, b| {
+        a.path == b.path && a.selected == b.selected && a.x == b.x && a.y == b.y
+    });
+}
+
+fn sync_cal_days(model: &ModelRc<ViewerCalDay>, rows: Vec<ViewerCalDay>) {
+    sync_model_rows(model, rows, |a, b| {
+        a.day == b.day && a.selected == b.selected && a.count == b.count && a.path == b.path
+    });
+}
+
+fn sync_shared_strings(model: &ModelRc<SharedString>, rows: Vec<SharedString>) {
+    sync_model_rows(model, rows, |a, b| a == b);
+}
+
+fn sync_model_rows<T: Clone + 'static>(
+    model: &ModelRc<T>,
+    rows: Vec<T>,
+    eq: impl Fn(&T, &T) -> bool,
+) {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<T>>() else {
+        return;
+    };
+    while v.row_count() > rows.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, row) in rows.into_iter().enumerate() {
+        if i < v.row_count() {
+            if let Some(old) = v.row_data(i) {
+                if eq(&old, &row) {
+                    continue;
+                }
+            }
+            v.set_row_data(i, row);
+        } else {
+            v.push(row);
+        }
+    }
+}
+
+fn slint_map_pin(p: &orchid_viewers::MapPinItem) -> ViewerMapPin {
+    let thumbnail = match &p.rgba {
+        Some(rgba) if p.width > 0 && p.height > 0 => slint_image_from_rgba(rgba, p.width, p.height),
+        _ => Image::default(),
+    };
+    ViewerMapPin {
+        path: p.path.clone().into(),
+        name: p.name.clone().into(),
+        x: p.x,
+        y: p.y,
+        selected: p.selected,
+        has_image: p.rgba.is_some(),
+        thumbnail,
+    }
+}
+
+fn slint_cal_day(d: &orchid_viewers::CalDayItem) -> ViewerCalDay {
+    let thumbnail = match &d.rgba {
+        Some(rgba) if d.width > 0 && d.height > 0 => slint_image_from_rgba(rgba, d.width, d.height),
+        _ => Image::default(),
+    };
+    ViewerCalDay {
+        day: i32::from(d.day),
+        count: d.count as i32,
+        selected: d.selected,
+        path: d.path.clone().into(),
+        has_image: d.rgba.is_some(),
+        thumbnail,
+    }
+}
+
 fn build_document_snapshot(
     s: &orchid_viewers::DocumentSnapshot,
     locale: &LocaleManager,
@@ -1284,47 +1514,8 @@ fn build_image_snapshot(
         .iter()
         .map(|t| slint_folder_thumb(t, locale))
         .collect();
-    let map_pins: Vec<ViewerMapPin> = s
-        .map_pins
-        .iter()
-        .map(|p| {
-            let thumbnail = match &p.rgba {
-                Some(rgba) if p.width > 0 && p.height > 0 => {
-                    slint_image_from_rgba(rgba, p.width, p.height)
-                }
-                _ => Image::default(),
-            };
-            ViewerMapPin {
-                path: p.path.clone().into(),
-                name: p.name.clone().into(),
-                x: p.x,
-                y: p.y,
-                selected: p.selected,
-                has_image: p.rgba.is_some(),
-                thumbnail,
-            }
-        })
-        .collect();
-    let cal_days: Vec<ViewerCalDay> = s
-        .cal_days
-        .iter()
-        .map(|d| {
-            let thumbnail = match &d.rgba {
-                Some(rgba) if d.width > 0 && d.height > 0 => {
-                    slint_image_from_rgba(rgba, d.width, d.height)
-                }
-                _ => Image::default(),
-            };
-            ViewerCalDay {
-                day: i32::from(d.day),
-                count: d.count as i32,
-                selected: d.selected,
-                path: d.path.clone().into(),
-                has_image: d.rgba.is_some(),
-                thumbnail,
-            }
-        })
-        .collect();
+    let map_pins: Vec<ViewerMapPin> = s.map_pins.iter().map(slint_map_pin).collect();
+    let cal_days: Vec<ViewerCalDay> = s.cal_days.iter().map(slint_cal_day).collect();
     ViewerImageModel {
         width_px: s.width_px as i32,
         height_px: s.height_px as i32,
@@ -1663,20 +1854,7 @@ fn build_text_snapshot(
     let lines: Vec<ViewerSyntaxLine> = s
         .visible_lines
         .iter()
-        .map(|line| {
-            let segments: Vec<ViewerSyntaxSegment> = line
-                .segments
-                .iter()
-                .map(|seg| ViewerSyntaxSegment {
-                    text: seg.text.clone().into(),
-                    scope: syntax_scope_to_int(&seg.scope),
-                })
-                .collect();
-            ViewerSyntaxLine {
-                line_number: line.line_number as i32,
-                segments: ModelRc::new(VecModel::from(segments)),
-            }
-        })
+        .map(syntax_line_from_snapshot)
         .collect();
 
     let line_ending_key = match s.line_ending.as_str() {
