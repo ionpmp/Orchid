@@ -187,6 +187,12 @@ impl MainWindowController {
             }
         }
     }
+    fn fm_patch_or_rebuild(self: &Arc<Self>, inst: Uuid) {
+        if !self.try_patch_file_manager_instance(inst) {
+            self.schedule_rebuild();
+        }
+    }
+
     pub(super) async fn fm_refresh_ui(self: &Arc<Self>, inst: Uuid) {
         let _ = self.widget_manager.refresh_snapshot_cache(inst).await;
         // Prefer nested-model mutation. Replacing the workspace frame remounts
@@ -567,8 +573,9 @@ impl MainWindowController {
                 let _ = c.widget_manager.refresh_snapshot_cache(target_inst).await;
                 if source_inst != target_inst {
                     let _ = c.widget_manager.refresh_snapshot_cache(source_inst).await;
+                    c.fm_patch_or_rebuild(source_inst);
                 }
-                c.schedule_rebuild();
+                c.fm_patch_or_rebuild(target_inst);
             }
         });
     }
@@ -609,22 +616,22 @@ impl MainWindowController {
         };
         if paths.is_empty() {
             self.clear_fm_drag(source_inst);
-            self.schedule_rebuild();
+            self.fm_patch_or_rebuild(source_inst);
             return;
         }
         if self.pointer_over_viewer_content() {
             self.clear_fm_drag(source_inst);
-            self.schedule_rebuild();
+            self.fm_patch_or_rebuild(source_inst);
             self.fm_open_paths_in_viewer(paths);
             return;
         }
         let Some((target_inst, dest)) = self.fm_resolve_move_dest(source_inst, hinted_dest) else {
             self.clear_fm_drag(source_inst);
-            self.schedule_rebuild();
+            self.fm_patch_or_rebuild(source_inst);
             return;
         };
         self.clear_fm_drag(source_inst);
-        self.schedule_rebuild();
+        self.fm_patch_or_rebuild(source_inst);
         let copy = self
             .keyboard_modifiers
             .lock()
@@ -882,7 +889,7 @@ impl MainWindowController {
             },
             move |()| async move {
                 if let Some(c) = tw.upgrade() {
-                    c.schedule_rebuild();
+                    c.fm_patch_or_rebuild(inst);
                 }
             },
         );
@@ -989,7 +996,7 @@ impl MainWindowController {
         entry.drag_drop_target.clear();
         entry.drag_target_pane = pane;
         drop(over);
-        self.schedule_rebuild();
+        self.fm_patch_or_rebuild(inst);
     }
     pub(super) fn on_fm_entry_drag_hover(
         self: &Arc<Self>,
@@ -1015,7 +1022,7 @@ impl MainWindowController {
         entry.drag_drop_target = folder;
         entry.drag_target_pane = pane;
         drop(over);
-        self.schedule_rebuild();
+        self.fm_patch_or_rebuild(inst);
     }
     pub(super) fn clear_fm_drag_hover_to_pane(self: &Arc<Self>, inst: Uuid, pane: i32) {
         let mut over = self.fm_overlays.write();
@@ -1026,7 +1033,7 @@ impl MainWindowController {
         entry.drag_drop_target.clear();
         entry.drag_target_pane = pane;
         drop(over);
-        self.schedule_rebuild();
+        self.fm_patch_or_rebuild(inst);
     }
     pub(super) fn on_fm_entry_drag_scroll(
         self: &Arc<Self>,
@@ -1145,7 +1152,7 @@ impl MainWindowController {
         entry.drag_drop_target.clear();
         entry.drag_target_pane = pane;
         drop(over);
-        self.schedule_rebuild();
+        self.fm_patch_or_rebuild(inst);
     }
     pub(super) fn on_fm_drop_on_current_dir(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
@@ -1162,7 +1169,7 @@ impl MainWindowController {
             return;
         };
         self.clear_fm_drag(inst);
-        self.schedule_rebuild();
+        self.fm_patch_or_rebuild(inst);
     }
     pub(super) fn on_fm_pane_clicked(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
@@ -1273,7 +1280,7 @@ impl MainWindowController {
             },
             move |()| async move {
                 if let Some(c) = tw.upgrade() {
-                    c.schedule_rebuild();
+                    c.fm_patch_or_rebuild(inst);
                 }
             },
         );
@@ -1293,7 +1300,7 @@ impl MainWindowController {
             },
             move |()| async move {
                 if let Some(c) = tw.upgrade() {
-                    c.schedule_rebuild();
+                    c.fm_patch_or_rebuild(inst);
                 }
             },
         );
@@ -1313,7 +1320,7 @@ impl MainWindowController {
             },
             move |()| async move {
                 if let Some(c) = tw.upgrade() {
-                    c.schedule_rebuild();
+                    c.fm_patch_or_rebuild(inst);
                 }
             },
         );
@@ -1358,7 +1365,7 @@ impl MainWindowController {
             },
             move |()| async move {
                 if let Some(c) = tw.upgrade() {
-                    c.schedule_rebuild();
+                    c.fm_patch_or_rebuild(inst);
                 }
             },
         );
@@ -1388,7 +1395,7 @@ impl MainWindowController {
             },
             move |()| async move {
                 if let Some(c) = tw.upgrade() {
-                    c.schedule_rebuild();
+                    c.fm_patch_or_rebuild(inst);
                 }
             },
         );
@@ -1455,7 +1462,7 @@ impl MainWindowController {
             },
             move |()| async move {
                 if let Some(c) = tw.upgrade() {
-                    c.schedule_rebuild();
+                    c.fm_patch_or_rebuild(inst);
                 }
             },
         );
@@ -1912,7 +1919,6 @@ impl MainWindowController {
                     }
                     Ok(o) => {
                         c.apply_fm_action_outcome(inst, o);
-                        c.schedule_rebuild();
                     }
                     Err(e) => {
                         warn!(?e, path = %path, "fm open path");
@@ -1964,7 +1970,7 @@ impl MainWindowController {
         entry.context_menu = menu;
         drop(over);
         if !self.try_patch_file_manager_instance(inst) {
-            self.schedule_rebuild();
+            self.fm_patch_or_rebuild(inst);
         }
         if target.is_empty() {
             let _ = self.try_patch_fm_selection(inst, p);
@@ -2048,7 +2054,7 @@ impl MainWindowController {
                 entry.drag_drop_target.clear();
                 entry.drag_target_pane = -1;
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsConfirmation {
                 message,
@@ -2087,7 +2093,7 @@ impl MainWindowController {
                 entry.confirm_dialog = dlg;
                 entry.context_menu = empty_context_menu();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsRename {
                 path,
@@ -2116,7 +2122,7 @@ impl MainWindowController {
                 };
                 entry.context_menu = empty_context_menu();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsCreateFolder { parent } => {
                 let mut over = self.fm_overlays.write();
@@ -2142,7 +2148,7 @@ impl MainWindowController {
                 };
                 entry.context_menu = empty_context_menu();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsCreateFile { parent } => {
                 let mut over = self.fm_overlays.write();
@@ -2168,7 +2174,7 @@ impl MainWindowController {
                 };
                 entry.context_menu = empty_context_menu();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsTag { paths } => {
                 let mut over = self.fm_overlays.write();
@@ -2183,7 +2189,7 @@ impl MainWindowController {
                 };
                 entry.context_menu = empty_context_menu();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsSelectMask {
                 op,
@@ -2228,7 +2234,7 @@ impl MainWindowController {
                 };
                 entry.context_menu = empty_context_menu();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsPassphrase {
                 paths,
@@ -2256,7 +2262,7 @@ impl MainWindowController {
                 }
                 entry.context_menu = empty_context_menu();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsManagedPolicy {
                 path,
@@ -2268,7 +2274,7 @@ impl MainWindowController {
                     build_managed_policy_state(self.locale.as_ref(), &path, policy.as_ref());
                 entry.context_menu = empty_context_menu();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsConflict {
                 dest_name,
@@ -2301,7 +2307,7 @@ impl MainWindowController {
                 entry.confirm_dialog = empty_confirm_dialog();
                 entry.context_menu = empty_context_menu();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsReport { title, body } => {
                 let dlg = FmConfirmDialog {
@@ -2321,7 +2327,7 @@ impl MainWindowController {
                 entry.tool_paths.clear();
                 entry.context_menu = empty_context_menu();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsToolPrompt {
                 action_id,
@@ -2355,7 +2361,7 @@ impl MainWindowController {
                 };
                 entry.context_menu = empty_context_menu();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NeedsBatchRename { paths } => {
                 let mut over = self.fm_overlays.write();
@@ -2382,7 +2388,7 @@ impl MainWindowController {
                 };
                 entry.context_menu = empty_context_menu();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenInViewer { path } => {
                 let Ok(fs_path) = orchid_fs::FsPath::new(&path) else {
@@ -2471,13 +2477,17 @@ impl MainWindowController {
             orchid_widgets::builtin::file_manager::ActionOutcome::PlayInAudioPlayer { paths } => {
                 self.play_paths_in_audio_player(paths);
             }
-            orchid_widgets::builtin::file_manager::ActionOutcome::EnqueueInAudioPlayer { paths } => {
+            orchid_widgets::builtin::file_manager::ActionOutcome::EnqueueInAudioPlayer {
+                paths,
+            } => {
                 self.enqueue_paths_in_audio_player(paths);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::PlayInVideoPlayer { paths } => {
                 self.play_paths_in_video_player(paths);
             }
-            orchid_widgets::builtin::file_manager::ActionOutcome::EnqueueInVideoPlayer { paths } => {
+            orchid_widgets::builtin::file_manager::ActionOutcome::EnqueueInVideoPlayer {
+                paths,
+            } => {
                 self.enqueue_paths_in_video_player(paths);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::OpenWithPicker { paths } => {
@@ -2542,7 +2552,7 @@ impl MainWindowController {
                 };
                 entry.context_menu = empty_context_menu();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
             }
             orchid_widgets::builtin::file_manager::ActionOutcome::NavigateSearch { path } => {
                 let mut over = self.fm_overlays.write();
@@ -2564,7 +2574,7 @@ impl MainWindowController {
                         warn!(?e, "fm navigate search");
                     }
                     if let Some(c) = tw.upgrade() {
-                        c.schedule_rebuild();
+                        c.fm_patch_or_rebuild(inst);
                     }
                 });
             }
@@ -2592,7 +2602,7 @@ impl MainWindowController {
         let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.context_menu = empty_context_menu();
         drop(over);
-        self.schedule_rebuild();
+        self.fm_patch_or_rebuild(inst);
     }
     pub(super) fn on_fm_confirm_yes(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
@@ -2608,7 +2618,7 @@ impl MainWindowController {
             let entry = over.entry(inst).or_insert_with(default_fm_overlays);
             entry.confirm_dialog = empty_confirm_dialog();
             drop(over);
-            self.schedule_rebuild();
+            self.fm_patch_or_rebuild(inst);
             return;
         }
         let path_vec: Vec<String> = (0..over.confirm_dialog.pending_paths.row_count())
@@ -2647,7 +2657,7 @@ impl MainWindowController {
         let entry = over.entry(inst).or_insert_with(default_fm_overlays);
         entry.confirm_dialog = empty_confirm_dialog();
         drop(over);
-        self.schedule_rebuild();
+        self.fm_patch_or_rebuild(inst);
     }
     pub(super) fn on_fm_rename_commit(
         self: &Arc<Self>,
@@ -2683,7 +2693,7 @@ impl MainWindowController {
                     entry.select_mask_op = None;
                     drop(over);
                     c.fm_refresh_selection_ui(inst, pane);
-                    c.schedule_rebuild();
+                    c.fm_patch_or_rebuild(inst);
                 }
             });
             return;
@@ -2718,7 +2728,7 @@ impl MainWindowController {
                     entry.rename = empty_rename_state();
                     entry.batch_rename_paths.clear();
                     drop(over);
-                    c.schedule_rebuild();
+                    c.fm_patch_or_rebuild(inst);
                 }
             });
             return;
@@ -2767,7 +2777,7 @@ impl MainWindowController {
                 entry.tool_action = None;
                 entry.tool_paths.clear();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
                 return;
             }
             let input = new_name.to_string();
@@ -2858,7 +2868,7 @@ impl MainWindowController {
                     entry.create_folder_parent = None;
                     entry.create_item_is_file = false;
                     drop(over);
-                    c.schedule_rebuild();
+                    c.fm_patch_or_rebuild(inst);
                 }
             });
             return;
@@ -2878,7 +2888,7 @@ impl MainWindowController {
                 let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.rename = empty_rename_state();
                 drop(over);
-                c.schedule_rebuild();
+                c.fm_patch_or_rebuild(inst);
             }
         });
     }
@@ -2901,7 +2911,7 @@ impl MainWindowController {
             entry.conflict_dialog.visible = true;
         }
         drop(over);
-        self.schedule_rebuild();
+        self.fm_patch_or_rebuild(inst);
     }
     pub(super) fn on_fm_conflict_choice(
         self: &Arc<Self>,
@@ -2921,7 +2931,7 @@ impl MainWindowController {
             let entry = over.entry(inst).or_insert_with(default_fm_overlays);
             entry.conflict_dialog = empty_conflict_dialog();
             drop(over);
-            self.schedule_rebuild();
+            self.fm_patch_or_rebuild(inst);
             return;
         }
         if ch == "rename" && !apply_all {
@@ -2952,7 +2962,7 @@ impl MainWindowController {
                 cancel_label: self.locale.tr("fm-rename-cancel").into(),
             };
             drop(over);
-            self.schedule_rebuild();
+            self.fm_patch_or_rebuild(inst);
             return;
         }
         let mapped = match ch.as_str() {
@@ -3010,7 +3020,7 @@ impl MainWindowController {
                 entry.tag = empty_tag_state();
                 entry.tag_paths.clear();
                 drop(over);
-                c.schedule_rebuild();
+                c.fm_patch_or_rebuild(inst);
             }
         });
     }
@@ -3023,7 +3033,7 @@ impl MainWindowController {
         entry.tag = empty_tag_state();
         entry.tag_paths.clear();
         drop(over);
-        self.schedule_rebuild();
+        self.fm_patch_or_rebuild(inst);
     }
     pub(super) fn on_fm_passphrase_commit(
         self: &Arc<Self>,
@@ -3045,7 +3055,7 @@ impl MainWindowController {
             ) {
                 warn!(?e, "fm passphrase empty");
             }
-            self.schedule_rebuild();
+            self.fm_patch_or_rebuild(inst);
             return;
         }
         let purpose = over
@@ -3074,8 +3084,9 @@ impl MainWindowController {
                         }
                         if !is_passphrase_retryable(&msg) {
                             c.clear_fm_passphrase_overlay(inst);
+                        } else {
+                            c.fm_patch_or_rebuild(inst);
                         }
-                        c.schedule_rebuild();
                     }
                     return;
                 }
@@ -3091,7 +3102,7 @@ impl MainWindowController {
             return;
         };
         self.clear_fm_passphrase_overlay(inst);
-        self.schedule_rebuild();
+        self.fm_patch_or_rebuild(inst);
     }
     pub(super) fn on_fm_managed_policy_close(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
@@ -3103,7 +3114,7 @@ impl MainWindowController {
             entry.context_menu = empty_context_menu();
         }
         drop(over);
-        self.schedule_rebuild();
+        self.fm_patch_or_rebuild(inst);
     }
     pub(super) fn on_fm_passphrase_biometric(self: &Arc<Self>, fm_id: &SharedString) {
         let Some(inst) = self.fm_prepare_instance(fm_id, None) else {
@@ -3132,7 +3143,7 @@ impl MainWindowController {
                 ) {
                     warn!(?report, "fm passphrase error report");
                 }
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
                 return;
             }
         };
@@ -3158,8 +3169,9 @@ impl MainWindowController {
                         }
                         if !is_passphrase_retryable(&msg) {
                             c.clear_fm_passphrase_overlay(inst);
+                        } else {
+                            c.fm_patch_or_rebuild(inst);
                         }
-                        c.schedule_rebuild();
                     }
                     return;
                 }
@@ -3180,7 +3192,7 @@ impl MainWindowController {
         if let Err(e) = orchid_widgets::builtin::file_manager::clear_passphrase_error(inst) {
             warn!(?e, "fm clear passphrase error");
         }
-        self.schedule_rebuild();
+        self.fm_patch_or_rebuild(inst);
     }
     pub(super) fn on_fm_select_all(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;
@@ -3300,14 +3312,14 @@ impl MainWindowController {
                 if let Err(e) = orchid_widgets::builtin::file_manager::pause_transfer(inst) {
                     warn!(?e, "fm pause");
                 }
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
                 return;
             }
             "resume" => {
                 if let Err(e) = orchid_widgets::builtin::file_manager::resume_transfer(inst) {
                     warn!(?e, "fm resume");
                 }
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
                 return;
             }
             "cancel" => {
@@ -3318,7 +3330,7 @@ impl MainWindowController {
                 let entry = over.entry(inst).or_insert_with(default_fm_overlays);
                 entry.conflict_dialog = empty_conflict_dialog();
                 drop(over);
-                self.schedule_rebuild();
+                self.fm_patch_or_rebuild(inst);
                 return;
             }
             "copy-other" => {

@@ -386,6 +386,9 @@ release yet.
   `VecModel`s; only changed rows are rewritten.
 - **Weather / Notes / Calendar**: content ticks patch nested `VecModel`s
   instead of remounting the widget frame.
+- **Content refresh**: clock / weather / notes / calendar / processes /
+  jyotish / FM navigation patch one frame instead of rebuilding the
+  workspace grid.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

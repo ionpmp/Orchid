@@ -83,7 +83,7 @@ impl MainWindowController {
         spawn::spawn_local_compat(async move {
             let _ = wm.refresh_snapshot_cache(inst_id).await;
             if let Some(c) = t.upgrade() {
-                c.schedule_rebuild();
+                c.schedule_instance_patch(inst_id);
             }
         });
     }

@@ -894,6 +894,15 @@ impl MainWindowController {
         trace!(target: "orchid_ui::workspace", "rebuild requested");
     }
 
+    /// Patch one widget's frame now. Use this for content updates; call
+    /// [`Self::schedule_rebuild`] only when the grid / membership changed.
+    pub(super) fn schedule_instance_patch(self: &Arc<Self>, id: Uuid) {
+        if let Err(e) = self.patch_workspace_frames(&[id]) {
+            warn!(?e, %id, "instance patch failed");
+            self.schedule_rebuild();
+        }
+    }
+
     /// Align widget lifecycle with canvas visibility (active workspace + group tab).
     fn schedule_visibility_sync(self: &Arc<Self>) {
         if self.visibility_sync_pending.swap(true, Ordering::AcqRel) {
