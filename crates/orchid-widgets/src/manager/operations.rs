@@ -133,6 +133,7 @@ impl WidgetManager {
         persistence::save_instance(&self.inner.storage, &runtime, Some(bytes))?;
 
         self.inner.instances.insert(instance_id, runtime);
+        self.inner.index_workspace(workspace_id, instance_id);
         self.inner.bus.publish(
             orchid_core::EventSource::Subsystem("widgets".into()),
             WidgetCreated {
@@ -321,7 +322,10 @@ impl WidgetManager {
             last_config: RwLock::new(bytes.clone()),
         });
         persistence::save_instance(&self.inner.storage, &new_runtime, Some(bytes))?;
+        let old_ws = instance.workspace_id;
         self.inner.instances.insert(instance.id, new_runtime);
+        self.inner.unindex_workspace(old_ws, instance.id);
+        self.inner.index_workspace(workspace_id, instance.id);
         Ok(())
     }
 

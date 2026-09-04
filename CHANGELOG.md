@@ -406,6 +406,8 @@ release yet.
   each publish skips unrelated filters.
 - **Dist profile**: `cargo build --profile dist` inherits release and sets
   `panic = "abort"` for packaged / PGO builds.
+- **Widget lookup**: `instances_for_workspace` uses a workspace id index
+  instead of scanning every live instance.
 
 ### Fixed
 - Image viewer toolbar: compact geometric icons (not font symbols),

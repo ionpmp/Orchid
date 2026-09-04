@@ -63,6 +63,8 @@ pub(crate) struct WidgetManagerInner {
     locale: Arc<orchid_i18n::LocaleManager>,
     jobs: Arc<orchid_core::BackgroundJobQueue>,
     instances: DashMap<Uuid, SharedInstance>,
+    /// Instance ids grouped by workspace so UI lookups skip other canvases.
+    by_workspace: DashMap<Uuid, HashSet<Uuid>>,
     lifecycle: LifecycleController,
     options: RwLock<WidgetManagerOptions>,
     /// Idle lifecycle sweeper (Sleeping → Unloaded only).
@@ -82,6 +84,21 @@ pub(crate) struct WidgetManagerInner {
     layout_dirty: parking_lot::Mutex<HashSet<Uuid>>,
     /// Debounced flusher for [`layout_dirty`]; aborted on shutdown.
     layout_flush: parking_lot::Mutex<Option<JoinHandle<()>>>,
+}
+
+impl WidgetManagerInner {
+    pub(crate) fn index_workspace(&self, workspace_id: Uuid, instance_id: Uuid) {
+        self.by_workspace
+            .entry(workspace_id)
+            .or_default()
+            .insert(instance_id);
+    }
+
+    pub(crate) fn unindex_workspace(&self, workspace_id: Uuid, instance_id: Uuid) {
+        if let Some(mut set) = self.by_workspace.get_mut(&workspace_id) {
+            set.remove(&instance_id);
+        }
+    }
 }
 
 /// Public handle to the widget manager.
@@ -123,6 +140,7 @@ impl WidgetManager {
                 locale,
                 jobs,
                 instances: DashMap::new(),
+                by_workspace: DashMap::new(),
                 lifecycle,
                 options: RwLock::new(options),
                 sweeper: Mutex::new(None),
@@ -318,11 +336,11 @@ impl WidgetManager {
     /// Every instance that belongs to `workspace_id`.
     #[must_use]
     pub fn instances_for_workspace(&self, workspace_id: Uuid) -> Vec<SharedInstance> {
-        self.inner
-            .instances
-            .iter()
-            .filter(|e| e.value().workspace_id == workspace_id)
-            .map(|e| Arc::clone(e.value()))
+        let Some(ids) = self.inner.by_workspace.get(&workspace_id) else {
+            return Vec::new();
+        };
+        ids.iter()
+            .filter_map(|id| self.inner.instances.get(id).map(|e| Arc::clone(e.value())))
             .collect()
     }
 
@@ -497,6 +515,7 @@ impl WidgetManager {
             // on_activate runs later via apply_visibility for visible widgets.
 
             self.inner.instances.insert(row.id, runtime);
+            self.inner.index_workspace(row.workspace_id, row.id);
             count += 1;
         }
         Ok(count)
@@ -692,6 +711,7 @@ impl WidgetManager {
             .instances
             .remove(&id)
             .ok_or(WidgetError::InstanceNotFound(id))?;
+        self.inner.unindex_workspace(instance.workspace_id, id);
 
         let ctx = self.context_for(&instance);
         {
