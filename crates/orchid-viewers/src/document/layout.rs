@@ -670,6 +670,15 @@ impl DocumentLayout {
             }
         }
 
+        paint_comment_highlights(
+            &layouts,
+            &mut pixels,
+            width,
+            height,
+            insets,
+            &doc.comment_ranges,
+        );
+
         let base = Arc::new(pixels);
         self.scene = Some(RenderScene {
             content_width,
@@ -1990,6 +1999,8 @@ fn blit_rgba(
 
 const SELECTION_FILL: [u8; 4] = [147, 197, 253, 140]; // soft blue
 const CARET_FILL: [u8; 4] = [37, 99, 235, 220];
+/// Soft amber wash for DOCX comment ranges (under/over glyphs in the base raster).
+const COMMENT_FILL: [u8; 4] = [253, 224, 71, 110];
 
 fn overlay_selection_on_scene(
     scene: &RenderScene,
@@ -2076,6 +2087,7 @@ fn paint_selection_overlay(
                     origin_y,
                     layout_lo,
                     layout_hi,
+                    SELECTION_FILL,
                 );
             }
         }
@@ -2106,6 +2118,7 @@ fn paint_selection_range(
     origin_y: f32,
     layout_lo: usize,
     layout_hi: usize,
+    fill: [u8; 4],
 ) {
     if layout_lo >= layout_hi {
         return;
@@ -2148,7 +2161,76 @@ fn paint_selection_range(
                     line_top.floor().max(0.0) as u32,
                     (x1 - x0).ceil().max(1.0) as u32,
                     line_h.ceil().max(1.0) as u32,
-                    SELECTION_FILL,
+                    fill,
+                );
+            }
+        }
+    }
+}
+
+/// Paint comment ranges into the base preview raster (amber wash).
+fn paint_comment_highlights(
+    layouts: &[LaidBlock],
+    pixels: &mut [u8],
+    width: u32,
+    height: u32,
+    insets: PreviewInsets,
+    ranges: &[crate::document::model::CommentRange],
+) {
+    if ranges.is_empty() {
+        return;
+    }
+    for c in ranges {
+        let sel_lo = c.start_plain.min(c.end_plain);
+        let sel_hi = c.start_plain.max(c.end_plain);
+        if sel_lo >= sel_hi {
+            // Zero-width: small amber caret-like tick at the offset.
+            for item in layouts {
+                if item.is_image || item.layout.is_empty() {
+                    continue;
+                }
+                let para_end = item.plain_start + item.body_len;
+                if sel_lo >= item.plain_start && sel_lo <= para_end {
+                    let origin_x = insets.left + item.x0 + item.indent_px;
+                    let origin_y = insets.top + item.y0;
+                    let layout_idx = item.prefix_len + (sel_lo - item.plain_start);
+                    paint_selection_range(
+                        &item.layout,
+                        pixels,
+                        width,
+                        height,
+                        origin_x,
+                        origin_y,
+                        layout_idx,
+                        layout_idx.saturating_add(1).min(item.prefix_len + item.body_len),
+                        COMMENT_FILL,
+                    );
+                }
+            }
+            continue;
+        }
+        for item in layouts {
+            if item.is_image || item.layout.is_empty() {
+                continue;
+            }
+            let para_end = item.plain_start + item.body_len;
+            let i0 = sel_lo.max(item.plain_start);
+            let i1 = sel_hi.min(para_end);
+            if i0 < i1 {
+                let origin_x = insets.left + item.x0 + item.indent_px;
+                let origin_y = insets.top + item.y0;
+                let layout_lo = item.prefix_len + (i0 - item.plain_start);
+                let layout_hi = item.prefix_len + (i1 - item.plain_start);
+                paint_selection_range(
+                    &item.layout,
+                    pixels,
+                    width,
+                    height,
+                    origin_x,
+                    origin_y,
+                    layout_lo,
+                    layout_hi,
+                    COMMENT_FILL,
                 );
             }
         }
@@ -3368,6 +3450,39 @@ mod tests {
                 .chunks_exact(4)
                 .any(|px| px[2] > px[0] && px[2] > 180),
             "expected bluish selection tint"
+        );
+    }
+
+    #[test]
+    fn comment_range_paints_amber_wash() {
+        use crate::document::model::CommentRange;
+        let mut dl = DocumentLayout::new();
+        let plain_doc = Document {
+            blocks: vec![Block::Paragraph(sample_paragraph())],
+            ..Default::default()
+        };
+        let commented = Document {
+            blocks: vec![Block::Paragraph(sample_paragraph())],
+            comment_ranges: vec![CommentRange {
+                id: 0,
+                start_plain: 0,
+                end_plain: 5,
+            }],
+            ..Default::default()
+        };
+        let (plain, _, _) = dl.render_document(&plain_doc, 400.0);
+        let (with_c, _, _) = DocumentLayout::new().render_document(&commented, 400.0);
+        assert_eq!(plain.len(), with_c.len());
+        assert_ne!(
+            plain.as_slice(),
+            with_c.as_slice(),
+            "comment highlight should change preview pixels"
+        );
+        assert!(
+            with_c
+                .chunks_exact(4)
+                .any(|px| px[0] > 200 && px[1] > 180 && px[2] < 150),
+            "expected amber comment wash"
         );
     }
 
