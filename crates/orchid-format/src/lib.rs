@@ -7,8 +7,11 @@
 #![warn(clippy::all)]
 #![deny(unsafe_code)]
 
+mod compress;
 mod error;
 mod framing;
+mod toc_build;
+mod writer;
 
 #[allow(dead_code)]
 #[allow(missing_docs)]
@@ -22,10 +25,13 @@ mod framing;
 #[path = "toc_generated.rs"]
 mod toc_generated;
 
+pub use compress::{compress_zstd, decompress_zstd};
 pub use error::{FormatError, Result};
 pub use framing::{
     align_up, pad_len, pad_to_alignment, Footer, Header, RegionHeader,
 };
+pub use toc_build::{build_toc, TocRegionSpec, TocSpec};
+pub use writer::{build_sealed_bytes, empty_raw, write_sealed_file, SealedCreateRequest};
 
 /// File extension including the leading dot.
 pub const EXTENSION: &str = ".orchid";

@@ -5909,9 +5909,12 @@ name = "orchid-format"
 version = "0.1.0"
 dependencies = [
  "flatbuffers",
+ "orchid-crypto",
  "tempfile",
  "thiserror 2.0.20",
  "tracing",
+ "uuid",
+ "zstd",
 ]
 
 [[package]]
