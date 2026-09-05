@@ -2814,6 +2814,28 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Toggle different first page (`w:titlePg`).
+    ///
+    /// When enabled, Preview prefers first-page header/footer stories if present.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn toggle_title_page(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let mut next = doc.page_setup.clone();
+        next.title_page = !next.title_page;
+        if next == doc.page_setup {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::SetPageSetup { setup: next })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Set list kind on paragraphs touched by the selection (body or same cell).
     ///
     /// # Errors
@@ -4084,6 +4106,7 @@ impl Viewer for DocumentViewer {
         let page_landscape = is_landscape_page(&doc.page_setup);
         let header_text = story_plain_text(&doc.header);
         let footer_text = story_plain_text(&doc.footer);
+        let title_page = doc.page_setup.title_page;
         drop(doc_guard);
         ViewerSnapshot::Document(DocumentSnapshot {
             path_display,
@@ -4140,6 +4163,7 @@ impl Viewer for DocumentViewer {
             page_landscape,
             header_text,
             footer_text,
+            title_page,
         })
     }
 

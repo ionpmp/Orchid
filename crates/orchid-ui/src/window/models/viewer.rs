@@ -881,6 +881,9 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         first_line_more_label: locale.tr("viewer-document-first-line-more").into(),
         page_size_label: locale.tr("viewer-document-page-letter").into(),
         page_orientation_label: locale.tr("viewer-document-page-orientation").into(),
+        title_page: false,
+        title_page_label: locale.tr("viewer-document-title-page").into(),
+        tip_title_page: locale.tr("viewer-document-tip-title-page").into(),
         image_insert_label: locale.tr("viewer-document-image-insert").into(),
         table_insert_label: locale.tr("viewer-document-table-insert").into(),
         table_row_insert_label: locale.tr("viewer-document-table-row-insert").into(),
@@ -1459,6 +1462,7 @@ fn build_document_snapshot(
     model.link_url = s.link_url.clone().into();
     model.header_text = s.header_text.clone().into();
     model.footer_text = s.footer_text.clone().into();
+    model.title_page = s.title_page;
     model.page_size_label = document_page_size_label(locale, s.page_is_a4, s.page_landscape);
     model
 }

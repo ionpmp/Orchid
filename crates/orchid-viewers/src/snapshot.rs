@@ -132,6 +132,8 @@ pub struct DocumentSnapshot {
     pub header_text: String,
     /// Plain text of the default footer story (paragraphs joined by `\n`).
     pub footer_text: String,
+    /// Different first page (`w:titlePg`) enabled.
+    pub title_page: bool,
 }
 
 /// Image snapshot.

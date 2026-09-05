@@ -3678,6 +3678,7 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "first-line-less" => doc.bump_indent_first_line_selection(-360),
                 "page-size-cycle" => doc.cycle_page_size(),
                 "page-orientation-toggle" => doc.toggle_page_orientation(),
+                "title-page" => doc.toggle_title_page(),
                 "zoom-in" => doc.bump_preview_zoom(1),
                 "zoom-out" => doc.bump_preview_zoom(-1),
                 "zoom-reset" => doc.reset_preview_zoom(),

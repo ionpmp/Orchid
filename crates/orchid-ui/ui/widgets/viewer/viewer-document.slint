@@ -1399,6 +1399,27 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: max(28px, tp-btn-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(model.title-page, tp-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    tp-ta := TouchArea { clicked => { root.action("title-page"); } }
+                    tp-btn-label := Text {
+                        text: model.title-page-label;
+                        color: tool-btn(model.title-page);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-title-page;
+                        show: tp-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
                     width: max(36px, hdr-btn-label.preferred-width + 12px);
                     height: 28px;
                     background: tool-bg(root.story-open == 1 || model.header-text != "", hdr-ta.has-hover);
