@@ -3914,6 +3914,42 @@ pub async fn document_footer_first(instance_id: Uuid, text: String) -> WidgetRes
     Ok(())
 }
 
+/// Document: set or clear the even-page header story plain text.
+pub async fn document_header_even(instance_id: Uuid, text: String) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Err(WidgetError::InvalidStateForOperation("no viewer".into()));
+        };
+        let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+            return Ok(());
+        };
+        doc.set_header_even_plain_text(&text)
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
+/// Document: set or clear the even-page footer story plain text.
+pub async fn document_footer_even(instance_id: Uuid, text: String) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Err(WidgetError::InvalidStateForOperation("no viewer".into()));
+        };
+        let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+            return Ok(());
+        };
+        doc.set_footer_even_plain_text(&text)
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
 
 pub async fn document_preview_pointer(
     instance_id: Uuid,

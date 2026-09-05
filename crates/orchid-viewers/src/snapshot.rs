@@ -136,6 +136,10 @@ pub struct DocumentSnapshot {
     pub header_first_text: String,
     /// Plain text of the first-page footer story (paragraphs joined by `\n`).
     pub footer_first_text: String,
+    /// Plain text of the even-page header story (paragraphs joined by `\n`).
+    pub header_even_text: String,
+    /// Plain text of the even-page footer story (paragraphs joined by `\n`).
+    pub footer_even_text: String,
     /// Different first page (`w:titlePg`) enabled.
     pub title_page: bool,
     /// Different odd and even pages (`w:evenAndOddHeaders`) enabled.

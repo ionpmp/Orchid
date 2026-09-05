@@ -153,6 +153,16 @@ pub enum EditCommand {
         /// New first-page footer paragraphs (`w:type="first"`).
         paragraphs: Vec<Paragraph>,
     },
+    /// Replace the even-page header story paragraphs.
+    SetHeaderEven {
+        /// New even-page header paragraphs (`w:type="even"`).
+        paragraphs: Vec<Paragraph>,
+    },
+    /// Replace the even-page footer story paragraphs.
+    SetFooterEven {
+        /// New even-page footer paragraphs (`w:type="even"`).
+        paragraphs: Vec<Paragraph>,
+    },
     /// Insert a named bookmark at a plain-text offset.
     AddBookmark {
         /// Bookmark payload.
@@ -770,6 +780,18 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
                 paragraphs: previous,
             })
         }
+        EditCommand::SetHeaderEven { paragraphs } => {
+            let previous = std::mem::replace(&mut doc.header_even, paragraphs.clone());
+            Ok(EditCommand::SetHeaderEven {
+                paragraphs: previous,
+            })
+        }
+        EditCommand::SetFooterEven { paragraphs } => {
+            let previous = std::mem::replace(&mut doc.footer_even, paragraphs.clone());
+            Ok(EditCommand::SetFooterEven {
+                paragraphs: previous,
+            })
+        }
         EditCommand::AddBookmark { bookmark } => {
             if doc.bookmarks.iter().any(|b| b.name == bookmark.name) {
                 return Err(ViewerError::EditOutOfBounds);
@@ -1312,6 +1334,53 @@ mod tests {
         assert_eq!(doc.header_first, header);
         stack.redo(&mut doc).unwrap();
         assert_eq!(doc.footer_first, footer);
+    }
+
+    #[test]
+    fn set_header_even_footer_even_then_undo() {
+        let mut doc = doc_with_hello();
+        let mut stack = UndoStack::new();
+        let header = vec![Paragraph {
+            runs: vec![Run {
+                text: "EvenH".into(),
+                style: RunStyle::default(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }];
+        let footer = vec![Paragraph {
+            runs: vec![Run {
+                text: "EvenF".into(),
+                style: RunStyle::default(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }];
+        stack
+            .push(
+                &mut doc,
+                EditCommand::SetHeaderEven {
+                    paragraphs: header.clone(),
+                },
+            )
+            .unwrap();
+        stack
+            .push(
+                &mut doc,
+                EditCommand::SetFooterEven {
+                    paragraphs: footer.clone(),
+                },
+            )
+            .unwrap();
+        assert_eq!(doc.header_even, header);
+        assert_eq!(doc.footer_even, footer);
+        stack.undo(&mut doc).unwrap();
+        assert!(doc.footer_even.is_empty());
+        assert_eq!(doc.header_even, header);
+        stack.undo(&mut doc).unwrap();
+        assert!(doc.header_even.is_empty());
+        stack.redo(&mut doc).unwrap();
+        assert_eq!(doc.header_even, header);
     }
 
     #[test]

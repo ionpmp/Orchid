@@ -281,6 +281,8 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-document-footer-request(string, string);
     callback viewer-document-header-first-request(string, string);
     callback viewer-document-footer-first-request(string, string);
+    callback viewer-document-header-even-request(string, string);
+    callback viewer-document-footer-even-request(string, string);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-pane-clicked(string, int);
@@ -1106,6 +1108,8 @@ export component WidgetFrame inherits Rectangle {
                         document-footer-request(text) => { root.viewer-document-footer-request(root.model.instance-id, text); }
                         document-header-first-request(text) => { root.viewer-document-header-first-request(root.model.instance-id, text); }
                         document-footer-first-request(text) => { root.viewer-document-footer-first-request(root.model.instance-id, text); }
+                        document-header-even-request(text) => { root.viewer-document-header-even-request(root.model.instance-id, text); }
+                        document-footer-even-request(text) => { root.viewer-document-footer-even-request(root.model.instance-id, text); }
                     }
                 }
 

@@ -2798,6 +2798,44 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Replace the even-page header story from plain text (empty clears).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn set_header_even_plain_text(&self, text: &str) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let paragraphs = paragraphs_from_plain(text);
+        if paragraphs == doc.header_even {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::SetHeaderEven { paragraphs })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
+    /// Replace the even-page footer story from plain text (empty clears).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn set_footer_even_plain_text(&self, text: &str) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let paragraphs = paragraphs_from_plain(text);
+        if paragraphs == doc.footer_even {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::SetFooterEven { paragraphs })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Toggle page size between US Letter and ISO A4 (margins unchanged).
     ///
     /// # Errors
@@ -4170,6 +4208,8 @@ impl Viewer for DocumentViewer {
         let footer_text = story_plain_text(&doc.footer);
         let header_first_text = story_plain_text(&doc.header_first);
         let footer_first_text = story_plain_text(&doc.footer_first);
+        let header_even_text = story_plain_text(&doc.header_even);
+        let footer_even_text = story_plain_text(&doc.footer_even);
         let title_page = doc.page_setup.title_page;
         let even_and_odd_headers = doc.page_setup.even_and_odd_headers;
         drop(doc_guard);
@@ -4230,6 +4270,8 @@ impl Viewer for DocumentViewer {
             footer_text,
             header_first_text,
             footer_first_text,
+            header_even_text,
+            footer_even_text,
             title_page,
             even_and_odd_headers,
         })

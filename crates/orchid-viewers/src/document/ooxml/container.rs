@@ -379,22 +379,46 @@ fn write_story_part(
     Ok(())
 }
 
-/// Allocate default header/footer package parts when the model has story text
-/// but no `w:headerReference` / `w:footerReference` yet.
+/// Allocate header/footer package parts when the model has story text
+/// but no matching `w:headerReference` / `w:footerReference` yet.
 fn prepare_document_header_footer(doc: &mut Document) {
-    let need_header = !doc.header.is_empty()
-        && doc
-            .page_setup
-            .header_r_id
-            .as_ref()
-            .is_none_or(|id| !relationship_id_present(doc.document_rels.as_deref(), id));
-    let need_footer = !doc.footer.is_empty()
-        && doc
-            .page_setup
-            .footer_r_id
-            .as_ref()
-            .is_none_or(|id| !relationship_id_present(doc.document_rels.as_deref(), id));
-    if !need_header && !need_footer {
+    let need_header = story_needs_part(
+        &doc.header,
+        doc.page_setup.header_r_id.as_deref(),
+        doc.document_rels.as_deref(),
+    );
+    let need_footer = story_needs_part(
+        &doc.footer,
+        doc.page_setup.footer_r_id.as_deref(),
+        doc.document_rels.as_deref(),
+    );
+    let need_header_first = story_needs_part(
+        &doc.header_first,
+        doc.page_setup.header_first_r_id.as_deref(),
+        doc.document_rels.as_deref(),
+    );
+    let need_footer_first = story_needs_part(
+        &doc.footer_first,
+        doc.page_setup.footer_first_r_id.as_deref(),
+        doc.document_rels.as_deref(),
+    );
+    let need_header_even = story_needs_part(
+        &doc.header_even,
+        doc.page_setup.header_even_r_id.as_deref(),
+        doc.document_rels.as_deref(),
+    );
+    let need_footer_even = story_needs_part(
+        &doc.footer_even,
+        doc.page_setup.footer_even_r_id.as_deref(),
+        doc.document_rels.as_deref(),
+    );
+    if !(need_header
+        || need_footer
+        || need_header_first
+        || need_footer_first
+        || need_header_even
+        || need_footer_even)
+    {
         return;
     }
 
@@ -412,42 +436,88 @@ fn prepare_document_header_footer(doc: &mut Document) {
     .into_owned();
 
     if need_header {
-        let n = next_story_part_index(&rels, &doc.retained_parts, "header");
-        let target = format!("header{n}.xml");
-        let rid = next_relationship_id(&rels);
-        inject_story_relationship(
+        doc.page_setup.header_r_id = Some(allocate_story_part(
             &mut rels,
-            &rid,
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
-            &target,
-        );
-        ensure_override_content_type(
             &mut content_types,
-            &format!("/word/{target}"),
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml",
-        );
-        doc.page_setup.header_r_id = Some(rid);
+            &doc.retained_parts,
+            "header",
+        ));
     }
     if need_footer {
-        let n = next_story_part_index(&rels, &doc.retained_parts, "footer");
-        let target = format!("footer{n}.xml");
-        let rid = next_relationship_id(&rels);
-        inject_story_relationship(
+        doc.page_setup.footer_r_id = Some(allocate_story_part(
             &mut rels,
-            &rid,
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer",
-            &target,
-        );
-        ensure_override_content_type(
             &mut content_types,
-            &format!("/word/{target}"),
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml",
-        );
-        doc.page_setup.footer_r_id = Some(rid);
+            &doc.retained_parts,
+            "footer",
+        ));
+    }
+    if need_header_first {
+        doc.page_setup.header_first_r_id = Some(allocate_story_part(
+            &mut rels,
+            &mut content_types,
+            &doc.retained_parts,
+            "header",
+        ));
+    }
+    if need_footer_first {
+        doc.page_setup.footer_first_r_id = Some(allocate_story_part(
+            &mut rels,
+            &mut content_types,
+            &doc.retained_parts,
+            "footer",
+        ));
+    }
+    if need_header_even {
+        doc.page_setup.header_even_r_id = Some(allocate_story_part(
+            &mut rels,
+            &mut content_types,
+            &doc.retained_parts,
+            "header",
+        ));
+    }
+    if need_footer_even {
+        doc.page_setup.footer_even_r_id = Some(allocate_story_part(
+            &mut rels,
+            &mut content_types,
+            &doc.retained_parts,
+            "footer",
+        ));
     }
 
     doc.document_rels = Some(rels.into_bytes());
     doc.content_types = Some(content_types.into_bytes());
+}
+
+fn story_needs_part(
+    paragraphs: &[Paragraph],
+    r_id: Option<&str>,
+    rels: Option<&[u8]>,
+) -> bool {
+    !paragraphs.is_empty() && r_id.is_none_or(|id| !relationship_id_present(rels, id))
+}
+
+fn allocate_story_part(
+    rels: &mut String,
+    content_types: &mut String,
+    retained: &[(String, Vec<u8>)],
+    stem: &str,
+) -> String {
+    let n = next_story_part_index(rels, retained, stem);
+    let target = format!("{stem}{n}.xml");
+    let rid = next_relationship_id(rels);
+    let rel_type = if stem == "header" {
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header"
+    } else {
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer"
+    };
+    let content_type = if stem == "header" {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"
+    } else {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"
+    };
+    inject_story_relationship(rels, &rid, rel_type, &target);
+    ensure_override_content_type(content_types, &format!("/word/{target}"), content_type);
+    rid
 }
 
 fn relationship_id_present(rels: Option<&[u8]>, id: &str) -> bool {
@@ -1425,5 +1495,50 @@ mod tests {
             rels.contains("/relationships/footer") && rels.contains("footer1.xml"),
             "missing footer rel: {rels}"
         );
+    }
+    #[test]
+    fn save_allocates_even_header_footer_parts_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("new-even-hf.docx");
+        let doc = Document {
+            blocks: vec![Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Body".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })],
+            header_even: vec![Paragraph {
+                runs: vec![Run {
+                    text: "EvenHeader".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            footer_even: vec![Paragraph {
+                runs: vec![Run {
+                    text: "EvenFooter".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            page_setup: crate::document::model::PageSetup {
+                even_and_odd_headers: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(doc.page_setup.header_even_r_id.is_none());
+        assert!(doc.page_setup.footer_even_r_id.is_none());
+        save_document_sync(&doc, &path).unwrap();
+        let loaded = open_document(&path).unwrap();
+        assert!(loaded.page_setup.header_even_r_id.is_some());
+        assert!(loaded.page_setup.footer_even_r_id.is_some());
+        assert_eq!(loaded.header_even[0].plain_text(), "EvenHeader");
+        assert_eq!(loaded.footer_even[0].plain_text(), "EvenFooter");
+        assert!(loaded.page_setup.even_and_odd_headers);
     }
 }

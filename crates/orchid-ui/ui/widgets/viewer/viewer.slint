@@ -62,6 +62,8 @@ export component ViewerView inherits Rectangle {
     callback document-footer-request(string);
     callback document-header-first-request(string);
     callback document-footer-first-request(string);
+    callback document-header-even-request(string);
+    callback document-footer-even-request(string);
 
     callback media-command(string);
     callback media-seek-frac(float);
@@ -177,6 +179,8 @@ export component ViewerView inherits Rectangle {
         footer-request(text) => { root.document-footer-request(text); }
         header-first-request(text) => { root.document-header-first-request(text); }
         footer-first-request(text) => { root.document-footer-first-request(text); }
+        header-even-request(text) => { root.document-header-even-request(text); }
+        footer-even-request(text) => { root.document-footer-even-request(text); }
     }
 
     if model.kind == 8 : ViewerMediaView {
