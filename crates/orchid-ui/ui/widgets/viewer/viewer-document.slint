@@ -1762,6 +1762,48 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: max(36px, date-btn-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(false, date-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    date-ta := TouchArea { clicked => { root.action("insert-date-field"); } }
+                    date-btn-label := Text {
+                        text: model.date-field-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-date-field;
+                        show: date-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: max(36px, fn-btn-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(false, fn-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fn-ta := TouchArea { clicked => { root.action("insert-filename-field"); } }
+                    fn-btn-label := Text {
+                        text: model.filename-field-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-filename-field;
+                        show: fn-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
                     width: 1px;
                     height: 18px;
                     y: (parent.height - self.height) / 2;

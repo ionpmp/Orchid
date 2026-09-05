@@ -735,7 +735,7 @@ fn apply_fld_char(
             {
                 let display = if text.is_empty() {
                     field
-                        .map(|f| f.display(1, 1))
+                        .map(|f| f.display(1, 1, None))
                         .unwrap_or_default()
                 } else {
                     text
@@ -805,7 +805,7 @@ fn parse_fld_simple(
         buf.clear();
     }
     if text.is_empty() {
-        text = field.map(|f| f.display(1, 1)).unwrap_or_default();
+        text = field.map(|f| f.display(1, 1, None)).unwrap_or_default();
     }
     Ok(Run {
         text,
@@ -828,7 +828,7 @@ fn write_fld_simple(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<(
         writer,
         &Run {
             text: if run.text.is_empty() {
-                field.display(1, 1)
+                field.display(1, 1, None)
             } else {
                 run.text.clone()
             },
@@ -4529,5 +4529,34 @@ mod tests {
         };
         assert_eq!(p0b.section_properties, p0.section_properties);
     }
+
+    #[test]
+    fn parse_date_and_filename_fields() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:p>
+            <w:fldSimple w:instr=" DATE \@ &quot;yyyy-MM-dd&quot; ">
+              <w:r><w:t>2020-01-01</w:t></w:r>
+            </w:fldSimple>
+            <w:r><w:t> </w:t></w:r>
+            <w:fldSimple w:instr=" FILENAME ">
+              <w:r><w:t>demo.docx</w:t></w:r>
+            </w:fldSimple>
+          </w:p>
+        </w:hdr>"#;
+        let paras = parse_story_xml(xml, "hdr", &StyleDefaults::default(), &NumberingDefs::default())
+            .unwrap();
+        assert_eq!(paras[0].runs[0].field, Some(DocField::Date));
+        assert_eq!(paras[0].runs[2].field, Some(DocField::FileName));
+        assert_eq!(DocField::Date.instr(), "DATE");
+        assert_eq!(
+            DocField::FileName.display(1, 1, Some("report.docx")),
+            "report.docx"
+        );
+        let out = write_story_xml("hdr", &paras).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(text.contains("DATE") && text.contains("FILENAME"), "{text}");
+    }
+
 
 }

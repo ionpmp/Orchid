@@ -93,6 +93,10 @@ pub enum DocField {
     Page,
     /// Total page count (`NUMPAGES`).
     NumPages,
+    /// Current date (`DATE`); Preview uses local `YYYY-MM-DD`.
+    Date,
+    /// Document file name (`FILENAME`); Preview uses the open path's file name.
+    FileName,
 }
 
 impl DocField {
@@ -102,10 +106,12 @@ impl DocField {
         match self {
             Self::Page => "PAGE",
             Self::NumPages => "NUMPAGES",
+            Self::Date => "DATE",
+            Self::FileName => "FILENAME",
         }
     }
 
-    /// Parse a field instruction string (`PAGE`, `NUMPAGES`, optional switches).
+    /// Parse a field instruction string (`PAGE`, `DATE`, …; optional switches ignored).
     #[must_use]
     pub fn from_instr(instr: &str) -> Option<Self> {
         let token = instr
@@ -116,16 +122,25 @@ impl DocField {
         match token.as_str() {
             "NUMPAGES" => Some(Self::NumPages),
             "PAGE" => Some(Self::Page),
+            "DATE" => Some(Self::Date),
+            "FILENAME" => Some(Self::FileName),
             _ => None,
         }
     }
 
     /// Preview / cached display for a field at `page` of `page_count` (1-based).
+    ///
+    /// `file_name` is the open document's file name (not full path) for [`Self::FileName`].
     #[must_use]
-    pub fn display(self, page: u32, page_count: u32) -> String {
+    pub fn display(self, page: u32, page_count: u32, file_name: Option<&str>) -> String {
         match self {
             Self::Page => page.max(1).to_string(),
             Self::NumPages => page_count.max(1).to_string(),
+            Self::Date => chrono::Local::now().format("%Y-%m-%d").to_string(),
+            Self::FileName => file_name
+                .filter(|s| !s.is_empty())
+                .unwrap_or("Document")
+                .to_string(),
         }
     }
 }
@@ -139,7 +154,7 @@ pub struct Run {
     pub style: RunStyle,
     /// External hyperlink covering this run (`None` = plain text).
     pub hyperlink: Option<Hyperlink>,
-    /// Simple field (`PAGE` / `NUMPAGES`); `text` holds the last known result.
+    /// Simple field (`PAGE` / `DATE` / …); `text` holds the last known result.
     pub field: Option<DocField>,
 }
 

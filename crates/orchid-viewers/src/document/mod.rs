@@ -2921,6 +2921,61 @@ impl DocumentViewer {
     /// # Errors
     ///
     /// [`ViewerError::DocumentNotOpen`].
+    /// Insert a simple field (`DATE`, `FILENAME`, …) at the preview caret.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`] / edit bounds errors.
+    pub fn insert_field_at_selection(&self, field: DocField) -> Result<()> {
+        let file_name = self.path.read().as_ref().and_then(|p| {
+            std::path::Path::new(p.as_str())
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(str::to_owned)
+        });
+        let text = field.display(1, 1, file_name.as_deref());
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = *self.selection.lock();
+        let at = self.delete_selection_if_needed(doc, sel)?;
+        if at.cell.is_some() {
+            drop(doc_guard);
+            return self.preview_insert_text(&text);
+        }
+        let mut blocks = doc.blocks.clone();
+        let Block::Paragraph(p) = blocks
+            .get_mut(at.block_idx)
+            .ok_or(ViewerError::EditOutOfBounds)?
+        else {
+            return Err(ViewerError::EditOutOfBounds);
+        };
+        let (left, right) = split_runs_at(p, at);
+        let field_run_idx = left.len();
+        let mut runs = left;
+        runs.push(Run {
+            text: text.clone(),
+            field: Some(field),
+            ..Default::default()
+        });
+        runs.extend(right);
+        p.runs = runs;
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks })?;
+        let caret = Cursor {
+            block_idx: at.block_idx,
+            cell: None,
+            run_idx: field_run_idx,
+            byte_offset: text.len(),
+        };
+        *self.selection.lock() = Selection {
+            anchor: caret,
+            head: caret,
+        };
+        self.invalidate_preview();
+        Ok(())
+    }
+
     pub fn insert_page_number_fields_in_footer(&self) -> Result<()> {
         use crate::document::model::DocField;
         let mut doc_guard = self.document.write();
@@ -4340,6 +4395,13 @@ impl Viewer for DocumentViewer {
                 if !prev.valid {
                     layout.drop_render_scene();
                 }
+                let file_name = self.path.read().as_ref().and_then(|p| {
+                    std::path::Path::new(p.as_str())
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .map(str::to_owned)
+                });
+                layout.set_field_file_name(file_name);
                 let (bytes, w, h) = layout.render_document_with_selection(
                     doc,
                     prev.width,

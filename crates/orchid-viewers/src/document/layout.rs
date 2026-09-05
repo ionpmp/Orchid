@@ -111,6 +111,8 @@ pub struct DocumentLayout {
     layout_cache: LayoutCache,
     /// Last full raster without caret / selection, reused on selection-only paints.
     scene: Option<RenderScene>,
+    /// Open document file name for `FILENAME` field preview.
+    field_file_name: Option<String>,
 }
 
 impl std::fmt::Debug for DocumentLayout {
@@ -135,6 +137,15 @@ impl DocumentLayout {
             scale_cx: ScaleContext::new(),
             layout_cache: LayoutCache::new(),
             scene: None,
+            field_file_name: None,
+        }
+    }
+
+    /// Set the open file name used when resolving `FILENAME` fields in Preview.
+    pub fn set_field_file_name(&mut self, name: Option<String>) {
+        if self.field_file_name != name {
+            self.field_file_name = name;
+            self.drop_render_scene();
         }
     }
 
@@ -355,7 +366,15 @@ impl DocumentLayout {
                     let indent = list_indent_px(p) * scale;
                     let wrap_w =
                         (max_w - indent - paragraph_right_indent_px(p) * scale).max(12.0 * scale);
-                    let layout = self.cached_paragraph_layout(block_idx, p, wrap_w, scale);
+                    // Body fields: page=1 until per-band PAGE resolution; DATE/FILENAME ok.
+                    let resolved = resolve_paragraph_fields(
+                        p,
+                        1,
+                        page_starts.len().max(1) as u32,
+                        self.field_file_name.as_deref(),
+                    );
+                    let layout =
+                        self.cached_paragraph_layout(block_idx, &resolved, wrap_w, scale);
                     let h = layout.height().max(16.0 * scale);
                     layouts.push(LaidBlock {
                         layout,
@@ -579,8 +598,8 @@ impl DocumentLayout {
                 .copied()
                 .unwrap_or(total_h);
             let (header_story, footer_story) = margin_stories_for_page(doc, page);
-            let header_resolved = resolve_story_fields(header_story, page, page_count);
-            let footer_resolved = resolve_story_fields(footer_story, page, page_count);
+            let header_resolved = resolve_story_fields(header_story, page, page_count, self.field_file_name.as_deref());
+            let footer_resolved = resolve_story_fields(footer_story, page, page_count, self.field_file_name.as_deref());
             // `start_y` is content-relative; header sits `header_off` below the page top.
             let header_y = (start_y + header_off).max(0.0);
             let footer_y = if page_i + 1 == page_starts.len() {
@@ -628,24 +647,32 @@ impl DocumentLayout {
     }
 }
 
-/// Substitute `PAGE` / `NUMPAGES` field display text for preview paint.
+/// Substitute field display text (`PAGE`, `DATE`, `FILENAME`, …) for preview paint.
 fn resolve_story_fields(
     paragraphs: &[crate::document::model::Paragraph],
     page: u32,
     page_count: u32,
+    file_name: Option<&str>,
 ) -> Vec<crate::document::model::Paragraph> {
     paragraphs
         .iter()
-        .map(|p| {
-            let mut out = p.clone();
-            for run in &mut out.runs {
-                if let Some(field) = run.field {
-                    run.text = field.display(page, page_count);
-                }
-            }
-            out
-        })
+        .map(|p| resolve_paragraph_fields(p, page, page_count, file_name))
         .collect()
+}
+
+fn resolve_paragraph_fields(
+    p: &crate::document::model::Paragraph,
+    page: u32,
+    page_count: u32,
+    file_name: Option<&str>,
+) -> crate::document::model::Paragraph {
+    let mut out = p.clone();
+    for run in &mut out.runs {
+        if let Some(field) = run.field {
+            run.text = field.display(page, page_count, file_name);
+        }
+    }
+    out
 }
 
 /// Pick header/footer stories for a 1-based preview page index.
