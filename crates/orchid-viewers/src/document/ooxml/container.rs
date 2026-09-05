@@ -166,6 +166,7 @@ pub fn open_document(path: &Path) -> Result<Document> {
         blocks,
         page_setup,
         paragraph_styles: styles.paragraph_styles.clone(),
+        character_styles: styles.character_styles.clone(),
         header,
         footer,
         header_first,
@@ -1123,6 +1124,7 @@ mod tests {
                 runs: vec![Run {
                     text: "Example".into(),
                     style: RunStyle::default(),
+                    style_id: None,
                     hyperlink: Some(Hyperlink {
                         url: "https://example.com/".into(),
                         r_id: None,

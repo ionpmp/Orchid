@@ -29,9 +29,9 @@ pub use cursor::{
 };
 pub use layout::{DocumentLayout, PreviewInsets, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
-    Alignment, Block, Bookmark, CellImage, CommentRange, DocComment, DocField, Document, Hyperlink, ImageFormat, InlineImage,
-    LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table,
-    TableCell, TableRow, VMerge,
+    Alignment, Block, Bookmark, CellImage, CommentRange, DocComment, DocField, Document, Hyperlink,
+    ImageFormat, InlineImage, LineSpacingRule, ListKind, NamedCharacterStyle, NamedParagraphStyle,
+    OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow, VMerge,
 };
 pub use sample::{create_sample_docx, sample_document};
 pub use undo::{EditCommand, RunStylePatch, UndoStack};
@@ -4058,12 +4058,14 @@ fn split_runs_at(p: &Paragraph, at: Cursor) -> (Vec<Run>, Vec<Run>) {
                 left_runs.push(Run {
                     text: run.text[..split].to_string(),
                     style: run.style.clone(),
+                    style_id: run.style_id.clone(),
                     hyperlink: run.hyperlink.clone(),
                     field: None,
                 });
                 right_runs.push(Run {
                     text: run.text[split..].to_string(),
                     style: run.style.clone(),
+                    style_id: run.style_id.clone(),
                     hyperlink: run.hyperlink.clone(),
                     field: None,
                 });
@@ -4082,6 +4084,7 @@ fn split_runs_at(p: &Paragraph, at: Cursor) -> (Vec<Run>, Vec<Run>) {
         right_runs.push(Run {
             text: String::new(),
             style,
+            style_id: left_runs.last().and_then(|r| r.style_id.clone()),
             hyperlink,
             field: None,
         });
@@ -4292,6 +4295,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
             merged_runs.push(Run {
                 text: run.text[..start.byte_offset.min(run.text.len())].to_string(),
                 style: run.style.clone(),
+                style_id: run.style_id.clone(),
                 hyperlink: run.hyperlink.clone(),
                 field: None,
             });
@@ -4304,6 +4308,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
             merged_runs.push(Run {
                 text: run.text[end.byte_offset.min(run.text.len())..].to_string(),
                 style: run.style.clone(),
+                style_id: run.style_id.clone(),
                 hyperlink: run.hyperlink.clone(),
                 field: None,
             });
@@ -4391,6 +4396,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
             merged_runs.push(Run {
                 text: run.text[..start.byte_offset.min(run.text.len())].to_string(),
                 style: run.style.clone(),
+                style_id: run.style_id.clone(),
                 hyperlink: run.hyperlink.clone(),
                 field: None,
             });
@@ -4403,6 +4409,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
             merged_runs.push(Run {
                 text: run.text[end.byte_offset.min(run.text.len())..].to_string(),
                 style: run.style.clone(),
+                style_id: run.style_id.clone(),
                 hyperlink: run.hyperlink.clone(),
                 field: None,
             });

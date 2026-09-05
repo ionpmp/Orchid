@@ -1086,6 +1086,7 @@ mod tests {
                     Run {
                         text: "link".into(),
                         style: RunStyle::default(),
+                        style_id: None,
                         hyperlink: Some(Hyperlink {
                             url: "https://example.com".into(),
                             r_id: Some("rId5".into()),

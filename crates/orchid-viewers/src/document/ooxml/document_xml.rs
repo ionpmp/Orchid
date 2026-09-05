@@ -514,13 +514,14 @@ fn parse_paragraph(
                         current_run = Some(Run {
                             text: String::new(),
                             style: styles.run.clone(),
+                            style_id: None,
                             hyperlink: active_link.clone(),
                             field: None,
                         });
                     }
                     "rPr" if in_r => {
                         if let Some(ref mut run) = current_run {
-                            parse_r_pr_into(reader, buf, &mut run.style)?;
+                            parse_r_pr_into(reader, buf, &mut run.style, &mut run.style_id)?;
                         }
                     }
                     "t" if in_r => {
@@ -825,6 +826,7 @@ fn apply_fld_char(
                     p.runs.push(Run {
                         text: display,
                         style,
+                        style_id: None,
                         hyperlink: link,
                         field,
                     });
@@ -852,7 +854,10 @@ fn parse_fld_simple(
             Ok(Event::Start(e)) => {
                 let local = local_name(e.name().as_ref());
                 match local.as_str() {
-                    "rPr" => parse_r_pr_into(reader, buf, &mut style)?,
+                    "rPr" => {
+                        let mut sid = None;
+                        parse_r_pr_into(reader, buf, &mut style, &mut sid)?;
+                    }
                     "t" => in_t = true,
                     _ => {}
                 }
@@ -890,6 +895,7 @@ fn parse_fld_simple(
     Ok(Run {
         text,
         style,
+        style_id: None,
         hyperlink: link,
         field,
     })
@@ -913,6 +919,7 @@ fn write_fld_simple(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<(
                 run.text.clone()
             },
             style: run.style.clone(),
+            style_id: run.style_id.clone(),
             hyperlink: None,
             field: None,
         },
@@ -992,12 +999,21 @@ fn parse_r_pr_into(
     reader: &mut Reader<&[u8]>,
     buf: &mut Vec<u8>,
     style: &mut RunStyle,
+    style_id: &mut Option<String>,
 ) -> Result<()> {
     loop {
         match reader.read_event_into(buf) {
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
                 let local = local_name(e.name().as_ref());
-                apply_r_pr_attr(&local, &e, style);
+                if local == "rStyle" {
+                    if let Some(val) = attr_val(&e, "val") {
+                        if !val.is_empty() {
+                            *style_id = Some(val);
+                        }
+                    }
+                } else {
+                    apply_r_pr_attr(&local, &e, style);
+                }
             }
             Ok(Event::End(e)) => {
                 if local_name(e.name().as_ref()) == "rPr" {
@@ -1922,6 +1938,15 @@ fn write_run(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<()> {
     writer
         .write_event(Event::Start(BytesStart::new("w:rPr")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    if let Some(ref sid) = run.style_id {
+        if !sid.is_empty() {
+            let mut rs = BytesStart::new("w:rStyle");
+            rs.push_attribute(("w:val", sid.as_str()));
+            writer
+                .write_event(Event::Empty(rs))
+                .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+        }
+    }
     if run.style.bold {
         writer
             .write_event(Event::Empty(BytesStart::new("w:b")))
@@ -4770,6 +4795,80 @@ mod tests {
         };
         assert_eq!(p2.style_id.as_deref(), Some("Heading1"));
         assert_eq!(p2.outline_level, Some(0));
+    }
+
+    #[test]
+    fn rstyle_round_trip_and_preview_merge() {
+        use crate::document::layout::DocumentLayout;
+        use crate::document::model::{NamedCharacterStyle, RunStyle};
+
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:r>
+                <w:rPr><w:rStyle w:val="Strong"/></w:rPr>
+                <w:t>Hi</w:t>
+              </w:r>
+            </w:p>
+            <w:sectPr/>
+          </w:body>
+        </w:document>"#;
+        let mut styles = StyleDefaults::default();
+        styles.character_styles.insert(
+            "Strong".into(),
+            NamedCharacterStyle {
+                style_id: "Strong".into(),
+                name: "Strong".into(),
+                run: RunStyle {
+                    bold: true,
+                    color: Some([0xC0, 0x00, 0x00]),
+                    ..Default::default()
+                },
+            },
+        );
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
+            xml,
+            &styles,
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert!(unsupported.is_empty());
+        let Block::Paragraph(p) = &blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert_eq!(p.runs[0].style_id.as_deref(), Some("Strong"));
+        assert!(!p.runs[0].style.bold, "direct rPr should not bake style");
+        let doc = Document {
+            blocks: blocks.clone(),
+            page_setup,
+            character_styles: styles.character_styles.clone(),
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8(out.clone()).unwrap();
+        assert!(
+            text.contains("w:rStyle") && text.contains("Strong"),
+            "missing rStyle: {text}"
+        );
+        let (blocks2, _, _, _, _) = parse_document_xml(
+            &out,
+            &styles,
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        let Block::Paragraph(p2) = &blocks2[0] else {
+            panic!("expected paragraph");
+        };
+        assert_eq!(p2.runs[0].style_id.as_deref(), Some("Strong"));
+        // Preview merge: named character style fills unset props.
+        let mut layout = DocumentLayout::new();
+        let (bytes, w, h) = layout.render_document(&doc, 400.0);
+        assert!(w > 0 && h > 0 && !bytes.is_empty());
     }
 
     #[test]

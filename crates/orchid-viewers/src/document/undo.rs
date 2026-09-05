@@ -1099,12 +1099,14 @@ fn split_run_at(p: &mut Paragraph, run_idx: usize, byte_offset: usize) -> Result
     let right_text = run.text[byte_offset..].to_string();
     run.text.truncate(byte_offset);
     let style = run.style.clone();
+    let style_id = run.style_id.clone();
     let hyperlink = run.hyperlink.clone();
     p.runs.insert(
         run_idx + 1,
         Run {
             text: right_text,
             style,
+            style_id,
             hyperlink,
             field: None,
         },

@@ -185,6 +185,8 @@ pub struct Run {
     pub text: String,
     /// Character style.
     pub style: RunStyle,
+    /// Named character style id (`w:rStyle/@w:val`).
+    pub style_id: Option<String>,
     /// External hyperlink covering this run (`None` = plain text).
     pub hyperlink: Option<Hyperlink>,
     /// Simple field (`PAGE` / `DATE` / …); `text` holds the last known result.
@@ -539,6 +541,17 @@ pub struct NamedParagraphStyle {
     pub run: RunStyle,
 }
 
+/// Character style from `word/styles.xml` (`w:style` type `character`).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct NamedCharacterStyle {
+    /// Style id (`w:styleId`).
+    pub style_id: String,
+    /// Display name (`w:name/@w:val`).
+    pub name: String,
+    /// Character defaults from the style's `w:rPr`.
+    pub run: RunStyle,
+}
+
 /// Full in-memory document.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Document {
@@ -548,6 +561,8 @@ pub struct Document {
     pub page_setup: PageSetup,
     /// Named paragraph styles keyed by `style_id` (from `styles.xml`).
     pub paragraph_styles: HashMap<String, NamedParagraphStyle>,
+    /// Named character styles keyed by `style_id` (from `styles.xml`).
+    pub character_styles: HashMap<String, NamedCharacterStyle>,
     /// Default header story paragraphs (`word/header*.xml`).
     pub header: Vec<Paragraph>,
     /// Default footer story paragraphs (`word/footer*.xml`).
@@ -584,6 +599,12 @@ impl Document {
     #[must_use]
     pub fn paragraph_style(&self, style_id: &str) -> Option<&NamedParagraphStyle> {
         self.paragraph_styles.get(style_id)
+    }
+
+    /// Look up a named character style by id.
+    #[must_use]
+    pub fn character_style(&self, style_id: &str) -> Option<&NamedCharacterStyle> {
+        self.character_styles.get(style_id)
     }
 
     /// OOXML style id for outline level (`Heading1`…`Heading9`), or `None` for body.
