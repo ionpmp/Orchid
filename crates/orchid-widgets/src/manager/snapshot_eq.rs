@@ -98,6 +98,11 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
                 && std::sync::Arc::ptr_eq(&a.page_rgba_bytes, &b.page_rgba_bytes)
                 && a.zoom.to_bits() == b.zoom.to_bits()
                 && a.fit_mode == b.fit_mode
+                && a.outline == b.outline
+                && a.overlays == b.overlays
+                && a.find_match_index == b.find_match_index
+                && a.find_match_count == b.find_match_count
+                && a.has_selection == b.has_selection
         }
         (Vs::Text(a), Vs::Text(b)) => {
             a.path_display == b.path_display

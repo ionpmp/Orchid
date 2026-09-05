@@ -690,6 +690,23 @@ fn points_to_pixels(points: f32) -> f32 {
     points / 72.0 * 96.0
 }
 
+/// Smallest valid single-page PDF (US Letter). Shared with `ops` tests.
+#[cfg(test)]
+pub(crate) const MINIMAL_PDF: &[u8] = br"%PDF-1.1
+1 0 obj<< /Type /Catalog /Pages 2 0 R>>endobj
+2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1>>endobj
+3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]>>endobj
+xref
+0 4
+0000000000 65535 f 
+0000000009 00000 n 
+0000000052 00000 n 
+0000000101 00000 n 
+trailer<< /Root 1 0 R /Size 4>>
+startxref
+178
+%%EOF";
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -321,6 +321,28 @@ pub struct CalDayItem {
     pub height: u32,
 }
 
+/// One bookmark row for the PDF outline sidebar.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct PdfOutlineItem {
+    pub title: String,
+    /// 1-based page, or `0` when the destination is unknown.
+    pub page: u32,
+    pub depth: u32,
+}
+
+/// Screen-space overlay on the rasterized PDF page (origin top-left).
+#[derive(Debug, Clone, PartialEq)]
+#[allow(missing_docs)]
+pub struct PdfOverlayRect {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    /// 0 search, 1 current match, 2 selection, 3 highlight.
+    pub kind: u8,
+}
+
 /// PDF page snapshot.
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
@@ -335,6 +357,13 @@ pub struct PdfSnapshot {
     /// 0 = FitWidth, 1 = FitPage, 2 = Custom (manual zoom).
     pub fit_mode: u8,
     pub info_text: String,
+    pub outline: Vec<PdfOutlineItem>,
+    pub overlays: Vec<PdfOverlayRect>,
+    /// 1-based index of the current find match (`0` when none).
+    pub find_match_index: i32,
+    /// Total matches for the last find query.
+    pub find_match_count: i32,
+    pub has_selection: bool,
 }
 
 /// Text snapshot.

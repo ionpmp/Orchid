@@ -8,8 +8,8 @@ use super::super::errors::viewer_localized_error;
 use crate::slint_generated::{
     ViewerArchiveEntry, ViewerArchiveModel, ViewerCalDay, ViewerDocumentModel, ViewerEmptyModel,
     ViewerHtmlModel, ViewerImageModel, ViewerImageThumb, ViewerMapPin, ViewerMediaChapterItem,
-    ViewerMediaModel, ViewerMediaPlaylistItem, ViewerModel, ViewerPdfModel, ViewerStatusModel,
-    ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
+    ViewerMediaModel, ViewerMediaPlaylistItem, ViewerModel, ViewerPdfModel, ViewerPdfOutlineRow,
+    ViewerPdfOverlay, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
 };
 
 /// Reuse Slint images when the underlying RGBA `Arc` is unchanged (pan/zoom).
@@ -401,6 +401,18 @@ fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
         go_label: locale.tr("viewer-pdf-go").into(),
         copy_text_label: locale.tr("viewer-pdf-copy-text").into(),
         extract_page_label: locale.tr("viewer-pdf-extract-page").into(),
+        outline: ModelRc::new(VecModel::default()),
+        overlays: ModelRc::new(VecModel::default()),
+        find_match_index: 0,
+        find_match_count: 0,
+        has_selection: false,
+        outline_label: locale.tr("viewer-pdf-outline").into(),
+        find_label: locale.tr("viewer-pdf-find").into(),
+        find_placeholder: locale.tr("viewer-pdf-find-placeholder").into(),
+        find_no_match_label: locale.tr("viewer-pdf-find-no-match").into(),
+        print_label: locale.tr("viewer-pdf-print").into(),
+        highlight_label: locale.tr("viewer-pdf-highlight").into(),
+        match_case_label: locale.tr("viewer-pdf-match-case").into(),
     }
 }
 
@@ -2033,6 +2045,38 @@ fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -
         go_label: locale.tr("viewer-pdf-go").into(),
         copy_text_label: locale.tr("viewer-pdf-copy-text").into(),
         extract_page_label: locale.tr("viewer-pdf-extract-page").into(),
+        outline: ModelRc::new(VecModel::from(
+            s.outline
+                .iter()
+                .map(|row| ViewerPdfOutlineRow {
+                    title: row.title.clone().into(),
+                    page: row.page as i32,
+                    depth: row.depth as i32,
+                })
+                .collect::<Vec<_>>(),
+        )),
+        overlays: ModelRc::new(VecModel::from(
+            s.overlays
+                .iter()
+                .map(|ov| ViewerPdfOverlay {
+                    x: ov.x,
+                    y: ov.y,
+                    w: ov.w,
+                    h: ov.h,
+                    kind: i32::from(ov.kind),
+                })
+                .collect::<Vec<_>>(),
+        )),
+        find_match_index: s.find_match_index,
+        find_match_count: s.find_match_count,
+        has_selection: s.has_selection,
+        outline_label: locale.tr("viewer-pdf-outline").into(),
+        find_label: locale.tr("viewer-pdf-find").into(),
+        find_placeholder: locale.tr("viewer-pdf-find-placeholder").into(),
+        find_no_match_label: locale.tr("viewer-pdf-find-no-match").into(),
+        print_label: locale.tr("viewer-pdf-print").into(),
+        highlight_label: locale.tr("viewer-pdf-highlight").into(),
+        match_case_label: locale.tr("viewer-pdf-match-case").into(),
     }
 }
 

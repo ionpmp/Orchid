@@ -96,6 +96,10 @@ pub enum ViewerError {
     #[error("PDF render superseded")]
     PdfStale,
 
+    /// Highlight export was requested with no text selected.
+    #[error("viewer-pdf-highlight-empty")]
+    PdfHighlightEmpty,
+
     /// libmpv shared library could not be loaded.
     #[error(
         "Media playback unavailable: place mpv-1.dll (or libmpv-2.dll) next to the executable or see docs/BUILDING.md"

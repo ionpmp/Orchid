@@ -288,6 +288,11 @@ export component MainWindow inherits Window {
     callback viewer-pdf-go-to-page(string, int);
     callback viewer-pdf-copy-text(string);
     callback viewer-pdf-extract-page(string);
+    callback viewer-pdf-find(string, string, bool, int);
+    callback viewer-pdf-pointer(string, int, float, float);
+    callback viewer-pdf-outline-goto(string, int);
+    callback viewer-pdf-print(string);
+    callback viewer-pdf-highlight(string);
     callback viewer-archive-navigate-into(string, string);
     callback viewer-archive-navigate-up(string);
     callback viewer-archive-select(string, string);
@@ -738,6 +743,11 @@ export component MainWindow inherits Window {
             viewer-pdf-go-to-page(id, p) => { root.viewer-pdf-go-to-page(id, p); }
             viewer-pdf-copy-text(id) => { root.viewer-pdf-copy-text(id); }
             viewer-pdf-extract-page(id) => { root.viewer-pdf-extract-page(id); }
+            viewer-pdf-find(id, q, mc, d) => { root.viewer-pdf-find(id, q, mc, d); }
+            viewer-pdf-pointer(id, ph, x, y) => { root.viewer-pdf-pointer(id, ph, x, y); }
+            viewer-pdf-outline-goto(id, p) => { root.viewer-pdf-outline-goto(id, p); }
+            viewer-pdf-print(id) => { root.viewer-pdf-print(id); }
+            viewer-pdf-highlight(id) => { root.viewer-pdf-highlight(id); }
             viewer-archive-navigate-into(id, path) => { root.viewer-archive-navigate-into(id, path); }
             viewer-archive-navigate-up(id) => { root.viewer-archive-navigate-up(id); }
             viewer-archive-select(id, path) => { root.viewer-archive-select(id, path); }

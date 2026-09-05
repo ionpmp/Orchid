@@ -32,6 +32,11 @@ export component ViewerView inherits Rectangle {
     callback pdf-go-to-page(int);
     callback pdf-copy-text();
     callback pdf-extract-page();
+    callback pdf-find(string, bool, int);
+    callback pdf-pointer(int, float, float);
+    callback pdf-outline-goto(int);
+    callback pdf-print();
+    callback pdf-highlight();
 
     callback archive-navigate-into(string);
     callback archive-navigate-up();
@@ -136,6 +141,11 @@ export component ViewerView inherits Rectangle {
         go-to-page(p) => { root.pdf-go-to-page(p); }
         copy-text => { root.pdf-copy-text(); }
         extract-page => { root.pdf-extract-page(); }
+        find(q, mc, d) => { root.pdf-find(q, mc, d); }
+        pointer(ph, x, y) => { root.pdf-pointer(ph, x, y); }
+        outline-goto(pg) => { root.pdf-outline-goto(pg); }
+        print => { root.pdf-print(); }
+        highlight => { root.pdf-highlight(); }
     }
 
     if model.kind == 5 : ViewerTextView {

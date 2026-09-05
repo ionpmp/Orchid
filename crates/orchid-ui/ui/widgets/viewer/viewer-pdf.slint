@@ -14,11 +14,20 @@ export component ViewerPdfView inherits Rectangle {
     callback go-to-page(int);
     callback copy-text();
     callback extract-page();
+    callback find(string, bool, int);
+    callback pointer(int, float, float);
+    callback outline-goto(int);
+    callback print();
+    callback highlight();
 
     background: transparent;
 
     property <string> page-draft: "" + model.current-page;
     property <bool> page-editing: false;
+    property <bool> find-open: false;
+    property <string> find-query: "";
+    property <bool> find-match-case: false;
+    property <bool> outline-open: false;
 
     changed model => {
         if !root.page-editing {
@@ -46,9 +55,22 @@ export component ViewerPdfView inherits Rectangle {
         init => { self.focus(); }
 
         key-pressed(event) => {
-            // Let the page-number field keep arrows / digits.
-            if (page-input.has-focus) {
+            // Let the page-number / find fields keep arrows / digits.
+            if (page-input.has-focus || find-input.has-focus) {
                 return reject;
+            }
+            if (event.modifiers.control && (event.text == "f" || event.text == "F")) {
+                root.find-open = true;
+                find-input.focus();
+                return accept;
+            }
+            if (event.modifiers.control && (event.text == "c" || event.text == "C")) {
+                root.copy-text();
+                return accept;
+            }
+            if (event.modifiers.control && (event.text == "p" || event.text == "P")) {
+                root.print();
+                return accept;
             }
             if (event.text == Key.PageDown || event.text == Key.RightArrow) {
                 root.next-page();
@@ -299,6 +321,93 @@ export component ViewerPdfView inherits Rectangle {
                     }
                 }
 
+                Rectangle {
+                    min-width: 56px; height: 28px;
+                    background: root.outline-open ? Theme.surface-raised
+                        : ol-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ol-ta := TouchArea { clicked => { root.outline-open = !root.outline-open; pdf-keys.focus(); } }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.outline-label;
+                            color: root.outline-open ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 56px; height: 28px;
+                    background: root.find-open ? Theme.surface-raised
+                        : find-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    find-ta := TouchArea {
+                        clicked => {
+                            root.find-open = !root.find-open;
+                            if (root.find-open) {
+                                find-input.focus();
+                            } else {
+                                pdf-keys.focus();
+                            }
+                        }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.find-label;
+                            color: root.find-open ? Theme.accent-brand : Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 56px; height: 28px;
+                    background: print-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    print-ta := TouchArea { clicked => { root.print(); pdf-keys.focus(); } }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.print-label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 56px; height: 28px;
+                    background: hl-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    hl-ta := TouchArea { clicked => { root.highlight(); pdf-keys.focus(); } }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.highlight-label;
+                            color: model.has-selection ? Theme.text-primary : Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
                 Rectangle { width: 8px; }
 
                 Rectangle {
@@ -432,21 +541,220 @@ export component ViewerPdfView inherits Rectangle {
         }
 
         Rectangle {
+            height: root.find-open ? 36px : 0px;
+            clip: true;
+            background: Theme.surface-raised;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+                alignment: center;
+
+                Text {
+                    text: model.find-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 26px;
+                    background: Theme.surface-base;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+
+                    if root.find-query == "" : Text {
+                        x: 8px;
+                        width: parent.width - 16px;
+                        height: 100%;
+                        text: model.find-placeholder;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+
+                    find-input := TextInput {
+                        x: 8px;
+                        width: parent.width - 16px;
+                        height: 100%;
+                        text <=> root.find-query;
+                        single-line: true;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        key-pressed(event) => {
+                            if (event.text == Key.Return) {
+                                root.find(root.find-query, root.find-match-case, event.modifiers.shift ? -1 : 0);
+                                return accept;
+                            }
+                            if (event.text == Key.Escape) {
+                                root.find-open = false;
+                                pdf-keys.focus();
+                                return accept;
+                            }
+                            return reject;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: 28px; height: 26px;
+                    background: find-prev-ta.has-hover ? Theme.surface-base : transparent;
+                    border-radius: Theme.radius-md;
+                    find-prev-ta := TouchArea {
+                        clicked => { root.find(root.find-query, root.find-match-case, -1); }
+                    }
+                    Text {
+                        text: "↑";
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    width: 28px; height: 26px;
+                    background: find-next-ta.has-hover ? Theme.surface-base : transparent;
+                    border-radius: Theme.radius-md;
+                    find-next-ta := TouchArea {
+                        clicked => { root.find(root.find-query, root.find-match-case, 1); }
+                    }
+                    Text {
+                        text: "↓";
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Text {
+                    min-width: 36px;
+                    text: root.find-query == "" ? ""
+                        : model.find-match-count <= 0 ? model.find-no-match-label
+                        : "\{model.find-match-index}/\{model.find-match-count}";
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    height: 26px;
+                    background: root.find-match-case ? Theme.surface-base
+                        : case-ta.has-hover ? Theme.surface-base : transparent;
+                    border-radius: Theme.radius-md;
+                    case-ta := TouchArea {
+                        clicked => { root.find-match-case = !root.find-match-case; }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: model.match-case-label;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
             background: #80808020;
             vertical-stretch: 1;
             clip: true;
 
-            Flickable {
-                width: parent.width;
-                height: parent.height;
-                viewport-width: model.page-width-px * 1px;
-                viewport-height: model.page-height-px * 1px;
+            HorizontalLayout {
+                spacing: 0;
 
-                Image {
-                    source: model.page-image;
-                    width: model.page-width-px * 1px;
-                    height: model.page-height-px * 1px;
-                    image-fit: fill;
+                if root.outline-open : Rectangle {
+                    width: 200px;
+                    background: Theme.surface-base;
+                    border-width: 0px;
+                    Flickable {
+                        width: 100%;
+                        height: 100%;
+                        viewport-width: self.width;
+                        VerticalLayout {
+                            padding: 6px;
+                            spacing: 2px;
+                            for row in model.outline : TouchArea {
+                                height: 22px;
+                                clicked => { root.outline-goto(row.page); }
+                                Text {
+                                    x: 8px + row.depth * 12px;
+                                    width: parent.width - 16px;
+                                    height: 100%;
+                                    text: row.title == "" ? "…" : row.title;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    overflow: elide;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Flickable {
+                    horizontal-stretch: 1;
+                    width: 100%;
+                    height: 100%;
+                    viewport-width: model.page-width-px * 1px;
+                    viewport-height: model.page-height-px * 1px;
+
+                    Image {
+                        source: model.page-image;
+                        width: model.page-width-px * 1px;
+                        height: model.page-height-px * 1px;
+                        image-fit: fill;
+                    }
+                    for ov in model.overlays : Rectangle {
+                        x: ov.x * 1px;
+                        y: ov.y * 1px;
+                        width: ov.w * 1px;
+                        height: ov.h * 1px;
+                        background: ov.kind == 1 ? #ff980080
+                            : ov.kind == 2 ? #4c8dff80
+                            : ov.kind == 3 ? #ffe00066
+                            : #ffe00055;
+                    }
+                    TouchArea {
+                        width: model.page-width-px * 1px;
+                        height: model.page-height-px * 1px;
+                        mouse-cursor: text;
+                        moved => {
+                            if (self.pressed) {
+                                root.pointer(1, self.mouse-x / 1px, self.mouse-y / 1px);
+                            }
+                        }
+                        double-clicked => {
+                            root.pointer(3, self.mouse-x / 1px, self.mouse-y / 1px);
+                        }
+                        pointer-event(e) => {
+                            if (e.kind == PointerEventKind.down) {
+                                root.pointer(0, self.mouse-x / 1px, self.mouse-y / 1px);
+                            }
+                            if (e.kind == PointerEventKind.up) {
+                                root.pointer(2, self.mouse-x / 1px, self.mouse-y / 1px);
+                            }
+                        }
+                        scroll-event(event) => {
+                            if (event.modifiers.control) {
+                                if (event.delta-y < 0) {
+                                    root.zoom-out();
+                                } else {
+                                    root.zoom-in();
+                                }
+                                return accept;
+                            }
+                            return reject;
+                        }
+                    }
                 }
             }
         }

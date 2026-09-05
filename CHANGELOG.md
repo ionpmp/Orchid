@@ -85,6 +85,8 @@ release yet.
   universal search (files + commands + settings).
 
 #### Viewers
+- **PDF viewer:** outline sidebar, in-page find, drag-select/copy,
+  print, and highlight export to a sibling `hl.pdf`.
 - **Media viewer (libmpv):** in-app audio/video playback with play/pause,
   seek scrubber, volume/mute, speed, folder playlist, audio-track cycle,
   chapters, embedded and sidecar `.srt`/`.ass` subtitles, album cover art

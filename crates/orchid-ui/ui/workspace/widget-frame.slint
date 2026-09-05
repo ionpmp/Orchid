@@ -248,6 +248,11 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-pdf-go-to-page(string, int);
     callback viewer-pdf-copy-text(string);
     callback viewer-pdf-extract-page(string);
+    callback viewer-pdf-find(string, string, bool, int);
+    callback viewer-pdf-pointer(string, int, float, float);
+    callback viewer-pdf-outline-goto(string, int);
+    callback viewer-pdf-print(string);
+    callback viewer-pdf-highlight(string);
 
     callback viewer-archive-navigate-into(string, string);
     callback viewer-archive-navigate-up(string);
@@ -1076,6 +1081,11 @@ export component WidgetFrame inherits Rectangle {
                         pdf-go-to-page(p) => { root.viewer-pdf-go-to-page(root.model.instance-id, p); }
                         pdf-copy-text => { root.viewer-pdf-copy-text(root.model.instance-id); }
                         pdf-extract-page => { root.viewer-pdf-extract-page(root.model.instance-id); }
+                        pdf-find(q, mc, d) => { root.viewer-pdf-find(root.model.instance-id, q, mc, d); }
+                        pdf-pointer(ph, x, y) => { root.viewer-pdf-pointer(root.model.instance-id, ph, x, y); }
+                        pdf-outline-goto(pg) => { root.viewer-pdf-outline-goto(root.model.instance-id, pg); }
+                        pdf-print => { root.viewer-pdf-print(root.model.instance-id); }
+                        pdf-highlight => { root.viewer-pdf-highlight(root.model.instance-id); }
 
                         archive-navigate-into(path) => { root.viewer-archive-navigate-into(root.model.instance-id, path); }
                         archive-navigate-up => { root.viewer-archive-navigate-up(root.model.instance-id); }

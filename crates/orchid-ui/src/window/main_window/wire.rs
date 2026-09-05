@@ -2110,6 +2110,123 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_viewer_pdf_find({
+            let t = t.clone();
+            move |id, query, match_case, dir| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let q = query.to_string();
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::pdf_find(inst, q, match_case, dir)
+                        );
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_pdf_pointer({
+            let t = t.clone();
+            move |id, phase, x, y| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::pdf_pointer(inst, phase, x, y)
+                        );
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_pdf_outline_goto({
+            let t = t.clone();
+            move |id, page| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::pdf_outline_goto(inst, page)
+                        );
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_pdf_print({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        spawn::spawn_local_compat(async move {
+                            match orchid_widgets::builtin::viewer::pdf_print(inst).await {
+                                Ok(()) => {
+                                    if let Some(c) = tw.upgrade() {
+                                        let title = c.locale.tr("widget-viewer-name");
+                                        let body = c.locale.tr("viewer-pdf-printed");
+                                        c.push_notification(&title, &body, 1);
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!(?e, "viewer pdf print");
+                                    if let Some(c) = tw.upgrade() {
+                                        let title = c.locale.tr("widget-viewer-name");
+                                        let reason =
+                                            viewer_localized_error(&c.locale, &e.to_string());
+                                        let body = c.locale.tr_args(
+                                            "viewer-action-failed",
+                                            &orchid_i18n::FluentArgs::new().with("reason", reason),
+                                        );
+                                        c.push_notification(&title, &body, 3);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_pdf_highlight({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        spawn::spawn_local_compat(async move {
+                            match orchid_widgets::builtin::viewer::pdf_highlight(inst).await {
+                                Ok(path) => {
+                                    if let Some(c) = tw.upgrade() {
+                                        let title = c.locale.tr("widget-viewer-name");
+                                        let body = c.locale.tr_args(
+                                            "viewer-pdf-highlighted",
+                                            &orchid_i18n::FluentArgs::new().with("path", path),
+                                        );
+                                        c.push_notification(&title, &body, 2);
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!(?e, "viewer pdf highlight");
+                                    if let Some(c) = tw.upgrade() {
+                                        let title = c.locale.tr("widget-viewer-name");
+                                        let reason =
+                                            viewer_localized_error(&c.locale, &e.to_string());
+                                        let body = c.locale.tr_args(
+                                            "viewer-action-failed",
+                                            &orchid_i18n::FluentArgs::new().with("reason", reason),
+                                        );
+                                        c.push_notification(&title, &body, 3);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        });
         self.window.on_viewer_archive_navigate_into({
             let t = t.clone();
             move |id, path| {

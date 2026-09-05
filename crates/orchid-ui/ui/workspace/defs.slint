@@ -1295,6 +1295,20 @@ export struct ViewerImageModel {
     overlay-autohide-label: string,
 }
 
+export struct ViewerPdfOutlineRow {
+    title: string,
+    page: int,
+    depth: int,
+}
+
+export struct ViewerPdfOverlay {
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    kind: int,
+}
+
 export struct ViewerPdfModel {
     page-count: int,
     current-page: int,
@@ -1314,6 +1328,18 @@ export struct ViewerPdfModel {
     go-label: string,
     copy-text-label: string,
     extract-page-label: string,
+    outline: [ViewerPdfOutlineRow],
+    overlays: [ViewerPdfOverlay],
+    find-match-index: int,
+    find-match-count: int,
+    has-selection: bool,
+    outline-label: string,
+    find-label: string,
+    find-placeholder: string,
+    find-no-match-label: string,
+    print-label: string,
+    highlight-label: string,
+    match-case-label: string,
 }
 
 export struct ViewerTextModel {

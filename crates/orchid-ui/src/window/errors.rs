@@ -19,7 +19,8 @@ pub(crate) fn viewer_localized_error(locale: &LocaleManager, err: &str) -> Strin
         | "viewer-image-emf-unsupported"
         | "viewer-image-raw-unsupported"
         | "viewer-archive-nothing-selected"
-        | "viewer-archive-cannot-extract-folder" => locale.tr(msg),
+        | "viewer-archive-cannot-extract-folder"
+        | "viewer-pdf-highlight-empty" => locale.tr(msg),
         _ if msg.starts_with("unsupported file type") => locale.tr("viewer-unsupported"),
         _ if msg.contains("edit outside buffer bounds") => locale.tr("viewer-text-read-only"),
         _ if msg.contains("PDF support unavailable") => locale.tr("viewer-pdf-unavailable"),
