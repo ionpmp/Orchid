@@ -632,6 +632,7 @@ impl MainWindowController {
             row.group_id = group_id;
             row.group_tabs = group_tabs;
             v.set_row_data(r, row);
+            self.sync_html_webview_document(id, &vp.snapshot);
             return true;
         }
         false
@@ -1769,6 +1770,7 @@ impl MainWindowController {
         *self.search_autofocus_pending.lock() = None;
         self.sync_fm_transfer_notifications();
         self.sync_jyotish_notifications();
+        self.sync_visible_html_webviews();
         Ok(())
     }
 }

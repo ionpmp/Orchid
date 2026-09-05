@@ -1,0 +1,511 @@
+//! HWND-hosted WebView2 overlay used by the HTML viewer.
+//!
+//! Slint has no native web control. On Windows the host creates a WebView2
+//! controller as a child of the main window and positions it over the HTML
+//! widget's embed rectangle. Missing runtime falls back to the source preview.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
+use tracing::{debug, warn};
+use uuid::Uuid;
+
+/// Navigation chrome update produced by WebView2 history events.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct HtmlNavState {
+    pub instance_id: Uuid,
+    pub can_go_back: bool,
+    pub can_go_forward: bool,
+}
+
+/// Target document for a viewer instance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum HtmlDocument {
+    /// Nothing to show.
+    None,
+    /// Local (or remote) URL, typically `file://`.
+    Url(String),
+    /// In-memory HTML when the file is not on the local filesystem.
+    Html(String),
+}
+
+/// Shared WebView2 host (cheap to clone; UI-thread affinity).
+#[derive(Clone)]
+pub(crate) struct HtmlWebViewHost {
+    state: Arc<Mutex<HostState>>,
+    nav: Arc<Mutex<Vec<HtmlNavState>>>,
+}
+
+#[derive(Default)]
+struct HostState {
+    user_data_dir: PathBuf,
+    env_pending: bool,
+    env_failed: bool,
+    #[cfg(windows)]
+    env: Option<webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Environment>,
+    #[cfg(windows)]
+    parent: windows::Win32::Foundation::HWND,
+    slots: HashMap<Uuid, Slot>,
+}
+
+struct Slot {
+    document: HtmlDocument,
+    last_applied: HtmlDocument,
+    visible: bool,
+    bounds: OverlayBounds,
+    creating: bool,
+    #[cfg(windows)]
+    controller: Option<webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller>,
+    #[cfg(windows)]
+    webview: Option<webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2>,
+}
+
+impl Default for Slot {
+    fn default() -> Self {
+        Self {
+            document: HtmlDocument::None,
+            last_applied: HtmlDocument::None,
+            visible: false,
+            bounds: OverlayBounds::default(),
+            creating: false,
+            #[cfg(windows)]
+            controller: None,
+            #[cfg(windows)]
+            webview: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct OverlayBounds {
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+}
+
+impl HtmlWebViewHost {
+    /// Resolve the user-data folder and probe the runtime.
+    pub(crate) fn new() -> Self {
+        let user_data_dir = orchid_storage::OrchidPaths::resolve()
+            .map(|p| p.cache_dir.join("webview2"))
+            .unwrap_or_else(|_| std::env::temp_dir().join("orchid-webview2"));
+        if let Err(e) = std::fs::create_dir_all(&user_data_dir) {
+            warn!(?e, path = %user_data_dir.display(), "webview2 user-data dir");
+        }
+        Self {
+            state: Arc::new(Mutex::new(HostState {
+                user_data_dir,
+                ..HostState::default()
+            })),
+            nav: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    /// Evergreen WebView2 Runtime present on this machine.
+    #[must_use]
+    pub(crate) fn runtime_available() -> bool {
+        probe_runtime()
+    }
+
+    /// Drain history-changed updates for the Slint chrome.
+    pub(crate) fn take_nav_updates(&self) -> Vec<HtmlNavState> {
+        let mut g = self.nav.lock();
+        std::mem::take(&mut *g)
+    }
+
+    /// Remember the document to show for `id`.
+    pub(crate) fn set_document(&self, id: Uuid, document: HtmlDocument) {
+        {
+            let mut st = self.state.lock();
+            let slot = st.slots.entry(id).or_default();
+            slot.document = document;
+        }
+        self.kick();
+    }
+
+    /// Position the overlay in parent-client physical pixels.
+    pub(crate) fn set_bounds(
+        &self,
+        id: Uuid,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        visible: bool,
+        #[cfg_attr(not(windows), allow(unused_variables))] parent_hwnd: isize,
+    ) {
+        {
+            let mut st = self.state.lock();
+            #[cfg(windows)]
+            {
+                st.parent = windows::Win32::Foundation::HWND(parent_hwnd as *mut _);
+            }
+            let slot = st.slots.entry(id).or_default();
+            slot.bounds = OverlayBounds { x, y, w, h };
+            slot.visible = visible && w > 8 && h > 8;
+        }
+        self.kick();
+    }
+
+    /// Back / forward / reload.
+    pub(crate) fn command(&self, id: Uuid, command: &str) {
+        #[cfg(windows)]
+        {
+            let webview = {
+                let st = self.state.lock();
+                st.slots.get(&id).and_then(|s| s.webview.clone())
+            };
+            let Some(webview) = webview else {
+                return;
+            };
+            let result = unsafe {
+                match command {
+                    "back" => webview.GoBack(),
+                    "forward" => webview.GoForward(),
+                    "reload" => webview.Reload(),
+                    _ => return,
+                }
+            };
+            if let Err(e) = result {
+                warn!(?e, command, %id, "webview2 command");
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (id, command);
+        }
+    }
+
+    /// Close the controller for a widget instance.
+    pub(crate) fn destroy(&self, id: Uuid) {
+        let slot = {
+            let mut st = self.state.lock();
+            st.slots.remove(&id)
+        };
+        #[cfg(windows)]
+        if let Some(slot) = slot {
+            if let Some(controller) = slot.controller {
+                if let Err(e) = unsafe { controller.Close() } {
+                    debug!(?e, %id, "webview2 close");
+                }
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = slot;
+        }
+    }
+
+    /// Hide overlays whose widgets are not currently painted.
+    pub(crate) fn hide_except(&self, visible: &[Uuid]) {
+        let to_hide: Vec<Uuid> = {
+            let st = self.state.lock();
+            st.slots
+                .iter()
+                .filter(|(id, slot)| slot.visible && !visible.contains(id))
+                .map(|(id, _)| *id)
+                .collect()
+        };
+        for id in to_hide {
+            {
+                let mut st = self.state.lock();
+                if let Some(slot) = st.slots.get_mut(&id) {
+                    slot.visible = false;
+                }
+            }
+            self.apply_bounds(id);
+        }
+    }
+}
+
+fn probe_runtime() -> bool {
+    #[cfg(windows)]
+    {
+        use webview2_com::Microsoft::Web::WebView2::Win32::GetAvailableCoreWebView2BrowserVersionString;
+        use windows::core::{PCWSTR, PWSTR};
+        use windows::Win32::System::Com::CoTaskMemFree;
+
+        let mut version = PWSTR::null();
+        let hr = unsafe { GetAvailableCoreWebView2BrowserVersionString(PCWSTR::null(), &mut version) };
+        let present = hr.is_ok() && !version.is_null();
+        if !version.is_null() {
+            unsafe { CoTaskMemFree(Some(version.0.cast())) };
+        }
+        present
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
+/// Build a `file://` URL for an OS path.
+#[must_use]
+pub(crate) fn file_url_from_path(path: &Path) -> Option<String> {
+    let abs = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    url::Url::from_file_path(&abs).ok().map(String::from)
+}
+
+impl HtmlWebViewHost {
+    fn kick(&self) {
+        #[cfg(windows)]
+        {
+            self.ensure_environment();
+            let ids: Vec<Uuid> = {
+                let st = self.state.lock();
+                st.slots.keys().copied().collect()
+            };
+            for id in ids {
+                self.ensure_controller(id);
+                self.apply_document(id);
+                self.apply_bounds(id);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn ensure_environment(&self) {
+        use webview2_com::Microsoft::Web::WebView2::Win32::CreateCoreWebView2EnvironmentWithOptions;
+        use webview2_com::CreateCoreWebView2EnvironmentCompletedHandler;
+        use windows::core::PCWSTR;
+
+        let user_data = {
+            let mut st = self.state.lock();
+            if st.env.is_some() || st.env_pending || st.env_failed {
+                return;
+            }
+            if !probe_runtime() {
+                st.env_failed = true;
+                return;
+            }
+            st.env_pending = true;
+            st.user_data_dir.clone()
+        };
+
+        let mut wide: Vec<u16> = user_data
+            .to_string_lossy()
+            .encode_utf16()
+            .chain(Some(0))
+            .collect();
+        let host = self.clone();
+        let handler = CreateCoreWebView2EnvironmentCompletedHandler::create(Box::new(
+            move |error_code, env| {
+                if let Err(e) = error_code {
+                    warn!(?e, "webview2 environment");
+                    let mut st = host.state.lock();
+                    st.env_pending = false;
+                    st.env_failed = true;
+                    return Ok(());
+                }
+                {
+                    let mut st = host.state.lock();
+                    st.env_pending = false;
+                    st.env = env;
+                }
+                host.kick();
+                Ok(())
+            },
+        ));
+        let hr = unsafe {
+            CreateCoreWebView2EnvironmentWithOptions(
+                PCWSTR::null(),
+                PCWSTR(wide.as_mut_ptr()),
+                None,
+                &handler,
+            )
+        };
+        if let Err(e) = hr {
+            warn!(?e, "CreateCoreWebView2EnvironmentWithOptions");
+            let mut st = self.state.lock();
+            st.env_pending = false;
+            st.env_failed = true;
+        }
+    }
+
+    #[cfg(windows)]
+    fn ensure_controller(&self, id: Uuid) {
+        use webview2_com::CreateCoreWebView2ControllerCompletedHandler;
+
+        let (env, parent, need) = {
+            let mut st = self.state.lock();
+            let Some(env) = st.env.clone() else {
+                return;
+            };
+            if st.parent.0.is_null() {
+                return;
+            }
+            let parent = st.parent;
+            let Some(slot) = st.slots.get_mut(&id) else {
+                return;
+            };
+            if slot.controller.is_some() || slot.creating {
+                return;
+            }
+            if matches!(slot.document, HtmlDocument::None) && !slot.visible {
+                return;
+            }
+            slot.creating = true;
+            (env, parent, true)
+        };
+        if !need {
+            return;
+        }
+
+        let host = self.clone();
+        let handler = CreateCoreWebView2ControllerCompletedHandler::create(Box::new(
+            move |error_code, controller| {
+                if let Err(e) = error_code {
+                    warn!(?e, %id, "webview2 controller");
+                    if let Some(slot) = host.state.lock().slots.get_mut(&id) {
+                        slot.creating = false;
+                    }
+                    return Ok(());
+                }
+                let Some(controller) = controller else {
+                    if let Some(slot) = host.state.lock().slots.get_mut(&id) {
+                        slot.creating = false;
+                    }
+                    return Ok(());
+                };
+                let webview = match unsafe { controller.CoreWebView2() } {
+                    Ok(w) => w,
+                    Err(e) => {
+                        warn!(?e, %id, "CoreWebView2");
+                        if let Some(slot) = host.state.lock().slots.get_mut(&id) {
+                            slot.creating = false;
+                        }
+                        return Ok(());
+                    }
+                };
+                if let Ok(settings) = unsafe { webview.Settings() } {
+                    let _ = unsafe { settings.SetAreDefaultContextMenusEnabled(true) };
+                    let _ = unsafe { settings.SetAreDevToolsEnabled(false) };
+                    let _ = unsafe { settings.SetIsStatusBarEnabled(false) };
+                }
+                attach_history(&host, id, &webview);
+                {
+                    let mut st = host.state.lock();
+                    if let Some(slot) = st.slots.get_mut(&id) {
+                        slot.creating = false;
+                        slot.controller = Some(controller);
+                        slot.webview = Some(webview);
+                    }
+                }
+                host.apply_document(id);
+                host.apply_bounds(id);
+                Ok(())
+            },
+        ));
+        if let Err(e) = unsafe { env.CreateCoreWebView2Controller(parent, &handler) } {
+            warn!(?e, %id, "CreateCoreWebView2Controller");
+            if let Some(slot) = self.state.lock().slots.get_mut(&id) {
+                slot.creating = false;
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn apply_document(&self, id: Uuid) {
+        use windows::core::HSTRING;
+
+        let (webview, document) = {
+            let mut st = self.state.lock();
+            let Some(slot) = st.slots.get_mut(&id) else {
+                return;
+            };
+            if slot.document == slot.last_applied {
+                return;
+            }
+            let Some(webview) = slot.webview.clone() else {
+                return;
+            };
+            let document = slot.document.clone();
+            slot.last_applied = document.clone();
+            (webview, document)
+        };
+        let result = unsafe {
+            match &document {
+                HtmlDocument::None => webview.Navigate(&HSTRING::from("about:blank")),
+                HtmlDocument::Url(url) => webview.Navigate(&HSTRING::from(url.as_str())),
+                HtmlDocument::Html(html) => webview.NavigateToString(&HSTRING::from(html.as_str())),
+            }
+        };
+        if let Err(e) = result {
+            warn!(?e, %id, "webview2 navigate");
+            let mut st = self.state.lock();
+            if let Some(slot) = st.slots.get_mut(&id) {
+                slot.last_applied = HtmlDocument::None;
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn apply_bounds(&self, id: Uuid) {
+        use windows::Win32::Foundation::RECT;
+
+        let (controller, bounds, visible) = {
+            let st = self.state.lock();
+            let Some(slot) = st.slots.get(&id) else {
+                return;
+            };
+            let Some(controller) = slot.controller.clone() else {
+                return;
+            };
+            (controller, slot.bounds, slot.visible)
+        };
+        let rect = RECT {
+            left: bounds.x,
+            top: bounds.y,
+            right: bounds.x + bounds.w.max(0),
+            bottom: bounds.y + bounds.h.max(0),
+        };
+        if let Err(e) = unsafe { controller.SetBounds(rect) } {
+            debug!(?e, %id, "webview2 SetBounds");
+        }
+        if let Err(e) = unsafe { controller.SetIsVisible(visible) } {
+            debug!(?e, %id, "webview2 SetIsVisible");
+        }
+        let _ = unsafe { controller.NotifyParentWindowPositionChanged() };
+    }
+}
+
+#[cfg(windows)]
+fn attach_history(
+    host: &HtmlWebViewHost,
+    id: Uuid,
+    webview: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2,
+) {
+    use webview2_com::HistoryChangedEventHandler;
+
+    let nav = host.nav.clone();
+    let wv = webview.clone();
+    let handler = HistoryChangedEventHandler::create(Box::new(move |_, _| {
+        let can_go_back = unsafe { wv.CanGoBack() }.unwrap_or(false.into()).as_bool();
+        let can_go_forward = unsafe { wv.CanGoForward() }.unwrap_or(false.into()).as_bool();
+        nav.lock().push(HtmlNavState {
+            instance_id: id,
+            can_go_back,
+            can_go_forward,
+        });
+        Ok(())
+    }));
+    let mut token = 0_i64;
+    if let Err(e) = unsafe { webview.add_HistoryChanged(&handler, &mut token) } {
+        debug!(?e, %id, "webview2 HistoryChanged");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_url_from_drive_path() {
+        let url = file_url_from_path(Path::new(r"C:\temp\page.html")).expect("url");
+        assert!(url.starts_with("file:"), "{url}");
+        assert!(url.contains("page.html"), "{url}");
+    }
+}

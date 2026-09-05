@@ -54,6 +54,7 @@ impl MainWindowController {
                     c.handle_recognized_gestures(gestures);
                     c.check_vault_auto_lock();
                     c.flush_notifications(false);
+                    c.flush_html_webview_nav();
                     let scale = c.window.window().scale_factor();
                     let scale_changed = {
                         let mut last = c.last_window_scale.lock();
@@ -2452,6 +2453,26 @@ impl MainWindowController {
                             let body = e.to_string();
                             c.push_notification(&title, &body, 3);
                         }
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_html_command({
+            let t = t.clone();
+            move |id, cmd| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        c.on_html_command(inst, cmd.as_str());
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_html_embed_bounds({
+            let t = t.clone();
+            move |id, x, y, w, h, vis| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        c.on_html_embed_bounds(inst, x, y, w, h, vis);
                     }
                 }
             }

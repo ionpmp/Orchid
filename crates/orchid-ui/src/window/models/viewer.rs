@@ -729,12 +729,20 @@ fn build_media_snapshot(
 }
 
 fn empty_viewer_html_model(locale: &LocaleManager) -> ViewerHtmlModel {
+    let available = crate::html_webview::HtmlWebViewHost::runtime_available();
     ViewerHtmlModel {
         path_display: SharedString::new(),
         source_preview: SharedString::new(),
         open_label: locale.tr("viewer-html-open").into(),
         hint_label: locale.tr("viewer-html-hint").into(),
         source_label: locale.tr("viewer-html-source").into(),
+        back_label: locale.tr("viewer-html-back").into(),
+        forward_label: locale.tr("viewer-html-forward").into(),
+        reload_label: locale.tr("viewer-html-reload").into(),
+        unavailable_label: locale.tr("viewer-html-unavailable").into(),
+        webview_available: available,
+        can_go_back: false,
+        can_go_forward: false,
     }
 }
 
@@ -1117,6 +1125,13 @@ pub(crate) fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> V
                 open_label: locale.tr("viewer-html-open").into(),
                 hint_label: locale.tr("viewer-html-hint").into(),
                 source_label: locale.tr("viewer-html-source").into(),
+                back_label: locale.tr("viewer-html-back").into(),
+                forward_label: locale.tr("viewer-html-forward").into(),
+                reload_label: locale.tr("viewer-html-reload").into(),
+                unavailable_label: locale.tr("viewer-html-unavailable").into(),
+                webview_available: crate::html_webview::HtmlWebViewHost::runtime_available(),
+                can_go_back: false,
+                can_go_forward: false,
             };
         }
     }
@@ -1155,6 +1170,10 @@ pub(crate) fn patch_viewer_model(
         Vs::Html(s) if model.kind == 9 => {
             model.html.path_display = s.path_display.clone().into();
             model.html.source_preview = SharedString::from(s.source_preview.as_ref());
+            model.html.webview_available =
+                crate::html_webview::HtmlWebViewHost::runtime_available();
+            model.html.hint_label = locale.tr("viewer-html-hint").into();
+            model.html.unavailable_label = locale.tr("viewer-html-unavailable").into();
         }
         _ => {
             *model = build_viewer_model(p, locale);

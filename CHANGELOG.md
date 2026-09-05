@@ -85,6 +85,11 @@ release yet.
   universal search (files + commands + settings).
 
 #### Viewers
+- **HTML viewer:** embedded WebView2 preview (back / forward / reload,
+  source toggle) for local `html`/`htm`/`xhtml` files; falls back to the
+  source pane plus Open in the system browser when the WebView2 Runtime
+  is missing. Remote HTML uses an in-memory preview (relative assets may
+  not resolve).
 - **PDF viewer:** outline sidebar, in-page find, drag-select/copy,
   print, and highlight export to a sibling `hl.pdf`.
 - **Media viewer (libmpv):** in-app audio/video playback with play/pause,
@@ -228,8 +233,8 @@ release yet.
 - Text Lister: Text / HEX / binary, encoding picker, wrap/no-wrap, find
   (F7) with regex + multiline replace, print, undo/redo.
 - Media viewer plays in-app via libmpv when bundled; otherwise opens a Play
-  handoff to the system player. HTML shows source
-  plus Open in browser.
+  handoff to the system player. HTML uses an embedded WebView2 preview
+  when the runtime is present, with source toggle and Open in browser.
 - **Tier-1 DOCX document editor**: OOXML read/write, Preview/Source,
   parley+swash canvas, selection and keyboard editing, tables (cell nav,
   insert/delete row/col, merge/unmerge cells, `tblGrid` widths, `gridSpan`/`vMerge` preview),

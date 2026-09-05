@@ -53,6 +53,8 @@ export component ViewerView inherits Rectangle {
     callback text-find-request(string, bool, bool, bool);
     callback text-replace-request(string, string, bool, bool, bool);
     callback open-external();
+    callback html-command(string);
+    callback html-embed-bounds(length, length, length, length, bool);
 
     callback document-action(string);
     callback document-text-edited(string);
@@ -209,5 +211,7 @@ export component ViewerView inherits Rectangle {
         height: parent.height;
         model: root.model.html;
         open-browser => { root.open-external(); }
+        html-command(c) => { root.html-command(c); }
+        embed-bounds(x, y, w, h, vis) => { root.html-embed-bounds(x, y, w, h, vis); }
     }
 }

@@ -4,8 +4,22 @@ import { ViewerHtmlModel } from "../../workspace/defs.slint";
 export component ViewerHtmlView inherits Rectangle {
     in property <ViewerHtmlModel> model;
     callback open-browser();
+    callback html-command(string);
+    callback embed-bounds(length, length, length, length, bool);
 
     background: transparent;
+    property <bool> show-source: !model.webview-available;
+
+    function fire-embed() {
+        if (model.webview-available && !root.show-source && host.width > 8px && host.height > 8px) {
+            root.embed-bounds(host.absolute-position.x, host.absolute-position.y, host.width, host.height, true);
+        } else {
+            root.embed-bounds(0, 0, 0, 0, false);
+        }
+    }
+
+    changed show-source => { root.fire-embed(); }
+    changed model => { root.fire-embed(); }
 
     VerticalLayout {
         spacing: 0;
@@ -16,14 +30,74 @@ export component ViewerHtmlView inherits Rectangle {
             HorizontalLayout {
                 padding-left: 8px;
                 padding-right: 8px;
-                spacing: 8px;
+                spacing: 6px;
                 alignment: start;
 
-                Text {
-                    text: model.source-label;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    vertical-alignment: center;
+                if model.webview-available : Rectangle {
+                    width: max(56px, back-lbl.preferred-width + 12px);
+                    height: 28px;
+                    background: back-ta.has-hover && model.can-go-back ? Theme.surface-raised : transparent;
+                    opacity: model.can-go-back ? 1.0 : 0.45;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    back-ta := TouchArea {
+                        clicked => { if (model.can-go-back) { root.html-command("back"); } }
+                    }
+                    back-lbl := Text {
+                        text: model.back-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                if model.webview-available : Rectangle {
+                    width: max(68px, fwd-lbl.preferred-width + 12px);
+                    height: 28px;
+                    background: fwd-ta.has-hover && model.can-go-forward ? Theme.surface-raised : transparent;
+                    opacity: model.can-go-forward ? 1.0 : 0.45;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fwd-ta := TouchArea {
+                        clicked => { if (model.can-go-forward) { root.html-command("forward"); } }
+                    }
+                    fwd-lbl := Text {
+                        text: model.forward-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                if model.webview-available : Rectangle {
+                    width: max(64px, reload-lbl.preferred-width + 12px);
+                    height: 28px;
+                    background: reload-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    reload-ta := TouchArea { clicked => { root.html-command("reload"); } }
+                    reload-lbl := Text {
+                        text: model.reload-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                if model.webview-available : Rectangle {
+                    width: max(64px, src-lbl.preferred-width + 12px);
+                    height: 28px;
+                    background: src-ta.has-hover || root.show-source ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    src-ta := TouchArea { clicked => { root.show-source = !root.show-source; } }
+                    src-lbl := Text {
+                        text: model.source-label;
+                        color: root.show-source ? Theme.accent-brand : Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
                 }
                 Rectangle { horizontal-stretch: 1; }
                 Rectangle {
@@ -46,19 +120,35 @@ export component ViewerHtmlView inherits Rectangle {
 
         Text {
             height: 20px;
-            text: model.hint-label;
+            text: model.webview-available ? model.hint-label : model.unavailable-label;
             color: Theme.text-tertiary;
             font-size: Theme.font-size-sm;
             vertical-alignment: center;
         }
 
-        Rectangle {
+        embed-slot := Rectangle {
             vertical-stretch: 1;
             background: Theme.surface-base;
             clip: true;
+
+            host := Rectangle {
+                width: parent.width;
+                height: parent.height;
+                visible: model.webview-available && !root.show-source;
+                changed width => { root.fire-embed(); }
+                changed height => { root.fire-embed(); }
+                changed absolute-position => { root.fire-embed(); }
+                changed visible => { root.fire-embed(); }
+                property <length> ax: self.absolute-position.x;
+                property <length> ay: self.absolute-position.y;
+                changed ax => { root.fire-embed(); }
+                changed ay => { root.fire-embed(); }
+            }
+
             Flickable {
                 width: parent.width;
                 height: parent.height;
+                visible: root.show-source || !model.webview-available;
                 viewport-width: self.width;
                 viewport-height: max(self.height, src.preferred-height + 8px);
                 src := Text {

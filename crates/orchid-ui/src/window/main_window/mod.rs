@@ -65,6 +65,7 @@ mod catalog;
 mod clock;
 mod floating;
 mod fm;
+mod html_embed;
 mod image_touch;
 mod input;
 mod jyotish;
@@ -222,6 +223,8 @@ pub struct MainWindowController {
     config_file_path: PathBuf,
     /// Directory for Document Editor untitled `.docx` files (`data/documents`).
     documents_dir: PathBuf,
+    /// WebView2 HWND overlays for HTML viewer widgets.
+    html_webview: crate::html_webview::HtmlWebViewHost,
     settings_sections: ModelRc<SettingsSectionEntry>,
     settings_fields: ModelRc<SettingsFieldRow>,
     navigation: Arc<RwLock<NavigationUiState>>,
@@ -536,6 +539,7 @@ impl MainWindowController {
             settings: Arc::new(RwLock::new(SettingsUiState::default())),
             config_file_path,
             documents_dir,
+            html_webview: crate::html_webview::HtmlWebViewHost::new(),
             settings_sections,
             settings_fields,
             navigation: Arc::new(RwLock::new(NavigationUiState::default())),

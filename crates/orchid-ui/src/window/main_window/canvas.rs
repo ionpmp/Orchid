@@ -141,6 +141,7 @@ impl MainWindowController {
     }
 
     pub(super) fn finish_widget_close(self: &Arc<Self>, u: Uuid) {
+        self.html_webview.destroy(u);
         self.close_confirm_overlays.write().remove(&u);
         self.settings_dialog_overlays.write().remove(&u);
         let wm = self.widget_manager.clone();

@@ -226,6 +226,8 @@ export component WorkspaceView inherits Rectangle {
     callback viewer-text-find-request(string, string, bool, bool, bool);
     callback viewer-text-replace-request(string, string, string, bool, bool, bool);
     callback viewer-open-external(string);
+    callback viewer-html-command(string, string);
+    callback viewer-html-embed-bounds(string, length, length, length, length, bool);
 
     callback viewer-media-command(string, string);
     callback viewer-media-seek-frac(string, float);
@@ -642,6 +644,8 @@ export component WorkspaceView inherits Rectangle {
                     viewer-text-find-request(id, q, fwd, rx, ml) => { root.viewer-text-find-request(id, q, fwd, rx, ml); }
                     viewer-text-replace-request(id, q, r, all, rx, ml) => { root.viewer-text-replace-request(id, q, r, all, rx, ml); }
                     viewer-open-external(id) => { root.viewer-open-external(id); }
+                    viewer-html-command(id, c) => { root.viewer-html-command(id, c); }
+                    viewer-html-embed-bounds(id, x, y, w, h, vis) => { root.viewer-html-embed-bounds(id, x, y, w, h, vis); }
                     viewer-media-command(id, c) => { root.viewer-media-command(id, c); }
                     viewer-media-seek-frac(id, f) => { root.viewer-media-seek-frac(id, f); }
                     viewer-document-action(id, a) => { root.viewer-document-action(id, a); }
@@ -800,6 +804,8 @@ export component WorkspaceView inherits Rectangle {
             viewer-text-find-request(id, q, fwd, rx, ml) => { root.viewer-text-find-request(id, q, fwd, rx, ml); }
             viewer-text-replace-request(id, q, r, all, rx, ml) => { root.viewer-text-replace-request(id, q, r, all, rx, ml); }
             viewer-open-external(id) => { root.viewer-open-external(id); }
+            viewer-html-command(id, c) => { root.viewer-html-command(id, c); }
+            viewer-html-embed-bounds(id, x, y, w, h, vis) => { root.viewer-html-embed-bounds(id, x, y, w, h, vis); }
             viewer-media-command(id, c) => { root.viewer-media-command(id, c); }
             viewer-media-seek-frac(id, f) => { root.viewer-media-seek-frac(id, f); }
             viewer-document-action(id, a) => { root.viewer-document-action(id, a); }
