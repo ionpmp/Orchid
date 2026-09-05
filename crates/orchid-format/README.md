@@ -3,9 +3,8 @@
 Native `.orchid` container (`application/vnd.orchid`). Spec:
 [`docs/ORCHID_FORMAT.md`](../../docs/ORCHID_FORMAT.md).
 
-Phase 1 (sealed framing) is implemented in this crate: header / `ORCR`
-regions / FlatBuffers TOC / footer, zstd for Clean-Text + Structured,
-`memmap2` open, and a small CLI.
+Phase 1–2: sealed + linked framing, FlatBuffers TOC, zstd Clean-Text /
+Structured, optional per-region age encryption, `memmap2` open, and CLI.
 
 ## Schema
 
@@ -19,10 +18,13 @@ cargo run -p orchid-format -- create \
   --output sample.orchid \
   --clean-text body.txt \
   --structured doc.bin \
-  --raw attachment.bin
+  --raw attachment.bin \
+  --passphrase 'secret'
 
 cargo run -p orchid-format -- read sample.orchid \
+  --passphrase 'secret' \
   --dump-clean-text out.txt
 ```
 
-Library entry points: `write_sealed_file` / `SealedFile::open`.
+Library: `write_sealed_file` / `write_linked_file` / `SealedFile::open` /
+`linked_region_plaintext` / `sealed_to_linked` / `linked_to_sealed`.
