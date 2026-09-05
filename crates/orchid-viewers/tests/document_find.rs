@@ -510,3 +510,30 @@ fn bump_paragraph_spacing_before_and_after() {
         assert_eq!(p.space_before_twips, 120);
     }
 }
+
+#[test]
+fn insert_comment_on_selection_and_undo() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(sample_doc());
+    viewer.set_selection_plain_offsets(0, 5);
+    let id = viewer.insert_comment_at_selection().unwrap();
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        assert_eq!(doc.comments.len(), 1);
+        assert_eq!(doc.comments[0].id, id);
+        assert_eq!(doc.comments[0].author, "Orchid");
+        assert!(!doc.comments[0].text.is_empty());
+        assert_eq!(doc.comment_ranges.len(), 1);
+        assert_eq!(doc.comment_ranges[0].id, id);
+        assert_eq!(doc.comment_ranges[0].start_plain, 0);
+        assert_eq!(doc.comment_ranges[0].end_plain, 5);
+    }
+    viewer.undo().unwrap();
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        assert!(doc.comments.is_empty());
+        assert!(doc.comment_ranges.is_empty());
+    }
+}

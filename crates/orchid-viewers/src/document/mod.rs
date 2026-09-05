@@ -29,7 +29,7 @@ pub use cursor::{
 };
 pub use layout::{DocumentLayout, PreviewInsets, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
-    Alignment, Block, Bookmark, CellImage, DocField, Document, Hyperlink, ImageFormat, InlineImage,
+    Alignment, Block, Bookmark, CellImage, CommentRange, DocComment, DocField, Document, Hyperlink, ImageFormat, InlineImage,
     LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table,
     TableCell, TableRow, VMerge,
 };
@@ -1781,6 +1781,58 @@ impl DocumentViewer {
         Ok(name)
     }
 
+    /// Insert a comment on the current selection (caret → zero-width range).
+    ///
+    /// Body text defaults to the selected plain text (trimmed, ≤200 chars) or
+    /// `"Comment"` when the selection is empty. Author is `"Orchid"`.
+    ///
+    /// Returns the new comment id.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn insert_comment_at_selection(&self) -> Result<u32> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let (a, b) = sel.normalized();
+        let start = plain_offset_from_cursor(doc, a);
+        let end = plain_offset_from_cursor(doc, b);
+        let start_plain = start.min(end);
+        let end_plain = start.max(end);
+        let id = next_comment_id(doc);
+        let text = if start_plain < end_plain {
+            let plain = doc.plain_text();
+            let slice = plain.get(start_plain..end_plain).unwrap_or("").trim();
+            let truncated: String = slice.chars().take(200).collect();
+            if truncated.is_empty() {
+                "Comment".into()
+            } else {
+                truncated
+            }
+        } else {
+            "Comment".into()
+        };
+        let date = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        let comment = DocComment {
+            id,
+            author: "Orchid".into(),
+            initials: "Or".into(),
+            date,
+            text,
+        };
+        let range = CommentRange {
+            id,
+            start_plain,
+            end_plain,
+        };
+        self.undo
+            .lock()
+            .push(doc, EditCommand::AddComment { comment, range })?;
+        self.invalidate_preview();
+        Ok(id)
+    }
+
     /// Toggle `w:keepNext` on selected paragraphs.
     ///
     /// # Errors
@@ -3522,6 +3574,17 @@ fn next_bookmark_name(doc: &Document) -> String {
         n += 1;
     }
 }
+
+fn next_comment_id(doc: &Document) -> u32 {
+    doc.comments
+        .iter()
+        .map(|c| c.id)
+        .chain(doc.comment_ranges.iter().map(|r| r.id))
+        .max()
+        .map(|m| m.saturating_add(1))
+        .unwrap_or(0)
+}
+
 
 fn clamp_spacing_twips(v: i32) -> u32 {
     v.clamp(0, SPACING_TWIPS_MAX) as u32

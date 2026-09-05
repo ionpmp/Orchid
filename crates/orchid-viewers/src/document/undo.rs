@@ -2,7 +2,8 @@
 
 use crate::document::cursor::{paragraph_mut, paragraph_ref, Cursor, Selection};
 use crate::document::model::{
-    Alignment, Block, Bookmark, CellImage, Document, Hyperlink, InlineImage, ListKind, PageSetup,
+    Alignment, Block, Bookmark, CellImage, CommentRange, DocComment, Document, Hyperlink,
+    InlineImage, ListKind, PageSetup,
     Paragraph, Run, RunStyle, Table, TableCell, TableRow,
 };
 use crate::error::{Result, ViewerError};
@@ -172,6 +173,18 @@ pub enum EditCommand {
     RemoveBookmark {
         /// Bookmark name (`w:name`).
         name: String,
+    },
+    /// Insert a comment payload + body range.
+    AddComment {
+        /// Comment body from `comments.xml`.
+        comment: DocComment,
+        /// Anchored plain-text span.
+        range: CommentRange,
+    },
+    /// Remove a comment by id (inverse of [`Self::AddComment`]).
+    RemoveComment {
+        /// Comment id (`w:id`).
+        id: u32,
     },
     /// Remove a block (inverse of insert).
     RemoveBlock {
@@ -827,6 +840,29 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
                 .ok_or(ViewerError::EditOutOfBounds)?;
             let bookmark = doc.bookmarks.remove(idx);
             Ok(EditCommand::AddBookmark { bookmark })
+        }
+        EditCommand::AddComment { comment, range } => {
+            if doc.comments.iter().any(|c| c.id == comment.id) {
+                return Err(ViewerError::EditOutOfBounds);
+            }
+            doc.comments.push(comment.clone());
+            doc.comment_ranges.push(range.clone());
+            Ok(EditCommand::RemoveComment { id: comment.id })
+        }
+        EditCommand::RemoveComment { id } => {
+            let c_idx = doc
+                .comments
+                .iter()
+                .position(|c| c.id == *id)
+                .ok_or(ViewerError::EditOutOfBounds)?;
+            let comment = doc.comments.remove(c_idx);
+            let r_idx = doc
+                .comment_ranges
+                .iter()
+                .position(|r| r.id == *id)
+                .ok_or(ViewerError::EditOutOfBounds)?;
+            let range = doc.comment_ranges.remove(r_idx);
+            Ok(EditCommand::AddComment { comment, range })
         }
         EditCommand::RemoveBlock { block_idx } => {
             if *block_idx >= doc.blocks.len() {
