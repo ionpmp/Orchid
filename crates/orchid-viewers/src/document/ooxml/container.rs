@@ -131,6 +131,22 @@ pub fn open_document(path: &Path) -> Result<Document> {
         &styles,
         &numbering,
     )?;
+    let header_even = load_story_part(
+        &package,
+        &rels,
+        page_setup.header_even_r_id.as_deref(),
+        "hdr",
+        &styles,
+        &numbering,
+    )?;
+    let footer_even = load_story_part(
+        &package,
+        &rels,
+        page_setup.footer_even_r_id.as_deref(),
+        "ftr",
+        &styles,
+        &numbering,
+    )?;
 
     let mut retained = Vec::new();
     for (name, bytes) in &package.parts {
@@ -147,6 +163,8 @@ pub fn open_document(path: &Path) -> Result<Document> {
         footer,
         header_first,
         footer_first,
+        header_even,
+        footer_even,
         bookmarks,
         unsupported,
         retained_parts: retained,
@@ -296,6 +314,24 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
             doc.page_setup.footer_first_r_id.as_deref(),
             "ftr",
             &doc.footer_first,
+        )?;
+        write_story_part(
+            &mut zip,
+            opts,
+            &mut written,
+            &rels_map,
+            doc.page_setup.header_even_r_id.as_deref(),
+            "hdr",
+            &doc.header_even,
+        )?;
+        write_story_part(
+            &mut zip,
+            opts,
+            &mut written,
+            &rels_map,
+            doc.page_setup.footer_even_r_id.as_deref(),
+            "ftr",
+            &doc.footer_even,
         )?;
 
         for (name, bytes) in &doc.retained_parts {
@@ -1229,6 +1265,109 @@ mod tests {
             loaded.page_setup.header_first_r_id.as_deref(),
             Some("rId9")
         );
+    }
+
+    #[test]
+    fn save_and_reopen_even_header_footer_stories() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hf-even.docx");
+        let file = File::create(&path).unwrap();
+        let mut zip = ZipWriter::new(file);
+        let opts = SimpleFileOptions::default();
+        zip.start_file("[Content_Types].xml", opts).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>
+  <Override PartName="/word/header2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>
+  <Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>
+  <Override PartName="/word/footer2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>
+</Types>"#,
+        )
+        .unwrap();
+        zip.start_file("_rels/.rels", opts).unwrap();
+        zip.write_all(MINIMAL_PACKAGE_RELS.as_bytes()).unwrap();
+        zip.start_file("word/document.xml", opts).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <w:body>
+            <w:p><w:r><w:t>Body</w:t></w:r></w:p>
+            <w:sectPr>
+              <w:evenAndOddHeaders/>
+              <w:headerReference w:type="default" r:id="rId7"/>
+              <w:headerReference w:type="even" r:id="rId9"/>
+              <w:footerReference w:type="default" r:id="rId8"/>
+              <w:footerReference w:type="even" r:id="rId10"/>
+            </w:sectPr>
+          </w:body>
+        </w:document>"#,
+        )
+        .unwrap();
+        zip.start_file("word/_rels/document.xml.rels", opts)
+            .unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>
+  <Relationship Id="rId8" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>
+  <Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header2.xml"/>
+  <Relationship Id="rId10" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/>
+</Relationships>"#,
+        )
+        .unwrap();
+        zip.start_file("word/header1.xml", opts).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0"?>
+        <w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:p><w:r><w:t>OddHdr</w:t></w:r></w:p>
+        </w:hdr>"#,
+        )
+        .unwrap();
+        zip.start_file("word/header2.xml", opts).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0"?>
+        <w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:p><w:r><w:t>EvenHdr</w:t></w:r></w:p>
+        </w:hdr>"#,
+        )
+        .unwrap();
+        zip.start_file("word/footer1.xml", opts).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0"?>
+        <w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:p><w:r><w:t>OddFtr</w:t></w:r></w:p>
+        </w:ftr>"#,
+        )
+        .unwrap();
+        zip.start_file("word/footer2.xml", opts).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0"?>
+        <w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:p><w:r><w:t>EvenFtr</w:t></w:r></w:p>
+        </w:ftr>"#,
+        )
+        .unwrap();
+        zip.finish().unwrap();
+
+        let mut doc = open_document(&path).unwrap();
+        assert!(doc.page_setup.even_and_odd_headers);
+        assert_eq!(doc.header[0].plain_text(), "OddHdr");
+        assert_eq!(doc.header_even[0].plain_text(), "EvenHdr");
+        assert_eq!(doc.footer[0].plain_text(), "OddFtr");
+        assert_eq!(doc.footer_even[0].plain_text(), "EvenFtr");
+
+        doc.header_even[0].runs[0].text = "NewEven".into();
+        save_document_sync(&doc, &path).unwrap();
+        let loaded = open_document(&path).unwrap();
+        assert!(loaded.page_setup.even_and_odd_headers);
+        assert_eq!(loaded.header_even[0].plain_text(), "NewEven");
+        assert_eq!(loaded.header[0].plain_text(), "OddHdr");
+        assert_eq!(loaded.page_setup.header_even_r_id.as_deref(), Some("rId9"));
     }
 
     #[test]

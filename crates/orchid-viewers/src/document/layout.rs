@@ -558,15 +558,20 @@ impl DocumentLayout {
             }
         }
 
-        // Header / footer stories in page margins. With `w:titlePg`, the single
-        // Preview canvas prefers first-page stories when present.
+        // Header / footer stories in page margins. Single Preview canvas prefers
+        // first-page stories when `w:titlePg`, else even-page stories when
+        // `w:evenAndOddHeaders`, else the default stories.
         let header_story = if doc.page_setup.title_page && !doc.header_first.is_empty() {
             &doc.header_first
+        } else if doc.page_setup.even_and_odd_headers && !doc.header_even.is_empty() {
+            &doc.header_even
         } else {
             &doc.header
         };
         let footer_story = if doc.page_setup.title_page && !doc.footer_first.is_empty() {
             &doc.footer_first
+        } else if doc.page_setup.even_and_odd_headers && !doc.footer_even.is_empty() {
+            &doc.footer_even
         } else {
             &doc.footer
         };

@@ -387,8 +387,14 @@ pub struct PageSetup {
     pub header_first_r_id: Option<String>,
     /// First-page footer relationship id (`w:type="first"`).
     pub footer_first_r_id: Option<String>,
+    /// Even-page header relationship id (`w:type="even"`).
+    pub header_even_r_id: Option<String>,
+    /// Even-page footer relationship id (`w:type="even"`).
+    pub footer_even_r_id: Option<String>,
     /// Different first page (`w:titlePg`).
     pub title_page: bool,
+    /// Different odd/even headers (`w:evenAndOddHeaders`).
+    pub even_and_odd_headers: bool,
 }
 
 impl Default for PageSetup {
@@ -405,7 +411,10 @@ impl Default for PageSetup {
             footer_r_id: None,
             header_first_r_id: None,
             footer_first_r_id: None,
+            header_even_r_id: None,
+            footer_even_r_id: None,
             title_page: false,
+            even_and_odd_headers: false,
         }
     }
 }
@@ -425,6 +434,10 @@ pub struct Document {
     pub header_first: Vec<Paragraph>,
     /// First-page footer story paragraphs (when [`PageSetup::title_page`]).
     pub footer_first: Vec<Paragraph>,
+    /// Even-page header story paragraphs (when [`PageSetup::even_and_odd_headers`]).
+    pub header_even: Vec<Paragraph>,
+    /// Even-page footer story paragraphs (when [`PageSetup::even_and_odd_headers`]).
+    pub footer_even: Vec<Paragraph>,
     /// Named destinations (`w:bookmarkStart`); first occurrence of a name wins on jump.
     pub bookmarks: Vec<Bookmark>,
     /// Unsupported body-level elements preserved for round-trip.

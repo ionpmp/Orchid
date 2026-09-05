@@ -988,6 +988,7 @@ fn parse_sect_pr(reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>) -> Result<PageSe
                         if let Some(id) = attr_val(&e, "id").filter(|s| !s.is_empty()) {
                             match ty.as_str() {
                                 "first" => setup.header_first_r_id = Some(id),
+                                "even" => setup.header_even_r_id = Some(id),
                                 "default" => setup.header_r_id = Some(id),
                                 _ => {}
                             }
@@ -998,6 +999,7 @@ fn parse_sect_pr(reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>) -> Result<PageSe
                         if let Some(id) = attr_val(&e, "id").filter(|s| !s.is_empty()) {
                             match ty.as_str() {
                                 "first" => setup.footer_first_r_id = Some(id),
+                                "even" => setup.footer_even_r_id = Some(id),
                                 "default" => setup.footer_r_id = Some(id),
                                 _ => {}
                             }
@@ -1005,6 +1007,9 @@ fn parse_sect_pr(reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>) -> Result<PageSe
                     }
                     "titlePg" => {
                         setup.title_page = true;
+                    }
+                    "evenAndOddHeaders" => {
+                        setup.even_and_odd_headers = true;
                     }
                     _ => {}
                 }
@@ -1918,9 +1923,30 @@ fn write_sect_pr(writer: &mut Writer<Cursor<Vec<u8>>>, setup: &PageSetup) -> Res
             .write_event(Event::Empty(fref))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
+    if let Some(ref id) = setup.header_even_r_id {
+        let mut href = BytesStart::new("w:headerReference");
+        href.push_attribute(("w:type", "even"));
+        href.push_attribute(("r:id", id.as_str()));
+        writer
+            .write_event(Event::Empty(href))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if let Some(ref id) = setup.footer_even_r_id {
+        let mut fref = BytesStart::new("w:footerReference");
+        fref.push_attribute(("w:type", "even"));
+        fref.push_attribute(("r:id", id.as_str()));
+        writer
+            .write_event(Event::Empty(fref))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
     if setup.title_page {
         writer
             .write_event(Event::Empty(BytesStart::new("w:titlePg")))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if setup.even_and_odd_headers {
+        writer
+            .write_event(Event::Empty(BytesStart::new("w:evenAndOddHeaders")))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
     writer
@@ -3647,6 +3673,55 @@ mod tests {
         assert!(page_setup.title_page);
         assert_eq!(page_setup.header_first_r_id.as_deref(), Some("rId1"));
         assert_eq!(page_setup.footer_first_r_id.as_deref(), Some("rId2"));
+    }
+
+    #[test]
+    fn parse_and_write_even_and_odd_headers() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <w:body>
+            <w:p><w:r><w:t>Body</w:t></w:r></w:p>
+            <w:sectPr>
+              <w:evenAndOddHeaders/>
+              <w:headerReference w:type="default" r:id="rId1"/>
+              <w:headerReference w:type="even" r:id="rId2"/>
+              <w:footerReference w:type="default" r:id="rId3"/>
+              <w:footerReference w:type="even" r:id="rId4"/>
+            </w:sectPr>
+          </w:body>
+        </w:document>"#;
+        let (_, page_setup, _, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert!(page_setup.even_and_odd_headers);
+        assert_eq!(page_setup.header_r_id.as_deref(), Some("rId1"));
+        assert_eq!(page_setup.header_even_r_id.as_deref(), Some("rId2"));
+        assert_eq!(page_setup.footer_r_id.as_deref(), Some("rId3"));
+        assert_eq!(page_setup.footer_even_r_id.as_deref(), Some("rId4"));
+        let doc = Document {
+            page_setup,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:evenAndOddHeaders"),
+            "missing evenAndOddHeaders: {text}"
+        );
+        assert!(
+            text.contains("w:type=\"even\"") && text.contains("r:id=\"rId2\""),
+            "missing even headerReference: {text}"
+        );
+        assert!(
+            text.contains("r:id=\"rId4\""),
+            "missing even footerReference: {text}"
+        );
     }
 
     #[test]
