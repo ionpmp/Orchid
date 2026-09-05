@@ -8,7 +8,7 @@ use quick_xml::reader::Reader;
 use quick_xml::writer::Writer;
 
 use crate::document::model::{
-    Alignment, Block, Bookmark, CellImage, Document, Hyperlink, ImageFormat, InlineImage,
+    Alignment, Block, Bookmark, CellImage, DocField, Document, Hyperlink, ImageFormat, InlineImage,
     LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell,
     TableRow, VMerge, CELL_BORDER_BOTTOM, CELL_BORDER_LEFT, CELL_BORDER_RIGHT,
     CELL_BORDER_TOP,
@@ -355,6 +355,9 @@ fn parse_paragraph(
     let mut in_t = false;
     let mut current_run: Option<Run> = None;
     let mut active_link: Option<Hyperlink> = None;
+    // Complex field collapse (`w:fldChar` / `w:instrText`) for PAGE / NUMPAGES.
+    let mut cx_field: ComplexFieldParse = ComplexFieldParse::Off;
+    let mut in_instr_text = false;
 
     loop {
         match reader.read_event_into(buf) {
@@ -441,12 +444,20 @@ fn parse_paragraph(
                             local_bookmarks.push((name, para_plain_len));
                         }
                     }
+                    "fldSimple" => {
+                        let instr = attr_val(&e, "instr").unwrap_or_default();
+                        let link = active_link.clone();
+                        let run = parse_fld_simple(reader, buf, styles, link, &instr)?;
+                        para_plain_len += run.text.len();
+                        p.runs.push(run);
+                    }
                     "r" => {
                         in_r = true;
                         current_run = Some(Run {
                             text: String::new(),
                             style: styles.run.clone(),
                             hyperlink: active_link.clone(),
+                            field: None,
                         });
                     }
                     "rPr" if in_r => {
@@ -468,6 +479,20 @@ fn parse_paragraph(
                         } else if let Some(ref mut run) = current_run {
                             run.text.push('\n');
                         }
+                    }
+                    "fldChar" => {
+                        apply_fld_char(
+                            &e,
+                            &mut cx_field,
+                            &mut current_run,
+                            &mut p,
+                            &mut para_plain_len,
+                            styles,
+                            active_link.as_ref(),
+                        );
+                    }
+                    "instrText" if in_r => {
+                        in_instr_text = true;
                     }
                     _ => {}
                 }
@@ -550,6 +575,17 @@ fn parse_paragraph(
                         run.text.push('\n');
                     }
                 }
+                if local == "fldChar" {
+                    apply_fld_char(
+                        &e,
+                        &mut cx_field,
+                        &mut current_run,
+                        &mut p,
+                        &mut para_plain_len,
+                        styles,
+                        active_link.as_ref(),
+                    );
+                }
                 if local == "bookmarkStart" {
                     if let Some(name) = attr_val(&e, "name").filter(|n| !n.is_empty()) {
                         local_bookmarks.push((name, para_plain_len));
@@ -562,10 +598,17 @@ fn parse_paragraph(
                 }
             }
             Ok(Event::Text(t)) => {
-                if in_t {
+                let text = t.as_ref();
+                if in_instr_text {
+                    if let ComplexFieldParse::Instr { instr, .. } = &mut cx_field {
+                        instr.push_str(text);
+                    }
+                } else if in_t {
                     if let Some(ref mut run) = current_run {
-                        let text = t.as_ref();
                         run.text.push_str(text);
+                    }
+                    if let ComplexFieldParse::Result { text: result, .. } = &mut cx_field {
+                        result.push_str(text);
                     }
                 }
             }
@@ -575,10 +618,19 @@ fn parse_paragraph(
                     "pPr" => in_p_pr = false,
                     "pBdr" => in_p_bdr = false,
                     "t" => in_t = false,
+                    "instrText" => in_instr_text = false,
                     "r" => {
                         in_r = false;
                         in_t = false;
-                        if let Some(run) = current_run.take() {
+                        in_instr_text = false;
+                        if matches!(
+                            cx_field,
+                            ComplexFieldParse::Instr { .. } | ComplexFieldParse::Result { .. }
+                        ) {
+                            // Discard shell runs that only carry fldChar / instrText / result
+                            // fragments; the collapsed field is pushed on fldChar end.
+                            current_run = None;
+                        } else if let Some(run) = current_run.take() {
                             para_plain_len += run.text.len();
                             p.runs.push(run);
                         }
@@ -612,6 +664,179 @@ fn media_part_path(target: &str) -> String {
     } else {
         format!("word/{t}")
     }
+}
+
+#[derive(Debug, Clone)]
+enum ComplexFieldParse {
+    Off,
+    Instr {
+        instr: String,
+        style: RunStyle,
+        link: Option<Hyperlink>,
+    },
+    Result {
+        field: Option<DocField>,
+        text: String,
+        style: RunStyle,
+        link: Option<Hyperlink>,
+    },
+}
+
+fn apply_fld_char(
+    e: &BytesStart<'_>,
+    cx_field: &mut ComplexFieldParse,
+    current_run: &mut Option<Run>,
+    p: &mut Paragraph,
+    para_plain_len: &mut usize,
+    styles: &StyleDefaults,
+    active_link: Option<&Hyperlink>,
+) {
+    let ty = attr_val(e, "fldCharType").unwrap_or_default();
+    match ty.as_str() {
+        "begin" => {
+            let style = current_run
+                .as_ref()
+                .map(|r| r.style.clone())
+                .unwrap_or_else(|| styles.run.clone());
+            *cx_field = ComplexFieldParse::Instr {
+                instr: String::new(),
+                style,
+                link: active_link.cloned(),
+            };
+            *current_run = None;
+        }
+        "separate" => {
+            if let ComplexFieldParse::Instr {
+                instr,
+                style,
+                link,
+            } = std::mem::replace(cx_field, ComplexFieldParse::Off)
+            {
+                *cx_field = ComplexFieldParse::Result {
+                    field: DocField::from_instr(&instr),
+                    text: String::new(),
+                    style,
+                    link,
+                };
+            }
+            *current_run = None;
+        }
+        "end" => {
+            if let ComplexFieldParse::Result {
+                field,
+                text,
+                style,
+                link,
+            } = std::mem::replace(cx_field, ComplexFieldParse::Off)
+            {
+                let display = if text.is_empty() {
+                    field
+                        .map(|f| f.display(1, 1))
+                        .unwrap_or_default()
+                } else {
+                    text
+                };
+                if field.is_some() || !display.is_empty() {
+                    *para_plain_len += display.len();
+                    p.runs.push(Run {
+                        text: display,
+                        style,
+                        hyperlink: link,
+                        field,
+                    });
+                }
+            }
+            *current_run = None;
+        }
+        _ => {}
+    }
+}
+
+fn parse_fld_simple(
+    reader: &mut Reader<&[u8]>,
+    buf: &mut Vec<u8>,
+    styles: &StyleDefaults,
+    link: Option<Hyperlink>,
+    instr: &str,
+) -> Result<Run> {
+    let field = DocField::from_instr(instr);
+    let mut text = String::new();
+    let mut style = styles.run.clone();
+    let mut in_t = false;
+    loop {
+        match reader.read_event_into(buf) {
+            Ok(Event::Start(e)) => {
+                let local = local_name(e.name().as_ref());
+                match local.as_str() {
+                    "rPr" => parse_r_pr_into(reader, buf, &mut style)?,
+                    "t" => in_t = true,
+                    _ => {}
+                }
+            }
+            Ok(Event::Empty(_)) => {}
+            Ok(Event::Text(t)) => {
+                if in_t {
+                    text.push_str(t.as_ref());
+                }
+            }
+            Ok(Event::End(e)) => {
+                let local = local_name(e.name().as_ref());
+                if local == "t" {
+                    in_t = false;
+                }
+                if local == "fldSimple" {
+                    break;
+                }
+            }
+            Ok(Event::Eof) => {
+                return Err(ViewerError::DocumentParse(
+                    "unexpected EOF inside fldSimple".into(),
+                ));
+            }
+            Err(e) => {
+                return Err(ViewerError::DocumentParse(format!("fldSimple: {e}")));
+            }
+            _ => {}
+        }
+        buf.clear();
+    }
+    if text.is_empty() {
+        text = field.map(|f| f.display(1, 1)).unwrap_or_default();
+    }
+    Ok(Run {
+        text,
+        style,
+        hyperlink: link,
+        field,
+    })
+}
+
+fn write_fld_simple(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<()> {
+    let Some(field) = run.field else {
+        return write_run(writer, run);
+    };
+    let mut start = BytesStart::new("w:fldSimple");
+    start.push_attribute(("w:instr", format!(" {} ", field.instr()).as_str()));
+    writer
+        .write_event(Event::Start(start))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    write_run(
+        writer,
+        &Run {
+            text: if run.text.is_empty() {
+                field.display(1, 1)
+            } else {
+                run.text.clone()
+            },
+            style: run.style.clone(),
+            hyperlink: None,
+            field: None,
+        },
+    )?;
+    writer
+        .write_event(Event::End(BytesEnd::new("w:fldSimple")))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    Ok(())
 }
 
 /// Walk a `w:drawing` subtree and resolve the embedded blip to package media.
@@ -1375,6 +1600,10 @@ fn write_paragraph(
                 .write_event(Event::End(BytesEnd::new("w:hyperlink")))
                 .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
             i = j;
+        } else if p.runs[i].field.is_some() {
+            write_fld_simple(writer, &p.runs[i])?;
+            run_rel += p.runs[i].text.len();
+            i += 1;
         } else {
             write_run(writer, &p.runs[i])?;
             run_rel += p.runs[i].text.len();
@@ -3768,6 +3997,64 @@ mod tests {
             text.contains("w:footer=\"864\""),
             "missing footer distance: {text}"
         );
+    }
+
+    #[test]
+    fn parse_and_write_fld_simple_page_numpages() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:p>
+            <w:fldSimple w:instr=" PAGE ">
+              <w:r><w:t>3</w:t></w:r>
+            </w:fldSimple>
+            <w:r><w:t> / </w:t></w:r>
+            <w:fldSimple w:instr=" NUMPAGES ">
+              <w:r><w:t>10</w:t></w:r>
+            </w:fldSimple>
+          </w:p>
+        </w:hdr>"#;
+        let paras = parse_story_xml(
+            xml,
+            "hdr",
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+        )
+        .unwrap();
+        assert_eq!(paras.len(), 1);
+        assert_eq!(paras[0].runs.len(), 3);
+        assert_eq!(paras[0].runs[0].field, Some(DocField::Page));
+        assert_eq!(paras[0].runs[0].text, "3");
+        assert!(paras[0].runs[1].field.is_none());
+        assert_eq!(paras[0].runs[2].field, Some(DocField::NumPages));
+        assert_eq!(paras[0].runs[2].text, "10");
+        let out = write_story_xml("hdr", &paras).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(text.contains("w:fldSimple") && text.contains("PAGE"), "{text}");
+        assert!(text.contains("NUMPAGES"), "{text}");
+    }
+
+    #[test]
+    fn parse_complex_page_field_collapses() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:p>
+            <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+            <w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>
+            <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+            <w:r><w:t>7</w:t></w:r>
+            <w:r><w:fldChar w:fldCharType="end"/></w:r>
+          </w:p>
+        </w:ftr>"#;
+        let paras = parse_story_xml(
+            xml,
+            "ftr",
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+        )
+        .unwrap();
+        assert_eq!(paras[0].runs.len(), 1);
+        assert_eq!(paras[0].runs[0].field, Some(DocField::Page));
+        assert_eq!(paras[0].runs[0].text, "7");
     }
 
     #[test]

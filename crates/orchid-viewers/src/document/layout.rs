@@ -566,6 +566,7 @@ impl DocumentLayout {
         // `w:pgMar` `@w:header` / `@w:footer` distances from the page edge.
         let header_off = twips_to_css_px(doc.page_setup.header_distance_twips) * scale;
         let footer_off = twips_to_css_px(doc.page_setup.footer_distance_twips) * scale;
+        let page_count = (page_starts.len() as u32).max(1);
         for (page_i, &start_y) in page_starts.iter().enumerate() {
             let page = (page_i + 1) as u32;
             let end_y = page_starts
@@ -573,6 +574,8 @@ impl DocumentLayout {
                 .copied()
                 .unwrap_or(total_h);
             let (header_story, footer_story) = margin_stories_for_page(doc, page);
+            let header_resolved = resolve_story_fields(header_story, page, page_count);
+            let footer_resolved = resolve_story_fields(footer_story, page, page_count);
             // `start_y` is content-relative; header sits `header_off` below the page top.
             let header_y = (start_y + header_off).max(0.0);
             let footer_y = if page_i + 1 == page_starts.len() {
@@ -580,9 +583,9 @@ impl DocumentLayout {
             } else {
                 (insets.top + end_y - footer_off.min(insets.bottom).max(12.0 * scale)).max(0.0)
             };
-            if !header_story.is_empty() {
+            if !header_resolved.is_empty() {
                 self.paint_margin_story(
-                    header_story,
+                    &header_resolved,
                     max_w,
                     insets.left,
                     header_y,
@@ -592,9 +595,9 @@ impl DocumentLayout {
                     height,
                 );
             }
-            if !footer_story.is_empty() {
+            if !footer_resolved.is_empty() {
                 self.paint_margin_story(
-                    footer_story,
+                    &footer_resolved,
                     max_w,
                     insets.left,
                     footer_y,
@@ -618,6 +621,26 @@ impl DocumentLayout {
         });
         overlay_selection_on_scene(self.scene.as_ref().expect("scene just stored"), selection)
     }
+}
+
+/// Substitute `PAGE` / `NUMPAGES` field display text for preview paint.
+fn resolve_story_fields(
+    paragraphs: &[crate::document::model::Paragraph],
+    page: u32,
+    page_count: u32,
+) -> Vec<crate::document::model::Paragraph> {
+    paragraphs
+        .iter()
+        .map(|p| {
+            let mut out = p.clone();
+            for run in &mut out.runs {
+                if let Some(field) = run.field {
+                    run.text = field.display(page, page_count);
+                }
+            }
+            out
+        })
+        .collect()
 }
 
 /// Pick header/footer stories for a 1-based preview page index.
@@ -3541,6 +3564,60 @@ mod tests {
             cursor.cell.and_then(|c| c.image_idx),
             Some(0),
             "expected cell image cursor"
+        );
+    }
+
+    #[test]
+    fn preview_substitutes_page_fields_in_footer() {
+        use crate::document::model::DocField;
+        let mut page_setup = PageSetup::default();
+        page_setup.margin_bottom_twips = 1440;
+        page_setup.footer_distance_twips = 720;
+        let with_field = Document {
+            blocks: vec![
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "One".into(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+                Block::Paragraph(Paragraph {
+                    page_break_before: true,
+                    runs: vec![Run {
+                        text: "Two".into(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+            ],
+            page_setup: page_setup.clone(),
+            footer: vec![Paragraph {
+                runs: vec![Run {
+                    text: "0".into(),
+                    field: Some(DocField::Page),
+                    style: RunStyle {
+                        bold: true,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let without = Document {
+            blocks: with_field.blocks.clone(),
+            page_setup,
+            ..Default::default()
+        };
+        let (bytes_with, w, h) = DocumentLayout::new().render_document(&with_field, 400.0);
+        let (bytes_without, w2, h2) = DocumentLayout::new().render_document(&without, 400.0);
+        assert_eq!((w, h), (w2, h2));
+        let dark = |bytes: &[u8]| bytes.chunks_exact(4).filter(|px| px[0] < 100).count();
+        assert!(
+            dark(&bytes_with) > dark(&bytes_without) + 5,
+            "PAGE field footer should add glyph ink"
         );
     }
 

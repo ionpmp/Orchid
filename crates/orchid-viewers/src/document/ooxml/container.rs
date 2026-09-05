@@ -1066,6 +1066,7 @@ mod tests {
                         r_id: None,
                     bookmark: None,
                     }),
+                    field: None,
                 }],
                 ..Default::default()
             })],

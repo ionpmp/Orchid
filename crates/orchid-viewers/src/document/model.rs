@@ -86,15 +86,61 @@ pub struct Bookmark {
     pub plain_offset: usize,
 }
 
+/// Simple Word field kinds supported in Tier-1 stories / body.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DocField {
+    /// Current page number (`PAGE`).
+    Page,
+    /// Total page count (`NUMPAGES`).
+    NumPages,
+}
+
+impl DocField {
+    /// OOXML `w:instr` token (without switches).
+    #[must_use]
+    pub fn instr(self) -> &'static str {
+        match self {
+            Self::Page => "PAGE",
+            Self::NumPages => "NUMPAGES",
+        }
+    }
+
+    /// Parse a field instruction string (`PAGE`, `NUMPAGES`, optional switches).
+    #[must_use]
+    pub fn from_instr(instr: &str) -> Option<Self> {
+        let token = instr
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .to_ascii_uppercase();
+        match token.as_str() {
+            "NUMPAGES" => Some(Self::NumPages),
+            "PAGE" => Some(Self::Page),
+            _ => None,
+        }
+    }
+
+    /// Preview / cached display for a field at `page` of `page_count` (1-based).
+    #[must_use]
+    pub fn display(self, page: u32, page_count: u32) -> String {
+        match self {
+            Self::Page => page.max(1).to_string(),
+            Self::NumPages => page_count.max(1).to_string(),
+        }
+    }
+}
+
 /// A contiguous run of text with uniform style.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Run {
-    /// Plain text content (may be empty).
+    /// Plain text content (may be empty). Cached field result when [`Self::field`] is set.
     pub text: String,
     /// Character style.
     pub style: RunStyle,
     /// External hyperlink covering this run (`None` = plain text).
     pub hyperlink: Option<Hyperlink>,
+    /// Simple field (`PAGE` / `NUMPAGES`); `text` holds the last known result.
+    pub field: Option<DocField>,
 }
 
 /// Paragraph alignment.

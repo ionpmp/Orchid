@@ -1091,6 +1091,7 @@ mod tests {
                             r_id: Some("rId5".into()),
                             bookmark: None,
                         }),
+                        field: None,
                     },
                 ],
                 ..Default::default()

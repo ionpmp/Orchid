@@ -1033,6 +1033,7 @@ fn split_run_at(p: &mut Paragraph, run_idx: usize, byte_offset: usize) -> Result
             text: right_text,
             style,
             hyperlink,
+            field: None,
         },
     );
     Ok(run_idx + 1)

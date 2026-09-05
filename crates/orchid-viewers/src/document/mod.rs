@@ -29,7 +29,7 @@ pub use cursor::{
 };
 pub use layout::{DocumentLayout, PreviewInsets, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
-    Alignment, Block, Bookmark, CellImage, Document, Hyperlink, ImageFormat, InlineImage,
+    Alignment, Block, Bookmark, CellImage, DocField, Document, Hyperlink, ImageFormat, InlineImage,
     LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table,
     TableCell, TableRow, VMerge,
 };
@@ -2836,6 +2836,63 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Append `PAGE` / `NUMPAGES` fields to the default footer (`Pg#` toolbar).
+    ///
+    /// Inserts `PAGE`, ` / `, and `NUMPAGES` runs (with a leading space when the
+    /// footer already has text).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn insert_page_number_fields_in_footer(&self) -> Result<()> {
+        use crate::document::model::DocField;
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let mut paragraphs = doc.footer.clone();
+        let mut runs = vec![
+            Run {
+                text: "1".into(),
+                field: Some(DocField::Page),
+                ..Default::default()
+            },
+            Run {
+                text: " / ".into(),
+                ..Default::default()
+            },
+            Run {
+                text: "1".into(),
+                field: Some(DocField::NumPages),
+                ..Default::default()
+            },
+        ];
+        if let Some(last) = paragraphs.last_mut() {
+            if last
+                .runs
+                .last()
+                .is_some_and(|r| !r.text.is_empty() || r.field.is_some())
+            {
+                last.runs.push(Run {
+                    text: " ".into(),
+                    ..Default::default()
+                });
+            }
+            last.runs.append(&mut runs);
+        } else {
+            paragraphs.push(Paragraph {
+                runs,
+                ..Default::default()
+            });
+        }
+        if paragraphs == doc.footer {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::SetFooter { paragraphs })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Toggle page size between US Letter and ISO A4 (margins unchanged).
     ///
     /// # Errors
@@ -3603,11 +3660,13 @@ fn split_runs_at(p: &Paragraph, at: Cursor) -> (Vec<Run>, Vec<Run>) {
                     text: run.text[..split].to_string(),
                     style: run.style.clone(),
                     hyperlink: run.hyperlink.clone(),
+                    field: None,
                 });
                 right_runs.push(Run {
                     text: run.text[split..].to_string(),
                     style: run.style.clone(),
                     hyperlink: run.hyperlink.clone(),
+                    field: None,
                 });
             }
         }
@@ -3625,6 +3684,7 @@ fn split_runs_at(p: &Paragraph, at: Cursor) -> (Vec<Run>, Vec<Run>) {
             text: String::new(),
             style,
             hyperlink,
+            field: None,
         });
     }
     (left_runs, right_runs)
@@ -3826,6 +3886,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
                 text: run.text[..start.byte_offset.min(run.text.len())].to_string(),
                 style: run.style.clone(),
                 hyperlink: run.hyperlink.clone(),
+                field: None,
             });
         }
     }
@@ -3837,6 +3898,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
                 text: run.text[end.byte_offset.min(run.text.len())..].to_string(),
                 style: run.style.clone(),
                 hyperlink: run.hyperlink.clone(),
+                field: None,
             });
         }
     }
@@ -3921,6 +3983,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
                 text: run.text[..start.byte_offset.min(run.text.len())].to_string(),
                 style: run.style.clone(),
                 hyperlink: run.hyperlink.clone(),
+                field: None,
             });
         }
     }
@@ -3932,6 +3995,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
                 text: run.text[end.byte_offset.min(run.text.len())..].to_string(),
                 style: run.style.clone(),
                 hyperlink: run.hyperlink.clone(),
+                field: None,
             });
         }
     }

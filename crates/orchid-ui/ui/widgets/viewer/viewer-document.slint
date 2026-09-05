@@ -1635,6 +1635,26 @@ export component ViewerDocumentView inherits Rectangle {
                     }
                 }
 
+                Rectangle {
+                    width: max(36px, pg-btn-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(false, pg-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    pg-ta := TouchArea { clicked => { root.action("insert-page-field"); } }
+                    pg-btn-label := Text {
+                        text: model.page-field-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-page-field;
+                        show: pg-ta.has-hover;
+                        below: false;
+                    }
+                }
 
                 Rectangle {
                     width: 1px;

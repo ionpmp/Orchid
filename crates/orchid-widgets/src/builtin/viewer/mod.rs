@@ -3647,6 +3647,7 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "suppress-auto-hyphens" => doc.toggle_suppress_auto_hyphens_selection(),
                 "outline-level-cycle" => doc.cycle_outline_level_selection(),
                 "insert-bookmark" => doc.insert_bookmark_at_selection().map(|_| ()),
+                "insert-page-field" => doc.insert_page_number_fields_in_footer(),
                 "superscript" => doc.toggle_style_all('^'),
                 "subscript" => doc.toggle_style_all('_'),
                 "clear-formatting" => doc.clear_formatting_selection(),
