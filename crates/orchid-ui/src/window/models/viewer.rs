@@ -884,6 +884,9 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         title_page: false,
         title_page_label: locale.tr("viewer-document-title-page").into(),
         tip_title_page: locale.tr("viewer-document-tip-title-page").into(),
+        even_and_odd_headers: false,
+        even_and_odd_headers_label: locale.tr("viewer-document-even-and-odd-headers").into(),
+        tip_even_and_odd_headers: locale.tr("viewer-document-tip-even-and-odd-headers").into(),
         image_insert_label: locale.tr("viewer-document-image-insert").into(),
         table_insert_label: locale.tr("viewer-document-table-insert").into(),
         table_row_insert_label: locale.tr("viewer-document-table-row-insert").into(),
@@ -1463,6 +1466,7 @@ fn build_document_snapshot(
     model.header_text = s.header_text.clone().into();
     model.footer_text = s.footer_text.clone().into();
     model.title_page = s.title_page;
+    model.even_and_odd_headers = s.even_and_odd_headers;
     model.page_size_label = document_page_size_label(locale, s.page_is_a4, s.page_landscape);
     model
 }

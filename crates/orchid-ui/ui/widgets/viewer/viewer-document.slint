@@ -1420,6 +1420,27 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: max(28px, ee-btn-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(model.even-and-odd-headers, ee-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ee-ta := TouchArea { clicked => { root.action("even-and-odd-headers"); } }
+                    ee-btn-label := Text {
+                        text: model.even-and-odd-headers-label;
+                        color: tool-btn(model.even-and-odd-headers);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-even-and-odd-headers;
+                        show: ee-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
                     width: max(36px, hdr-btn-label.preferred-width + 12px);
                     height: 28px;
                     background: tool-bg(root.story-open == 1 || model.header-text != "", hdr-ta.has-hover);

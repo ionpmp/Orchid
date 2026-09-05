@@ -3679,6 +3679,7 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "page-size-cycle" => doc.cycle_page_size(),
                 "page-orientation-toggle" => doc.toggle_page_orientation(),
                 "title-page" => doc.toggle_title_page(),
+                "even-and-odd-headers" => doc.toggle_even_and_odd_headers(),
                 "zoom-in" => doc.bump_preview_zoom(1),
                 "zoom-out" => doc.bump_preview_zoom(-1),
                 "zoom-reset" => doc.reset_preview_zoom(),

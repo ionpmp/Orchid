@@ -1135,7 +1135,12 @@ mod tests {
         next.margin_right_twips = 720;
         let mut stack = UndoStack::new();
         stack
-            .push(&mut doc, EditCommand::SetPageSetup { setup: next.clone() })
+            .push(
+                &mut doc,
+                EditCommand::SetPageSetup {
+                    setup: next.clone(),
+                },
+            )
             .unwrap();
         assert_eq!(doc.page_setup.margin_left_twips, 720);
         stack.undo(&mut doc).unwrap();
@@ -1152,13 +1157,41 @@ mod tests {
         let mut next = doc.page_setup.clone();
         next.title_page = true;
         stack
-            .push(&mut doc, EditCommand::SetPageSetup { setup: next.clone() })
+            .push(
+                &mut doc,
+                EditCommand::SetPageSetup {
+                    setup: next.clone(),
+                },
+            )
             .unwrap();
         assert!(doc.page_setup.title_page);
         stack.undo(&mut doc).unwrap();
         assert!(!doc.page_setup.title_page);
         stack.redo(&mut doc).unwrap();
         assert!(doc.page_setup.title_page);
+        assert_eq!(doc.page_setup, next);
+    }
+
+    #[test]
+    fn set_even_and_odd_headers_then_undo() {
+        let mut doc = doc_with_hello();
+        assert!(!doc.page_setup.even_and_odd_headers);
+        let mut stack = UndoStack::new();
+        let mut next = doc.page_setup.clone();
+        next.even_and_odd_headers = true;
+        stack
+            .push(
+                &mut doc,
+                EditCommand::SetPageSetup {
+                    setup: next.clone(),
+                },
+            )
+            .unwrap();
+        assert!(doc.page_setup.even_and_odd_headers);
+        stack.undo(&mut doc).unwrap();
+        assert!(!doc.page_setup.even_and_odd_headers);
+        stack.redo(&mut doc).unwrap();
+        assert!(doc.page_setup.even_and_odd_headers);
         assert_eq!(doc.page_setup, next);
     }
 

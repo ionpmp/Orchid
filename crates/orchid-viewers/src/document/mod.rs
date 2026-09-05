@@ -2836,6 +2836,29 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Toggle different odd and even pages (`w:evenAndOddHeaders`).
+    ///
+    /// When enabled, Preview prefers even-page header/footer stories if present
+    /// (unless a title-page story takes precedence).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn toggle_even_and_odd_headers(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let mut next = doc.page_setup.clone();
+        next.even_and_odd_headers = !next.even_and_odd_headers;
+        if next == doc.page_setup {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::SetPageSetup { setup: next })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Set list kind on paragraphs touched by the selection (body or same cell).
     ///
     /// # Errors
@@ -4107,6 +4130,7 @@ impl Viewer for DocumentViewer {
         let header_text = story_plain_text(&doc.header);
         let footer_text = story_plain_text(&doc.footer);
         let title_page = doc.page_setup.title_page;
+        let even_and_odd_headers = doc.page_setup.even_and_odd_headers;
         drop(doc_guard);
         ViewerSnapshot::Document(DocumentSnapshot {
             path_display,
@@ -4164,6 +4188,7 @@ impl Viewer for DocumentViewer {
             header_text,
             footer_text,
             title_page,
+            even_and_odd_headers,
         })
     }
 

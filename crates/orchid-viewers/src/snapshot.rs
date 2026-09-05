@@ -134,6 +134,8 @@ pub struct DocumentSnapshot {
     pub footer_text: String,
     /// Different first page (`w:titlePg`) enabled.
     pub title_page: bool,
+    /// Different odd and even pages (`w:evenAndOddHeaders`) enabled.
+    pub even_and_odd_headers: bool,
 }
 
 /// Image snapshot.
