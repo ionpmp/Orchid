@@ -1,7 +1,7 @@
 //! Find next/previous in the DOCX plain-text stream.
 
 use orchid_viewers::document::model::{
-    Block, Document as Doc, Paragraph, Run, RunStyle, Table, TableCell, TableRow,
+    Block, Document as Doc, PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow,
 };
 use orchid_viewers::document::DocumentViewer;
 use orchid_viewers::{Viewer, ViewerSnapshot};
@@ -638,4 +638,151 @@ fn goto_comment_next_prev_wraps() {
     assert_eq!(viewer.selection_plain_offsets(), (0, 5));
     assert!(viewer.goto_comment(false).unwrap());
     assert_eq!(viewer.selection_plain_offsets(), (6, 11));
+}
+
+#[test]
+fn page_chrome_edits_caret_section_not_only_trailing() {
+    let mut sect0 = PageSetup::default(); // Letter
+    sect0.width_twips = 12240;
+    sect0.height_twips = 15840;
+    let mut trailing = PageSetup::default();
+    trailing.width_twips = 11906; // A4
+    trailing.height_twips = 16838;
+    let doc = Doc {
+        blocks: vec![
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "SectionZero".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                section_properties: Some(sect0.clone()),
+                ..Default::default()
+            }),
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "TrailingSect".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+        ],
+        page_setup: trailing.clone(),
+        ..Default::default()
+    };
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(doc);
+
+    // Caret in section 0 → Pg cycles Letter → A4 on mid-body only.
+    viewer.set_selection_plain_offsets(0, 0);
+    {
+        let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+            panic!("expected document");
+        };
+        assert!(!snap.page_is_a4, "caret in Letter section");
+    }
+    viewer.cycle_page_size().unwrap();
+    {
+        let guard = viewer.document();
+        let d = guard.as_ref().unwrap();
+        let Block::Paragraph(p0) = &d.blocks[0] else {
+            panic!("p0");
+        };
+        let ps = p0.section_properties.as_ref().unwrap();
+        assert_eq!(ps.width_twips, 11906);
+        assert_eq!(ps.height_twips, 16838);
+        assert_eq!(d.page_setup.width_twips, 11906, "trailing untouched");
+        assert_eq!(d.page_setup.height_twips, 16838);
+    }
+    {
+        let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+            panic!("expected document");
+        };
+        assert!(snap.page_is_a4);
+    }
+    viewer.undo().unwrap();
+    {
+        let guard = viewer.document();
+        let d = guard.as_ref().unwrap();
+        let Block::Paragraph(p0) = &d.blocks[0] else {
+            panic!("p0");
+        };
+        assert_eq!(
+            p0.section_properties.as_ref().unwrap().width_twips,
+            12240
+        );
+    }
+
+    // Caret in trailing section → Or flips trailing only.
+    viewer.set_selection_plain_offsets(20, 20); // into "TrailingSect"
+    viewer.toggle_page_orientation().unwrap();
+    {
+        let guard = viewer.document();
+        let d = guard.as_ref().unwrap();
+        assert_eq!(d.page_setup.width_twips, 16838);
+        assert_eq!(d.page_setup.height_twips, 11906);
+        let Block::Paragraph(p0) = &d.blocks[0] else {
+            panic!("p0");
+        };
+        assert_eq!(
+            p0.section_properties.as_ref().unwrap().width_twips,
+            12240,
+            "mid-body untouched"
+        );
+    }
+    {
+        let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+            panic!("expected document");
+        };
+        assert!(snap.page_landscape);
+        assert!(snap.page_is_a4);
+    }
+}
+
+#[test]
+fn section_break_stamps_caret_section_page_setup() {
+    let mut sect0 = PageSetup::default();
+    sect0.margin_left_twips = 720;
+    sect0.width_twips = 12240;
+    let mut trailing = PageSetup::default();
+    trailing.margin_left_twips = 2160;
+    trailing.width_twips = 11906;
+    let doc = Doc {
+        blocks: vec![
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "AAAA".into(),
+                    ..Default::default()
+                }],
+                section_properties: Some(sect0.clone()),
+                ..Default::default()
+            }),
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "BBBB".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+        ],
+        page_setup: trailing,
+        ..Default::default()
+    };
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(doc);
+    viewer.set_source_mode(false);
+    viewer.set_selection_plain_offsets(2, 2); // in section 0
+    viewer.preview_insert_section_break().unwrap();
+    {
+        let guard = viewer.document();
+        let d = guard.as_ref().unwrap();
+        // Ending para of first section should carry section-0 geometry.
+        let Block::Paragraph(p0) = &d.blocks[0] else {
+            panic!("p0");
+        };
+        let ps = p0.section_properties.as_ref().expect("sectPr on split left");
+        assert_eq!(ps.margin_left_twips, 720);
+        assert_eq!(ps.width_twips, 12240);
+    }
 }

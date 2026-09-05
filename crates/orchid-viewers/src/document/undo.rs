@@ -129,9 +129,16 @@ pub enum EditCommand {
         /// New body blocks.
         blocks: Vec<Block>,
     },
-    /// Replace page size / margins (`w:sectPr` / `w:pgMar`).
+    /// Replace trailing page size / margins (`Document::page_setup`).
     SetPageSetup {
         /// New page geometry.
+        setup: PageSetup,
+    },
+    /// Replace mid-body section page setup (`w:pPr/w:sectPr` on a paragraph).
+    SetSectionPageSetup {
+        /// Body block index of the paragraph that ends the section.
+        end_block_idx: usize,
+        /// New page geometry for that section.
         setup: PageSetup,
     },
     /// Replace the default header story paragraphs.
@@ -793,6 +800,26 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
         EditCommand::SetPageSetup { setup } => {
             let previous = std::mem::replace(&mut doc.page_setup, setup.clone());
             Ok(EditCommand::SetPageSetup { setup: previous })
+        }
+        EditCommand::SetSectionPageSetup {
+            end_block_idx,
+            setup,
+        } => {
+            let Block::Paragraph(p) = doc
+                .blocks
+                .get_mut(*end_block_idx)
+                .ok_or(ViewerError::EditOutOfBounds)?
+            else {
+                return Err(ViewerError::EditOutOfBounds);
+            };
+            let previous = p
+                .section_properties
+                .replace(setup.clone())
+                .ok_or(ViewerError::EditOutOfBounds)?;
+            Ok(EditCommand::SetSectionPageSetup {
+                end_block_idx: *end_block_idx,
+                setup: previous,
+            })
         }
         EditCommand::SetHeader { paragraphs } => {
             let previous = std::mem::replace(&mut doc.header, paragraphs.clone());

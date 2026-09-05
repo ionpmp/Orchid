@@ -405,7 +405,7 @@ impl DocumentViewer {
             let guard = self.document.read();
             match guard.as_ref() {
                 Some(doc) => {
-                    let insets = PreviewInsets::from_page_setup(&doc.page_setup);
+                    let insets = PreviewInsets::from_page_setup(&union_section_page_setup(doc));
                     (insets.left, insets.right)
                 }
                 None => {
@@ -427,7 +427,7 @@ impl DocumentViewer {
     fn sync_preview_width_after_margin_change(&self, doc: &Document) {
         let mut prev = self.preview.lock();
         if prev.viewport_px > 0.0 {
-            let insets = PreviewInsets::from_page_setup(&doc.page_setup);
+            let insets = PreviewInsets::from_page_setup(&union_section_page_setup(doc));
             let content = (prev.viewport_px - insets.left - insets.right).max(160.0);
             prev.width = content;
         }
@@ -749,7 +749,7 @@ impl DocumentViewer {
 
     /// Insert a next-page section break at the preview caret.
     ///
-    /// Splits like Enter, attaches a copy of the document trailing
+    /// Splits like Enter, attaches a copy of the **caret section's**
     /// [`PageSetup`] as [`Paragraph::section_properties`] on the paragraph that
     /// ends the previous section (`w:pPr/w:sectPr`), and starts the following
     /// content on a new preview page band.
@@ -760,8 +760,8 @@ impl DocumentViewer {
     pub fn preview_insert_section_break(&self) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let setup = doc.page_setup.clone();
         let sel = *self.selection.lock();
+        let setup = page_setup_for_cursor(doc, sel.head).clone();
         let at = self.delete_selection_if_needed(doc, sel)?;
         if at.cell.is_some() {
             // Section breaks are body-level in OOXML; fall back to a page break in cells.
@@ -2944,10 +2944,61 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Apply `mutate` to the page setup of the section that owns the caret.
+    ///
+    /// Mid-body sections update that paragraph's `section_properties`; the last
+    /// section updates trailing [`Document::page_setup`].
+    fn mutate_caret_page_setup(
+        &self,
+        doc: &mut Document,
+        mutate: impl FnOnce(&mut PageSetup),
+    ) -> Result<bool> {
+        let caret = self.selection.lock().head;
+        let target = section_page_setup_target(doc, caret_section_index(doc, caret.block_idx));
+        match target {
+            SectionPageSetupTarget::Trailing => {
+                let mut next = doc.page_setup.clone();
+                mutate(&mut next);
+                if next == doc.page_setup {
+                    return Ok(false);
+                }
+                self.undo
+                    .lock()
+                    .push(doc, EditCommand::SetPageSetup { setup: next })?;
+            }
+            SectionPageSetupTarget::MidBody { end_block_idx } => {
+                let Block::Paragraph(p) = doc
+                    .blocks
+                    .get(end_block_idx)
+                    .ok_or(ViewerError::EditOutOfBounds)?
+                else {
+                    return Err(ViewerError::EditOutOfBounds);
+                };
+                let Some(current) = p.section_properties.as_ref() else {
+                    return Err(ViewerError::EditOutOfBounds);
+                };
+                let mut next = current.clone();
+                mutate(&mut next);
+                if next == *current {
+                    return Ok(false);
+                }
+                self.undo.lock().push(
+                    doc,
+                    EditCommand::SetSectionPageSetup {
+                        end_block_idx,
+                        setup: next,
+                    },
+                )?;
+            }
+        }
+        Ok(true)
+    }
+
     /// Bump all page margins by `delta_twips` (clamped to 0.25″–3″).
     ///
-    /// Typical steps: `±180` (1/8″) or `±360` (1/4″). Preview insets update
-    /// immediately; undo restores the previous [`PageSetup`].
+    /// Typical steps: `±180` (1/8″) or `±360` (1/4″). Applies to the caret
+    /// section; Preview insets update immediately; undo restores the previous
+    /// [`PageSetup`].
     ///
     /// # Errors
     ///
@@ -2955,25 +3006,26 @@ impl DocumentViewer {
     pub fn bump_page_margins(&self, delta_twips: i32) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let mut next = doc.page_setup.clone();
-        next.margin_top_twips = clamp_margin_twips(next.margin_top_twips as i32 + delta_twips);
-        next.margin_bottom_twips =
-            clamp_margin_twips(next.margin_bottom_twips as i32 + delta_twips);
-        next.margin_left_twips = clamp_margin_twips(next.margin_left_twips as i32 + delta_twips);
-        next.margin_right_twips = clamp_margin_twips(next.margin_right_twips as i32 + delta_twips);
-        if next == doc.page_setup {
-            return Ok(());
+        let changed = self.mutate_caret_page_setup(doc, |next| {
+            next.margin_top_twips =
+                clamp_margin_twips(next.margin_top_twips as i32 + delta_twips);
+            next.margin_bottom_twips =
+                clamp_margin_twips(next.margin_bottom_twips as i32 + delta_twips);
+            next.margin_left_twips =
+                clamp_margin_twips(next.margin_left_twips as i32 + delta_twips);
+            next.margin_right_twips =
+                clamp_margin_twips(next.margin_right_twips as i32 + delta_twips);
+        })?;
+        if changed {
+            self.sync_preview_width_after_margin_change(doc);
         }
-        self.undo
-            .lock()
-            .push(doc, EditCommand::SetPageSetup { setup: next })?;
-        self.sync_preview_width_after_margin_change(doc);
         Ok(())
     }
 
     /// Nudge header and/or footer edge distances (`w:pgMar` `@w:header` / `@w:footer`).
     ///
     /// Positive `delta_twips` moves the story farther from the page edge.
+    /// Applies to the caret section.
     ///
     /// # Errors
     ///
@@ -2985,24 +3037,21 @@ impl DocumentViewer {
     ) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let mut next = doc.page_setup.clone();
-        if header_delta_twips != 0 {
-            next.header_distance_twips = clamp_header_footer_distance_twips(
-                next.header_distance_twips as i32 + header_delta_twips,
-            );
+        let changed = self.mutate_caret_page_setup(doc, |next| {
+            if header_delta_twips != 0 {
+                next.header_distance_twips = clamp_header_footer_distance_twips(
+                    next.header_distance_twips as i32 + header_delta_twips,
+                );
+            }
+            if footer_delta_twips != 0 {
+                next.footer_distance_twips = clamp_header_footer_distance_twips(
+                    next.footer_distance_twips as i32 + footer_delta_twips,
+                );
+            }
+        })?;
+        if changed {
+            self.invalidate_preview();
         }
-        if footer_delta_twips != 0 {
-            next.footer_distance_twips = clamp_header_footer_distance_twips(
-                next.footer_distance_twips as i32 + footer_delta_twips,
-            );
-        }
-        if next == doc.page_setup {
-            return Ok(());
-        }
-        self.undo
-            .lock()
-            .push(doc, EditCommand::SetPageSetup { setup: next })?;
-        self.invalidate_preview();
         Ok(())
     }
 
@@ -3254,40 +3303,41 @@ impl DocumentViewer {
 
     /// Toggle page size between US Letter and ISO A4 (margins unchanged).
     ///
+    /// Applies to the caret section.
+    ///
     /// # Errors
     ///
     /// [`ViewerError::DocumentNotOpen`].
     pub fn cycle_page_size(&self) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let mut next = doc.page_setup.clone();
-        let landscape = is_landscape_page(&next);
-        if is_a4_page(&next) {
-            if landscape {
-                next.width_twips = PAGE_LETTER_HEIGHT_TWIPS;
-                next.height_twips = PAGE_LETTER_WIDTH_TWIPS;
+        let changed = self.mutate_caret_page_setup(doc, |next| {
+            let landscape = is_landscape_page(next);
+            if is_a4_page(next) {
+                if landscape {
+                    next.width_twips = PAGE_LETTER_HEIGHT_TWIPS;
+                    next.height_twips = PAGE_LETTER_WIDTH_TWIPS;
+                } else {
+                    next.width_twips = PAGE_LETTER_WIDTH_TWIPS;
+                    next.height_twips = PAGE_LETTER_HEIGHT_TWIPS;
+                }
+            } else if landscape {
+                next.width_twips = PAGE_A4_HEIGHT_TWIPS;
+                next.height_twips = PAGE_A4_WIDTH_TWIPS;
             } else {
-                next.width_twips = PAGE_LETTER_WIDTH_TWIPS;
-                next.height_twips = PAGE_LETTER_HEIGHT_TWIPS;
+                next.width_twips = PAGE_A4_WIDTH_TWIPS;
+                next.height_twips = PAGE_A4_HEIGHT_TWIPS;
             }
-        } else if landscape {
-            next.width_twips = PAGE_A4_HEIGHT_TWIPS;
-            next.height_twips = PAGE_A4_WIDTH_TWIPS;
-        } else {
-            next.width_twips = PAGE_A4_WIDTH_TWIPS;
-            next.height_twips = PAGE_A4_HEIGHT_TWIPS;
+        })?;
+        if changed {
+            self.sync_preview_width_after_margin_change(doc);
         }
-        if next == doc.page_setup {
-            return Ok(());
-        }
-        self.undo
-            .lock()
-            .push(doc, EditCommand::SetPageSetup { setup: next })?;
-        self.sync_preview_width_after_margin_change(doc);
         Ok(())
     }
 
     /// Swap page width and height (portrait ↔ landscape).
+    ///
+    /// Applies to the caret section.
     ///
     /// # Errors
     ///
@@ -3295,21 +3345,19 @@ impl DocumentViewer {
     pub fn toggle_page_orientation(&self) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let mut next = doc.page_setup.clone();
-        std::mem::swap(&mut next.width_twips, &mut next.height_twips);
-        if next == doc.page_setup {
-            return Ok(());
+        let changed = self.mutate_caret_page_setup(doc, |next| {
+            std::mem::swap(&mut next.width_twips, &mut next.height_twips);
+        })?;
+        if changed {
+            self.sync_preview_width_after_margin_change(doc);
         }
-        self.undo
-            .lock()
-            .push(doc, EditCommand::SetPageSetup { setup: next })?;
-        self.sync_preview_width_after_margin_change(doc);
         Ok(())
     }
 
     /// Toggle different first page (`w:titlePg`).
     ///
     /// When enabled, Preview prefers first-page header/footer stories if present.
+    /// Applies to the caret section.
     ///
     /// # Errors
     ///
@@ -3317,22 +3365,19 @@ impl DocumentViewer {
     pub fn toggle_title_page(&self) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let mut next = doc.page_setup.clone();
-        next.title_page = !next.title_page;
-        if next == doc.page_setup {
-            return Ok(());
+        let changed = self.mutate_caret_page_setup(doc, |next| {
+            next.title_page = !next.title_page;
+        })?;
+        if changed {
+            self.invalidate_preview();
         }
-        self.undo
-            .lock()
-            .push(doc, EditCommand::SetPageSetup { setup: next })?;
-        self.invalidate_preview();
         Ok(())
     }
 
     /// Toggle different odd and even pages (`w:evenAndOddHeaders`).
     ///
     /// When enabled, Preview prefers even-page header/footer stories if present
-    /// (unless a title-page story takes precedence).
+    /// (unless a title-page story takes precedence). Applies to the caret section.
     ///
     /// # Errors
     ///
@@ -3340,15 +3385,12 @@ impl DocumentViewer {
     pub fn toggle_even_and_odd_headers(&self) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let mut next = doc.page_setup.clone();
-        next.even_and_odd_headers = !next.even_and_odd_headers;
-        if next == doc.page_setup {
-            return Ok(());
+        let changed = self.mutate_caret_page_setup(doc, |next| {
+            next.even_and_odd_headers = !next.even_and_odd_headers;
+        })?;
+        if changed {
+            self.invalidate_preview();
         }
-        self.undo
-            .lock()
-            .push(doc, EditCommand::SetPageSetup { setup: next })?;
-        self.invalidate_preview();
         Ok(())
     }
 
@@ -3687,6 +3729,74 @@ fn expand_selection_to_paragraph(doc: &Document, cursor: Cursor) -> Selection {
             byte_offset: p.runs[last].text.len(),
         },
     }
+}
+
+/// Body section index owning `caret_block` (0 = first; last = trailing `page_setup`).
+fn caret_section_index(doc: &Document, caret_block: usize) -> usize {
+    let mut section = 0usize;
+    for (bi, block) in doc.blocks.iter().enumerate() {
+        if bi >= caret_block {
+            break;
+        }
+        if let Block::Paragraph(p) = block {
+            if p.section_properties.is_some() {
+                section += 1;
+            }
+        }
+    }
+    section
+}
+
+enum SectionPageSetupTarget {
+    MidBody { end_block_idx: usize },
+    Trailing,
+}
+
+fn section_page_setup_target(doc: &Document, section_idx: usize) -> SectionPageSetupTarget {
+    let mut seen = 0usize;
+    for (bi, block) in doc.blocks.iter().enumerate() {
+        if let Block::Paragraph(p) = block {
+            if p.section_properties.is_some() {
+                if seen == section_idx {
+                    return SectionPageSetupTarget::MidBody { end_block_idx: bi };
+                }
+                seen += 1;
+            }
+        }
+    }
+    SectionPageSetupTarget::Trailing
+}
+
+fn page_setup_for_cursor<'a>(doc: &'a Document, cursor: Cursor) -> &'a PageSetup {
+    match section_page_setup_target(doc, caret_section_index(doc, cursor.block_idx)) {
+        SectionPageSetupTarget::Trailing => &doc.page_setup,
+        SectionPageSetupTarget::MidBody { end_block_idx } => doc
+            .blocks
+            .get(end_block_idx)
+            .and_then(|b| match b {
+                Block::Paragraph(p) => p.section_properties.as_ref(),
+                _ => None,
+            })
+            .unwrap_or(&doc.page_setup),
+    }
+}
+
+/// Widest margins / page size across mid-body + trailing section setups.
+fn union_section_page_setup(doc: &Document) -> PageSetup {
+    let mut u = doc.page_setup.clone();
+    for block in &doc.blocks {
+        if let Block::Paragraph(p) = block {
+            if let Some(ref s) = p.section_properties {
+                u.margin_left_twips = u.margin_left_twips.max(s.margin_left_twips);
+                u.margin_right_twips = u.margin_right_twips.max(s.margin_right_twips);
+                u.margin_top_twips = u.margin_top_twips.max(s.margin_top_twips);
+                u.margin_bottom_twips = u.margin_bottom_twips.max(s.margin_bottom_twips);
+                u.width_twips = u.width_twips.max(s.width_twips);
+                u.height_twips = u.height_twips.max(s.height_twips);
+            }
+        }
+    }
+    u
 }
 
 const DEFAULT_FONT_SIZE_PT: f32 = 14.0;
@@ -4698,16 +4808,17 @@ impl Viewer for DocumentViewer {
             }
             (Arc::clone(&prev.bytes), prev.width_px, prev.height_px)
         };
-        let page_is_a4 = is_a4_page(&doc.page_setup);
-        let page_landscape = is_landscape_page(&doc.page_setup);
+        let page_setup_caret = page_setup_for_cursor(doc, sel.head);
+        let page_is_a4 = is_a4_page(page_setup_caret);
+        let page_landscape = is_landscape_page(page_setup_caret);
         let header_text = story_plain_text(&doc.header);
         let footer_text = story_plain_text(&doc.footer);
         let header_first_text = story_plain_text(&doc.header_first);
         let footer_first_text = story_plain_text(&doc.footer_first);
         let header_even_text = story_plain_text(&doc.header_even);
         let footer_even_text = story_plain_text(&doc.footer_even);
-        let title_page = doc.page_setup.title_page;
-        let even_and_odd_headers = doc.page_setup.even_and_odd_headers;
+        let title_page = page_setup_caret.title_page;
+        let even_and_odd_headers = page_setup_caret.even_and_odd_headers;
         let caret_off = plain_offset_from_cursor(doc, sel.head);
         let comment_hit = comment_id_overlapping(doc, caret_off, caret_off)
             .and_then(|id| doc.comments.iter().find(|c| c.id == id));
