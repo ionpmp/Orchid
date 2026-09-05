@@ -562,3 +562,25 @@ fn delete_comment_at_caret_and_undo() {
     viewer.set_selection_plain_offsets(1000, 1000);
     assert_eq!(viewer.delete_comment_at_selection().unwrap(), None);
 }
+
+#[test]
+fn comment_at_caret_in_snapshot() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(sample_doc());
+    viewer.set_selection_plain_offsets(0, 5);
+    viewer.insert_comment_at_selection().unwrap();
+    viewer.set_selection_plain_offsets(2, 2);
+    let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+        panic!("expected document");
+    };
+    assert!(
+        snap.comment_at_caret.contains("Orchid"),
+        "got {:?}",
+        snap.comment_at_caret
+    );
+    viewer.set_selection_plain_offsets(1000, 1000);
+    let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+        panic!("expected document");
+    };
+    assert!(snap.comment_at_caret.is_empty());
+}

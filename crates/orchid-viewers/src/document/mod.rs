@@ -4584,6 +4584,18 @@ impl Viewer for DocumentViewer {
         let footer_even_text = story_plain_text(&doc.footer_even);
         let title_page = doc.page_setup.title_page;
         let even_and_odd_headers = doc.page_setup.even_and_odd_headers;
+        let caret_off = plain_offset_from_cursor(doc, sel.head);
+        let comment_at_caret = comment_id_overlapping(doc, caret_off, caret_off)
+            .and_then(|id| doc.comments.iter().find(|c| c.id == id))
+            .map(|c| {
+                let body: String = c.text.chars().take(80).collect();
+                if c.author.is_empty() {
+                    body
+                } else {
+                    format!("{}: {body}", c.author)
+                }
+            })
+            .unwrap_or_default();
         drop(doc_guard);
         ViewerSnapshot::Document(DocumentSnapshot {
             path_display,
@@ -4592,6 +4604,7 @@ impl Viewer for DocumentViewer {
             word_count,
             char_count,
             comment_count,
+            comment_at_caret,
             plain_text: Arc::from(plain_text.as_str()),
             warnings,
             info_text: String::new(),

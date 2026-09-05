@@ -822,13 +822,13 @@ export component ViewerDocumentView inherits Rectangle {
                 Rectangle {
                     width: 28px;
                     height: 28px;
-                    background: tool-bg(false, cx-ta.has-hover);
+                    background: tool-bg(model.comment-active, cx-ta.has-hover);
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     cx-ta := TouchArea { clicked => { root.action("delete-comment"); } }
                     Text {
                         text: model.comment-delete-label;
-                        color: tool-btn(false);
+                        color: tool-btn(model.comment-active);
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;

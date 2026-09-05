@@ -49,6 +49,8 @@ pub struct DocumentSnapshot {
     pub char_count: u32,
     /// Number of comments from `word/comments.xml`.
     pub comment_count: u32,
+    /// Comment preview at the caret (`Author: text`), empty when none.
+    pub comment_at_caret: String,
     /// Plain-text extraction for search / fallback display.
     pub plain_text: Arc<str>,
     /// Non-fatal warnings (e.g. unsupported OOXML features).

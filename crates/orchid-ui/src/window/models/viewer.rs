@@ -804,6 +804,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         bookmark_label: locale.tr("viewer-document-bookmark").into(),
         comment_label: locale.tr("viewer-document-comment").into(),
         comment_delete_label: locale.tr("viewer-document-comment-delete").into(),
+        comment_active: false,
         header_label: locale.tr("viewer-document-header").into(),
         footer_label: locale.tr("viewer-document-footer").into(),
         header_first_label: locale.tr("viewer-document-header-first").into(),
@@ -1458,7 +1459,15 @@ fn build_document_snapshot(
     model.path_display = s.path_display.clone().into();
     model.plain_text = s.plain_text.as_ref().into();
     model.dirty = s.dirty;
-    model.info_text = locale.tr_args("viewer-document-info", &args).into();
+    model.comment_active = !s.comment_at_caret.is_empty();
+    model.info_text = {
+        let base = locale.tr_args("viewer-document-info", &args);
+        if s.comment_at_caret.is_empty() {
+            base.into()
+        } else {
+            format!("{base} · {}", s.comment_at_caret).into()
+        }
+    };
     model.bold = s.bold;
     model.italic = s.italic;
     model.underline = s.underline;
