@@ -8,10 +8,10 @@ use quick_xml::reader::Reader;
 use quick_xml::writer::Writer;
 
 use crate::document::model::{
-    Alignment, Block, Bookmark, CellImage, CommentRange, DocField, Document, Hyperlink, ImageFormat, InlineImage,
-    LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, SectionBreakType, Table, TableCell,
-    TableRow, VMerge, CELL_BORDER_BOTTOM, CELL_BORDER_LEFT, CELL_BORDER_RIGHT,
-    CELL_BORDER_TOP,
+    Alignment, Block, Bookmark, CellImage, CommentRange, DocField, Document, Hyperlink,
+    ImageFormat, InlineImage, LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run,
+    RunStyle, SectionBreakType, Table, TableCell, TableRow, VMerge, CELL_BORDER_BOTTOM,
+    CELL_BORDER_LEFT, CELL_BORDER_RIGHT, CELL_BORDER_TOP,
 };
 use crate::document::ooxml::numbering::NumberingDefs;
 use crate::document::ooxml::styles::StyleDefaults;
@@ -63,7 +63,13 @@ pub fn parse_document_xml(
     numbering: &NumberingDefs,
     rels: &Relationships,
     media: &HashMap<String, Vec<u8>>,
-) -> Result<(Vec<Block>, PageSetup, Vec<OpaqueXmlNode>, Vec<Bookmark>, Vec<CommentRange>)> {
+) -> Result<(
+    Vec<Block>,
+    PageSetup,
+    Vec<OpaqueXmlNode>,
+    Vec<Bookmark>,
+    Vec<CommentRange>,
+)> {
     let mut reader = Reader::from_reader(bytes);
     reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
@@ -95,11 +101,7 @@ pub fn parse_document_xml(
                                 media,
                             )?;
                             let has_text = p.runs.iter().any(|r| !r.text.is_empty());
-                            let para_start = if plain_len > 0 {
-                                plain_len + 1
-                            } else {
-                                0
-                            };
+                            let para_start = if plain_len > 0 { plain_len + 1 } else { 0 };
                             for name in pending_body_bookmarks.drain(..) {
                                 if !bookmarks.iter().any(|b| b.name == name) {
                                     bookmarks.push(Bookmark {
@@ -310,7 +312,14 @@ pub fn write_story_xml(root_local: &str, paragraphs: &[Paragraph]) -> Result<Vec
 
     let mut bookmark_id = 0u32;
     if paragraphs.is_empty() {
-        write_paragraph(&mut writer, &Paragraph::default(), &[], &[], 0, &mut bookmark_id)?;
+        write_paragraph(
+            &mut writer,
+            &Paragraph::default(),
+            &[],
+            &[],
+            0,
+            &mut bookmark_id,
+        )?;
     } else {
         for p in paragraphs {
             write_paragraph(&mut writer, p, &[], &[], 0, &mut bookmark_id)?;
@@ -670,7 +679,12 @@ fn parse_paragraph(
                         local_comment_ends.push((id, para_plain_len));
                     }
                 }
-                if in_r && matches!(local.as_str(), "b" | "i" | "u" | "caps" | "smallCaps" | "color" | "rFonts" | "sz") {
+                if in_r
+                    && matches!(
+                        local.as_str(),
+                        "b" | "i" | "u" | "caps" | "smallCaps" | "color" | "rFonts" | "sz"
+                    )
+                {
                     if let Some(ref mut run) = current_run {
                         apply_r_pr_attr(&local, &e, &mut run.style);
                     }
@@ -715,13 +729,15 @@ fn parse_paragraph(
                         }
                     }
                     "hyperlink" => active_link = None,
-                    "p" => return Ok((
-                        p,
-                        images,
-                        local_bookmarks,
-                        local_comment_starts,
-                        local_comment_ends,
-                    )),
+                    "p" => {
+                        return Ok((
+                            p,
+                            images,
+                            local_bookmarks,
+                            local_comment_starts,
+                            local_comment_ends,
+                        ))
+                    }
                     _ => {}
                 }
             }
@@ -791,11 +807,8 @@ fn apply_fld_char(
             *current_run = None;
         }
         "separate" => {
-            if let ComplexFieldParse::Instr {
-                instr,
-                style,
-                link,
-            } = std::mem::replace(cx_field, ComplexFieldParse::Off)
+            if let ComplexFieldParse::Instr { instr, style, link } =
+                std::mem::replace(cx_field, ComplexFieldParse::Off)
             {
                 *cx_field = ComplexFieldParse::Result {
                     field: DocField::from_instr(&instr),
@@ -815,9 +828,7 @@ fn apply_fld_char(
             } = std::mem::replace(cx_field, ComplexFieldParse::Off)
             {
                 let display = if text.is_empty() {
-                    field
-                        .map(|f| f.display(1, 1, None))
-                        .unwrap_or_default()
+                    field.map(|f| f.display(1, 1, None)).unwrap_or_default()
                 } else {
                     text
                 };
@@ -1492,10 +1503,7 @@ pub fn write_document_xml(doc: &Document) -> Result<Vec<u8>> {
     Ok(writer.into_inner().into_inner())
 }
 
-fn write_comment_range_start(
-    writer: &mut Writer<Cursor<Vec<u8>>>,
-    id: u32,
-) -> Result<()> {
+fn write_comment_range_start(writer: &mut Writer<Cursor<Vec<u8>>>, id: u32) -> Result<()> {
     let mut start = BytesStart::new("w:commentRangeStart");
     start.push_attribute(("w:id", id.to_string().as_str()));
     writer
@@ -1503,10 +1511,7 @@ fn write_comment_range_start(
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))
 }
 
-fn write_comment_range_end_and_ref(
-    writer: &mut Writer<Cursor<Vec<u8>>>,
-    id: u32,
-) -> Result<()> {
+fn write_comment_range_end_and_ref(writer: &mut Writer<Cursor<Vec<u8>>>, id: u32) -> Result<()> {
     let id_s = id.to_string();
     let mut end = BytesStart::new("w:commentRangeEnd");
     end.push_attribute(("w:id", id_s.as_str()));
@@ -1860,10 +1865,7 @@ fn apply_cell_shading(e: &BytesStart<'_>, cell: &mut TableCell) {
 
 fn border_side_visible(e: &BytesStart<'_>) -> bool {
     let val = attr_val(e, "val").unwrap_or_else(|| "single".to_string());
-    !matches!(
-        val.to_ascii_lowercase().as_str(),
-        "nil" | "none" | ""
-    )
+    !matches!(val.to_ascii_lowercase().as_str(), "nil" | "none" | "")
 }
 
 fn apply_cell_border_side(cell: &mut TableCell, side_bit: u8, e: &BytesStart<'_>) {
@@ -2756,7 +2758,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn parse_and_write_vanish() {
         let xml = br#"<?xml version="1.0"?>
@@ -2817,7 +2818,6 @@ mod tests {
             _ => panic!("expected paragraph"),
         }
     }
-
 
     #[test]
     fn parse_and_write_shadow() {
@@ -3796,7 +3796,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn parse_and_write_bidi() {
         let xml = br#"<?xml version="1.0"?>
@@ -3855,7 +3854,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn parse_and_write_suppress_auto_hyphens() {
         let xml = br#"<?xml version="1.0"?>
@@ -3913,7 +3911,6 @@ mod tests {
             _ => panic!("expected paragraph"),
         }
     }
-
 
     #[test]
     fn parse_and_write_outline_level() {
@@ -4249,7 +4246,10 @@ mod tests {
         assert_eq!(paras[0].runs[2].text, "10");
         let out = write_story_xml("hdr", &paras).unwrap();
         let text = String::from_utf8_lossy(&out);
-        assert!(text.contains("w:fldSimple") && text.contains("PAGE"), "{text}");
+        assert!(
+            text.contains("w:fldSimple") && text.contains("PAGE"),
+            "{text}"
+        );
         assert!(text.contains("NUMPAGES"), "{text}");
     }
 
@@ -4810,7 +4810,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn pstyle_round_trip_and_outline_from_named_style() {
         use crate::document::model::{NamedParagraphStyle, RunStyle};
@@ -5024,8 +5023,13 @@ mod tests {
             </w:fldSimple>
           </w:p>
         </w:hdr>"#;
-        let paras = parse_story_xml(xml, "hdr", &StyleDefaults::default(), &NumberingDefs::default())
-            .unwrap();
+        let paras = parse_story_xml(
+            xml,
+            "hdr",
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+        )
+        .unwrap();
         assert_eq!(paras[0].runs[0].field, Some(DocField::Date));
         assert_eq!(paras[0].runs[2].field, Some(DocField::FileName));
         assert_eq!(DocField::Date.instr(), "DATE");
@@ -5062,17 +5066,25 @@ mod tests {
         )
         .unwrap();
         assert!(unsupported.is_empty());
-        let Block::Paragraph(p0) = &blocks[0] else { panic!("p0") };
+        let Block::Paragraph(p0) = &blocks[0] else {
+            panic!("p0")
+        };
         assert!(p0.runs[0].style.double_strikethrough);
         assert!(p0.runs[0].style.emboss);
-        let Block::Paragraph(p1) = &blocks[1] else { panic!("p1") };
+        let Block::Paragraph(p1) = &blocks[1] else {
+            panic!("p1")
+        };
         assert!(p1.runs[0].style.imprint);
-        let doc = Document { blocks, page_setup, ..Default::default() };
+        let doc = Document {
+            blocks,
+            page_setup,
+            ..Default::default()
+        };
         let out = write_document_xml(&doc).unwrap();
         let text = String::from_utf8_lossy(&out);
-        assert!(text.contains("w:dstrike") && text.contains("w:emboss") && text.contains("w:imprint"), "{text}");
+        assert!(
+            text.contains("w:dstrike") && text.contains("w:emboss") && text.contains("w:imprint"),
+            "{text}"
+        );
     }
-
-
-
 }

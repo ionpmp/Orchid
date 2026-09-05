@@ -21,8 +21,8 @@ use crate::snapshot::{MediaChapterItem, MediaSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
 pub use cover::{
-    discover_cover_sidecars, load_cover_art, load_cover_art_sized, load_cover_file, load_media_tags,
-    load_track_meta, MediaTags, TrackMeta,
+    discover_cover_sidecars, load_cover_art, load_cover_art_sized, load_cover_file,
+    load_media_tags, load_track_meta, MediaTags, TrackMeta,
 };
 pub use engine::{EngineMode, FrameBuf, MpvEngine, SharedPlayback};
 pub use ffi::mpv_available;
@@ -516,8 +516,7 @@ impl Viewer for MediaViewer {
             }
             let tags = cover::load_media_tags(&os);
             let art = cover::load_cover_art(&os);
-            self.engine
-                .set_cover_and_tags(art, tags.title, tags.artist);
+            self.engine.set_cover_and_tags(art, tags.title, tags.artist);
             if self.engine_available() {
                 self.engine.load(&os);
             }

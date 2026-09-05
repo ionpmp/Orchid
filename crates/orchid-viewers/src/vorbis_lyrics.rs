@@ -74,7 +74,10 @@ fn scan_ogg_buffer(buf: &[u8]) -> Option<String> {
             break;
         }
         let body_start = seg_table_start + nseg;
-        let body_len: usize = buf[seg_table_start..body_start].iter().map(|&b| b as usize).sum();
+        let body_len: usize = buf[seg_table_start..body_start]
+            .iter()
+            .map(|&b| b as usize)
+            .sum();
         let body_end = body_start + body_len;
         if body_end > buf.len() {
             break;

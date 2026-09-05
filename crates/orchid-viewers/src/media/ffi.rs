@@ -49,37 +49,19 @@ pub(crate) struct MpvRenderParam {
 type FnCreate = unsafe extern "C" fn() -> MpvHandle;
 type FnInitialize = unsafe extern "C" fn(MpvHandle) -> c_int;
 type FnTerminateDestroy = unsafe extern "C" fn(MpvHandle);
-type FnSetOptionString =
-    unsafe extern "C" fn(MpvHandle, *const c_char, *const c_char) -> c_int;
+type FnSetOptionString = unsafe extern "C" fn(MpvHandle, *const c_char, *const c_char) -> c_int;
 type FnCommand = unsafe extern "C" fn(MpvHandle, *mut *const c_char) -> c_int;
-type FnGetProperty = unsafe extern "C" fn(
-    MpvHandle,
-    *const c_char,
-    c_int,
-    *mut c_void,
-) -> c_int;
-type FnSetProperty = unsafe extern "C" fn(
-    MpvHandle,
-    *const c_char,
-    c_int,
-    *mut c_void,
-) -> c_int;
+type FnGetProperty = unsafe extern "C" fn(MpvHandle, *const c_char, c_int, *mut c_void) -> c_int;
+type FnSetProperty = unsafe extern "C" fn(MpvHandle, *const c_char, c_int, *mut c_void) -> c_int;
 type FnFree = unsafe extern "C" fn(*mut c_void);
 type FnWaitEvent = unsafe extern "C" fn(MpvHandle, c_double) -> *mut MpvEvent;
-type FnRenderContextCreate = unsafe extern "C" fn(
-    *mut MpvRenderContext,
-    MpvHandle,
-    *mut MpvRenderParam,
-) -> c_int;
+type FnRenderContextCreate =
+    unsafe extern "C" fn(*mut MpvRenderContext, MpvHandle, *mut MpvRenderParam) -> c_int;
 type FnRenderContextFree = unsafe extern "C" fn(MpvRenderContext);
-type FnRenderContextRender =
-    unsafe extern "C" fn(MpvRenderContext, *mut MpvRenderParam) -> c_int;
+type FnRenderContextRender = unsafe extern "C" fn(MpvRenderContext, *mut MpvRenderParam) -> c_int;
 type FnRenderContextUpdate = unsafe extern "C" fn(MpvRenderContext) -> u64;
-type FnRenderContextSetUpdateCallback = unsafe extern "C" fn(
-    MpvRenderContext,
-    Option<unsafe extern "C" fn(*mut c_void)>,
-    *mut c_void,
-);
+type FnRenderContextSetUpdateCallback =
+    unsafe extern "C" fn(MpvRenderContext, Option<unsafe extern "C" fn(*mut c_void)>, *mut c_void);
 type FnErrorString = unsafe extern "C" fn(c_int) -> *const c_char;
 
 pub(crate) struct MpvApi {
@@ -171,8 +153,7 @@ unsafe fn load_from_path(path: &Path) -> std::result::Result<MpvApi, String> {
     let lib = Library::new(path).map_err(|e| e.to_string())?;
     unsafe {
         let create: FnCreate = *lib.get(b"mpv_create\0").map_err(|e| e.to_string())?;
-        let initialize: FnInitialize =
-            *lib.get(b"mpv_initialize\0").map_err(|e| e.to_string())?;
+        let initialize: FnInitialize = *lib.get(b"mpv_initialize\0").map_err(|e| e.to_string())?;
         let terminate_destroy: FnTerminateDestroy = *lib
             .get(b"mpv_terminate_destroy\0")
             .map_err(|e| e.to_string())?;
@@ -185,8 +166,7 @@ unsafe fn load_from_path(path: &Path) -> std::result::Result<MpvApi, String> {
         let set_property: FnSetProperty =
             *lib.get(b"mpv_set_property\0").map_err(|e| e.to_string())?;
         let free: FnFree = *lib.get(b"mpv_free\0").map_err(|e| e.to_string())?;
-        let wait_event: FnWaitEvent =
-            *lib.get(b"mpv_wait_event\0").map_err(|e| e.to_string())?;
+        let wait_event: FnWaitEvent = *lib.get(b"mpv_wait_event\0").map_err(|e| e.to_string())?;
         let render_context_create: FnRenderContextCreate = *lib
             .get(b"mpv_render_context_create\0")
             .map_err(|e| e.to_string())?;
@@ -259,12 +239,7 @@ pub(crate) unsafe fn get_double(api: &MpvApi, handle: MpvHandle, name: &str) -> 
 pub(crate) unsafe fn get_flag(api: &MpvApi, handle: MpvHandle, name: &str) -> Option<bool> {
     let key = c_str(name);
     let mut val: c_int = 0;
-    let rc = (api.get_property)(
-        handle,
-        key.as_ptr(),
-        MPV_FORMAT_FLAG,
-        (&raw mut val).cast(),
-    );
+    let rc = (api.get_property)(handle, key.as_ptr(), MPV_FORMAT_FLAG, (&raw mut val).cast());
     if rc >= 0 {
         Some(val != 0)
     } else {
@@ -305,12 +280,7 @@ pub(crate) unsafe fn get_string(api: &MpvApi, handle: MpvHandle, name: &str) -> 
     Some(s)
 }
 
-pub(crate) unsafe fn set_double(
-    api: &MpvApi,
-    handle: MpvHandle,
-    name: &str,
-    value: f64,
-) -> c_int {
+pub(crate) unsafe fn set_double(api: &MpvApi, handle: MpvHandle, name: &str, value: f64) -> c_int {
     let key = c_str(name);
     let mut val: c_double = value;
     (api.set_property)(
@@ -324,12 +294,7 @@ pub(crate) unsafe fn set_double(
 pub(crate) unsafe fn set_flag(api: &MpvApi, handle: MpvHandle, name: &str, value: bool) -> c_int {
     let key = c_str(name);
     let mut val: c_int = i32::from(value);
-    (api.set_property)(
-        handle,
-        key.as_ptr(),
-        MPV_FORMAT_FLAG,
-        (&raw mut val).cast(),
-    )
+    (api.set_property)(handle, key.as_ptr(), MPV_FORMAT_FLAG, (&raw mut val).cast())
 }
 
 pub(crate) unsafe fn set_string(api: &MpvApi, handle: MpvHandle, name: &str, value: &str) -> c_int {

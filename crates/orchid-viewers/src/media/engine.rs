@@ -10,9 +10,9 @@ use std::time::{Duration, Instant};
 use parking_lot::RwLock;
 
 use super::ffi::{
-    self, command_args, c_str, error_message, get_double, get_flag, get_int64, get_string,
+    self, c_str, command_args, error_message, get_double, get_flag, get_int64, get_string,
     set_double, set_flag, set_string, MpvApi, MpvHandle, MpvRenderContext, MpvRenderParam,
-    MPV_EVENT_NONE, MPV_EVENT_SHUTDOWN, MPV_EVENT_END_FILE, MPV_RENDER_PARAM_ADVANCED_CONTROL,
+    MPV_EVENT_END_FILE, MPV_EVENT_NONE, MPV_EVENT_SHUTDOWN, MPV_RENDER_PARAM_ADVANCED_CONTROL,
     MPV_RENDER_PARAM_API_TYPE, MPV_RENDER_PARAM_INVALID, MPV_RENDER_PARAM_SW_FORMAT,
     MPV_RENDER_PARAM_SW_POINTER, MPV_RENDER_PARAM_SW_SIZE, MPV_RENDER_PARAM_SW_STRIDE,
     MPV_RENDER_UPDATE_FRAME,
@@ -278,9 +278,7 @@ impl MpvEngine {
 
     /// Append `path` after the current playlist entry (gapless prefetch).
     pub fn playlist_append(&self, path: &Path) {
-        let _ = self
-            .tx
-            .send(EngineCmd::PlaylistAppend(path.to_path_buf()));
+        let _ = self.tx.send(EngineCmd::PlaylistAppend(path.to_path_buf()));
     }
 
     /// Still cover / tags for audio chrome (call with [`Self::load`]).
@@ -622,8 +620,7 @@ fn run_worker(
             drain_events(api, handle, &shared);
             if let Some(render) = render {
                 let flags = (api.render_context_update)(render);
-                if flags & MPV_RENDER_UPDATE_FRAME != 0
-                    || frame_flag.swap(false, Ordering::AcqRel)
+                if flags & MPV_RENDER_UPDATE_FRAME != 0 || frame_flag.swap(false, Ordering::AcqRel)
                 {
                     render_frame(api, handle, render, &shared);
                 }
@@ -776,12 +773,7 @@ unsafe fn handle_cmd(
             // Re-apply session look / gain after a fresh load.
             let style = shared.sub_style_index.load(Ordering::Relaxed);
             apply_sub_style(api, handle, shared, style);
-            apply_eq_at_index(
-                api,
-                handle,
-                shared,
-                shared.eq_index.load(Ordering::Relaxed),
-            );
+            apply_eq_at_index(api, handle, shared, shared.eq_index.load(Ordering::Relaxed));
             apply_replaygain_at_index(
                 api,
                 handle,
@@ -865,10 +857,7 @@ unsafe fn handle_cmd(
                 if !muted {
                     "Muted".into()
                 } else {
-                    format!(
-                        "Vol {}%",
-                        shared.volume.load(Ordering::Relaxed)
-                    )
+                    format!("Vol {}%", shared.volume.load(Ordering::Relaxed))
                 },
             );
             shared.dirty.store(true, Ordering::Release);
@@ -945,8 +934,8 @@ unsafe fn handle_cmd(
             shared.dirty.store(true, Ordering::Release);
         }
         EngineCmd::CycleSubStyle => {
-            let next =
-                (shared.sub_style_index.load(Ordering::Relaxed) + 1) % SUB_STYLE_PRESETS.len() as u32;
+            let next = (shared.sub_style_index.load(Ordering::Relaxed) + 1)
+                % SUB_STYLE_PRESETS.len() as u32;
             shared.sub_style_index.store(next, Ordering::Relaxed);
             apply_sub_style(api, handle, shared, next);
             persist_look(mode, shared);
@@ -1164,7 +1153,8 @@ unsafe fn poll_props(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback) {
         String::new()
     } else if let Some(title) = get_string(api, handle, "current-tracks/sub/title") {
         if title.is_empty() {
-            get_string(api, handle, "current-tracks/sub/lang").unwrap_or_else(|| format!("sub {sid}"))
+            get_string(api, handle, "current-tracks/sub/lang")
+                .unwrap_or_else(|| format!("sub {sid}"))
         } else {
             title
         }
@@ -1261,8 +1251,7 @@ fn write_screenshot(shared: &SharedPlayback) -> Result<PathBuf, String> {
     let dest = next_shot_path(&parent, &stem);
     let img = image::RgbaImage::from_raw(frame.width, frame.height, (*frame.rgba).clone())
         .ok_or_else(|| "Shot: bad frame size".to_string())?;
-    img.save(&dest)
-        .map_err(|e| format!("Shot failed: {e}"))?;
+    img.save(&dest).map_err(|e| format!("Shot failed: {e}"))?;
     Ok(dest)
 }
 
@@ -1347,18 +1336,27 @@ unsafe fn refresh_ab_label(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayb
 const SUB_STYLE_PRESETS: &[(&str, &str, &str, &str, f64, f64)] = &[
     // label, color, border, back, border-size, shadow
     ("", "#FFFFFFFF", "#FF000000", "#00000000", 2.0, 0.0),
-    ("Subs outline", "#FFFFFFFF", "#FF000000", "#00000000", 3.0, 0.0),
-    ("Subs yellow", "#FFFFFF00", "#FF000000", "#00000000", 2.5, 0.0),
+    (
+        "Subs outline",
+        "#FFFFFFFF",
+        "#FF000000",
+        "#00000000",
+        3.0,
+        0.0,
+    ),
+    (
+        "Subs yellow",
+        "#FFFFFF00",
+        "#FF000000",
+        "#00000000",
+        2.5,
+        0.0,
+    ),
     ("Subs box", "#FFFFFFFF", "#FF000000", "#80000000", 0.0, 0.0),
     ("Subs cyan", "#FF00FFFF", "#FF003333", "#00000000", 2.0, 1.0),
 ];
 
-unsafe fn apply_sub_style(
-    api: &MpvApi,
-    handle: MpvHandle,
-    shared: &SharedPlayback,
-    index: u32,
-) {
+unsafe fn apply_sub_style(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, index: u32) {
     let idx = index as usize % SUB_STYLE_PRESETS.len();
     let (label, color, border, back, border_size, shadow) = SUB_STYLE_PRESETS[idx];
     let _ = set_double(api, handle, "sub-scale", 1.0);
@@ -1376,7 +1374,8 @@ unsafe fn apply_sub_style(
 }
 
 /// ReplayGain modes via mpv `replaygain` (tags in file; no af conflict with EQ).
-const REPLAYGAIN_MODES: &[(&str, &str)] = &[("", "no"), ("RG track", "track"), ("RG album", "album")];
+const REPLAYGAIN_MODES: &[(&str, &str)] =
+    &[("", "no"), ("RG track", "track"), ("RG album", "album")];
 
 unsafe fn apply_replaygain_at_index(
     api: &MpvApi,
@@ -1406,15 +1405,13 @@ const EQ_PRESETS: &[(&str, Option<&str>)] = &[
     ("", None),
     ("Bass", Some("lavfi=[bass=g=6]")),
     ("Treble", Some("lavfi=[treble=g=5]")),
-    ("Vocal", Some("lavfi=[equalizer=f=300:t=h:width=200:g=-3,equalizer=f=3000:t=h:width=1000:g=4]")),
+    (
+        "Vocal",
+        Some("lavfi=[equalizer=f=300:t=h:width=200:g=-3,equalizer=f=3000:t=h:width=1000:g=4]"),
+    ),
 ];
 
-unsafe fn apply_eq_at_index(
-    api: &MpvApi,
-    handle: MpvHandle,
-    shared: &SharedPlayback,
-    index: u32,
-) {
+unsafe fn apply_eq_at_index(api: &MpvApi, handle: MpvHandle, shared: &SharedPlayback, index: u32) {
     let next = index % EQ_PRESETS.len() as u32;
     shared.eq_index.store(next, Ordering::Relaxed);
     let (label, filter) = EQ_PRESETS[next as usize];

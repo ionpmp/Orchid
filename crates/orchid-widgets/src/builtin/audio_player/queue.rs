@@ -41,9 +41,7 @@ impl PlayQueue {
                 .wrapping_add(self.index as u64)
                 .wrapping_add(self.shuffle_seed.wrapping_mul(0x85EB_CA6B));
             for i in (1..self.order.len()).rev() {
-                state = state
-                    .wrapping_mul(6364136223846793005)
-                    .wrapping_add(1);
+                state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
                 let j = (state as usize) % (i + 1);
                 self.order.swap(i, j);
             }
@@ -407,34 +405,19 @@ mod tests {
 
     #[test]
     fn next_with_repeat_all_wraps() {
-        let mut q = PlayQueue::from_paths(
-            vec!["a".into(), "b".into()],
-            1,
-            false,
-            RepeatMode::All,
-        );
+        let mut q = PlayQueue::from_paths(vec!["a".into(), "b".into()], 1, false, RepeatMode::All);
         assert_eq!(q.next(), Some("a"));
     }
 
     #[test]
     fn next_off_stops_at_end() {
-        let mut q = PlayQueue::from_paths(
-            vec!["a".into(), "b".into()],
-            1,
-            false,
-            RepeatMode::Off,
-        );
+        let mut q = PlayQueue::from_paths(vec!["a".into(), "b".into()], 1, false, RepeatMode::Off);
         assert!(q.next().is_none());
     }
 
     #[test]
     fn repeat_one_stays() {
-        let mut q = PlayQueue::from_paths(
-            vec!["a".into(), "b".into()],
-            0,
-            false,
-            RepeatMode::One,
-        );
+        let mut q = PlayQueue::from_paths(vec!["a".into(), "b".into()], 0, false, RepeatMode::One);
         assert_eq!(q.next(), Some("a"));
     }
 
@@ -465,8 +448,12 @@ mod tests {
 
     #[test]
     fn remove_path_adjusts_index() {
-        let mut q =
-            PlayQueue::from_paths(vec!["a".into(), "b".into(), "c".into()], 1, false, RepeatMode::Off);
+        let mut q = PlayQueue::from_paths(
+            vec!["a".into(), "b".into(), "c".into()],
+            1,
+            false,
+            RepeatMode::Off,
+        );
         assert!(!q.remove_path("a"));
         assert_eq!(q.paths, vec!["b", "c"]);
         assert_eq!(q.index, 0);
@@ -476,8 +463,12 @@ mod tests {
 
     #[test]
     fn move_up_down_keeps_current_path() {
-        let mut q =
-            PlayQueue::from_paths(vec!["a".into(), "b".into(), "c".into()], 1, false, RepeatMode::Off);
+        let mut q = PlayQueue::from_paths(
+            vec!["a".into(), "b".into(), "c".into()],
+            1,
+            false,
+            RepeatMode::Off,
+        );
         assert_eq!(q.current(), Some("b"));
         assert!(q.move_up("b"));
         assert_eq!(q.paths, vec!["b", "a", "c"]);
@@ -579,8 +570,12 @@ mod tests {
 
     #[test]
     fn jump_first_last() {
-        let mut q =
-            PlayQueue::from_paths(vec!["a".into(), "b".into(), "c".into()], 1, false, RepeatMode::Off);
+        let mut q = PlayQueue::from_paths(
+            vec!["a".into(), "b".into(), "c".into()],
+            1,
+            false,
+            RepeatMode::Off,
+        );
         assert!(q.jump_first());
         assert_eq!(q.current(), Some("a"));
         assert!(q.jump_last());

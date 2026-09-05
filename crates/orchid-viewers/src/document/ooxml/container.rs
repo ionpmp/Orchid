@@ -14,9 +14,8 @@ use crate::document::ooxml::document_xml::{
     write_story_xml, Relationships,
 };
 use crate::document::ooxml::numbering::{
-    assign_orchid_list_ids, document_can_reuse_numbering, document_uses_lists,
-    parse_numbering_xml, retained_numbering_xml, write_numbering_xml,
-    NumberingDefs,
+    assign_orchid_list_ids, document_can_reuse_numbering, document_uses_lists, parse_numbering_xml,
+    retained_numbering_xml, write_numbering_xml, NumberingDefs,
 };
 use crate::document::ooxml::styles::{parse_styles_xml, StyleDefaults};
 use crate::error::{Result, ViewerError};
@@ -523,11 +522,7 @@ fn prepare_document_header_footer(doc: &mut Document) {
     doc.content_types = Some(content_types.into_bytes());
 }
 
-fn story_needs_part(
-    paragraphs: &[Paragraph],
-    r_id: Option<&str>,
-    rels: Option<&[u8]>,
-) -> bool {
+fn story_needs_part(paragraphs: &[Paragraph], r_id: Option<&str>, rels: Option<&[u8]>) -> bool {
     !paragraphs.is_empty() && r_id.is_none_or(|id| !relationship_id_present(rels, id))
 }
 
@@ -562,11 +557,7 @@ fn relationship_id_present(rels: Option<&[u8]>, id: &str) -> bool {
     String::from_utf8_lossy(bytes).contains(&format!("Id=\"{id}\""))
 }
 
-fn next_story_part_index(
-    rels_xml: &str,
-    retained: &[(String, Vec<u8>)],
-    stem: &str,
-) -> u32 {
+fn next_story_part_index(rels_xml: &str, retained: &[(String, Vec<u8>)], stem: &str) -> u32 {
     let mut max = 0u32;
     for piece in rels_xml.split(&format!("Target=\"{stem}")) {
         let digits: String = piece.chars().take_while(|c| c.is_ascii_digit()).collect();
@@ -1139,7 +1130,7 @@ mod tests {
                     hyperlink: Some(Hyperlink {
                         url: "https://example.com/".into(),
                         r_id: None,
-                    bookmark: None,
+                        bookmark: None,
                     }),
                     field: None,
                 }],
@@ -1407,10 +1398,7 @@ mod tests {
         assert!(loaded.page_setup.title_page);
         assert_eq!(loaded.header_first[0].plain_text(), "NewFirst");
         assert_eq!(loaded.header[0].plain_text(), "DefaultHdr");
-        assert_eq!(
-            loaded.page_setup.header_first_r_id.as_deref(),
-            Some("rId9")
-        );
+        assert_eq!(loaded.page_setup.header_first_r_id.as_deref(), Some("rId9"));
     }
 
     #[test]

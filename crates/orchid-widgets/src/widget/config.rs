@@ -22,7 +22,8 @@ pub fn save_state<T: Serialize>(value: &T) -> Result<Vec<u8>> {
 ///
 /// Returns [`WidgetError::CreationFailed`] on decode failure.
 pub fn restore_state<T: DeserializeOwned>(bytes: &[u8]) -> Result<T> {
-    let (value, _) = bincode_reloaded::serde::decode_from_slice(bytes, bincode_reloaded::config::standard())
-        .map_err(|e| WidgetError::CreationFailed(format!("bincode decode: {e}")))?;
+    let (value, _) =
+        bincode_reloaded::serde::decode_from_slice(bytes, bincode_reloaded::config::standard())
+            .map_err(|e| WidgetError::CreationFailed(format!("bincode decode: {e}")))?;
     Ok(value)
 }

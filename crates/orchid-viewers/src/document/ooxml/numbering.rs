@@ -167,7 +167,6 @@ pub fn document_can_reuse_numbering(doc: &Document, defs: &NumberingDefs) -> boo
     true
 }
 
-
 /// Parse numbering.xml.
 ///
 /// # Errors
@@ -318,7 +317,10 @@ mod tests {
         assert_eq!(defs.kind_of(ORCHID_BULLET_NUM_ID), ListKind::Bullet);
         assert_eq!(defs.kind_of(ORCHID_NUMBERED_NUM_ID), ListKind::Numbered);
         let xml = String::from_utf8(write_numbering_xml()).unwrap();
-        assert!(xml.contains(r#"w:ilvl="8""#), "expected multilevel abstracts");
+        assert!(
+            xml.contains(r#"w:ilvl="8""#),
+            "expected multilevel abstracts"
+        );
         assert!(xml.contains("%9."), "decimal level 8 lvlText");
     }
 

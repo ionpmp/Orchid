@@ -23,7 +23,8 @@ use swash::FontRef;
 use crate::document::cursor::{cursor_from_plain_offset, plain_offset_from_cursor, Cursor};
 use crate::document::model::{
     Alignment, Block, Document, LineSpacingRule, ListKind, NamedCharacterStyle,
-    NamedParagraphStyle, PageSetup, Paragraph, RunStyle, SectionBreakType, Table, TableCell, TableRow, VMerge,
+    NamedParagraphStyle, PageSetup, Paragraph, RunStyle, SectionBreakType, Table, TableCell,
+    TableRow, VMerge,
 };
 
 /// Brush colour for styled runs (RGBA).
@@ -887,7 +888,6 @@ fn resolve_paragraph_fields(
     }
     out
 }
-
 
 /// Mid-body section ends: next-page forces a Preview page band; continuous does not.
 fn section_forces_page_band(ps: &PageSetup) -> bool {

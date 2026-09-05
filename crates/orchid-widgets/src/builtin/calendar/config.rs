@@ -154,9 +154,10 @@ impl CalendarConfig {
 /// Decode persisted bytes, accepting the pre-settings layout.
 #[must_use]
 pub fn decode_config(bytes: &[u8]) -> CalendarConfig {
-    if let Ok((mut cfg, _)) =
-        bincode_reloaded::serde::decode_from_slice::<CalendarConfig, _>(bytes, bincode_reloaded::config::standard())
-    {
+    if let Ok((mut cfg, _)) = bincode_reloaded::serde::decode_from_slice::<CalendarConfig, _>(
+        bytes,
+        bincode_reloaded::config::standard(),
+    ) {
         cfg.normalize();
         return cfg;
     }
@@ -169,9 +170,10 @@ pub fn decode_config(bytes: &[u8]) -> CalendarConfig {
         selected_date: String,
     }
 
-    if let Ok((legacy, _)) =
-        bincode_reloaded::serde::decode_from_slice::<Legacy, _>(bytes, bincode_reloaded::config::standard())
-    {
+    if let Ok((legacy, _)) = bincode_reloaded::serde::decode_from_slice::<Legacy, _>(
+        bytes,
+        bincode_reloaded::config::standard(),
+    ) {
         let mut cfg = CalendarConfig {
             events: legacy.events,
             view_year: legacy.view_year,

@@ -60,11 +60,7 @@ pub fn probe_media_durations_ms(paths: &[impl AsRef<Path>]) -> Vec<Option<u32>> 
     out
 }
 
-unsafe fn probe_with_handle(
-    api: &ffi::MpvApi,
-    handle: MpvHandle,
-    path: &Path,
-) -> Option<u32> {
+unsafe fn probe_with_handle(api: &ffi::MpvApi, handle: MpvHandle, path: &Path) -> Option<u32> {
     if !configure_probe(api, handle) {
         return None;
     }
@@ -92,11 +88,7 @@ unsafe fn configure_probe(api: &ffi::MpvApi, handle: MpvHandle) -> bool {
     ok.is_ok()
 }
 
-unsafe fn load_and_read_duration(
-    api: &ffi::MpvApi,
-    handle: MpvHandle,
-    path: &Path,
-) -> Option<u32> {
+unsafe fn load_and_read_duration(api: &ffi::MpvApi, handle: MpvHandle, path: &Path) -> Option<u32> {
     let path_s = path.to_string_lossy();
     let rc = command_args(api, handle, &["loadfile", path_s.as_ref(), "replace"]);
     if rc < 0 {

@@ -29,8 +29,7 @@ impl PlayerSession {
     pub fn load_path(&self, path: &Path) {
         let tags = load_media_tags(path);
         let art = load_cover_art(path);
-        self.engine
-            .set_cover_and_tags(art, tags.title, tags.artist);
+        self.engine.set_cover_and_tags(art, tags.title, tags.artist);
         if self.available() {
             self.engine.load(path);
         }
@@ -40,8 +39,7 @@ impl PlayerSession {
     pub fn apply_meta(&self, path: &Path) {
         let tags = load_media_tags(path);
         let art = load_cover_art(path);
-        self.engine
-            .set_cover_and_tags(art, tags.title, tags.artist);
+        self.engine.set_cover_and_tags(art, tags.title, tags.artist);
     }
 
     /// Prefetch the next file into mpv's playlist for gapless handover.

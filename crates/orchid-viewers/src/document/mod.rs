@@ -30,8 +30,9 @@ pub use cursor::{
 pub use layout::{DocumentLayout, PreviewInsets, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
     Alignment, Block, Bookmark, CellImage, CommentRange, DocComment, DocField, Document, Hyperlink,
-    ImageFormat, InlineImage, LineSpacingRule, ListKind, NamedCharacterStyle, NamedParagraphStyle, SectionBreakType,
-    OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow, VMerge,
+    ImageFormat, InlineImage, LineSpacingRule, ListKind, NamedCharacterStyle, NamedParagraphStyle,
+    OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, SectionBreakType, Table, TableCell,
+    TableRow, VMerge,
 };
 pub use sample::{create_sample_docx, sample_document};
 pub use undo::{EditCommand, RunStylePatch, UndoStack};

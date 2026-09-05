@@ -31,9 +31,7 @@ pub fn parse_comments_xml(bytes: &[u8]) -> Result<Vec<DocComment>> {
                     "comment" => {
                         in_comment = true;
                         cur = DocComment {
-                            id: attr_val(&e, "id")
-                                .and_then(|v| v.parse().ok())
-                                .unwrap_or(0),
+                            id: attr_val(&e, "id").and_then(|v| v.parse().ok()).unwrap_or(0),
                             author: attr_val(&e, "author").unwrap_or_default(),
                             initials: attr_val(&e, "initials").unwrap_or_default(),
                             date: attr_val(&e, "date").unwrap_or_default(),

@@ -172,9 +172,7 @@ mod tests {
 
     #[test]
     fn parses_basic_lrc() {
-        let l = Lyrics::parse(
-            "[00:12.00]First line\n[00:15.50]Second\n[ar:Meta]\n[01:00]Third\n",
-        );
+        let l = Lyrics::parse("[00:12.00]First line\n[00:15.50]Second\n[ar:Meta]\n[01:00]Third\n");
         assert_eq!(l.lines.len(), 3);
         assert_eq!(l.line_at(0), "");
         assert_eq!(l.line_at(12_000), "First line");
@@ -194,8 +192,8 @@ mod tests {
 
     #[test]
     fn prefers_sidecar_over_uslt() {
-        use id3::TagLike;
         use id3::frame::Lyrics as Id3Lyrics;
+        use id3::TagLike;
         let dir = tempfile::tempdir().unwrap();
         let media = dir.path().join("song.mp3");
         fs::write(&media, [0xFF, 0xFB, 0x90, 0x00]).unwrap();
@@ -213,8 +211,8 @@ mod tests {
 
     #[test]
     fn loads_uslt_when_no_sidecar() {
-        use id3::TagLike;
         use id3::frame::Lyrics as Id3Lyrics;
+        use id3::TagLike;
         let dir = tempfile::tempdir().unwrap();
         let media = dir.path().join("song.mp3");
         fs::write(&media, [0xFF, 0xFB, 0x90, 0x00]).unwrap();

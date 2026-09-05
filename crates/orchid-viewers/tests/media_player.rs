@@ -67,12 +67,10 @@ async fn media_viewer_open_missing_local_is_ok() {
 fn libmpv_is_loadable_when_bundled() {
     let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../third-party/mpv/win-x64/libmpv-2.dll");
-    let alt = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../third-party/mpv/win-x64/mpv-1.dll");
+    let alt =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../third-party/mpv/win-x64/mpv-1.dll");
     if !(bundled.is_file() || alt.is_file()) {
-        eprintln!(
-            "skip: no libmpv in third-party/mpv/win-x64 (see docs/BUILDING.md)"
-        );
+        eprintln!("skip: no libmpv in third-party/mpv/win-x64 (see docs/BUILDING.md)");
         return;
     }
     assert!(
@@ -160,7 +158,9 @@ async fn libmpv_plays_wav_when_bundled() {
     assert!(
         s.playing || saw_progress || s.position_ms > 0,
         "expected playback activity; pos={} playing={} progress={}",
-        s.position_ms, s.playing, s.progress
+        s.position_ms,
+        s.playing,
+        s.progress
     );
 
     viewer.close().await.unwrap();
@@ -172,7 +172,10 @@ fn audio_engine_mode_spawns() {
     let engine = MpvEngine::spawn_with_mode(EngineMode::Audio);
     assert_eq!(engine.mode, EngineMode::Audio);
     assert_eq!(
-        engine.shared.available.load(std::sync::atomic::Ordering::Relaxed),
+        engine
+            .shared
+            .available
+            .load(std::sync::atomic::Ordering::Relaxed),
         mpv_available()
     );
     // Drop sends Quit; no panic.
