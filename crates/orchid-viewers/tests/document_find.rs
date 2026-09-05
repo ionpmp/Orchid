@@ -865,3 +865,82 @@ fn cycle_character_style_selection_cycles_ids() {
         assert_eq!(p.runs[0].style_id.as_deref(), Some("Strong"));
     }
 }
+
+#[test]
+fn header_footer_plain_edit_preserves_fields_and_style() {
+    use orchid_viewers::document::model::{Alignment, DocField, RunStyle};
+
+    let mut doc = sample_doc();
+    doc.footer = vec![Paragraph {
+        runs: vec![
+            Run {
+                text: "Page ".into(),
+                style: RunStyle {
+                    bold: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            Run {
+                text: "1".into(),
+                field: Some(DocField::Page),
+                ..Default::default()
+            },
+            Run {
+                text: " / ".into(),
+                ..Default::default()
+            },
+            Run {
+                text: "3".into(),
+                field: Some(DocField::NumPages),
+                ..Default::default()
+            },
+        ],
+        alignment: Alignment::Center,
+        ..Default::default()
+    }];
+    doc.header = vec![Paragraph {
+        runs: vec![Run {
+            text: "Draft".into(),
+            style: RunStyle {
+                italic: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        }],
+        ..Default::default()
+    }];
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(doc);
+
+    viewer
+        .set_footer_plain_text("Page 1 / 3 — confidential")
+        .unwrap();
+    {
+        let guard = viewer.document();
+        let d = guard.as_ref().unwrap();
+        assert_eq!(d.footer.len(), 1);
+        assert_eq!(d.footer[0].alignment, Alignment::Center);
+        assert_eq!(d.footer[0].runs.len(), 5);
+        assert!(d.footer[0].runs[0].style.bold);
+        assert_eq!(d.footer[0].runs[0].text, "Page ");
+        assert_eq!(d.footer[0].runs[1].field, Some(DocField::Page));
+        assert_eq!(d.footer[0].runs[3].field, Some(DocField::NumPages));
+        assert_eq!(d.footer[0].runs[4].text, " — confidential");
+        assert!(d.footer[0].runs[4].style.bold);
+    }
+
+    viewer.set_header_plain_text("Draft v2").unwrap();
+    {
+        let guard = viewer.document();
+        let d = guard.as_ref().unwrap();
+        assert_eq!(d.header[0].runs.len(), 1);
+        assert_eq!(d.header[0].runs[0].text, "Draft v2");
+        assert!(d.header[0].runs[0].style.italic);
+    }
+
+    viewer.undo().unwrap();
+    assert_eq!(viewer.header_plain_text(), "Draft");
+    viewer.undo().unwrap();
+    assert_eq!(viewer.footer_plain_text(), "Page 1 / 3");
+}

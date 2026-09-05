@@ -3108,13 +3108,16 @@ impl DocumentViewer {
 
     /// Replace the default header story from plain text (empty clears).
     ///
+    /// Preserves `PAGE`/`DATE`/… field runs and paragraph/run props when the
+    /// overlay still contains each field's cached display text.
+    ///
     /// # Errors
     ///
     /// [`ViewerError::DocumentNotOpen`].
     pub fn set_header_plain_text(&self, text: &str) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let paragraphs = paragraphs_from_plain(text);
+        let paragraphs = paragraphs_from_plain_preserving(&doc.header, text);
         if paragraphs == doc.header {
             return Ok(());
         }
@@ -3127,13 +3130,15 @@ impl DocumentViewer {
 
     /// Replace the default footer story from plain text (empty clears).
     ///
+    /// Preserves field runs and story formatting like [`Self::set_header_plain_text`].
+    ///
     /// # Errors
     ///
     /// [`ViewerError::DocumentNotOpen`].
     pub fn set_footer_plain_text(&self, text: &str) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let paragraphs = paragraphs_from_plain(text);
+        let paragraphs = paragraphs_from_plain_preserving(&doc.footer, text);
         if paragraphs == doc.footer {
             return Ok(());
         }
@@ -3152,7 +3157,7 @@ impl DocumentViewer {
     pub fn set_header_first_plain_text(&self, text: &str) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let paragraphs = paragraphs_from_plain(text);
+        let paragraphs = paragraphs_from_plain_preserving(&doc.header_first, text);
         if paragraphs == doc.header_first {
             return Ok(());
         }
@@ -3171,7 +3176,7 @@ impl DocumentViewer {
     pub fn set_footer_first_plain_text(&self, text: &str) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let paragraphs = paragraphs_from_plain(text);
+        let paragraphs = paragraphs_from_plain_preserving(&doc.footer_first, text);
         if paragraphs == doc.footer_first {
             return Ok(());
         }
@@ -3190,7 +3195,7 @@ impl DocumentViewer {
     pub fn set_header_even_plain_text(&self, text: &str) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let paragraphs = paragraphs_from_plain(text);
+        let paragraphs = paragraphs_from_plain_preserving(&doc.header_even, text);
         if paragraphs == doc.header_even {
             return Ok(());
         }
@@ -3209,7 +3214,7 @@ impl DocumentViewer {
     pub fn set_footer_even_plain_text(&self, text: &str) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
-        let paragraphs = paragraphs_from_plain(text);
+        let paragraphs = paragraphs_from_plain_preserving(&doc.footer_even, text);
         if paragraphs == doc.footer_even {
             return Ok(());
         }
@@ -3948,6 +3953,137 @@ fn paragraphs_from_plain(text: &str) -> Vec<Paragraph> {
             ..Default::default()
         })
         .collect()
+}
+
+/// Rebuild a story from the plain-text overlay without wiping fields / styles.
+///
+/// Line `i` merges into existing paragraph `i` when present: `PAGE`/`DATE`/… runs
+/// whose cached display text still appears (left-to-right) are kept with their
+/// `field` + run props; free text keeps the first non-field run's style shell;
+/// paragraph-level properties are preserved. Extra lines become bare paragraphs;
+/// empty overlay clears the story.
+fn paragraphs_from_plain_preserving(existing: &[Paragraph], text: &str) -> Vec<Paragraph> {
+    let trimmed = text.trim_end_matches(['\r', '\n']);
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+    if existing.is_empty() {
+        return paragraphs_from_plain(text);
+    }
+    let lines: Vec<&str> = trimmed
+        .split('\n')
+        .map(|line| line.trim_end_matches('\r'))
+        .collect();
+    let mut out = Vec::with_capacity(lines.len());
+    for (i, line) in lines.iter().enumerate() {
+        if let Some(old) = existing.get(i) {
+            out.push(merge_plain_into_paragraph(old, line));
+        } else {
+            out.push(Paragraph {
+                runs: vec![Run {
+                    text: (*line).to_string(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            });
+        }
+    }
+    out
+}
+
+fn merge_plain_into_paragraph(old: &Paragraph, new_plain: &str) -> Paragraph {
+    let mut para = old.clone();
+    if new_plain == old.plain_text() {
+        return para;
+    }
+
+    let text_shell = old
+        .runs
+        .iter()
+        .find(|r| r.field.is_none())
+        .cloned()
+        .unwrap_or_else(|| Run {
+            style: old
+                .runs
+                .first()
+                .map(|r| r.style.clone())
+                .unwrap_or_default(),
+            style_id: old.runs.first().and_then(|r| r.style_id.clone()),
+            ..Default::default()
+        });
+
+    let field_runs: Vec<&Run> = old.runs.iter().filter(|r| r.field.is_some()).collect();
+    if field_runs.is_empty() {
+        para.runs = vec![Run {
+            text: new_plain.to_string(),
+            style: text_shell.style,
+            style_id: text_shell.style_id,
+            hyperlink: text_shell.hyperlink,
+            field: None,
+        }];
+        return para;
+    }
+
+    let mut matches: Vec<(usize, usize, &Run)> = Vec::new();
+    let mut search_from = 0;
+    for run in field_runs {
+        let needle = run.text.as_str();
+        if needle.is_empty() {
+            continue;
+        }
+        if let Some(rel) = new_plain[search_from..].find(needle) {
+            let start = search_from + rel;
+            let end = start + needle.len();
+            matches.push((start, end, run));
+            search_from = end;
+        }
+    }
+
+    let mut runs = Vec::new();
+    let mut cursor = 0;
+    for (start, end, field_run) in matches {
+        if start > cursor {
+            let chunk = &new_plain[cursor..start];
+            if !chunk.is_empty() {
+                runs.push(Run {
+                    text: chunk.to_string(),
+                    style: text_shell.style.clone(),
+                    style_id: text_shell.style_id.clone(),
+                    hyperlink: text_shell.hyperlink.clone(),
+                    field: None,
+                });
+            }
+        }
+        runs.push(Run {
+            text: new_plain[start..end].to_string(),
+            style: field_run.style.clone(),
+            style_id: field_run.style_id.clone(),
+            hyperlink: field_run.hyperlink.clone(),
+            field: field_run.field,
+        });
+        cursor = end;
+    }
+    if cursor < new_plain.len() {
+        runs.push(Run {
+            text: new_plain[cursor..].to_string(),
+            style: text_shell.style.clone(),
+            style_id: text_shell.style_id.clone(),
+            hyperlink: text_shell.hyperlink.clone(),
+            field: None,
+        });
+    }
+    if runs.is_empty() {
+        runs.push(Run {
+            text: new_plain.to_string(),
+            style: text_shell.style,
+            style_id: text_shell.style_id,
+            hyperlink: text_shell.hyperlink,
+            field: None,
+        });
+    }
+    para.runs = runs;
+    para
 }
 
 fn bump_line_spacing(current: u32, delta: i32) -> u32 {
