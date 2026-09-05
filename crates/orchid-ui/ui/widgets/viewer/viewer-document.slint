@@ -887,6 +887,66 @@ export component ViewerDocumentView inherits Rectangle {
                     width: 28px;
                     height: 28px;
                     background: tool-bg(false, fs-ta.has-hover);
+                    DocHoverTip {
+                        tip: model.tip-comment-edit;
+                        show: ce-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, cn-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    cn-ta := TouchArea { clicked => { root.action("comment-next"); } }
+                    Text {
+                        text: model.comment-next-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-comment-next;
+                        show: cn-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, cp-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    cp-ta := TouchArea { clicked => { root.action("comment-prev"); } }
+                    Text {
+                        text: model.comment-prev-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-comment-prev;
+                        show: cp-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: 1px;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+                    background: Theme.border-default;
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(false, fs-ta.has-hover);
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     fs-ta := TouchArea { clicked => { root.action("font-smaller"); } }

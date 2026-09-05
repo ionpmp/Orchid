@@ -1902,6 +1902,79 @@ impl DocumentViewer {
         Ok(Some(id))
     }
 
+    /// Move the selection to the next (`forward`) or previous comment range.
+    ///
+    /// Wraps at the ends. Selects the full plain-text span of the target
+    /// comment and scrolls Preview to its start. Returns `false` when the
+    /// document has no comments.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn goto_comment(&self, forward: bool) -> Result<bool> {
+        let doc_guard = self.document.read();
+        let doc = doc_guard.as_ref().ok_or(ViewerError::DocumentNotOpen)?;
+        let mut ranges: Vec<(usize, usize, u32)> = doc
+            .comment_ranges
+            .iter()
+            .map(|r| {
+                let a = r.start_plain.min(r.end_plain);
+                let b = r.start_plain.max(r.end_plain);
+                (a, b, r.id)
+            })
+            .collect();
+        ranges.sort_by_key(|&(a, b, id)| (a, b, id));
+        if ranges.is_empty() {
+            return Ok(false);
+        }
+        let sel = *self.selection.lock();
+        let (na, nb) = sel.normalized();
+        let lo = plain_offset_from_cursor(doc, na);
+        let hi = plain_offset_from_cursor(doc, nb);
+        let current_idx = comment_id_overlapping(doc, lo, hi).and_then(|id| {
+            ranges.iter().position(|&(_, _, rid)| rid == id)
+        });
+        let target = if let Some(i) = current_idx {
+            if forward {
+                ranges
+                    .get(i + 1)
+                    .copied()
+                    .or_else(|| ranges.first().copied())
+            } else if i == 0 {
+                ranges.last().copied()
+            } else {
+                ranges.get(i - 1).copied()
+            }
+        } else if forward {
+            ranges
+                .iter()
+                .copied()
+                .find(|(a, _, _)| *a >= hi)
+                .or_else(|| ranges.first().copied())
+        } else {
+            ranges
+                .iter()
+                .rev()
+                .copied()
+                .find(|(a, _, _)| *a < lo)
+                .or_else(|| ranges.last().copied())
+        };
+        let Some((start, end, _)) = target else {
+            return Ok(false);
+        };
+        let width = self.preview.lock().width;
+        let scroll_y = self
+            .layout
+            .lock()
+            .y_for_plain_offset(doc, width, start)
+            .round() as i32;
+        *self.selection.lock() = selection_from_plain_offsets(doc, start, end);
+        *self.find_scroll_y_px.lock() = scroll_y;
+        *self.find_gen.lock() += 1;
+        self.invalidate_preview();
+        Ok(true)
+    }
+
     /// Toggle `w:keepNext` on selected paragraphs.
     ///
     /// # Errors

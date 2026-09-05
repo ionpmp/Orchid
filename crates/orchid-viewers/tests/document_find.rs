@@ -619,3 +619,23 @@ fn set_comment_text_at_caret_and_undo() {
         None
     );
 }
+
+#[test]
+fn goto_comment_next_prev_wraps() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(sample_doc());
+    viewer.set_selection_plain_offsets(0, 5);
+    let id0 = viewer.insert_comment_at_selection().unwrap();
+    viewer.set_selection_plain_offsets(6, 11);
+    let id1 = viewer.insert_comment_at_selection().unwrap();
+    assert_ne!(id0, id1);
+    viewer.set_selection_plain_offsets(0, 0);
+    assert!(viewer.goto_comment(true).unwrap());
+    assert_eq!(viewer.selection_plain_offsets(), (0, 5));
+    assert!(viewer.goto_comment(true).unwrap());
+    assert_eq!(viewer.selection_plain_offsets(), (6, 11));
+    assert!(viewer.goto_comment(true).unwrap());
+    assert_eq!(viewer.selection_plain_offsets(), (0, 5));
+    assert!(viewer.goto_comment(false).unwrap());
+    assert_eq!(viewer.selection_plain_offsets(), (6, 11));
+}
