@@ -3671,6 +3671,10 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "line-spacing-less" => doc.bump_line_spacing_selection(-1),
                 "margin-more" => doc.bump_page_margins(180),
                 "margin-less" => doc.bump_page_margins(-180),
+                "header-distance-more" => doc.bump_header_footer_distances(180, 0),
+                "header-distance-less" => doc.bump_header_footer_distances(-180, 0),
+                "footer-distance-more" => doc.bump_header_footer_distances(0, 180),
+                "footer-distance-less" => doc.bump_header_footer_distances(0, -180),
                 "indent-more" => doc.bump_indent_left_selection(720),
                 "indent-less" => doc.bump_indent_left_selection(-720),
                 "indent-right-more" => doc.bump_indent_right_selection(720),
@@ -3950,7 +3954,6 @@ pub async fn document_footer_even(instance_id: Uuid, text: String) -> WidgetResu
     inner.refresh_snapshot().await;
     Ok(())
 }
-
 
 pub async fn document_preview_pointer(
     instance_id: Uuid,

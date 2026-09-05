@@ -482,7 +482,12 @@ fn preview_pointer_selects_second_paragraph_for_bold() {
     });
     viewer.set_source_mode(false);
     // Click into the second paragraph in preview coordinates.
-    viewer.preview_pointer(0, PreviewInsets::default_letter().left + 8.0, PreviewInsets::default_letter().left + 40.0, false);
+    viewer.preview_pointer(
+        0,
+        PreviewInsets::default_letter().left + 8.0,
+        PreviewInsets::default_letter().left + 40.0,
+        false,
+    );
     viewer.toggle_style_all('b').unwrap();
 
     let guard = viewer.document();
@@ -564,6 +569,7 @@ fn preview_ctrl_click_opens_hyperlink_without_selection() {
                     r_id: Some("rId9".into()),
                     bookmark: None,
                 }),
+                ..Default::default()
             }],
             ..Default::default()
         })],
@@ -571,16 +577,31 @@ fn preview_ctrl_click_opens_hyperlink_without_selection() {
     });
     viewer.set_source_mode(false);
     let before = viewer.selected_plain_text();
-    let outcome = viewer.preview_pointer(0, PreviewInsets::default_letter().left + 8.0, PreviewInsets::default_letter().left + 8.0, true);
+    let outcome = viewer.preview_pointer(
+        0,
+        PreviewInsets::default_letter().left + 8.0,
+        PreviewInsets::default_letter().left + 8.0,
+        true,
+    );
     assert_eq!(outcome.open_url.as_deref(), Some("https://example.com/doc"));
     assert_eq!(viewer.selected_plain_text(), before);
 
-    let blocked = viewer.preview_pointer(0, PreviewInsets::default_letter().left + 8.0, PreviewInsets::default_letter().left + 8.0, false);
+    let blocked = viewer.preview_pointer(
+        0,
+        PreviewInsets::default_letter().left + 8.0,
+        PreviewInsets::default_letter().left + 8.0,
+        false,
+    );
     assert!(blocked.open_url.is_none());
 
     // Hover sets link_hover; leave clears it.
     let _ = viewer.preview_pointer(5, -1.0, -1.0, false);
-    let hover = viewer.preview_pointer(5, PreviewInsets::default_letter().left + 8.0, PreviewInsets::default_letter().left + 8.0, false);
+    let hover = viewer.preview_pointer(
+        5,
+        PreviewInsets::default_letter().left + 8.0,
+        PreviewInsets::default_letter().left + 8.0,
+        false,
+    );
     assert!(hover.refresh);
     let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
         panic!("snapshot");
@@ -604,12 +625,18 @@ fn preview_ctrl_click_opens_hyperlink_without_selection() {
                     r_id: None,
                     bookmark: None,
                 }),
+                ..Default::default()
             }],
             ..Default::default()
         })],
         ..Default::default()
     });
-    let unsafe_out = viewer.preview_pointer(0, PreviewInsets::default_letter().left + 8.0, PreviewInsets::default_letter().left + 8.0, true);
+    let unsafe_out = viewer.preview_pointer(
+        0,
+        PreviewInsets::default_letter().left + 8.0,
+        PreviewInsets::default_letter().left + 8.0,
+        true,
+    );
     assert!(unsafe_out.open_url.is_none());
 }
 
@@ -639,4 +666,38 @@ fn write_minimal_docx(path: &std::path::Path, document_xml: &[u8]) {
     zip.start_file("word/document.xml", opts).unwrap();
     zip.write_all(document_xml).unwrap();
     zip.finish().unwrap();
+}
+
+#[test]
+fn bump_header_footer_distances_nudges_page_setup() {
+    use orchid_viewers::document::model::Document as Doc;
+
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(Doc::default());
+    let before = {
+        let guard = viewer.document();
+        let ps = &guard.as_ref().unwrap().page_setup;
+        (ps.header_distance_twips, ps.footer_distance_twips)
+    };
+    viewer.bump_header_footer_distances(180, -180).unwrap();
+    let after = {
+        let guard = viewer.document();
+        let ps = &guard.as_ref().unwrap().page_setup;
+        (ps.header_distance_twips, ps.footer_distance_twips)
+    };
+    assert_eq!(after.0, before.0 + 180);
+    assert_eq!(after.1, before.1 - 180);
+    // Clamp at zero for distances.
+    viewer
+        .bump_header_footer_distances(0, -(after.1 as i32) - 1000)
+        .unwrap();
+    assert_eq!(
+        viewer
+            .document()
+            .as_ref()
+            .unwrap()
+            .page_setup
+            .footer_distance_twips,
+        0
+    );
 }

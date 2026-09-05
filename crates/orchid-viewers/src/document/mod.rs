@@ -2701,6 +2701,41 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Nudge header and/or footer edge distances (`w:pgMar` `@w:header` / `@w:footer`).
+    ///
+    /// Positive `delta_twips` moves the story farther from the page edge.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn bump_header_footer_distances(
+        &self,
+        header_delta_twips: i32,
+        footer_delta_twips: i32,
+    ) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let mut next = doc.page_setup.clone();
+        if header_delta_twips != 0 {
+            next.header_distance_twips = clamp_header_footer_distance_twips(
+                next.header_distance_twips as i32 + header_delta_twips,
+            );
+        }
+        if footer_delta_twips != 0 {
+            next.footer_distance_twips = clamp_header_footer_distance_twips(
+                next.footer_distance_twips as i32 + footer_delta_twips,
+            );
+        }
+        if next == doc.page_setup {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::SetPageSetup { setup: next })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Plain text of the default header story (`\n`-joined paragraphs).
     #[must_use]
     pub fn header_plain_text(&self) -> String {
@@ -2758,7 +2793,6 @@ impl DocumentViewer {
         self.invalidate_preview();
         Ok(())
     }
-
 
     /// Replace the first-page header story from plain text (empty clears).
     ///
@@ -3362,6 +3396,10 @@ fn clamp_spacing_twips(v: i32) -> u32 {
 
 fn clamp_margin_twips(v: i32) -> u32 {
     v.clamp(MARGIN_TWIPS_MIN, MARGIN_TWIPS_MAX) as u32
+}
+
+fn clamp_header_footer_distance_twips(v: i32) -> u32 {
+    v.clamp(0, MARGIN_TWIPS_MAX) as u32
 }
 
 fn is_landscape_page(ps: &PageSetup) -> bool {

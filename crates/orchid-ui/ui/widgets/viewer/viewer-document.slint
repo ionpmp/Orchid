@@ -1239,6 +1239,90 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: max(36px, hd-less-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(false, hd-less.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    hd-less := TouchArea { clicked => { root.action("header-distance-less"); } }
+                    hd-less-label := Text {
+                        text: model.header-distance-less-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-header-distance-less;
+                        show: hd-less.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: max(36px, hd-more-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(false, hd-more.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    hd-more := TouchArea { clicked => { root.action("header-distance-more"); } }
+                    hd-more-label := Text {
+                        text: model.header-distance-more-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-header-distance-more;
+                        show: hd-more.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: max(36px, fd-less-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(false, fd-less.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fd-less := TouchArea { clicked => { root.action("footer-distance-less"); } }
+                    fd-less-label := Text {
+                        text: model.footer-distance-less-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-footer-distance-less;
+                        show: fd-less.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: max(36px, fd-more-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(false, fd-more.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    fd-more := TouchArea { clicked => { root.action("footer-distance-more"); } }
+                    fd-more-label := Text {
+                        text: model.footer-distance-more-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-footer-distance-more;
+                        show: fd-more.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
                     width: 28px;
                     height: 28px;
                     background: tool-bg(false, ind-less.has-hover);
