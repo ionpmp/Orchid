@@ -328,6 +328,8 @@ impl DocumentLayout {
         let mut layouts: Vec<LaidBlock> = Vec::new();
         let mut grids: Vec<TableGridGeom> = Vec::new();
         let mut total_h = 0.0;
+        // Content-relative Y of each 1-based page band (page breaks via `w:pageBreakBefore`).
+        let mut page_starts: Vec<f32> = vec![0.0];
         let para_gap = 10.0 * scale;
         let mut plain_offset = 0usize;
         let mut emitted_text = false;
@@ -345,6 +347,7 @@ impl DocumentLayout {
                         let page_break_gap = 28.0 * scale;
                         rule_y = Some(total_h + 10.0 * scale);
                         total_h += page_break_gap;
+                        page_starts.push(total_h);
                     }
                     total_h += twips_to_css_px(p.space_before_twips) * scale;
                     let body_len = p.plain_text().len();
@@ -558,46 +561,49 @@ impl DocumentLayout {
             }
         }
 
-        // Header / footer stories in page margins. Single Preview canvas prefers
-        // first-page stories when `w:titlePg`, else even-page stories when
-        // `w:evenAndOddHeaders`, else the default stories.
-        let header_story = if doc.page_setup.title_page && !doc.header_first.is_empty() {
-            &doc.header_first
-        } else if doc.page_setup.even_and_odd_headers && !doc.header_even.is_empty() {
-            &doc.header_even
-        } else {
-            &doc.header
-        };
-        let footer_story = if doc.page_setup.title_page && !doc.footer_first.is_empty() {
-            &doc.footer_first
-        } else if doc.page_setup.even_and_odd_headers && !doc.footer_even.is_empty() {
-            &doc.footer_even
-        } else {
-            &doc.footer
-        };
-        if !header_story.is_empty() {
-            self.paint_margin_story(
-                header_story,
-                max_w,
-                insets.left,
-                6.0 * scale,
-                scale,
-                &mut pixels,
-                width,
-                height,
-            );
-        }
-        if !footer_story.is_empty() {
-            self.paint_margin_story(
-                footer_story,
-                max_w,
-                insets.left,
-                height as f32 - insets.bottom + 6.0 * scale,
-                scale,
-                &mut pixels,
-                width,
-                height,
-            );
+        // Header / footer stories in page margins. Preview paints the correct
+        // first / even / default story at each `w:pageBreakBefore` band.
+        for (page_i, &start_y) in page_starts.iter().enumerate() {
+            let page = (page_i + 1) as u32;
+            let end_y = page_starts
+                .get(page_i + 1)
+                .copied()
+                .unwrap_or(total_h);
+            let (header_story, footer_story) = margin_stories_for_page(doc, page);
+            let header_y = if page_i == 0 {
+                6.0 * scale
+            } else {
+                (insets.top + start_y - 18.0 * scale).max(0.0)
+            };
+            let footer_y = if page_i + 1 == page_starts.len() {
+                height as f32 - insets.bottom + 6.0 * scale
+            } else {
+                (insets.top + end_y - 18.0 * scale).max(0.0)
+            };
+            if !header_story.is_empty() {
+                self.paint_margin_story(
+                    header_story,
+                    max_w,
+                    insets.left,
+                    header_y,
+                    scale,
+                    &mut pixels,
+                    width,
+                    height,
+                );
+            }
+            if !footer_story.is_empty() {
+                self.paint_margin_story(
+                    footer_story,
+                    max_w,
+                    insets.left,
+                    footer_y,
+                    scale,
+                    &mut pixels,
+                    width,
+                    height,
+                );
+            }
         }
 
         let base = Arc::new(pixels);
@@ -612,7 +618,36 @@ impl DocumentLayout {
         });
         overlay_selection_on_scene(self.scene.as_ref().expect("scene just stored"), selection)
     }
+}
 
+/// Pick header/footer stories for a 1-based preview page index.
+fn margin_stories_for_page(
+    doc: &Document,
+    page: u32,
+) -> (
+    &[crate::document::model::Paragraph],
+    &[crate::document::model::Paragraph],
+) {
+    let use_first = doc.page_setup.title_page && page == 1;
+    let use_even = doc.page_setup.even_and_odd_headers && !use_first && page % 2 == 0;
+    let header = if use_first && !doc.header_first.is_empty() {
+        doc.header_first.as_slice()
+    } else if use_even && !doc.header_even.is_empty() {
+        doc.header_even.as_slice()
+    } else {
+        doc.header.as_slice()
+    };
+    let footer = if use_first && !doc.footer_first.is_empty() {
+        doc.footer_first.as_slice()
+    } else if use_even && !doc.footer_even.is_empty() {
+        doc.footer_even.as_slice()
+    } else {
+        doc.footer.as_slice()
+    };
+    (header, footer)
+}
+
+impl DocumentLayout {
     /// Layout and paint header/footer paragraphs into the page margin band.
     fn paint_margin_story(
         &mut self,
@@ -2707,6 +2742,195 @@ mod tests {
         assert!(
             ink_in_margin,
             "expected first-page header glyph ink inside the top margin"
+        );
+    }
+
+    #[test]
+    fn preview_skips_even_header_on_page_one() {
+        // With even/odd enabled, page 1 is odd → default story (empty here).
+        let mut dl = DocumentLayout::new();
+        let mut page_setup = PageSetup::default();
+        page_setup.margin_top_twips = 1440;
+        page_setup.even_and_odd_headers = true;
+        let doc = Document {
+            blocks: vec![Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Body".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })],
+            page_setup,
+            header_even: vec![Paragraph {
+                runs: vec![Run {
+                    text: "EVENONLYHDR".into(),
+                    style: RunStyle {
+                        bold: true,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let (bytes, w, h) = dl.render_document(&doc, 400.0);
+        let s = PREVIEW_RENDER_SCALE;
+        let insets = PreviewInsets::from_page_setup(&doc.page_setup);
+        let margin_bottom = (insets.top * s).round() as u32;
+        let mut ink_in_margin = false;
+        for y in 0..margin_bottom.min(h) {
+            for x in 0..w {
+                let i = ((y as usize) * (w as usize) + (x as usize)) * 4;
+                if bytes[i] < 240 || bytes[i + 1] < 240 || bytes[i + 2] < 240 {
+                    ink_in_margin = true;
+                    break;
+                }
+            }
+            if ink_in_margin {
+                break;
+            }
+        }
+        assert!(
+            !ink_in_margin,
+            "page 1 must not paint the even-page header in the top margin"
+        );
+    }
+
+    #[test]
+    fn preview_paints_even_header_after_page_break() {
+        let mut page_setup = PageSetup::default();
+        page_setup.margin_top_twips = 1440;
+        page_setup.even_and_odd_headers = true;
+        let blocks = vec![
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "PageOne".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            Block::Paragraph(Paragraph {
+                page_break_before: true,
+                runs: vec![Run {
+                    text: "PageTwo".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+        ];
+        let with_even = Document {
+            blocks: blocks.clone(),
+            page_setup: page_setup.clone(),
+            header_even: vec![Paragraph {
+                runs: vec![Run {
+                    text: "EVENPAGEHDR".into(),
+                    style: RunStyle {
+                        bold: true,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let without_even = Document {
+            blocks,
+            page_setup,
+            ..Default::default()
+        };
+        // Separate layout engines — `DocumentLayout` caches the last scene by width.
+        let (bytes_with, w, h) = DocumentLayout::new().render_document(&with_even, 400.0);
+        let (bytes_without, w2, h2) =
+            DocumentLayout::new().render_document(&without_even, 400.0);
+        assert_eq!((w, h), (w2, h2));
+        let s = PREVIEW_RENDER_SCALE;
+        let insets = PreviewInsets::from_page_setup(&with_even.page_setup);
+        let margin_bottom = (insets.top * s).round() as u32;
+
+        let count_dark = |bytes: &[u8], y0: u32| {
+            let mut n = 0usize;
+            for y in y0..h {
+                for x in 0..w {
+                    let i = ((y as usize) * (w as usize) + (x as usize)) * 4;
+                    // Glyphs are near-black; dashed page-break rules stay ~180 gray.
+                    if bytes[i] < 100 || bytes[i + 1] < 100 || bytes[i + 2] < 100 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+
+        let top_dark = {
+            let mut n = 0usize;
+            for y in 0..margin_bottom.min(h) {
+                for x in 0..w {
+                    let i = ((y as usize) * (w as usize) + (x as usize)) * 4;
+                    if bytes_with[i] < 100 || bytes_with[i + 1] < 100 || bytes_with[i + 2] < 100
+                    {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        assert_eq!(top_dark, 0, "even header must not appear on page 1");
+
+        let dark_with = count_dark(&bytes_with, margin_bottom);
+        let dark_without = count_dark(&bytes_without, margin_bottom);
+        assert!(
+            dark_with > dark_without + 10,
+            "expected even-page header ink after the page break (with={dark_with}, without={dark_without})"
+        );
+    }
+
+    #[test]
+    fn margin_stories_for_page_picks_first_even_default() {
+        let doc = Document {
+            page_setup: PageSetup {
+                title_page: true,
+                even_and_odd_headers: true,
+                ..Default::default()
+            },
+            header: vec![Paragraph {
+                runs: vec![Run {
+                    text: "DEF".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            header_first: vec![Paragraph {
+                runs: vec![Run {
+                    text: "FIRST".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            header_even: vec![Paragraph {
+                runs: vec![Run {
+                    text: "EVEN".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert_eq!(
+            margin_stories_for_page(&doc, 1).0[0].plain_text(),
+            "FIRST"
+        );
+        assert_eq!(
+            margin_stories_for_page(&doc, 2).0[0].plain_text(),
+            "EVEN"
+        );
+        assert_eq!(
+            margin_stories_for_page(&doc, 3).0[0].plain_text(),
+            "DEF"
         );
     }
 

@@ -1541,4 +1541,50 @@ mod tests {
         assert_eq!(loaded.footer_even[0].plain_text(), "EvenFooter");
         assert!(loaded.page_setup.even_and_odd_headers);
     }
+
+    #[test]
+    fn save_allocates_first_page_header_footer_parts_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("new-first-hf.docx");
+        let doc = Document {
+            blocks: vec![Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Body".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })],
+            header_first: vec![Paragraph {
+                runs: vec![Run {
+                    text: "FirstHeader".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            footer_first: vec![Paragraph {
+                runs: vec![Run {
+                    text: "FirstFooter".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            page_setup: crate::document::model::PageSetup {
+                title_page: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(doc.page_setup.header_first_r_id.is_none());
+        assert!(doc.page_setup.footer_first_r_id.is_none());
+        save_document_sync(&doc, &path).unwrap();
+        let loaded = open_document(&path).unwrap();
+        assert!(loaded.page_setup.header_first_r_id.is_some());
+        assert!(loaded.page_setup.footer_first_r_id.is_some());
+        assert_eq!(loaded.header_first[0].plain_text(), "FirstHeader");
+        assert_eq!(loaded.footer_first[0].plain_text(), "FirstFooter");
+        assert!(loaded.page_setup.title_page);
+    }
 }
