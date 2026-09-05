@@ -193,6 +193,7 @@ fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
         }
         (Vs::Html(a), Vs::Html(b)) => {
             a.path_display == b.path_display
+                && a.local_path == b.local_path
                 && (std::sync::Arc::ptr_eq(&a.source_preview, &b.source_preview)
                     || a.source_preview.as_ref() == b.source_preview.as_ref())
         }

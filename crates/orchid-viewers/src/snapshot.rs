@@ -32,7 +32,7 @@ pub enum ViewerSnapshot {
     Document(DocumentSnapshot),
     /// Audio / video — libmpv when available, else system player via Open.
     Media(MediaSnapshot),
-    /// HTML source + open in the system browser.
+    /// HTML source + local path for an embedded WebView2 preview.
     Html(HtmlSnapshot),
 }
 
@@ -551,12 +551,14 @@ pub struct MediaSnapshot {
     pub error: String,
 }
 
-/// HTML snapshot (source preview + Open in browser).
+/// HTML snapshot (embedded preview + source + Open in browser).
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub struct HtmlSnapshot {
     pub path_display: String,
     pub source_preview: Arc<str>,
+    /// OS path when the file is on the local filesystem (`file://` navigation).
+    pub local_path: Option<std::path::PathBuf>,
     pub info_text: String,
 }
 
