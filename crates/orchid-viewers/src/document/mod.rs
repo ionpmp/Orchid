@@ -30,7 +30,7 @@ pub use cursor::{
 pub use layout::{DocumentLayout, PreviewInsets, DEFAULT_PREVIEW_WIDTH};
 pub use model::{
     Alignment, Block, Bookmark, CellImage, CommentRange, DocComment, DocField, Document, Hyperlink,
-    ImageFormat, InlineImage, LineSpacingRule, ListKind, NamedCharacterStyle, NamedParagraphStyle,
+    ImageFormat, InlineImage, LineSpacingRule, ListKind, NamedCharacterStyle, NamedParagraphStyle, SectionBreakType,
     OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow, VMerge,
 };
 pub use sample::{create_sample_docx, sample_document};
@@ -747,12 +747,13 @@ impl DocumentViewer {
         self.insert_break_at_caret(true)
     }
 
-    /// Insert a next-page section break at the preview caret.
+    /// Insert a next-page section break, or cycle break type on an existing end.
     ///
-    /// Splits like Enter, attaches a copy of the **caret section's**
-    /// [`PageSetup`] as [`Paragraph::section_properties`] on the paragraph that
-    /// ends the previous section (`w:pPr/w:sectPr`), and starts the following
-    /// content on a new preview page band.
+    /// When the caret sits on a paragraph that already has mid-body
+    /// [`Paragraph::section_properties`], toggles `w:type` between `nextPage` and
+    /// `continuous` (Preview skips the page band for continuous). Otherwise splits
+    /// like Enter, attaches a copy of the caret section's [`PageSetup`] (next-page)
+    /// as `w:pPr/w:sectPr`, and starts the following content on a new page band.
     ///
     /// # Errors
     ///
@@ -761,7 +762,20 @@ impl DocumentViewer {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let sel = *self.selection.lock();
-        let setup = page_setup_for_cursor(doc, sel.head).clone();
+        if sel.head.cell.is_none() {
+            if let Some(Block::Paragraph(p)) = doc.blocks.get(sel.head.block_idx) {
+                if p.section_properties.is_some() {
+                    let bi = sel.head.block_idx;
+                    drop(doc_guard);
+                    return self.cycle_section_break_type_at(bi);
+                }
+            }
+        }
+        let setup = {
+            let mut s = page_setup_for_cursor(doc, sel.head).clone();
+            s.section_break = SectionBreakType::NextPage;
+            s
+        };
         let at = self.delete_selection_if_needed(doc, sel)?;
         if at.cell.is_some() {
             // Section breaks are body-level in OOXML; fall back to a page break in cells.
@@ -786,6 +800,35 @@ impl DocumentViewer {
             anchor: caret,
             head: caret,
         };
+        self.invalidate_preview();
+        Ok(())
+    }
+
+    /// Toggle `w:type` on the mid-body `sectPr` at `block_idx` (`nextPage` ↔ `continuous`).
+    fn cycle_section_break_type_at(&self, block_idx: usize) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let Some(Block::Paragraph(p)) = doc.blocks.get(block_idx) else {
+            return Ok(());
+        };
+        let Some(current) = p.section_properties.as_ref() else {
+            return Ok(());
+        };
+        let mut next = current.clone();
+        next.section_break = match current.section_break {
+            SectionBreakType::NextPage => SectionBreakType::Continuous,
+            SectionBreakType::Continuous => SectionBreakType::NextPage,
+        };
+        if next == *current {
+            return Ok(());
+        }
+        self.undo.lock().push(
+            doc,
+            EditCommand::SetSectionPageSetup {
+                end_block_idx: block_idx,
+                setup: next,
+            },
+        )?;
         self.invalidate_preview();
         Ok(())
     }
@@ -4937,6 +4980,9 @@ impl Viewer for DocumentViewer {
         let bidi = para.is_some_and(|p| p.bidi);
         let suppress_auto_hyphens = para.is_some_and(|p| p.suppress_auto_hyphens);
         let character_style_id = run_style_id_at_cursor(doc, sel.head).unwrap_or_default();
+        let section_break_continuous = paragraph_ref(doc, sel.head)
+            .and_then(|p| p.section_properties.as_ref())
+            .is_some_and(|ps| ps.section_break == SectionBreakType::Continuous);
         let outline_level = para
             .and_then(|p| p.outline_level)
             .map(|lvl| i32::from(lvl))
@@ -5039,6 +5085,7 @@ impl Viewer for DocumentViewer {
             suppress_auto_hyphens,
             outline_level,
             character_style_id,
+            section_break_continuous,
             superscript,
             subscript,
             font_size_pt,

@@ -219,6 +219,16 @@ pub enum ListKind {
     Numbered,
 }
 
+/// How a section ends relative to the next (`w:type` inside `w:sectPr`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SectionBreakType {
+    /// Next content starts on a new page (`nextPage`; OOXML default when omitted).
+    #[default]
+    NextPage,
+    /// Next content continues on the same page (`continuous`).
+    Continuous,
+}
+
 /// Page size and margins in twentieths of a point (twips).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageSetup {
@@ -254,6 +264,8 @@ pub struct PageSetup {
     pub title_page: bool,
     /// Different odd/even headers (`w:evenAndOddHeaders`).
     pub even_and_odd_headers: bool,
+    /// Section break kind (`w:type`). Meaningful for mid-body `sectPr`.
+    pub section_break: SectionBreakType,
 }
 
 impl Default for PageSetup {
@@ -276,6 +288,7 @@ impl Default for PageSetup {
             footer_even_r_id: None,
             title_page: false,
             even_and_odd_headers: false,
+            section_break: SectionBreakType::NextPage,
         }
     }
 }

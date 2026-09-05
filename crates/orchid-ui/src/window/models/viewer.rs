@@ -833,6 +833,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         footer_even_label: locale.tr("viewer-document-footer-even").into(),
         page_field_label: locale.tr("viewer-document-page-field").into(),
         section_break_label: locale.tr("viewer-document-section-break").into(),
+        section_break_continuous: false,
         date_field_label: locale.tr("viewer-document-date-field").into(),
         filename_field_label: locale.tr("viewer-document-filename-field").into(),
         header_placeholder: locale.tr("viewer-document-header-placeholder").into(),
@@ -1516,6 +1517,7 @@ fn build_document_snapshot(
     model.outline_level = s.outline_level;
     model.outline_level_label = document_outline_level_label(s.outline_level);
     model.character_style_id = s.character_style_id.clone().into();
+    model.section_break_continuous = s.section_break_continuous;
     model.superscript = s.superscript;
     model.subscript = s.subscript;
     model.font_size_pt = s.font_size_pt;

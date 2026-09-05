@@ -23,7 +23,7 @@ use swash::FontRef;
 use crate::document::cursor::{cursor_from_plain_offset, plain_offset_from_cursor, Cursor};
 use crate::document::model::{
     Alignment, Block, Document, LineSpacingRule, ListKind, NamedCharacterStyle,
-    NamedParagraphStyle, PageSetup, Paragraph, RunStyle, Table, TableCell, TableRow, VMerge,
+    NamedParagraphStyle, PageSetup, Paragraph, RunStyle, SectionBreakType, Table, TableCell, TableRow, VMerge,
 };
 
 /// Brush colour for styled runs (RGBA).
@@ -424,12 +424,14 @@ impl DocumentLayout {
                     plain_offset += body_len;
                     let after = (twips_to_css_px(styled.space_after_twips) * scale).max(para_gap);
                     total_h += h + after;
-                    if p.section_properties.is_some() {
-                        let page_break_gap = 28.0 * scale;
-                        total_h += page_break_gap;
+                    if let Some(ref ps) = p.section_properties {
                         section_idx = (section_idx + 1).min(section_setups.len().saturating_sub(1));
-                        page_starts.push(total_h);
-                        page_section.push(section_idx);
+                        if section_forces_page_band(ps) {
+                            let page_break_gap = 28.0 * scale;
+                            total_h += page_break_gap;
+                            page_starts.push(total_h);
+                            page_section.push(section_idx);
+                        }
                     }
                 }
                 Block::Table(t) => {
@@ -886,6 +888,12 @@ fn resolve_paragraph_fields(
     out
 }
 
+
+/// Mid-body section ends: next-page forces a Preview page band; continuous does not.
+fn section_forces_page_band(ps: &PageSetup) -> bool {
+    ps.section_break != SectionBreakType::Continuous
+}
+
 /// Mid-body `w:pPr/w:sectPr` setups followed by the trailing body `w:sectPr`.
 fn collect_section_page_setups(doc: &Document) -> Vec<PageSetup> {
     let mut setups = Vec::new();
@@ -1079,9 +1087,11 @@ impl DocumentLayout {
                     }
                     plain_offset += body_len;
                     total_h += h + after;
-                    if p.section_properties.is_some() {
-                        total_h += 28.0;
+                    if let Some(ref ps) = p.section_properties {
                         section_idx = (section_idx + 1).min(section_setups.len().saturating_sub(1));
+                        if section_forces_page_band(ps) {
+                            total_h += 28.0;
+                        }
                     }
                 }
                 Block::Table(t) => {
@@ -1180,9 +1190,11 @@ impl DocumentLayout {
                     }
                     plain_offset += body_len;
                     total_h += h + twips_to_css_px(styled.space_after_twips).max(para_gap);
-                    if p.section_properties.is_some() {
-                        total_h += 28.0;
+                    if let Some(ref ps) = p.section_properties {
                         section_idx = (section_idx + 1).min(section_setups.len().saturating_sub(1));
+                        if section_forces_page_band(ps) {
+                            total_h += 28.0;
+                        }
                     }
                 }
                 Block::Table(t) => {
@@ -4603,5 +4615,42 @@ mod tests {
         let merged = apply_named_paragraph_style(&paragraph_styles, &HashMap::new(), &override_p);
         assert_eq!(merged.space_before_twips, 100);
         assert_eq!(merged.space_after_twips, 240);
+    }
+
+    #[test]
+    fn continuous_section_skips_preview_page_band() {
+        use crate::document::model::SectionBreakType;
+        let mut next = PageSetup::default();
+        next.section_break = SectionBreakType::NextPage;
+        let mut cont = PageSetup::default();
+        cont.section_break = SectionBreakType::Continuous;
+        let mk = |sect: PageSetup| Document {
+            blocks: vec![
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "One".into(),
+                        style: RunStyle::default(),
+                        ..Default::default()
+                    }],
+                    section_properties: Some(sect),
+                    ..Default::default()
+                }),
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "Two".into(),
+                        style: RunStyle::default(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+            ],
+            ..Default::default()
+        };
+        let (_, _, h_next) = DocumentLayout::new().render_document(&mk(next), 400.0);
+        let (_, _, h_cont) = DocumentLayout::new().render_document(&mk(cont), 400.0);
+        assert!(
+            h_next > h_cont + 10,
+            "continuous should skip page-band gap (next={h_next}, cont={h_cont})"
+        );
     }
 }

@@ -9,7 +9,7 @@ use quick_xml::writer::Writer;
 
 use crate::document::model::{
     Alignment, Block, Bookmark, CellImage, CommentRange, DocField, Document, Hyperlink, ImageFormat, InlineImage,
-    LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell,
+    LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, SectionBreakType, Table, TableCell,
     TableRow, VMerge, CELL_BORDER_BOTTOM, CELL_BORDER_LEFT, CELL_BORDER_RIGHT,
     CELL_BORDER_TOP,
 };
@@ -1352,6 +1352,14 @@ fn parse_sect_pr(reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>) -> Result<PageSe
                     "evenAndOddHeaders" => {
                         setup.even_and_odd_headers = true;
                     }
+                    "type" => {
+                        let val = attr_val(&e, "val").unwrap_or_default();
+                        setup.section_break = match val.as_str() {
+                            "continuous" => SectionBreakType::Continuous,
+                            // nextPage / oddPage / evenPage / omitted → next page band
+                            _ => SectionBreakType::NextPage,
+                        };
+                    }
                     _ => {}
                 }
             }
@@ -2313,6 +2321,13 @@ fn write_sect_pr(writer: &mut Writer<Cursor<Vec<u8>>>, setup: &PageSetup) -> Res
     writer
         .write_event(Event::Start(BytesStart::new("w:sectPr")))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    if setup.section_break == SectionBreakType::Continuous {
+        let mut ty = BytesStart::new("w:type");
+        ty.push_attribute(("w:val", "continuous"));
+        writer
+            .write_event(Event::Empty(ty))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
     let landscape = setup.width_twips > setup.height_twips;
     let mut sz = BytesStart::new("w:pgSz");
     sz.push_attribute(("w:w", setup.width_twips.to_string().as_str()));
@@ -4727,6 +4742,74 @@ mod tests {
         };
         assert_eq!(p0b.section_properties, p0.section_properties);
     }
+
+    #[test]
+    fn continuous_section_type_round_trip() {
+        use crate::document::model::SectionBreakType;
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:pPr>
+                <w:sectPr>
+                  <w:type w:val="continuous"/>
+                  <w:pgSz w:w="12240" w:h="15840"/>
+                  <w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="1440"
+                           w:header="720" w:footer="720"/>
+                </w:sectPr>
+              </w:pPr>
+              <w:r><w:t>A</w:t></w:r>
+            </w:p>
+            <w:p><w:r><w:t>B</w:t></w:r></w:p>
+            <w:sectPr>
+              <w:pgSz w:w="12240" w:h="15840"/>
+              <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"
+                       w:header="720" w:footer="720"/>
+            </w:sectPr>
+          </w:body>
+        </w:document>"#;
+        let (blocks, _, _, _, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        let Block::Paragraph(p0) = &blocks[0] else {
+            panic!("p0");
+        };
+        let sect = p0.section_properties.as_ref().expect("sectPr");
+        assert_eq!(sect.section_break, SectionBreakType::Continuous);
+        assert_eq!(sect.margin_left_twips, 1440);
+        let out = write_document_xml(&Document {
+            blocks: blocks.clone(),
+            page_setup: PageSetup::default(),
+            ..Default::default()
+        })
+        .unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:val=\"continuous\"") || text.contains("w:type w:val=\"continuous\""),
+            "{text}"
+        );
+        let (blocks2, _, _, _, _) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        let Block::Paragraph(p0b) = &blocks2[0] else {
+            panic!("p0b");
+        };
+        assert_eq!(
+            p0b.section_properties.as_ref().unwrap().section_break,
+            SectionBreakType::Continuous
+        );
+    }
+
 
     #[test]
     fn pstyle_round_trip_and_outline_from_named_style() {

@@ -98,6 +98,8 @@ pub struct DocumentSnapshot {
     pub outline_level: i32,
     /// Named character style id at the caret (`w:rStyle`), empty when none.
     pub character_style_id: String,
+    /// Caret paragraph ends a continuous mid-body section (`w:type="continuous"`).
+    pub section_break_continuous: bool,
     pub superscript: bool,
     pub subscript: bool,
     /// Font size in points at the caret (`0` = document default).

@@ -1982,13 +1982,13 @@ export component ViewerDocumentView inherits Rectangle {
                 Rectangle {
                     width: max(36px, sec-btn-label.preferred-width + 12px);
                     height: 28px;
-                    background: tool-bg(false, sec-ta.has-hover);
+                    background: tool-bg(model.section-break-continuous, sec-ta.has-hover);
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     sec-ta := TouchArea { clicked => { root.action("insert-section-break"); } }
                     sec-btn-label := Text {
                         text: model.section-break-label;
-                        color: Theme.text-primary;
+                        color: tool-btn(model.section-break-continuous);
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
