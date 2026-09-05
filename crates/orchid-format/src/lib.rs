@@ -10,6 +10,7 @@
 mod compress;
 mod error;
 mod framing;
+mod reader;
 mod toc_build;
 mod writer;
 
@@ -20,7 +21,8 @@ mod writer;
 #[allow(clippy::pedantic)]
 #[allow(unused_imports)]
 #[allow(clippy::needless_lifetimes)]
-#[allow(clippy::elided_lifetimes_in_paths)]
+#[allow(elided_lifetimes_in_paths)]
+#[allow(mismatched_lifetime_syntaxes)]
 #[rustfmt::skip]
 #[path = "toc_generated.rs"]
 mod toc_generated;
@@ -30,6 +32,7 @@ pub use error::{FormatError, Result};
 pub use framing::{
     align_up, pad_len, pad_to_alignment, Footer, Header, RegionHeader,
 };
+pub use reader::SealedFile;
 pub use toc_build::{build_toc, TocRegionSpec, TocSpec};
 pub use writer::{build_sealed_bytes, empty_raw, write_sealed_file, SealedCreateRequest};
 
@@ -57,8 +60,9 @@ pub const REGION_MINI_HEADER_SIZE: usize = 14;
 /// Fixed footer size at EOF.
 pub const FOOTER_SIZE: usize = 44;
 
-/// Initial format version carried in the header.
+/// Initial format major version carried in the header.
 pub const FORMAT_VERSION_MAJOR: u16 = 1;
+/// Initial format minor version carried in the header.
 pub const FORMAT_VERSION_MINOR: u16 = 0;
 
 /// Region taxonomy ids ([`docs/ORCHID_FORMAT.md`](../../../docs/ORCHID_FORMAT.md) §4).

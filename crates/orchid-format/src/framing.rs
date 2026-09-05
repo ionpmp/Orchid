@@ -153,8 +153,7 @@ impl Footer {
 /// Round `offset` up to the next multiple of [`ALIGNMENT`].
 #[must_use]
 pub fn align_up(offset: u64) -> u64 {
-    let a = ALIGNMENT;
-    (offset + a - 1) / a * a
+    offset.div_ceil(ALIGNMENT) * ALIGNMENT
 }
 
 /// Number of zero pad bytes needed so `offset + pad` is aligned.
