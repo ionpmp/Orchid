@@ -246,6 +246,7 @@ release yet.
   clear queue, soft **crossfade** (Off / 3 / 5 / 8 / 12s via button or `X`), gapless prefetch,
   sidecar `.lrc` lyrics plus expandable scrollable lyrics panel (`L` / chip; auto-scroll to the
   active line) and ID3 `SYLT`/`USLT` fallback when no sidecar, background library scan,
+  libmpv duration probe for tracks without ID3 `TLEN` (library rows + queue remaining),
   focused keyboard transport, Windows SMTC (lock screen / media keys), shared
   audio-only libmpv session (separate from SMTC Now Playing and Viewer media
   chrome); widget-owned volume (not Viewer `media_prefs`); mutual pause with

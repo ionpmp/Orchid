@@ -98,7 +98,7 @@ pub struct AudioPlayerPayload {
     pub scroll_gen: i32,
     /// Number of tracks in the play queue.
     pub queue_count: u32,
-    /// Sum of known ID3 durations for queued tracks (ms); 0 if none known.
+    /// Sum of known ID3 / probed durations for queued tracks (ms); 0 if none known.
     pub queue_duration_ms: u64,
     /// Tracks left from the current row (inclusive); 0 if nothing playing.
     pub queue_remaining_count: u32,

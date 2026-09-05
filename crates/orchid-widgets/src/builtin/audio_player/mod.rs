@@ -305,6 +305,50 @@ fn kick_scan(handle: Arc<AudioHandle>) {
         *handle.library.write() = index;
         handle.scanning.store(false, Ordering::Release);
         handle.publish();
+        kick_duration_probe(Arc::clone(&handle), gen);
+    });
+}
+
+/// Fill missing track durations via a shared libmpv probe session.
+fn kick_duration_probe(handle: Arc<AudioHandle>, gen: u64) {
+    if !orchid_viewers::mpv_available() {
+        return;
+    }
+    tokio::task::spawn_blocking(move || {
+        let missing: Vec<std::path::PathBuf> = {
+            let lib = handle.library.read();
+            lib.tracks
+                .iter()
+                .filter(|t| t.duration_ms.is_none())
+                .map(|t| t.path.clone())
+                .collect()
+        };
+        if missing.is_empty() {
+            return;
+        }
+        // Probe in chunks so a huge library still publishes partial progress.
+        const CHUNK: usize = 32;
+        for chunk in missing.chunks(CHUNK) {
+            if handle.scan_gen.load(Ordering::Acquire) != gen {
+                return;
+            }
+            let durations = orchid_viewers::probe_media_durations_ms(chunk);
+            let mut changed = false;
+            {
+                let mut lib = handle.library.write();
+                for (path, dur) in chunk.iter().zip(durations) {
+                    if let Some(ms) = dur {
+                        let key = path.to_string_lossy();
+                        if lib.set_duration_ms(key.as_ref(), ms) {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+            if changed {
+                handle.publish();
+            }
+        }
     });
 }
 
@@ -1473,6 +1517,17 @@ impl AudioPlayerWidget {
     }
 
     fn build_payload(&self) -> AudioPlayerPayload {
+        // Cache live mpv duration into the library when ID3 TLEN was missing.
+        if let Some(path) = self.handle.queue.read().current().map(str::to_string) {
+            let dur = self.handle.player.duration_ms();
+            if (1..=u64::from(u32::MAX)).contains(&dur) {
+                let _ = self
+                    .handle
+                    .library
+                    .write()
+                    .set_duration_ms(&path, dur as u32);
+            }
+        }
         let cfg = self.handle.config.read().clone();
         let lib = self.handle.library.read();
         let q = self.handle.queue.read();

@@ -676,7 +676,12 @@ unsafe extern "C" fn on_render_update(ctx: *mut std::ffi::c_void) {
     flag.store(true, Ordering::Release);
 }
 
-unsafe fn set_opt(api: &MpvApi, handle: MpvHandle, key: &str, val: &str) -> Result<(), String> {
+pub(crate) unsafe fn set_opt(
+    api: &MpvApi,
+    handle: MpvHandle,
+    key: &str,
+    val: &str,
+) -> Result<(), String> {
     let k = c_str(key);
     let v = c_str(val);
     let rc = (api.set_option_string)(handle, k.as_ptr(), v.as_ptr());

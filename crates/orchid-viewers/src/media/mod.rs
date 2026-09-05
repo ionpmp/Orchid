@@ -4,6 +4,7 @@ mod cover;
 mod engine;
 mod ffi;
 mod prefs;
+mod probe;
 mod resume;
 mod sidecars;
 
@@ -25,6 +26,7 @@ pub use cover::{
 };
 pub use engine::{EngineMode, FrameBuf, MpvEngine, SharedPlayback};
 pub use ffi::mpv_available;
+pub use probe::{probe_media_duration_ms, probe_media_durations_ms};
 pub use sidecars::discover_sidecar_subs;
 
 /// Default playlist side-panel open state from prefs.

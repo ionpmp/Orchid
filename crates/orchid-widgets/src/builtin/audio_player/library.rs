@@ -38,7 +38,7 @@ pub struct LibraryTrack {
     pub track: Option<u32>,
     pub year: Option<i32>,
     pub folder: String,
-    /// ID3 TLEN duration when known (milliseconds).
+    /// ID3 TLEN or libmpv-probed duration when known (milliseconds).
     pub duration_ms: Option<u32>,
 }
 
@@ -114,6 +114,30 @@ impl LibraryIndex {
         }
         self.tracks
             .iter()
+            .find(|t| t.path.to_string_lossy() == path)
+    }
+
+    /// Store a probed / playback duration for `path` (no-op when already set to the same value).
+    pub fn set_duration_ms(&mut self, path: &str, duration_ms: u32) -> bool {
+        if duration_ms == 0 {
+            return false;
+        }
+        let Some(track) = self.find_by_path_mut(path) else {
+            return false;
+        };
+        if track.duration_ms == Some(duration_ms) {
+            return false;
+        }
+        track.duration_ms = Some(duration_ms);
+        true
+    }
+
+    fn find_by_path_mut(&mut self, path: &str) -> Option<&mut LibraryTrack> {
+        if let Some(&i) = self.by_path.get(path) {
+            return self.tracks.get_mut(i);
+        }
+        self.tracks
+            .iter_mut()
             .find(|t| t.path.to_string_lossy() == path)
     }
 

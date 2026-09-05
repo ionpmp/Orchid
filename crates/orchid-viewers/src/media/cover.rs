@@ -39,7 +39,8 @@ pub struct TrackMeta {
     pub genre: String,
     pub track: Option<u32>,
     pub year: Option<i32>,
-    /// Length from ID3 TLEN when present (milliseconds).
+    /// Length from ID3 TLEN when present (milliseconds). Library scan may
+    /// later fill missing values via [`crate::probe_media_duration_ms`].
     pub duration_ms: Option<u32>,
 }
 
