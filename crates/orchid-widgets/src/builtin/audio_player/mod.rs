@@ -12,13 +12,13 @@ pub mod sleep;
 pub mod thumbs;
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use dashmap::DashMap;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::error::Result as WidgetResult;
@@ -67,6 +67,9 @@ struct AudioHandle {
     bus: Arc<orchid_core::EventBus>,
     scanning: AtomicBool,
     scan_gen: AtomicU64,
+    /// Bumped when Queue should auto-scroll to the current track.
+    scroll_gen: AtomicU32,
+    last_scroll: Mutex<(u8, Option<String>)>,
 }
 
 impl AudioHandle {
@@ -94,6 +97,21 @@ impl AudioHandle {
         cfg.eq_index = self.player.eq_index();
         cfg.replaygain_index = self.player.replaygain_index();
         cfg.speed_x100 = (self.player.speed() * 100.0).round() as u32;
+    }
+
+    /// Advance [`Self::scroll_gen`] when the Queue tab should re-centre on the current track.
+    fn note_queue_scroll(&self, tab: BrowseTab, path: Option<&str>) -> i32 {
+        let tab_u = tab.as_u8();
+        let mut last = self.last_scroll.lock();
+        let changed = last.0 != tab_u || last.1.as_deref() != path;
+        if changed {
+            last.0 = tab_u;
+            last.1 = path.map(str::to_string);
+            if tab == BrowseTab::NowPlaying {
+                self.scroll_gen.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        self.scroll_gen.load(Ordering::Relaxed) as i32
     }
 
     fn push_recent(&self, path: &str) {
@@ -1414,6 +1432,8 @@ impl AudioPlayerWidget {
             bus,
             scanning: AtomicBool::new(false),
             scan_gen: AtomicU64::new(0),
+            scroll_gen: AtomicU32::new(0),
+            last_scroll: Mutex::new((0, None)),
         });
         AUDIO_LIVE.insert(instance_id, Arc::clone(&handle));
         handle.restore_current_paused();
@@ -1587,6 +1607,9 @@ impl AudioPlayerWidget {
                     .map(|i| i as i32)
             })
             .unwrap_or(-1);
+        let scroll_gen = self
+            .handle
+            .note_queue_scroll(cfg.browse_tab, current.as_deref());
 
         AudioPlayerPayload {
             engine_available: self.handle.player.available(),
@@ -1641,6 +1664,7 @@ impl AudioPlayerWidget {
             },
             queue_index: q.index as i32,
             current_track_index,
+            scroll_gen,
             queue_count: q.paths.len() as u32,
             queue_duration_ms: queue_known_duration_ms(&lib, &q.paths),
             has_track: current.is_some(),

@@ -15,6 +15,16 @@ export component AudioPlayerView inherits Rectangle {
     property <int> q-drag-from: -1;
     property <int> q-drop-index: -1;
     property <length> q-row-stride: 41px;
+    property <int> applied-scroll-gen: -1;
+
+    scroll-apply-timer := Timer {
+        interval: 1ms;
+        running: root.model.browse-tab == 6 && root.model.scroll-gen != root.applied-scroll-gen;
+        triggered => {
+            root.scroll-to-current();
+            root.applied-scroll-gen = root.model.scroll-gen;
+        }
+    }
 
     public function scroll-to-current() {
         if root.model.current-track-index < 0 {

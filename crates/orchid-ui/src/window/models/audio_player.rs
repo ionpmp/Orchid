@@ -54,6 +54,7 @@ pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerMod
             cover: Image::default(),
             queue_stats_label: SharedString::new(),
             current_track_index: -1,
+            scroll_gen: 0,
             has_library_roots: false,
             ..labels_only(locale)
         },
@@ -100,6 +101,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         cover: Image::default(),
         queue_stats_label: SharedString::new(),
         current_track_index: -1,
+        scroll_gen: 0,
         has_library_roots: false,
         tab_songs: locale.tr("audio-player-tab-songs").into(),
         tab_artists: locale.tr("audio-player-tab-artists").into(),
@@ -398,6 +400,7 @@ pub(crate) fn build_audio_player_model(
             cover,
             queue_stats_label: queue_stats_label(p.queue_count, p.queue_duration_ms, locale),
             current_track_index: p.current_track_index,
+            scroll_gen: p.scroll_gen,
             has_library_roots: p.has_library_roots,
             sort_label: sort_label_for(p.library_sort, locale),
             is_current_favorite: p.is_current_favorite,
@@ -554,6 +557,7 @@ pub(crate) fn patch_audio_player_model(
     model.cover = cover;
     model.queue_stats_label = queue_stats_label(p.queue_count, p.queue_duration_ms, locale);
     model.current_track_index = p.current_track_index;
+    model.scroll_gen = p.scroll_gen;
     model.has_library_roots = p.has_library_roots;
     model.sort_label = sort_label_for(p.library_sort, locale);
     model.is_current_favorite = p.is_current_favorite;

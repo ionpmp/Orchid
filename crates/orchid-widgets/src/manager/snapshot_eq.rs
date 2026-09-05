@@ -877,6 +877,7 @@ fn audio_player_payload_eq(a: &AudioPlayerPayload, b: &AudioPlayerPayload) -> bo
         && a.cover_width == b.cover_width
         && a.cover_height == b.cover_height
         && a.current_track_index == b.current_track_index
+        && a.scroll_gen == b.scroll_gen
         && (std::sync::Arc::ptr_eq(&a.cover_rgba, &b.cover_rgba)
             || a.cover_rgba.as_ref() == b.cover_rgba.as_ref())
 }
