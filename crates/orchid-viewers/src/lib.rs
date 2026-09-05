@@ -18,6 +18,7 @@ pub mod snapshot;
 pub mod text;
 pub mod thumbnail;
 pub mod viewer_trait;
+pub mod vorbis_lyrics;
 
 pub use archive::ArchiveViewer;
 pub use audio_tags::{

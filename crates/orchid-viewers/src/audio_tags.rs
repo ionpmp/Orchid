@@ -6,6 +6,7 @@ use id3::frame::{SynchronisedLyricsType, TimestampFormat};
 use id3::TagLike;
 
 use crate::error::{Result, ViewerError};
+use crate::vorbis_lyrics;
 
 /// Extensions that typically carry ID3 tags.
 const ID3_EXTENSIONS: &[&str] = &["mp3", "mp2", "aac", "aiff", "wav"];
@@ -90,16 +91,20 @@ pub struct EmbeddedLyricLine {
     pub text: String,
 }
 
-/// Load embedded lyrics from ID3 (`SYLT` preferred, then `USLT`).
+/// Load embedded lyrics: ID3 `SYLT`/`USLT`, then Vorbis/FLAC comments.
 ///
-/// Returns `None` when the file has no usable lyric frames.
+/// Returns `None` when the file has no usable lyric data.
 #[must_use]
 pub fn load_embedded_lyrics(path: &Path) -> Option<Vec<EmbeddedLyricLine>> {
-    let tag = id3::Tag::read_from_path(path).ok()?;
-    if let Some(lines) = sylt_lines(&tag) {
-        return Some(lines);
+    if let Ok(tag) = id3::Tag::read_from_path(path) {
+        if let Some(lines) = sylt_lines(&tag) {
+            return Some(lines);
+        }
+        if let Some(lines) = uslt_lines(&tag) {
+            return Some(lines);
+        }
     }
-    uslt_lines(&tag)
+    vorbis_lyrics::load_vorbis_lyrics(path)
 }
 
 fn sylt_lines(tag: &id3::Tag) -> Option<Vec<EmbeddedLyricLine>> {
@@ -143,9 +148,12 @@ fn sylt_lines(tag: &id3::Tag) -> Option<Vec<EmbeddedLyricLine>> {
 
 fn uslt_lines(tag: &id3::Tag) -> Option<Vec<EmbeddedLyricLine>> {
     let text = tag.lyrics().next()?.text.trim();
-    if text.is_empty() {
-        return None;
-    }
+    plain_text_lines(text)
+}
+
+/// Split unsynced lyric text into panel rows (`time_ms = 0`).
+#[must_use]
+pub(crate) fn plain_text_lines(text: &str) -> Option<Vec<EmbeddedLyricLine>> {
     let mut lines = Vec::new();
     for raw in text.lines() {
         let line = raw.trim();

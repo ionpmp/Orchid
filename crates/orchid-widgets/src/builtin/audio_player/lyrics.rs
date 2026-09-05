@@ -1,4 +1,4 @@
-//! Sidecar `.lrc` and embedded ID3 lyrics for the audio player.
+//! Sidecar `.lrc` and embedded ID3 / Vorbis lyrics for the audio player.
 
 #![allow(missing_docs)]
 
@@ -18,7 +18,8 @@ pub struct Lyrics {
 }
 
 impl Lyrics {
-    /// Load `stem.lrc` next to `media`, else ID3 `SYLT`/`USLT`, or empty.
+    /// Load `stem.lrc` next to `media`, else ID3 `SYLT`/`USLT` or Vorbis/FLAC
+    /// comments, or empty.
     #[must_use]
     pub fn load_for(media: &Path) -> Self {
         if let Some(lrc) = sidecar_lrc(media) {
