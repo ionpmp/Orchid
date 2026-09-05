@@ -51,6 +51,8 @@ pub struct DocumentSnapshot {
     pub comment_count: u32,
     /// Comment preview at the caret (`Author: text`), empty when none.
     pub comment_at_caret: String,
+    /// Raw comment body at the caret (for edit overlay), empty when none.
+    pub comment_edit_text: String,
     /// Plain-text extraction for search / fallback display.
     pub plain_text: Arc<str>,
     /// Non-fatal warnings (e.g. unsupported OOXML features).

@@ -584,3 +584,38 @@ fn comment_at_caret_in_snapshot() {
     };
     assert!(snap.comment_at_caret.is_empty());
 }
+
+#[test]
+fn set_comment_text_at_caret_and_undo() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(sample_doc());
+    viewer.set_selection_plain_offsets(0, 5);
+    let id = viewer.insert_comment_at_selection().unwrap();
+    viewer.set_selection_plain_offsets(2, 2);
+    assert_eq!(
+        viewer.set_comment_text_at_selection("Edited note").unwrap(),
+        Some(id)
+    );
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        assert_eq!(doc.comments[0].text, "Edited note");
+    }
+    let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+        panic!("expected document");
+    };
+    assert_eq!(snap.comment_edit_text, "Edited note");
+    assert!(snap.comment_at_caret.contains("Edited note"));
+    viewer.undo().unwrap();
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        assert_ne!(doc.comments[0].text, "Edited note");
+    }
+    assert_eq!(viewer.set_comment_text_at_selection("   ").unwrap(), None);
+    viewer.set_selection_plain_offsets(1000, 1000);
+    assert_eq!(
+        viewer.set_comment_text_at_selection("orphan").unwrap(),
+        None
+    );
+}

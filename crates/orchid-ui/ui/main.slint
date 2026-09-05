@@ -315,6 +315,7 @@ export component MainWindow inherits Window {
     callback viewer-document-find-request(string, string, bool, bool);
     callback viewer-document-replace-request(string, string, string, bool, bool);
     callback viewer-document-link-request(string, string);
+    callback viewer-document-comment-request(string, string);
     callback viewer-document-header-request(string, string);
     callback viewer-document-footer-request(string, string);
     callback viewer-document-header-first-request(string, string);
@@ -764,6 +765,7 @@ export component MainWindow inherits Window {
             viewer-document-find-request(id, q, fwd, mc) => { root.viewer-document-find-request(id, q, fwd, mc); }
             viewer-document-replace-request(id, q, r, all, mc) => { root.viewer-document-replace-request(id, q, r, all, mc); }
             viewer-document-link-request(id, url) => { root.viewer-document-link-request(id, url); }
+            viewer-document-comment-request(id, text) => { root.viewer-document-comment-request(id, text); }
             viewer-document-header-request(id, text) => { root.viewer-document-header-request(id, text); }
             viewer-document-footer-request(id, text) => { root.viewer-document-footer-request(id, text); }
             viewer-document-header-first-request(id, text) => { root.viewer-document-header-first-request(id, text); }

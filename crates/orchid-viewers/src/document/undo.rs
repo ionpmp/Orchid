@@ -186,6 +186,13 @@ pub enum EditCommand {
         /// Comment id (`w:id`).
         id: u32,
     },
+    /// Replace comment body text (inverse stores the previous text).
+    UpdateCommentText {
+        /// Comment id (`w:id`).
+        id: u32,
+        /// New body text when applying; previous text when undoing.
+        text: String,
+    },
     /// Remove a block (inverse of insert).
     RemoveBlock {
         /// Block index to remove.
@@ -863,6 +870,18 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
                 .ok_or(ViewerError::EditOutOfBounds)?;
             let range = doc.comment_ranges.remove(r_idx);
             Ok(EditCommand::AddComment { comment, range })
+        }
+        EditCommand::UpdateCommentText { id, text } => {
+            let comment = doc
+                .comments
+                .iter_mut()
+                .find(|c| c.id == *id)
+                .ok_or(ViewerError::EditOutOfBounds)?;
+            let previous = std::mem::replace(&mut comment.text, text.clone());
+            Ok(EditCommand::UpdateCommentText {
+                id: *id,
+                text: previous,
+            })
         }
         EditCommand::RemoveBlock { block_idx } => {
             if *block_idx >= doc.blocks.len() {

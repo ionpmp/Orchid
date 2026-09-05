@@ -1480,6 +1480,9 @@ export struct ViewerDocumentModel {
     comment-label: string,
     comment-delete-label: string,
     comment-active: bool,
+    comment-edit-label: string,
+    comment-placeholder: string,
+    comment-apply-label: string,
     header-label: string,
     footer-label: string,
     header-first-label: string,
@@ -1496,6 +1499,7 @@ export struct ViewerDocumentModel {
     tip-bookmark: string,
     tip-comment: string,
     tip-comment-delete: string,
+    tip-comment-edit: string,
     tip-header: string,
     tip-footer: string,
     tip-header-first: string,
@@ -1557,6 +1561,8 @@ export struct ViewerDocumentModel {
     tip-print: string,
     /// External hyperlink URL at the caret (empty when none).
     link-url: string,
+    /// Raw comment body at the caret (empty when none).
+    comment-edit-text: string,
     /// Default header story plain text (`\n`-joined).
     header-text: string,
     /// Default footer story plain text (`\n`-joined).

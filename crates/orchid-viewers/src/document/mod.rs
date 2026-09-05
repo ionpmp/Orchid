@@ -1858,6 +1858,50 @@ impl DocumentViewer {
         Ok(Some(id))
     }
 
+    /// Set the body text of the comment covering the caret / selection.
+    ///
+    /// Prefers the narrowest overlapping range. Empty / whitespace-only `text`
+    /// is a no-op (`Ok(None)`). Returns the updated comment id, or `None` when
+    /// no comment touches the selection.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn set_comment_text_at_selection(&self, text: &str) -> Result<Option<u32>> {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return Ok(None);
+        }
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let (a, b) = sel.normalized();
+        let lo = plain_offset_from_cursor(doc, a).min(plain_offset_from_cursor(doc, b));
+        let hi = plain_offset_from_cursor(doc, a).max(plain_offset_from_cursor(doc, b));
+        let Some(id) = comment_id_overlapping(doc, lo, hi) else {
+            return Ok(None);
+        };
+        let truncated: String = trimmed.chars().take(4000).collect();
+        let current = doc
+            .comments
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.text.as_str())
+            .unwrap_or("");
+        if current == truncated {
+            return Ok(Some(id));
+        }
+        self.undo.lock().push(
+            doc,
+            EditCommand::UpdateCommentText {
+                id,
+                text: truncated,
+            },
+        )?;
+        self.invalidate_preview();
+        Ok(Some(id))
+    }
+
     /// Toggle `w:keepNext` on selected paragraphs.
     ///
     /// # Errors
@@ -4585,8 +4629,12 @@ impl Viewer for DocumentViewer {
         let title_page = doc.page_setup.title_page;
         let even_and_odd_headers = doc.page_setup.even_and_odd_headers;
         let caret_off = plain_offset_from_cursor(doc, sel.head);
-        let comment_at_caret = comment_id_overlapping(doc, caret_off, caret_off)
-            .and_then(|id| doc.comments.iter().find(|c| c.id == id))
+        let comment_hit = comment_id_overlapping(doc, caret_off, caret_off)
+            .and_then(|id| doc.comments.iter().find(|c| c.id == id));
+        let comment_edit_text = comment_hit
+            .map(|c| c.text.clone())
+            .unwrap_or_default();
+        let comment_at_caret = comment_hit
             .map(|c| {
                 let body: String = c.text.chars().take(80).collect();
                 if c.author.is_empty() {
@@ -4605,6 +4653,7 @@ impl Viewer for DocumentViewer {
             char_count,
             comment_count,
             comment_at_caret,
+            comment_edit_text,
             plain_text: Arc::from(plain_text.as_str()),
             warnings,
             info_text: String::new(),

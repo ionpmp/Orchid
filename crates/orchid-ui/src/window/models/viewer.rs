@@ -805,6 +805,10 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         comment_label: locale.tr("viewer-document-comment").into(),
         comment_delete_label: locale.tr("viewer-document-comment-delete").into(),
         comment_active: false,
+        comment_edit_label: locale.tr("viewer-document-comment-edit").into(),
+        comment_placeholder: locale.tr("viewer-document-comment-placeholder").into(),
+        comment_apply_label: locale.tr("viewer-document-comment-apply").into(),
+        comment_edit_text: SharedString::new(),
         header_label: locale.tr("viewer-document-header").into(),
         footer_label: locale.tr("viewer-document-footer").into(),
         header_first_label: locale.tr("viewer-document-header-first").into(),
@@ -821,6 +825,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         tip_bookmark: locale.tr("viewer-document-tip-bookmark").into(),
         tip_comment: locale.tr("viewer-document-tip-comment").into(),
         tip_comment_delete: locale.tr("viewer-document-tip-comment-delete").into(),
+        tip_comment_edit: locale.tr("viewer-document-tip-comment-edit").into(),
         tip_header: locale.tr("viewer-document-tip-header").into(),
         tip_footer: locale.tr("viewer-document-tip-footer").into(),
         tip_header_first: locale.tr("viewer-document-tip-header-first").into(),
@@ -1460,6 +1465,7 @@ fn build_document_snapshot(
     model.plain_text = s.plain_text.as_ref().into();
     model.dirty = s.dirty;
     model.comment_active = !s.comment_at_caret.is_empty();
+    model.comment_edit_text = s.comment_edit_text.clone().into();
     model.info_text = {
         let base = locale.tr_args("viewer-document-info", &args);
         if s.comment_at_caret.is_empty() {

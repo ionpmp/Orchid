@@ -3829,6 +3829,26 @@ pub async fn document_set_viewport_width(instance_id: Uuid, width_px: f32) -> Wi
     Ok(())
 }
 
+/// Document: update the body text of the comment at the caret / selection.
+///
+/// Empty / whitespace-only `text` is a no-op.
+pub async fn document_comment(instance_id: Uuid, text: String) -> WidgetResult<()> {
+    let inner = live_inner(instance_id)?;
+    {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Err(WidgetError::InvalidStateForOperation("no viewer".into()));
+        };
+        let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+            return Ok(());
+        };
+        doc.set_comment_text_at_selection(&text)
+            .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+    }
+    inner.refresh_snapshot().await;
+    Ok(())
+}
+
 /// Document: apply or remove an external hyperlink on the selection.
 ///
 /// Empty `url` removes the link under the caret / selection.
