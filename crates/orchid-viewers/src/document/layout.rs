@@ -356,6 +356,10 @@ impl DocumentLayout {
         let mut total_h = 0.0;
         // Content-relative Y of each 1-based page band (page breaks via `w:pageBreakBefore`).
         let mut page_starts: Vec<f32> = vec![0.0];
+        // Parallel to `page_starts`: which body section owns that preview page band.
+        let section_setups = collect_section_page_setups(doc);
+        let mut section_idx = 0usize;
+        let mut page_section: Vec<usize> = vec![0];
         let para_gap = 10.0 * scale;
         let mut plain_offset = 0usize;
         let mut emitted_text = false;
@@ -374,6 +378,7 @@ impl DocumentLayout {
                         rule_y = Some(total_h + 10.0 * scale);
                         total_h += page_break_gap;
                         page_starts.push(total_h);
+                        page_section.push(section_idx);
                     }
                     total_h += twips_to_css_px(p.space_before_twips) * scale;
                     let body_len = p.plain_text().len();
@@ -414,7 +419,9 @@ impl DocumentLayout {
                     if p.section_properties.is_some() {
                         let page_break_gap = 28.0 * scale;
                         total_h += page_break_gap;
+                        section_idx = (section_idx + 1).min(section_setups.len().saturating_sub(1));
                         page_starts.push(total_h);
+                        page_section.push(section_idx);
                     }
                 }
                 Block::Table(t) => {
@@ -601,10 +608,8 @@ impl DocumentLayout {
         }
 
         // Header / footer stories in page margins. Preview paints the correct
-        // first / even / default story at each `w:pageBreakBefore` band, using
-        // `w:pgMar` `@w:header` / `@w:footer` distances from the page edge.
-        let header_off = twips_to_css_px(doc.page_setup.header_distance_twips) * scale;
-        let footer_off = twips_to_css_px(doc.page_setup.footer_distance_twips) * scale;
+        // first / even / default story at each page band, using that section's
+        // `w:pgMar` `@w:header` / `@w:footer` distances (and titlePg / evenOdd).
         let page_count = (page_starts.len() as u32).max(1);
         for (page_i, &start_y) in page_starts.iter().enumerate() {
             let page = (page_i + 1) as u32;
@@ -612,7 +617,12 @@ impl DocumentLayout {
                 .get(page_i + 1)
                 .copied()
                 .unwrap_or(total_h);
-            let (header_story, footer_story) = margin_stories_for_page(doc, page);
+            let setup = section_setups
+                .get(page_section.get(page_i).copied().unwrap_or(0))
+                .unwrap_or(&doc.page_setup);
+            let header_off = twips_to_css_px(setup.header_distance_twips) * scale;
+            let footer_off = twips_to_css_px(setup.footer_distance_twips) * scale;
+            let (header_story, footer_story) = margin_stories_for_page(doc, page, setup);
             let header_resolved = resolve_story_fields(header_story, page, page_count, self.field_file_name.as_deref());
             let footer_resolved = resolve_story_fields(footer_story, page, page_count, self.field_file_name.as_deref());
             // `start_y` is content-relative; header sits `header_off` below the page top.
@@ -690,16 +700,31 @@ fn resolve_paragraph_fields(
     out
 }
 
+/// Mid-body `w:pPr/w:sectPr` setups followed by the trailing body `w:sectPr`.
+fn collect_section_page_setups(doc: &Document) -> Vec<PageSetup> {
+    let mut setups = Vec::new();
+    for block in &doc.blocks {
+        if let Block::Paragraph(p) = block {
+            if let Some(ref ps) = p.section_properties {
+                setups.push(ps.clone());
+            }
+        }
+    }
+    setups.push(doc.page_setup.clone());
+    setups
+}
+
 /// Pick header/footer stories for a 1-based preview page index.
-fn margin_stories_for_page(
-    doc: &Document,
+fn margin_stories_for_page<'a>(
+    doc: &'a Document,
     page: u32,
+    setup: &PageSetup,
 ) -> (
-    &[crate::document::model::Paragraph],
-    &[crate::document::model::Paragraph],
+    &'a [crate::document::model::Paragraph],
+    &'a [crate::document::model::Paragraph],
 ) {
-    let use_first = doc.page_setup.title_page && page == 1;
-    let use_even = doc.page_setup.even_and_odd_headers && !use_first && page % 2 == 0;
+    let use_first = setup.title_page && page == 1;
+    let use_even = setup.even_and_odd_headers && !use_first && page % 2 == 0;
     let header = if use_first && !doc.header_first.is_empty() {
         doc.header_first.as_slice()
     } else if use_even && !doc.header_even.is_empty() {
@@ -3073,15 +3098,15 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            margin_stories_for_page(&doc, 1).0[0].plain_text(),
+            margin_stories_for_page(&doc, 1, &doc.page_setup).0[0].plain_text(),
             "FIRST"
         );
         assert_eq!(
-            margin_stories_for_page(&doc, 2).0[0].plain_text(),
+            margin_stories_for_page(&doc, 2, &doc.page_setup).0[0].plain_text(),
             "EVEN"
         );
         assert_eq!(
-            margin_stories_for_page(&doc, 3).0[0].plain_text(),
+            margin_stories_for_page(&doc, 3, &doc.page_setup).0[0].plain_text(),
             "DEF"
         );
     }
@@ -3969,5 +3994,59 @@ mod tests {
             "section break should add a page-band gap (with={h}, without={h2})"
         );
     }
+
+    #[test]
+    fn preview_uses_section_header_distance_per_page_band() {
+        let mut sect1 = PageSetup::default();
+        sect1.margin_top_twips = 1440;
+        sect1.header_distance_twips = 240;
+        let mut sect2 = PageSetup::default();
+        sect2.margin_top_twips = 1440;
+        sect2.header_distance_twips = 960;
+        let doc = Document {
+            blocks: vec![
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "One".into(),
+                        style: RunStyle::default(),
+                        ..Default::default()
+                    }],
+                    section_properties: Some(sect1),
+                    ..Default::default()
+                }),
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "Two".into(),
+                        style: RunStyle::default(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+            ],
+            page_setup: sect2,
+            header: vec![Paragraph {
+                runs: vec![Run {
+                    text: "HDR".into(),
+                    style: RunStyle {
+                        bold: true,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let (bytes, w, h) = DocumentLayout::new().render_document(&doc, 400.0);
+        assert!(w > 0 && h > 0);
+        // Ink should exist (header painted); geometry differs from single-setup docs.
+        let dark = bytes.chunks_exact(4).filter(|px| px[0] < 100).count();
+        assert!(dark > 10, "expected header ink across section bands");
+        let setups = collect_section_page_setups(&doc);
+        assert_eq!(setups.len(), 2);
+        assert_eq!(setups[0].header_distance_twips, 240);
+        assert_eq!(setups[1].header_distance_twips, 960);
+    }
+
 
 }
