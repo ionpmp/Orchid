@@ -12,7 +12,7 @@ pre-alpha. Project overview and quick start live in the repository root
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System design and crate layout |
 | [DESIGN.md](DESIGN.md) | UX and design philosophy |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute code and feedback |
-| [ORCHID_FORMAT.md](ORCHID_FORMAT.md) | Native `.orchid` container spec (draft) |
+| [ORCHID_FORMAT.md](ORCHID_FORMAT.md) | Native `.orchid` container (Phase 1 sealed in `orchid-format`) |
 | [jyotish.md](jyotish.md) | Jyotish widget: scores, panchanga, birth data, limits |
 | [SECURITY.md](SECURITY.md) | Reporting vulnerabilities and threat-model notes |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |

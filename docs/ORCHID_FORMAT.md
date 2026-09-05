@@ -1,12 +1,14 @@
 # Orchid File Format (`.orchid`)
 
 Specification for Orchid’s native container format. This document is the
-design source of truth for implementers; no crate ships the format yet.
-Related reading: [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITY.md](SECURITY.md),
+design source of truth for implementers. Phase 1 sealed framing ships in
+[`crates/orchid-format`](../crates/orchid-format). Related reading:
+[ARCHITECTURE.md](ARCHITECTURE.md), [SECURITY.md](SECURITY.md),
 [ROADMAP.md](ROADMAP.md).
 
-Status: **draft**. Version targets below refer to the *format* version
-carried in the file header, not the Orchid application release.
+Status: **Phase 1 implemented** (sealed create/read); later phases remain
+draft. Version targets below refer to the *format* version carried in the
+file header, not the Orchid application release.
 
 ---
 
@@ -680,12 +682,12 @@ BM25 query misses on the same corpus.
 
 ## Appendix A — Implementation checklist (Phase 1)
 
-- [ ] `crates/orchid-format` crate skeleton + `orchid_toc.fbs`
-- [ ] Header / region / footer writers with 4 KiB padding
-- [ ] Sealed create/read CLI (`orchid-format` or `orchid-app` subcommand)
-- [ ] Round-trip tests with three regions
-- [ ] MIME + extension constants (`ORCD`, `application/vnd.orchid`)
-- [ ] Document this file’s status → “implemented” when Phase 1 DONE lands
+- [x] `crates/orchid-format` crate skeleton + `orchid_toc.fbs`
+- [x] Header / region / footer writers with 4 KiB padding
+- [x] Sealed create/read CLI (`orchid-format` or `orchid-app` subcommand)
+- [x] Round-trip tests with three regions
+- [x] MIME + extension constants (`ORCD`, `application/vnd.orchid`)
+- [x] Document this file’s status → “implemented” when Phase 1 DONE lands
 
 ## Appendix B — Constants summary
 

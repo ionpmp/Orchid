@@ -1,6 +1,6 @@
 //! Native `.orchid` container format (`application/vnd.orchid`).
 //!
-//! Phase 1 (sealed framing) lands incrementally. Spec:
+//! Phase 1 sealed framing: [`write_sealed_file`] / [`SealedFile`]. Spec:
 //! [`docs/ORCHID_FORMAT.md`](../../../docs/ORCHID_FORMAT.md).
 
 #![warn(missing_docs)]

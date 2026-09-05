@@ -17,6 +17,7 @@
 │  ├─ orchid-viewers — image/PDF/text/archive/DOCX    │
 │  ├─ orchid-terminal — PTY + vte emulator            │
 │  ├─ orchid-widgets — framework + builtins           │
+│  ├─ orchid-format — native `.orchid` sealed container (Phase 1) │
 │  ├─ orchid-i18n — Fluent catalogues (11 locales)    │
 │  └─ orchid-ui / orchid-app — composition + window   │
 ├─────────────────────────────────────────────────────┤
@@ -55,6 +56,7 @@ orchid/
 │   ├── orchid-terminal/         # PTY + custom vte emulation
 │   ├── orchid-viewers/          # PDF, images, text, archives, DOCX editor
 │   ├── orchid-widgets/          # widget infrastructure + built-in widgets
+│   ├── orchid-format/           # native .orchid sealed container (Phase 1)
 │   ├── orchid-i18n/             # localization (Fluent, 11 locales)
 │   ├── orchid-ui/               # Slint UI layer + window manager
 │   └── orchid-app/              # main binary, wires everything together
@@ -63,7 +65,7 @@ orchid/
 ```
 
 See also: [CHANGELOG.md](../CHANGELOG.md), [ROADMAP.md](ROADMAP.md),
-[ORCHID_FORMAT.md](ORCHID_FORMAT.md) (native container, not yet implemented).
+[ORCHID_FORMAT.md](ORCHID_FORMAT.md) (Phase 1 sealed framing in `orchid-format`).
 
 ## Network FS note
 

@@ -8,7 +8,17 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[[bin]]
+name = "orchid-format"
+path = "src/bin/orchid_format.rs"
+required-features = ["cli"]
+
+[features]
+default = ["cli"]
+cli = ["dep:clap"]
+
 [dependencies]
+clap = { workspace = true, optional = true }
 flatbuffers.workspace = true
 memmap2.workspace = true
 thiserror.workspace = true
