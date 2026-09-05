@@ -8,6 +8,7 @@
 #![deny(unsafe_code)]
 
 mod error;
+mod framing;
 
 #[allow(dead_code)]
 #[allow(missing_docs)]
@@ -22,6 +23,9 @@ mod error;
 mod toc_generated;
 
 pub use error::{FormatError, Result};
+pub use framing::{
+    align_up, pad_len, pad_to_alignment, Footer, Header, RegionHeader,
+};
 
 /// File extension including the leading dot.
 pub const EXTENSION: &str = ".orchid";
