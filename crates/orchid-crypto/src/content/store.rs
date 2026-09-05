@@ -367,11 +367,23 @@ impl ChunkStore {
     ///
     /// Propagates redb errors.
     pub fn exists(&self, hash: &[u8; 32]) -> Result<bool> {
+        Ok(self.info(hash)?.is_some())
+    }
+
+    /// Look up refcount metadata for `hash`.
+    ///
+    /// # Errors
+    ///
+    /// Propagates redb errors.
+    pub fn info(&self, hash: &[u8; 32]) -> Result<Option<ChunkRefInfo>> {
         let key = hex(hash);
         let db = self.raw_db();
         let txn = db.begin_read().map_err(to_crypto)?;
         let table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
-        Ok(table.get(key.as_str()).map_err(to_crypto)?.is_some())
+        Ok(table
+            .get(key.as_str())
+            .map_err(to_crypto)?
+            .map(|g| g.value()))
     }
 
     /// Total bytes tracked by the table. Does not stat the filesystem.
