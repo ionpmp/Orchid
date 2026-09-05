@@ -1461,12 +1461,16 @@ export struct ViewerDocumentModel {
     bookmark-label: string,
     header-label: string,
     footer-label: string,
+    header-first-label: string,
+    footer-first-label: string,
     header-placeholder: string,
     footer-placeholder: string,
     tip-link: string,
     tip-bookmark: string,
     tip-header: string,
     tip-footer: string,
+    tip-header-first: string,
+    tip-footer-first: string,
     tip-bold: string,
     tip-italic: string,
     tip-underline: string,
@@ -1519,6 +1523,12 @@ export struct ViewerDocumentModel {
     header-text: string,
     /// Default footer story plain text (`\n`-joined).
     footer-text: string,
+    /// First-page header story plain text (\
+\-joined).
+    header-first-text: string,
+    /// First-page footer story plain text (\
+\-joined).
+    footer-first-text: string,
     font-smaller-label: string,
     font-larger-label: string,
     font-family-prev-label: string,

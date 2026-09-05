@@ -2759,6 +2759,45 @@ impl DocumentViewer {
         Ok(())
     }
 
+
+    /// Replace the first-page header story from plain text (empty clears).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn set_header_first_plain_text(&self, text: &str) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let paragraphs = paragraphs_from_plain(text);
+        if paragraphs == doc.header_first {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::SetHeaderFirst { paragraphs })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
+    /// Replace the first-page footer story from plain text (empty clears).
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn set_footer_first_plain_text(&self, text: &str) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let paragraphs = paragraphs_from_plain(text);
+        if paragraphs == doc.footer_first {
+            return Ok(());
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::SetFooterFirst { paragraphs })?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Toggle page size between US Letter and ISO A4 (margins unchanged).
     ///
     /// # Errors
@@ -4129,6 +4168,8 @@ impl Viewer for DocumentViewer {
         let page_landscape = is_landscape_page(&doc.page_setup);
         let header_text = story_plain_text(&doc.header);
         let footer_text = story_plain_text(&doc.footer);
+        let header_first_text = story_plain_text(&doc.header_first);
+        let footer_first_text = story_plain_text(&doc.footer_first);
         let title_page = doc.page_setup.title_page;
         let even_and_odd_headers = doc.page_setup.even_and_odd_headers;
         drop(doc_guard);
@@ -4187,6 +4228,8 @@ impl Viewer for DocumentViewer {
             page_landscape,
             header_text,
             footer_text,
+            header_first_text,
+            footer_first_text,
             title_page,
             even_and_odd_headers,
         })

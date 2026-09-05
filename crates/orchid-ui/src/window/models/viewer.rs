@@ -798,12 +798,16 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         bookmark_label: locale.tr("viewer-document-bookmark").into(),
         header_label: locale.tr("viewer-document-header").into(),
         footer_label: locale.tr("viewer-document-footer").into(),
+        header_first_label: locale.tr("viewer-document-header-first").into(),
+        footer_first_label: locale.tr("viewer-document-footer-first").into(),
         header_placeholder: locale.tr("viewer-document-header-placeholder").into(),
         footer_placeholder: locale.tr("viewer-document-footer-placeholder").into(),
         tip_link: locale.tr("viewer-document-tip-link").into(),
         tip_bookmark: locale.tr("viewer-document-tip-bookmark").into(),
         tip_header: locale.tr("viewer-document-tip-header").into(),
         tip_footer: locale.tr("viewer-document-tip-footer").into(),
+        tip_header_first: locale.tr("viewer-document-tip-header-first").into(),
+        tip_footer_first: locale.tr("viewer-document-tip-footer-first").into(),
         tip_bold: locale.tr("viewer-document-tip-bold").into(),
         tip_italic: locale.tr("viewer-document-tip-italic").into(),
         tip_underline: locale.tr("viewer-document-tip-underline").into(),
@@ -855,6 +859,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         link_url: SharedString::new(),
         header_text: SharedString::new(),
         footer_text: SharedString::new(),
+        header_first_text: SharedString::new(),
+        footer_first_text: SharedString::new(),
         font_smaller_label: locale.tr("viewer-document-font-smaller").into(),
         font_larger_label: locale.tr("viewer-document-font-larger").into(),
         font_family_prev_label: locale.tr("viewer-document-font-prev").into(),
@@ -1327,6 +1333,8 @@ fn patch_document_snapshot(
     model.link_url = built.link_url;
     model.header_text = built.header_text;
     model.footer_text = built.footer_text;
+    model.header_first_text = built.header_first_text;
+    model.footer_first_text = built.footer_first_text;
     model.page_size_label = built.page_size_label;
 }
 
@@ -1465,6 +1473,8 @@ fn build_document_snapshot(
     model.link_url = s.link_url.clone().into();
     model.header_text = s.header_text.clone().into();
     model.footer_text = s.footer_text.clone().into();
+    model.header_first_text = s.header_first_text.clone().into();
+    model.footer_first_text = s.footer_first_text.clone().into();
     model.title_page = s.title_page;
     model.even_and_odd_headers = s.even_and_odd_headers;
     model.page_size_label = document_page_size_label(locale, s.page_is_a4, s.page_landscape);

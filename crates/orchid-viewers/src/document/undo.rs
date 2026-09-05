@@ -143,6 +143,16 @@ pub enum EditCommand {
         /// New footer paragraphs (`word/footer*.xml`).
         paragraphs: Vec<Paragraph>,
     },
+    /// Replace the first-page header story paragraphs.
+    SetHeaderFirst {
+        /// New first-page header paragraphs (`w:type="first"`).
+        paragraphs: Vec<Paragraph>,
+    },
+    /// Replace the first-page footer story paragraphs.
+    SetFooterFirst {
+        /// New first-page footer paragraphs (`w:type="first"`).
+        paragraphs: Vec<Paragraph>,
+    },
     /// Insert a named bookmark at a plain-text offset.
     AddBookmark {
         /// Bookmark payload.
@@ -748,6 +758,18 @@ pub fn apply_command(doc: &mut Document, cmd: &EditCommand) -> Result<EditComman
                 paragraphs: previous,
             })
         }
+        EditCommand::SetHeaderFirst { paragraphs } => {
+            let previous = std::mem::replace(&mut doc.header_first, paragraphs.clone());
+            Ok(EditCommand::SetHeaderFirst {
+                paragraphs: previous,
+            })
+        }
+        EditCommand::SetFooterFirst { paragraphs } => {
+            let previous = std::mem::replace(&mut doc.footer_first, paragraphs.clone());
+            Ok(EditCommand::SetFooterFirst {
+                paragraphs: previous,
+            })
+        }
         EditCommand::AddBookmark { bookmark } => {
             if doc.bookmarks.iter().any(|b| b.name == bookmark.name) {
                 return Err(ViewerError::EditOutOfBounds);
@@ -1240,6 +1262,56 @@ mod tests {
         assert!(doc.header.is_empty());
         stack.redo(&mut doc).unwrap();
         assert_eq!(doc.header, header);
+    }
+
+
+    #[test]
+    fn set_header_footer_first_then_undo() {
+        let mut doc = doc_with_hello();
+        let mut stack = UndoStack::new();
+        let header = vec![Paragraph {
+            runs: vec![Run {
+                text: "FirstHdr".into(),
+                style: RunStyle::default(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }];
+        let footer = vec![Paragraph {
+            runs: vec![Run {
+                text: "FirstFtr".into(),
+                style: RunStyle::default(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }];
+        stack
+            .push(
+                &mut doc,
+                EditCommand::SetHeaderFirst {
+                    paragraphs: header.clone(),
+                },
+            )
+            .unwrap();
+        stack
+            .push(
+                &mut doc,
+                EditCommand::SetFooterFirst {
+                    paragraphs: footer.clone(),
+                },
+            )
+            .unwrap();
+        assert_eq!(doc.header_first, header);
+        assert_eq!(doc.footer_first, footer);
+        stack.undo(&mut doc).unwrap();
+        assert!(doc.footer_first.is_empty());
+        assert_eq!(doc.header_first, header);
+        stack.undo(&mut doc).unwrap();
+        assert!(doc.header_first.is_empty());
+        stack.redo(&mut doc).unwrap();
+        assert_eq!(doc.header_first, header);
+        stack.redo(&mut doc).unwrap();
+        assert_eq!(doc.footer_first, footer);
     }
 
     #[test]

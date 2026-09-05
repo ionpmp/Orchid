@@ -2570,6 +2570,39 @@ impl MainWindowController {
                 }
             }
         });
+
+        self.window.on_viewer_document_header_first_request({
+            let t = t.clone();
+            move |id, text| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let text = text.to_string();
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::document_header_first(inst, text)
+                        );
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_document_footer_first_request({
+            let t = t.clone();
+            move |id, text| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let text = text.to_string();
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::document_footer_first(inst, text)
+                        );
+                    }
+                }
+            }
+        });
         self.window.on_viewer_document_preview_key({
             let t = t.clone();
             move |id, key, ctrl, shift| {

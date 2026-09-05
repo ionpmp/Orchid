@@ -53,6 +53,10 @@ export component ViewerDocumentView inherits Rectangle {
     callback header-request(string);
     /// Apply footer story plain text (`""` clears).
     callback footer-request(string);
+    /// Apply first-page header story plain text (`""` clears).
+    callback header-first-request(string);
+    /// Apply first-page footer story plain text (`""` clears).
+    callback footer-first-request(string);
 
     background: transparent;
 
@@ -66,7 +70,7 @@ export component ViewerDocumentView inherits Rectangle {
     property <string> replace-query: "";
     property <bool> link-open: false;
     property <string> link-query: "";
-    property <int> story-open: 0; // 0=closed, 1=header, 2=footer
+    property <int> story-open: 0; // 0=closed, 1=header, 2=footer, 3=header-first, 4=footer-first
     property <string> story-query: "";
 
     changed model => {
@@ -1502,6 +1506,69 @@ export component ViewerDocumentView inherits Rectangle {
                     }
                 }
 
+
+                Rectangle {
+                    width: max(36px, hf-btn-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(root.story-open == 3 || model.header-first-text != "", hf-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    hf-ta := TouchArea {
+                        clicked => {
+                            root.link-open = false;
+                            if (root.story-open == 3) {
+                                root.story-open = 0;
+                            } else {
+                                root.story-open = 3;
+                                root.story-query = model.header-first-text;
+                            }
+                        }
+                    }
+                    hf-btn-label := Text {
+                        text: model.header-first-label;
+                        color: tool-btn(root.story-open == 3 || model.header-first-text != "");
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-header-first;
+                        show: hf-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: max(36px, ff-btn-label.preferred-width + 12px);
+                    height: 28px;
+                    background: tool-bg(root.story-open == 4 || model.footer-first-text != "", ff-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ff-ta := TouchArea {
+                        clicked => {
+                            root.link-open = false;
+                            if (root.story-open == 4) {
+                                root.story-open = 0;
+                            } else {
+                                root.story-open = 4;
+                                root.story-query = model.footer-first-text;
+                            }
+                        }
+                    }
+                    ff-btn-label := Text {
+                        text: model.footer-first-label;
+                        color: tool-btn(root.story-open == 4 || model.footer-first-text != "");
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-footer-first;
+                        show: ff-ta.has-hover;
+                        below: false;
+                    }
+                }
+
                 Rectangle {
                     width: 1px;
                     height: 18px;
@@ -2187,7 +2254,10 @@ export component ViewerDocumentView inherits Rectangle {
             alignment: center;
 
             Text {
-                text: root.story-open == 1 ? model.header-label : model.footer-label;
+                text: root.story-open == 1 ? model.header-label
+                    : root.story-open == 2 ? model.footer-label
+                    : root.story-open == 3 ? model.header-first-label
+                    : model.footer-first-label;
                 color: Theme.text-secondary;
                 font-size: Theme.font-size-sm;
                 vertical-alignment: center;
@@ -2205,7 +2275,7 @@ export component ViewerDocumentView inherits Rectangle {
                     x: 8px;
                     width: parent.width - 16px;
                     height: 100%;
-                    text: root.story-open == 1 ? model.header-placeholder : model.footer-placeholder;
+                    text: root.story-open == 1 || root.story-open == 3 ? model.header-placeholder : model.footer-placeholder;
                     color: Theme.text-tertiary;
                     font-size: Theme.font-size-sm;
                     vertical-alignment: center;
@@ -2227,6 +2297,10 @@ export component ViewerDocumentView inherits Rectangle {
                                 root.header-request(root.story-query);
                             } else if (root.story-open == 2) {
                                 root.footer-request(root.story-query);
+                            } else if (root.story-open == 3) {
+                                root.header-first-request(root.story-query);
+                            } else if (root.story-open == 4) {
+                                root.footer-first-request(root.story-query);
                             }
                             root.story-open = 0;
                             return accept;
@@ -2251,6 +2325,10 @@ export component ViewerDocumentView inherits Rectangle {
                             root.header-request(root.story-query);
                         } else if (root.story-open == 2) {
                             root.footer-request(root.story-query);
+                        } else if (root.story-open == 3) {
+                            root.header-first-request(root.story-query);
+                        } else if (root.story-open == 4) {
+                            root.footer-first-request(root.story-query);
                         }
                         root.story-open = 0;
                     }
@@ -2275,6 +2353,10 @@ export component ViewerDocumentView inherits Rectangle {
                             root.header-request("");
                         } else if (root.story-open == 2) {
                             root.footer-request("");
+                        } else if (root.story-open == 3) {
+                            root.header-first-request("");
+                        } else if (root.story-open == 4) {
+                            root.footer-first-request("");
                         }
                         root.story-query = "";
                         root.story-open = 0;
