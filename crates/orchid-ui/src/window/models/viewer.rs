@@ -754,6 +754,8 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         suppress_auto_hyphens: false,
         outline_level: -1,
         outline_level_label: SharedString::from("P"),
+        character_style_id: SharedString::new(),
+        character_style_label: locale.tr("viewer-document-character-style").into(),
         superscript: false,
         subscript: false,
         font_size_pt: 0.0,
@@ -863,6 +865,7 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
             .tr("viewer-document-tip-suppress-auto-hyphens")
             .into(),
         tip_outline_level: locale.tr("viewer-document-tip-outline-level").into(),
+        tip_character_style: locale.tr("viewer-document-tip-character-style").into(),
         tip_color_black: locale.tr("viewer-document-tip-color-black").into(),
         tip_color_red: locale.tr("viewer-document-tip-color-red").into(),
         tip_color_blue: locale.tr("viewer-document-tip-color-blue").into(),
@@ -1500,6 +1503,7 @@ fn build_document_snapshot(
     model.suppress_auto_hyphens = s.suppress_auto_hyphens;
     model.outline_level = s.outline_level;
     model.outline_level_label = document_outline_level_label(s.outline_level);
+    model.character_style_id = s.character_style_id.clone().into();
     model.superscript = s.superscript;
     model.subscript = s.subscript;
     model.font_size_pt = s.font_size_pt;

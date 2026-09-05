@@ -111,7 +111,9 @@ fn replace_current_and_all() {
     viewer.set_source_mode(false);
     viewer.set_selection_plain_offsets(0, 0);
 
-    assert!(viewer.preview_replace_current("hello", "Hi", false).unwrap());
+    assert!(viewer
+        .preview_replace_current("hello", "Hi", false)
+        .unwrap());
     let plain = {
         let guard = viewer.document();
         guard.as_ref().unwrap().plain_text()
@@ -708,10 +710,7 @@ fn page_chrome_edits_caret_section_not_only_trailing() {
         let Block::Paragraph(p0) = &d.blocks[0] else {
             panic!("p0");
         };
-        assert_eq!(
-            p0.section_properties.as_ref().unwrap().width_twips,
-            12240
-        );
+        assert_eq!(p0.section_properties.as_ref().unwrap().width_twips, 12240);
     }
 
     // Caret in trailing section → Or flips trailing only.
@@ -781,8 +780,88 @@ fn section_break_stamps_caret_section_page_setup() {
         let Block::Paragraph(p0) = &d.blocks[0] else {
             panic!("p0");
         };
-        let ps = p0.section_properties.as_ref().expect("sectPr on split left");
+        let ps = p0
+            .section_properties
+            .as_ref()
+            .expect("sectPr on split left");
         assert_eq!(ps.margin_left_twips, 720);
         assert_eq!(ps.width_twips, 12240);
+    }
+}
+
+#[test]
+fn cycle_character_style_selection_cycles_ids() {
+    use orchid_viewers::document::model::{NamedCharacterStyle, RunStyle};
+    use std::collections::HashMap;
+
+    let mut styles = HashMap::new();
+    styles.insert(
+        "Emphasis".into(),
+        NamedCharacterStyle {
+            style_id: "Emphasis".into(),
+            name: "Emphasis".into(),
+            run: RunStyle {
+                italic: true,
+                ..Default::default()
+            },
+        },
+    );
+    styles.insert(
+        "Strong".into(),
+        NamedCharacterStyle {
+            style_id: "Strong".into(),
+            name: "Strong".into(),
+            run: RunStyle {
+                bold: true,
+                ..Default::default()
+            },
+        },
+    );
+    let mut doc = sample_doc();
+    doc.character_styles = styles;
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(doc);
+    viewer.set_selection_plain_offsets(0, 5);
+    viewer.cycle_character_style_selection().unwrap();
+    {
+        let guard = viewer.document();
+        let d = guard.as_ref().unwrap();
+        let Block::Paragraph(p) = &d.blocks[0] else {
+            panic!("p");
+        };
+        assert_eq!(p.runs[0].style_id.as_deref(), Some("Emphasis"));
+    }
+    {
+        let ViewerSnapshot::Document(snap) = viewer.snapshot() else {
+            panic!("snap");
+        };
+        assert_eq!(snap.character_style_id, "Emphasis");
+    }
+    viewer.cycle_character_style_selection().unwrap();
+    {
+        let guard = viewer.document();
+        let d = guard.as_ref().unwrap();
+        let Block::Paragraph(p) = &d.blocks[0] else {
+            panic!("p");
+        };
+        assert_eq!(p.runs[0].style_id.as_deref(), Some("Strong"));
+    }
+    viewer.cycle_character_style_selection().unwrap();
+    {
+        let guard = viewer.document();
+        let d = guard.as_ref().unwrap();
+        let Block::Paragraph(p) = &d.blocks[0] else {
+            panic!("p");
+        };
+        assert!(p.runs[0].style_id.is_none());
+    }
+    viewer.undo().unwrap();
+    {
+        let guard = viewer.document();
+        let d = guard.as_ref().unwrap();
+        let Block::Paragraph(p) = &d.blocks[0] else {
+            panic!("p");
+        };
+        assert_eq!(p.runs[0].style_id.as_deref(), Some("Strong"));
     }
 }

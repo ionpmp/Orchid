@@ -3649,16 +3649,18 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "bidi" => doc.toggle_bidi_selection(),
                 "suppress-auto-hyphens" => doc.toggle_suppress_auto_hyphens_selection(),
                 "outline-level-cycle" => doc.cycle_outline_level_selection(),
+                "character-style-cycle" => doc.cycle_character_style_selection(),
                 "insert-bookmark" => doc.insert_bookmark_at_selection().map(|_| ()),
                 "insert-comment" => doc.insert_comment_at_selection().map(|_| ()),
                 "delete-comment" => doc.delete_comment_at_selection().map(|_| ()),
                 "comment-next" => doc.goto_comment(true).map(|_| ()),
                 "comment-prev" => doc.goto_comment(false).map(|_| ()),
                 "insert-page-field" => doc.insert_page_number_fields_in_footer(),
-                "insert-date-field" => doc.insert_field_at_selection(orchid_viewers::document::model::DocField::Date),
-                "insert-filename-field" => {
-                    doc.insert_field_at_selection(orchid_viewers::document::model::DocField::FileName)
+                "insert-date-field" => {
+                    doc.insert_field_at_selection(orchid_viewers::document::model::DocField::Date)
                 }
+                "insert-filename-field" => doc
+                    .insert_field_at_selection(orchid_viewers::document::model::DocField::FileName),
                 "insert-section-break" => doc.preview_insert_section_break(),
                 "superscript" => doc.toggle_style_all('^'),
                 "subscript" => doc.toggle_style_all('_'),

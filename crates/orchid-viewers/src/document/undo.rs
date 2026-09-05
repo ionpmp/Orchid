@@ -3,8 +3,7 @@
 use crate::document::cursor::{paragraph_mut, paragraph_ref, Cursor, Selection};
 use crate::document::model::{
     Alignment, Block, Bookmark, CellImage, CommentRange, DocComment, Document, Hyperlink,
-    InlineImage, ListKind, PageSetup,
-    Paragraph, Run, RunStyle, Table, TableCell, TableRow,
+    InlineImage, ListKind, PageSetup, Paragraph, Run, RunStyle, Table, TableCell, TableRow,
 };
 use crate::error::{Result, ViewerError};
 
@@ -266,6 +265,8 @@ pub struct RunStylePatch {
     pub font_size_pt: Option<Option<f32>>,
     /// Set external hyperlink (`Some(None)` clears).
     pub hyperlink: Option<Option<Hyperlink>>,
+    /// Set named character style id (`w:rStyle`; `Some(None)` clears).
+    pub style_id: Option<Option<String>>,
 }
 
 impl RunStylePatch {
@@ -291,6 +292,7 @@ impl RunStylePatch {
             font_family: Some(None),
             font_size_pt: Some(None),
             hyperlink: Some(None),
+            style_id: Some(None),
         }
     }
 
@@ -360,6 +362,9 @@ impl RunStylePatch {
         self.apply_to(&mut run.style);
         if let Some(ref hl) = self.hyperlink {
             run.hyperlink = hl.clone();
+        }
+        if let Some(ref sid) = self.style_id {
+            run.style_id = sid.clone();
         }
     }
 }
@@ -1388,7 +1393,6 @@ mod tests {
         stack.redo(&mut doc).unwrap();
         assert_eq!(doc.header, header);
     }
-
 
     #[test]
     fn set_header_footer_first_then_undo() {

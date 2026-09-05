@@ -692,6 +692,38 @@ export component ViewerDocumentView inherits Rectangle {
                     width: 28px;
                     height: 28px;
                     background: tool-bg(model.superscript, super-ta.has-hover);
+                    DocHoverTip {
+                        tip: model.tip-outline-level;
+                        show: ol-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.character-style-id != "", ch-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    ch-ta := TouchArea { clicked => { root.action("character-style-cycle"); } }
+                    Text {
+                        text: model.character-style-label;
+                        color: tool-btn(model.character-style-id != "");
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-character-style;
+                        show: ch-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.superscript, super-ta.has-hover);
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
                     super-ta := TouchArea { clicked => { root.action("superscript"); } }

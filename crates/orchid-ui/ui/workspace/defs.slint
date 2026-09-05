@@ -1421,6 +1421,8 @@ export struct ViewerDocumentModel {
     /// `-1` = body paragraph, `0`..=`8` = Heading 1..=9.
     outline-level: int,
     outline-level-label: string,
+    character-style-id: string,
+    character-style-label: string,
     superscript: bool,
     subscript: bool,
     /// Font size in points at the caret (`0` = default).
@@ -1535,6 +1537,7 @@ export struct ViewerDocumentModel {
     tip-bidi: string,
     tip-suppress-auto-hyphens: string,
     tip-outline-level: string,
+    tip-character-style: string,
     tip-color-black: string,
     tip-color-red: string,
     tip-color-blue: string,

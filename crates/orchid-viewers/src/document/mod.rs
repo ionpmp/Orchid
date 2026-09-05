@@ -1931,9 +1931,8 @@ impl DocumentViewer {
         let (na, nb) = sel.normalized();
         let lo = plain_offset_from_cursor(doc, na);
         let hi = plain_offset_from_cursor(doc, nb);
-        let current_idx = comment_id_overlapping(doc, lo, hi).and_then(|id| {
-            ranges.iter().position(|&(_, _, rid)| rid == id)
-        });
+        let current_idx = comment_id_overlapping(doc, lo, hi)
+            .and_then(|id| ranges.iter().position(|&(_, _, rid)| rid == id));
         let target = if let Some(i) = current_idx {
             if forward {
                 ranges
@@ -2240,6 +2239,47 @@ impl DocumentViewer {
         Ok(())
     }
 
+    /// Cycle named character style (`w:rStyle`) on the selection.
+    ///
+    /// Order: none → each `Document::character_styles` id (sorted) → none.
+    /// No-op when the document defines no character styles.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn cycle_character_style_selection(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let mut ids: Vec<String> = doc.character_styles.keys().cloned().collect();
+        ids.sort();
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let (a, _) = sel.normalized();
+        let current = run_style_id_at_cursor(doc, a);
+        let next = match current.as_deref() {
+            None => Some(ids[0].clone()),
+            Some(cur) => match ids.iter().position(|id| id == cur) {
+                Some(i) if i + 1 < ids.len() => Some(ids[i + 1].clone()),
+                _ => None,
+            },
+        };
+        let patch = RunStylePatch {
+            style_id: Some(next),
+            ..Default::default()
+        };
+        self.undo.lock().push(
+            doc,
+            EditCommand::SetRunStyle {
+                range: sel,
+                style: patch,
+            },
+        )?;
+        self.invalidate_preview();
+        Ok(())
+    }
+
     /// Step font size up (`direction > 0`) or down on the selection.
     ///
     /// # Errors
@@ -2496,20 +2536,12 @@ impl DocumentViewer {
             },
             's' => RunStylePatch {
                 strikethrough: Some(!currently_on),
-                double_strikethrough: if currently_on {
-                    None
-                } else {
-                    Some(false)
-                },
+                double_strikethrough: if currently_on { None } else { Some(false) },
                 ..Default::default()
             },
             'd' => RunStylePatch {
                 double_strikethrough: Some(!currently_on),
-                strikethrough: if currently_on {
-                    None
-                } else {
-                    Some(false)
-                },
+                strikethrough: if currently_on { None } else { Some(false) },
                 ..Default::default()
             },
             'h' => RunStylePatch {
@@ -3007,8 +3039,7 @@ impl DocumentViewer {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
         let changed = self.mutate_caret_page_setup(doc, |next| {
-            next.margin_top_twips =
-                clamp_margin_twips(next.margin_top_twips as i32 + delta_twips);
+            next.margin_top_twips = clamp_margin_twips(next.margin_top_twips as i32 + delta_twips);
             next.margin_bottom_twips =
                 clamp_margin_twips(next.margin_bottom_twips as i32 + delta_twips);
             next.margin_left_twips =
@@ -3767,6 +3798,11 @@ fn section_page_setup_target(doc: &Document, section_idx: usize) -> SectionPageS
     SectionPageSetupTarget::Trailing
 }
 
+fn run_style_id_at_cursor(doc: &Document, cursor: Cursor) -> Option<String> {
+    let p = paragraph_ref(doc, cursor)?;
+    p.runs.get(cursor.run_idx)?.style_id.clone()
+}
+
 fn page_setup_for_cursor<'a>(doc: &'a Document, cursor: Cursor) -> &'a PageSetup {
     match section_page_setup_target(doc, caret_section_index(doc, cursor.block_idx)) {
         SectionPageSetupTarget::Trailing => &doc.page_setup,
@@ -3858,8 +3894,6 @@ fn comment_id_overlapping(doc: &Document, lo: usize, hi: usize) -> Option<u32> {
     }
     best.map(|(id, _)| id)
 }
-
-
 
 fn clamp_spacing_twips(v: i32) -> u32 {
     v.clamp(0, SPACING_TWIPS_MAX) as u32
@@ -4766,6 +4800,7 @@ impl Viewer for DocumentViewer {
         let contextual_spacing = para.is_some_and(|p| p.contextual_spacing);
         let bidi = para.is_some_and(|p| p.bidi);
         let suppress_auto_hyphens = para.is_some_and(|p| p.suppress_auto_hyphens);
+        let character_style_id = run_style_id_at_cursor(doc, sel.head).unwrap_or_default();
         let outline_level = para
             .and_then(|p| p.outline_level)
             .map(|lvl| i32::from(lvl))
@@ -4822,9 +4857,7 @@ impl Viewer for DocumentViewer {
         let caret_off = plain_offset_from_cursor(doc, sel.head);
         let comment_hit = comment_id_overlapping(doc, caret_off, caret_off)
             .and_then(|id| doc.comments.iter().find(|c| c.id == id));
-        let comment_edit_text = comment_hit
-            .map(|c| c.text.clone())
-            .unwrap_or_default();
+        let comment_edit_text = comment_hit.map(|c| c.text.clone()).unwrap_or_default();
         let comment_at_caret = comment_hit
             .map(|c| {
                 let body: String = c.text.chars().take(80).collect();
@@ -4869,6 +4902,7 @@ impl Viewer for DocumentViewer {
             bidi,
             suppress_auto_hyphens,
             outline_level,
+            character_style_id,
             superscript,
             subscript,
             font_size_pt,
