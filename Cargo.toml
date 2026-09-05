@@ -19,6 +19,7 @@ members = [
     "crates/orchid-i18n",
     "crates/orchid-ui",
     "crates/orchid-app",
+    "crates/orchid-format",
 ]
 
 [workspace.package]
@@ -206,6 +207,11 @@ starship-battery = "0.11"
 ropey = "1"
 memmap2 = "0.9"
 
+# Native .orchid container (FlatBuffers TOC + zstd regions)
+flatbuffers = "25"
+zstd = "0.13"
+clap = { version = "4", features = ["derive"] }
+
 # Document / OOXML (DOCX) viewer-editor
 quick-xml = "0.42"
 parley = "0.11"
@@ -246,6 +252,7 @@ orchid-viewers = { path = "crates/orchid-viewers", version = "0.1.0" }
 orchid-widgets = { path = "crates/orchid-widgets", version = "0.1.0" }
 orchid-i18n = { path = "crates/orchid-i18n", version = "0.1.0" }
 orchid-ui = { path = "crates/orchid-ui", version = "0.1.0" }
+orchid-format = { path = "crates/orchid-format", version = "0.1.0" }
 
 # -----------------------------------------------------------------------------
 # Profiles

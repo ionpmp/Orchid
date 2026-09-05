@@ -1,0 +1,77 @@
+// orchid_toc.fbs — TOC for application/vnd.orchid
+// See docs/ORCHID_FORMAT.md §5. Field ids are part of the wire contract.
+
+namespace orchid.format;
+
+enum RegionType : uint16 {
+  Raw = 1,
+  CleanText = 2,
+  Structured = 3,
+  Embedding = 4,
+  Provenance = 5,
+  VersionHistory = 6,
+}
+
+enum CompressionCodec : uint8 {
+  None = 0,
+  Zstd = 1,
+}
+
+enum StorageMode : uint8 {
+  Inline = 0,   // payload bytes live in this file (sealed)
+  Linked = 1,   // payload is a chunk-hash list into ChunkStore
+}
+
+table EncryptionInfo {
+  /// age recipient stanzas or opaque age header prefix length.
+  age_header: [ubyte];
+  /// BLAKE3-256 of the plaintext (after decompress).
+  plaintext_blake3: [ubyte]; // length 32
+  /// Identity kind hint: 0 = passphrase, 1 = x25519 (mirrors IdentityKind).
+  identity_kind: uint8;
+  /// True if this region is classified public (may still be integrity-hashed).
+  is_public: bool;
+}
+
+table ChunkRef {
+  blake3: [ubyte]; // 32
+  size: uint64;
+}
+
+table RegionEntry {
+  /// Defaults to Raw so FlatBuffers' zero-init stays in-enum (ids start at 1).
+  type: RegionType = Raw;
+  /// Absolute file offset of local_magic ORCR.
+  offset: uint64;
+  /// Length field from mini-header (enc_meta || payload).
+  length: uint64;
+  /// Human name (e.g. relative path for FM wrap).
+  name: string;
+  /// Stable order among siblings of the same type.
+  ordinal: uint32;
+  compression: CompressionCodec;
+  storage: StorageMode;
+  /// Inline: empty. Linked: ordered FastCDC chunk hashes.
+  chunks: [ChunkRef];
+  encryption: EncryptionInfo; // optional
+  /// MIME or model id / schema id depending on type.
+  content_type: string;
+  /// BLAKE3 of compressed plaintext before encryption (integrity).
+  payload_blake3: [ubyte]; // 32
+}
+
+table Toc {
+  /// Monotonic generation for this file_uuid lineage.
+  generation: uint64;
+  /// Parent generation (0 if genesis).
+  parent_generation: uint64;
+  /// Echo of header file UUID.
+  file_uuid: [ubyte]; // 16
+  /// sealed vs linked default for regions that omit storage.
+  default_storage: StorageMode;
+  regions: [RegionEntry];
+  /// Optional zstd dictionary id (hash) used by text regions in this library.
+  zstd_dict_blake3: [ubyte]; // 32, optional
+}
+
+root_type Toc;
