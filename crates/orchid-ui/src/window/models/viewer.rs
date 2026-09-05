@@ -1441,6 +1441,7 @@ fn build_document_snapshot(
         .with("blocks", s.block_count.to_string())
         .with("words", s.word_count.to_string())
         .with("chars", s.char_count.to_string())
+        .with("comments", s.comment_count.to_string())
         .with(
             "warnings",
             if s.warnings.is_empty() {

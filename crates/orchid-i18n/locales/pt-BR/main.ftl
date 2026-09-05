@@ -778,7 +778,7 @@ viewer-media-subs-off = Legendas off
 viewer-html-open = Abrir no navegador
 viewer-html-hint = A prévia HTML usa o navegador do sistema
 viewer-html-source = Código
-viewer-document-info = Documento · { $words } palavras · { $chars } caracteres · { $blocks } blocos · { $warnings } recursos não suportados
+viewer-document-info = Documento · { $words } palavras · { $chars } caracteres · { $comments } comentários · { $blocks } blocos · { $warnings } recursos não suportados
 
 viewer-document-save = Salvar
 viewer-document-print = Imprimir

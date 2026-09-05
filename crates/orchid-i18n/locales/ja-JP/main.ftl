@@ -778,7 +778,7 @@ viewer-media-subs-off = 字幕オフ
 viewer-html-open = ブラウザーで開く
 viewer-html-hint = HTML プレビューはシステムのブラウザーを使います
 viewer-html-source = ソース
-viewer-document-info = 文書 · { $words } 語 · { $chars } 文字 · { $blocks } ブロック · 未対応 { $warnings }
+viewer-document-info = 文書 · { $words } 語 · { $chars } 文字 · { $comments } コメント · { $blocks } ブロック · 未対応 { $warnings }
 
 viewer-document-save = 保存
 viewer-document-print = 印刷

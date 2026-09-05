@@ -779,7 +779,7 @@ viewer-media-subs-off = الترجمة متوقفة
 viewer-html-open = فتح في المتصفح
 viewer-html-hint = معاينة HTML تستخدم متصفح النظام
 viewer-html-source = المصدر
-viewer-document-info = مستند · { $words } كلمة · { $chars } حرف · { $blocks } كتل · { $warnings } ميزات غير مدعومة
+viewer-document-info = مستند · { $words } كلمة · { $chars } حرف · { $comments } تعليقات · { $blocks } كتل · { $warnings } ميزات غير مدعومة
 
 viewer-document-save = حفظ
 viewer-document-print = طباعة

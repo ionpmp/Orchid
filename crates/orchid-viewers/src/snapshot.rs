@@ -47,6 +47,8 @@ pub struct DocumentSnapshot {
     pub word_count: u32,
     /// Character count over [`Self::plain_text`] (newlines excluded).
     pub char_count: u32,
+    /// Number of comments from `word/comments.xml`.
+    pub comment_count: u32,
     /// Plain-text extraction for search / fallback display.
     pub plain_text: Arc<str>,
     /// Non-fatal warnings (e.g. unsupported OOXML features).

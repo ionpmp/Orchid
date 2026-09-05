@@ -4326,6 +4326,7 @@ impl Viewer for DocumentViewer {
         let plain_text = doc.plain_text();
         let block_count = doc.blocks.len() as u32;
         let (word_count, char_count) = crate::document::model::text_stats(&plain_text);
+        let comment_count = doc.comments.len() as u32;
         let sel = *self.selection.lock();
         let caret = sel.normalized().0;
         let style = style_at_cursor(doc, caret);
@@ -4479,6 +4480,7 @@ impl Viewer for DocumentViewer {
             block_count,
             word_count,
             char_count,
+            comment_count,
             plain_text: Arc::from(plain_text.as_str()),
             warnings,
             info_text: String::new(),

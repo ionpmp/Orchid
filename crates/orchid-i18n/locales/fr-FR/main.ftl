@@ -778,7 +778,7 @@ viewer-media-subs-off = Sous-titres off
 viewer-html-open = Ouvrir dans le navigateur
 viewer-html-hint = L’aperçu HTML utilise le navigateur système
 viewer-html-source = Source
-viewer-document-info = Document · { $words } mots · { $chars } caractères · { $blocks } blocs · { $warnings } éléments non pris en charge
+viewer-document-info = Document · { $words } mots · { $chars } caractères · { $comments } commentaires · { $blocks } blocs · { $warnings } éléments non pris en charge
 
 viewer-document-save = Enregistrer
 viewer-document-print = Imprimer

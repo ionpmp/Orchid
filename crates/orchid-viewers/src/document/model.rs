@@ -93,6 +93,32 @@ pub struct Bookmark {
     pub plain_offset: usize,
 }
 
+/// Comment payload from `word/comments.xml` (`w:comment`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DocComment {
+    /// Comment id (`w:id`).
+    pub id: u32,
+    /// Author display name (`w:author`).
+    pub author: String,
+    /// Author initials (`w:initials`).
+    pub initials: String,
+    /// Timestamp string as stored (`w:date`).
+    pub date: String,
+    /// Plain-text body (concatenated `w:t`).
+    pub text: String,
+}
+
+/// Anchored comment span in the body (`w:commentRangeStart` / `w:commentRangeEnd`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommentRange {
+    /// Comment id (`w:id`).
+    pub id: u32,
+    /// Inclusive start offset into [`Document::plain_text`].
+    pub start_plain: usize,
+    /// Exclusive end offset into [`Document::plain_text`].
+    pub end_plain: usize,
+}
+
 /// Simple Word field kinds supported in Tier-1 stories / body.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DocField {
@@ -536,6 +562,10 @@ pub struct Document {
     pub footer_even: Vec<Paragraph>,
     /// Named destinations (`w:bookmarkStart`); first occurrence of a name wins on jump.
     pub bookmarks: Vec<Bookmark>,
+    /// Comment payloads from `word/comments.xml`.
+    pub comments: Vec<DocComment>,
+    /// Body comment anchors (`w:commentRangeStart` / `End`).
+    pub comment_ranges: Vec<CommentRange>,
     /// Unsupported body-level elements preserved for round-trip.
     pub unsupported: Vec<OpaqueXmlNode>,
     /// Original package parts we did not rewrite (styles, numbering, …).

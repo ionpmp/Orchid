@@ -778,7 +778,7 @@ viewer-media-subs-off = Untertitel aus
 viewer-html-open = Im Browser öffnen
 viewer-html-hint = HTML-Vorschau nutzt den Systembrowser
 viewer-html-source = Quelltext
-viewer-document-info = Dokument · { $words } Wörter · { $chars } Zeichen · { $blocks } Blöcke · { $warnings } nicht unterstützte Features
+viewer-document-info = Dokument · { $words } Wörter · { $chars } Zeichen · { $comments } Kommentare · { $blocks } Blöcke · { $warnings } nicht unterstützte Features
 
 viewer-document-save = Speichern
 viewer-document-print = Drucken

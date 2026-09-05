@@ -96,8 +96,14 @@ pub fn open_document(path: &Path) -> Result<Document> {
         }
     }
 
-    let (blocks, page_setup, unsupported, bookmarks) =
+    let (blocks, page_setup, unsupported, bookmarks, comment_ranges) =
         parse_document_xml(document_xml, &styles, &numbering, &rels, &media)?;
+
+    let comments = package
+        .get("word/comments.xml")
+        .map(crate::document::ooxml::comments::parse_comments_xml)
+        .transpose()?
+        .unwrap_or_default();
 
     let header = load_story_part(
         &package,
@@ -150,7 +156,7 @@ pub fn open_document(path: &Path) -> Result<Document> {
 
     let mut retained = Vec::new();
     for (name, bytes) in &package.parts {
-        if name == "word/document.xml" {
+        if name == "word/document.xml" || name == "word/comments.xml" {
             continue;
         }
         retained.push((name.clone(), bytes.clone()));
@@ -167,6 +173,8 @@ pub fn open_document(path: &Path) -> Result<Document> {
         header_even,
         footer_even,
         bookmarks,
+        comments,
+        comment_ranges,
         unsupported,
         retained_parts: retained,
         content_types: package.get("[Content_Types].xml").map(|b| b.to_vec()),
@@ -240,6 +248,10 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
         if uses_lists {
             content_types = ensure_numbering_content_type(&content_types);
         }
+        let has_comments = !doc.comments.is_empty();
+        if has_comments {
+            content_types = ensure_comments_content_type(&content_types);
+        }
         zip.start_file("[Content_Types].xml", opts)
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
         zip.write_all(&content_types)?;
@@ -266,6 +278,13 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
             zip.write_all(&numbering)?;
             written.insert("word/numbering.xml".to_string());
         }
+        if has_comments {
+            let comments_xml = crate::document::ooxml::comments::write_comments_xml(&doc.comments)?;
+            zip.start_file("word/comments.xml", opts)
+                .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+            zip.write_all(&comments_xml)?;
+            written.insert("word/comments.xml".to_string());
+        }
 
         let mut document_rels = doc
             .document_rels
@@ -273,6 +292,9 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
             .unwrap_or_else(|| MINIMAL_DOCUMENT_RELS.as_bytes().to_vec());
         if uses_lists {
             document_rels = ensure_numbering_document_rel(&document_rels);
+        }
+        if has_comments {
+            document_rels = ensure_comments_document_rel(&document_rels);
         }
         zip.start_file("word/_rels/document.xml.rels", opts)
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
@@ -931,6 +953,45 @@ fn ensure_numbering_document_rel(bytes: &[u8]) -> Vec<u8> {
     let rid = next_relationship_id(&s);
     let injection = format!(
         r#"  <Relationship Id="{rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
+"#
+    );
+    if let Some(idx) = s.rfind("</Relationships>") {
+        let mut out = String::with_capacity(s.len() + injection.len());
+        out.push_str(&s[..idx]);
+        out.push_str(&injection);
+        out.push_str(&s[idx..]);
+        out.into_bytes()
+    } else {
+        bytes.to_vec()
+    }
+}
+
+fn ensure_comments_content_type(bytes: &[u8]) -> Vec<u8> {
+    let s = String::from_utf8_lossy(bytes);
+    if s.contains("/word/comments.xml") {
+        return bytes.to_vec();
+    }
+    let injection = r#"  <Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/>
+"#;
+    if let Some(idx) = s.rfind("</Types>") {
+        let mut out = String::with_capacity(s.len() + injection.len());
+        out.push_str(&s[..idx]);
+        out.push_str(injection);
+        out.push_str(&s[idx..]);
+        out.into_bytes()
+    } else {
+        bytes.to_vec()
+    }
+}
+
+fn ensure_comments_document_rel(bytes: &[u8]) -> Vec<u8> {
+    let s = String::from_utf8_lossy(bytes);
+    if s.contains("relationships/comments") || s.contains("Target=\"comments.xml\"") {
+        return bytes.to_vec();
+    }
+    let rid = next_relationship_id(&s);
+    let injection = format!(
+        r#"  <Relationship Id="{rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/>
 "#
     );
     if let Some(idx) = s.rfind("</Relationships>") {

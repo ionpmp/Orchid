@@ -8,7 +8,7 @@ use quick_xml::reader::Reader;
 use quick_xml::writer::Writer;
 
 use crate::document::model::{
-    Alignment, Block, Bookmark, CellImage, DocField, Document, Hyperlink, ImageFormat, InlineImage,
+    Alignment, Block, Bookmark, CellImage, CommentRange, DocField, Document, Hyperlink, ImageFormat, InlineImage,
     LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, Table, TableCell,
     TableRow, VMerge, CELL_BORDER_BOTTOM, CELL_BORDER_LEFT, CELL_BORDER_RIGHT,
     CELL_BORDER_TOP,
@@ -63,13 +63,15 @@ pub fn parse_document_xml(
     numbering: &NumberingDefs,
     rels: &Relationships,
     media: &HashMap<String, Vec<u8>>,
-) -> Result<(Vec<Block>, PageSetup, Vec<OpaqueXmlNode>, Vec<Bookmark>)> {
+) -> Result<(Vec<Block>, PageSetup, Vec<OpaqueXmlNode>, Vec<Bookmark>, Vec<CommentRange>)> {
     let mut reader = Reader::from_reader(bytes);
     reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
     let mut blocks = Vec::new();
     let mut unsupported = Vec::new();
     let mut bookmarks: Vec<Bookmark> = Vec::new();
+    let mut comment_ranges: Vec<CommentRange> = Vec::new();
+    let mut open_comments: Vec<(u32, usize)> = Vec::new();
     let mut pending_body_bookmarks: Vec<String> = Vec::new();
     let mut plain_len = 0usize;
     let mut page_setup = PageSetup::default();
@@ -84,7 +86,7 @@ pub fn parse_document_xml(
                 } else if in_body {
                     match local.as_str() {
                         "p" => {
-                            let (p, images, local_bms) = parse_paragraph(
+                            let (p, images, local_bms, c_starts, c_ends) = parse_paragraph(
                                 &mut reader,
                                 &mut buf,
                                 styles,
@@ -113,6 +115,22 @@ pub fn parse_document_xml(
                                         plain_offset: para_start + rel,
                                     });
                                 }
+                            }
+                            for (id, rel) in c_starts {
+                                open_comments.push((id, para_start + rel));
+                            }
+                            for (id, rel) in c_ends {
+                                let end = para_start + rel;
+                                if let Some(pos) = open_comments.iter().rposition(|(i, _)| *i == id)
+                                {
+                                    let (_, start) = open_comments.remove(pos);
+                                    comment_ranges.push(CommentRange {
+                                        id,
+                                        start_plain: start,
+                                        end_plain: end.max(start),
+                                    });
+                                }
+                                // Orphan end (e.g. duplicate marker) — ignore.
                             }
                             if has_text || images.is_empty() {
                                 plain_len = para_start + p.plain_text().len();
@@ -197,8 +215,15 @@ pub fn parse_document_xml(
             });
         }
     }
+    for (id, start) in open_comments.drain(..) {
+        comment_ranges.push(CommentRange {
+            id,
+            start_plain: start,
+            end_plain: plain_len.max(start),
+        });
+    }
 
-    Ok((blocks, page_setup, unsupported, bookmarks))
+    Ok((blocks, page_setup, unsupported, bookmarks, comment_ranges))
 }
 
 /// Parse a header or footer story (`w:hdr` / `w:ftr`) into paragraphs.
@@ -227,7 +252,7 @@ pub fn parse_story_xml(
                 if local == root_local {
                     in_root = true;
                 } else if in_root && local == "p" {
-                    let (p, _images, _bms) = parse_paragraph(
+                    let (p, _images, _bms, _, _) = parse_paragraph(
                         &mut reader,
                         &mut buf,
                         styles,
@@ -285,10 +310,10 @@ pub fn write_story_xml(root_local: &str, paragraphs: &[Paragraph]) -> Result<Vec
 
     let mut bookmark_id = 0u32;
     if paragraphs.is_empty() {
-        write_paragraph(&mut writer, &Paragraph::default(), &[], 0, &mut bookmark_id)?;
+        write_paragraph(&mut writer, &Paragraph::default(), &[], &[], 0, &mut bookmark_id)?;
     } else {
         for p in paragraphs {
-            write_paragraph(&mut writer, p, &[], 0, &mut bookmark_id)?;
+            write_paragraph(&mut writer, p, &[], &[], 0, &mut bookmark_id)?;
         }
     }
 
@@ -320,7 +345,13 @@ fn parse_paragraph(
     numbering: &NumberingDefs,
     rels: &Relationships,
     media: &HashMap<String, Vec<u8>>,
-) -> Result<(Paragraph, Vec<InlineImage>, Vec<(String, usize)>)> {
+) -> Result<(
+    Paragraph,
+    Vec<InlineImage>,
+    Vec<(String, usize)>,
+    Vec<(u32, usize)>,
+    Vec<(u32, usize)>,
+)> {
     let mut p = Paragraph {
         runs: Vec::new(),
         alignment: Alignment::Left,
@@ -350,6 +381,8 @@ fn parse_paragraph(
     };
     let mut images = Vec::new();
     let mut local_bookmarks: Vec<(String, usize)> = Vec::new();
+    let mut local_comment_starts: Vec<(u32, usize)> = Vec::new();
+    let mut local_comment_ends: Vec<(u32, usize)> = Vec::new();
     let mut para_plain_len = 0usize;
     let mut in_p_pr = false;
     let mut in_p_bdr = false;
@@ -457,6 +490,16 @@ fn parse_paragraph(
                     "bookmarkStart" => {
                         if let Some(name) = attr_val(&e, "name").filter(|n| !n.is_empty()) {
                             local_bookmarks.push((name, para_plain_len));
+                        }
+                    }
+                    "commentRangeStart" => {
+                        if let Some(id) = attr_val(&e, "id").and_then(|v| v.parse().ok()) {
+                            local_comment_starts.push((id, para_plain_len));
+                        }
+                    }
+                    "commentRangeEnd" => {
+                        if let Some(id) = attr_val(&e, "id").and_then(|v| v.parse().ok()) {
+                            local_comment_ends.push((id, para_plain_len));
                         }
                     }
                     "fldSimple" => {
@@ -616,6 +659,16 @@ fn parse_paragraph(
                         local_bookmarks.push((name, para_plain_len));
                     }
                 }
+                if local == "commentRangeStart" {
+                    if let Some(id) = attr_val(&e, "id").and_then(|v| v.parse().ok()) {
+                        local_comment_starts.push((id, para_plain_len));
+                    }
+                }
+                if local == "commentRangeEnd" {
+                    if let Some(id) = attr_val(&e, "id").and_then(|v| v.parse().ok()) {
+                        local_comment_ends.push((id, para_plain_len));
+                    }
+                }
                 if in_r && matches!(local.as_str(), "b" | "i" | "u" | "caps" | "smallCaps" | "color" | "rFonts" | "sz") {
                     if let Some(ref mut run) = current_run {
                         apply_r_pr_attr(&local, &e, &mut run.style);
@@ -661,7 +714,13 @@ fn parse_paragraph(
                         }
                     }
                     "hyperlink" => active_link = None,
-                    "p" => return Ok((p, images, local_bookmarks)),
+                    "p" => return Ok((
+                        p,
+                        images,
+                        local_bookmarks,
+                        local_comment_starts,
+                        local_comment_ends,
+                    )),
                     _ => {}
                 }
             }
@@ -1067,7 +1126,7 @@ fn parse_table(
                         }
                     }
                     "p" => {
-                        let (p, images, _bms) =
+                        let (p, images, _bms, _, _) =
                             parse_paragraph(reader, buf, styles, numbering, rels, media)?;
                         if let Some(ref mut cell) = current_cell {
                             cell.paragraphs.push(p);
@@ -1365,6 +1424,7 @@ pub fn write_document_xml(doc: &Document) -> Result<Vec<u8>> {
                     &mut writer,
                     p,
                     &doc.bookmarks,
+                    &doc.comment_ranges,
                     para_start,
                     &mut bookmark_id,
                 )?;
@@ -1408,6 +1468,40 @@ pub fn write_document_xml(doc: &Document) -> Result<Vec<u8>> {
     Ok(writer.into_inner().into_inner())
 }
 
+fn write_comment_range_start(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    id: u32,
+) -> Result<()> {
+    let mut start = BytesStart::new("w:commentRangeStart");
+    start.push_attribute(("w:id", id.to_string().as_str()));
+    writer
+        .write_event(Event::Empty(start))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))
+}
+
+fn write_comment_range_end_and_ref(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    id: u32,
+) -> Result<()> {
+    let id_s = id.to_string();
+    let mut end = BytesStart::new("w:commentRangeEnd");
+    end.push_attribute(("w:id", id_s.as_str()));
+    writer
+        .write_event(Event::Empty(end))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    writer
+        .write_event(Event::Start(BytesStart::new("w:r")))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    let mut cref = BytesStart::new("w:commentReference");
+    cref.push_attribute(("w:id", id_s.as_str()));
+    writer
+        .write_event(Event::Empty(cref))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    writer
+        .write_event(Event::End(BytesEnd::new("w:r")))
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))
+}
+
 fn write_collapsed_bookmark(
     writer: &mut Writer<Cursor<Vec<u8>>>,
     id: u32,
@@ -1432,6 +1526,7 @@ fn write_paragraph(
     writer: &mut Writer<Cursor<Vec<u8>>>,
     p: &Paragraph,
     bookmarks: &[Bookmark],
+    comment_ranges: &[CommentRange],
     para_start: usize,
     bookmark_id: &mut u32,
 ) -> Result<()> {
@@ -1601,6 +1696,16 @@ fn write_paragraph(
             *bookmark_id += 1;
         }
     }
+    for c in comment_ranges {
+        if c.start_plain == para_start {
+            write_comment_range_start(writer, c.id)?;
+        }
+    }
+    for c in comment_ranges {
+        if c.end_plain == para_start && c.start_plain == para_start {
+            write_comment_range_end_and_ref(writer, c.id)?;
+        }
+    }
 
     let mut run_rel = 0usize;
     let mut i = 0;
@@ -1610,6 +1715,16 @@ fn write_paragraph(
                 if b.plain_offset == para_start + run_rel {
                     write_collapsed_bookmark(writer, *bookmark_id, &b.name)?;
                     *bookmark_id += 1;
+                }
+            }
+            for c in comment_ranges {
+                if c.start_plain == para_start + run_rel {
+                    write_comment_range_start(writer, c.id)?;
+                }
+            }
+            for c in comment_ranges {
+                if c.end_plain == para_start + run_rel && c.start_plain != c.end_plain {
+                    write_comment_range_end_and_ref(writer, c.id)?;
                 }
             }
         }
@@ -1653,6 +1768,11 @@ fn write_paragraph(
             write_run(writer, &p.runs[i])?;
             run_rel += p.runs[i].text.len();
             i += 1;
+        }
+    }
+    for c in comment_ranges {
+        if c.end_plain == para_start + run_rel && c.start_plain != c.end_plain {
+            write_comment_range_end_and_ref(writer, c.id)?;
         }
     }
     for node in &p.unsupported {
@@ -2101,14 +2221,14 @@ fn write_table(
             }
             if cell.paragraphs.is_empty() {
                 let mut bm_id = 0u32;
-                write_paragraph(writer, &Paragraph::default(), &[], 0, &mut bm_id)?;
+                write_paragraph(writer, &Paragraph::default(), &[], &[], 0, &mut bm_id)?;
                 for ci in cell.images.iter().filter(|c| c.after_paragraph == 0) {
                     write_image_paragraph(writer, &ci.image, drawing_id)?;
                 }
             } else {
                 for (i, p) in cell.paragraphs.iter().enumerate() {
                     let mut bm_id = 0u32;
-                    write_paragraph(writer, p, &[], 0, &mut bm_id)?;
+                    write_paragraph(writer, p, &[], &[], 0, &mut bm_id)?;
                     for ci in cell.images.iter().filter(|c| c.after_paragraph == i) {
                         write_image_paragraph(writer, &ci.image, drawing_id)?;
                     }
@@ -2374,7 +2494,7 @@ mod tests {
             </w:sectPr>
           </w:body>
         </w:document>"#;
-        let (blocks, setup, _, _) = parse_document_xml(
+        let (blocks, setup, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2410,7 +2530,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2449,7 +2569,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2473,7 +2593,7 @@ mod tests {
             text.contains("w:strike"),
             "serialized XML missing strike: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2500,7 +2620,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2527,7 +2647,7 @@ mod tests {
             text.contains("w:caps"),
             "serialized XML missing caps: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2554,7 +2674,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2582,7 +2702,7 @@ mod tests {
             text.contains("w:smallCaps"),
             "serialized XML missing smallCaps: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2613,7 +2733,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2644,7 +2764,7 @@ mod tests {
             text.contains("w:vanish"),
             "serialized XML missing vanish: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2675,7 +2795,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2707,7 +2827,7 @@ mod tests {
             text.contains("w:shadow"),
             "serialized XML missing shadow: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2738,7 +2858,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2767,7 +2887,7 @@ mod tests {
             text.contains("superscript") && text.contains("subscript"),
             "serialized XML missing vertAlign: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2802,7 +2922,7 @@ mod tests {
         </w:document>"#;
         let mut rels = Relationships::new();
         rels.insert("rId5".into(), "https://example.com/".into());
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2832,7 +2952,7 @@ mod tests {
             text.contains("w:hyperlink") && text.contains("r:id=\"rId5\""),
             "missing hyperlink wrapper: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2866,7 +2986,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, bookmarks) = parse_document_xml(
+        let (blocks, page_setup, unsupported, bookmarks, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2899,7 +3019,7 @@ mod tests {
             text.contains("w:anchor=\"intro\"") && text.contains("w:bookmarkStart"),
             "missing internal link/bookmark: {text}"
         );
-        let (blocks2, _, _, bookmarks2) = parse_document_xml(
+        let (blocks2, _, _, bookmarks2, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2941,7 +3061,7 @@ mod tests {
             </w:tbl>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -2979,7 +3099,7 @@ mod tests {
             text.contains("<w:vMerge/>") || text.contains("<w:vMerge />"),
             "missing bare vMerge continue: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3008,7 +3128,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3048,7 +3168,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3092,7 +3212,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3149,7 +3269,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3213,7 +3333,7 @@ mod tests {
             </w:tbl>
           </w:body>
         </w:document>"#;
-        let (blocks, _, _, _) = parse_document_xml(
+        let (blocks, _, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3263,7 +3383,7 @@ mod tests {
             </w:tbl>
           </w:body>
         </w:document>"#;
-        let (blocks, _, _, _) = parse_document_xml(
+        let (blocks, _, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3306,7 +3426,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3363,7 +3483,7 @@ mod tests {
             <w:p><w:r><w:t>Plain</w:t></w:r></w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3417,7 +3537,7 @@ mod tests {
             <w:p><w:r><w:t>Next</w:t></w:r></w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3448,7 +3568,7 @@ mod tests {
             text.contains("w:keepNext"),
             "serialized XML missing keepNext: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3474,7 +3594,7 @@ mod tests {
             <w:p><w:r><w:t>Loose</w:t></w:r></w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3506,7 +3626,7 @@ mod tests {
             text.contains("w:keepLines"),
             "serialized XML missing keepLines: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3532,7 +3652,7 @@ mod tests {
             <w:p><w:r><w:t>Default</w:t></w:r></w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3564,7 +3684,7 @@ mod tests {
             text.contains("w:widowControl"),
             "serialized XML missing widowControl: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3590,7 +3710,7 @@ mod tests {
             <w:p><w:r><w:t>Default</w:t></w:r></w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3622,7 +3742,7 @@ mod tests {
             text.contains("w:contextualSpacing"),
             "serialized XML missing contextualSpacing: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3649,7 +3769,7 @@ mod tests {
             <w:p><w:r><w:t>LTR</w:t></w:r></w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3681,7 +3801,7 @@ mod tests {
             text.contains("w:bidi"),
             "serialized XML missing bidi: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3708,7 +3828,7 @@ mod tests {
             <w:p><w:r><w:t>Default</w:t></w:r></w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3740,7 +3860,7 @@ mod tests {
             text.contains("w:suppressAutoHyphens"),
             "serialized XML missing suppressAutoHyphens: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3767,7 +3887,7 @@ mod tests {
             <w:p><w:r><w:t>Body</w:t></w:r></w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3798,7 +3918,7 @@ mod tests {
             text.contains("w:outlineLvl"),
             "serialized XML missing outlineLvl: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3824,7 +3944,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3864,7 +3984,7 @@ mod tests {
             </w:sectPr>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3907,7 +4027,7 @@ mod tests {
             </w:sectPr>
           </w:body>
         </w:document>"#;
-        let (_, page_setup, _, _) = parse_document_xml(
+        let (_, page_setup, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3959,7 +4079,7 @@ mod tests {
             </w:sectPr>
           </w:body>
         </w:document>"#;
-        let (_, page_setup, _, _) = parse_document_xml(
+        let (_, page_setup, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -3988,7 +4108,7 @@ mod tests {
             </w:sectPr>
           </w:body>
         </w:document>"#;
-        let (_, page_setup, _, _) = parse_document_xml(
+        let (_, page_setup, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4033,7 +4153,7 @@ mod tests {
             </w:sectPr>
           </w:body>
         </w:document>"#;
-        let (_, page_setup, _, _) = parse_document_xml(
+        let (_, page_setup, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4162,7 +4282,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4186,7 +4306,7 @@ mod tests {
             text.contains("w:br") && !text.contains(">Line one\nLine two<"),
             "soft break should serialize as w:br, not a newline in w:t: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4210,7 +4330,7 @@ mod tests {
             </w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4225,7 +4345,7 @@ mod tests {
             ..Default::default()
         };
         let out = write_document_xml(&doc).unwrap();
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4259,7 +4379,7 @@ mod tests {
             </w:tbl>
           </w:body>
         </w:document>"#;
-        let (blocks, _, _, _) = parse_document_xml(
+        let (blocks, _, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4296,7 +4416,7 @@ mod tests {
             </w:tbl>
           </w:body>
         </w:document>"#;
-        let (blocks, _, _, _) = parse_document_xml(
+        let (blocks, _, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4329,7 +4449,7 @@ mod tests {
             </w:tbl>
           </w:body>
         </w:document>"#;
-        let (blocks, _, _, _) = parse_document_xml(
+        let (blocks, _, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4373,7 +4493,7 @@ mod tests {
             ..Default::default()
         };
         let out = write_document_xml(&doc).unwrap();
-        let (blocks, _, _, _) = parse_document_xml(
+        let (blocks, _, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4426,7 +4546,7 @@ mod tests {
         rels.insert("rId7".into(), "media/dot.png".into());
         let mut media = HashMap::new();
         media.insert("word/media/dot.png".into(), png.clone());
-        let (blocks, _, _, _) = parse_document_xml(
+        let (blocks, _, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4499,7 +4619,7 @@ mod tests {
         rels.insert("rId9".into(), "media/cell.png".into());
         let mut media = HashMap::new();
         media.insert("word/media/cell.png".into(), png.clone());
-        let (blocks, _, _, _) = parse_document_xml(
+        let (blocks, _, _, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4545,7 +4665,7 @@ mod tests {
             </w:sectPr>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4568,7 +4688,7 @@ mod tests {
             ..Default::default()
         };
         let out = write_document_xml(&doc).unwrap();
-        let (blocks2, page_setup2, _, _) = parse_document_xml(
+        let (blocks2, page_setup2, _, _, _) = parse_document_xml(
             &out,
             &StyleDefaults::default(),
             &NumberingDefs::default(),
@@ -4611,7 +4731,7 @@ mod tests {
                 },
             },
         );
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &styles,
             &NumberingDefs::default(),
@@ -4637,7 +4757,7 @@ mod tests {
             text.contains("w:pStyle") && text.contains("Heading1"),
             "missing pStyle: {text}"
         );
-        let (blocks2, _, _, _) = parse_document_xml(
+        let (blocks2, _, _, _, _) = parse_document_xml(
             &out,
             &styles,
             &NumberingDefs::default(),
@@ -4650,6 +4770,61 @@ mod tests {
         };
         assert_eq!(p2.style_id.as_deref(), Some("Heading1"));
         assert_eq!(p2.outline_level, Some(0));
+    }
+
+    #[test]
+    fn comment_range_markers_round_trip() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:commentRangeStart w:id="0"/>
+              <w:r><w:t>noted</w:t></w:r>
+              <w:commentRangeEnd w:id="0"/>
+              <w:r><w:commentReference w:id="0"/></w:r>
+            </w:p>
+            <w:sectPr/>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, _, _, ranges) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(ranges.len(), 1);
+        assert_eq!(ranges[0].id, 0);
+        assert_eq!(ranges[0].start_plain, 0);
+        assert_eq!(ranges[0].end_plain, 5);
+        let doc = Document {
+            blocks,
+            page_setup,
+            comment_ranges: ranges.clone(),
+            comments: vec![crate::document::model::DocComment {
+                id: 0,
+                author: "Ada".into(),
+                initials: "A".into(),
+                date: String::new(),
+                text: "note".into(),
+            }],
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8(out.clone()).unwrap();
+        assert!(text.contains("w:commentRangeStart"), "{text}");
+        assert!(text.contains("w:commentRangeEnd"), "{text}");
+        assert!(text.contains("w:commentReference"), "{text}");
+        let (_, _, _, _, ranges2) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(ranges2, ranges);
     }
 
     #[test]
@@ -4695,7 +4870,7 @@ mod tests {
             </w:r></w:p>
           </w:body>
         </w:document>"#;
-        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+        let (blocks, page_setup, unsupported, _, _) = parse_document_xml(
             xml,
             &StyleDefaults::default(),
             &NumberingDefs::default(),

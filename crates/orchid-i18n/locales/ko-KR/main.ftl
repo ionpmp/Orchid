@@ -778,7 +778,7 @@ viewer-media-subs-off = 자막 끔
 viewer-html-open = 브라우저에서 열기
 viewer-html-hint = HTML 미리보기는 시스템 브라우저를 사용합니다
 viewer-html-source = 소스
-viewer-document-info = 문서 · { $words }단어 · { $chars }자 · { $blocks }개 블록 · 미지원 { $warnings }
+viewer-document-info = 문서 · { $words }단어 · { $chars }자 · { $comments }댓글 · { $blocks }개 블록 · 미지원 { $warnings }
 
 viewer-document-save = 저장
 viewer-document-print = 인쇄
