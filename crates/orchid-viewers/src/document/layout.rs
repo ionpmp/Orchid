@@ -342,7 +342,9 @@ impl DocumentLayout {
             }
         }
         let scale = PREVIEW_RENDER_SCALE;
-        let base_insets = PreviewInsets::from_page_setup(&doc.page_setup);
+        let section_setups = collect_section_page_setups(doc);
+        let union = union_page_setup_margins(&section_setups);
+        let base_insets = PreviewInsets::from_page_setup(&union);
         let insets = PreviewInsets {
             left: base_insets.left * scale,
             right: base_insets.right * scale,
@@ -357,7 +359,6 @@ impl DocumentLayout {
         // Content-relative Y of each 1-based page band (page breaks via `w:pageBreakBefore`).
         let mut page_starts: Vec<f32> = vec![0.0];
         // Parallel to `page_starts`: which body section owns that preview page band.
-        let section_setups = collect_section_page_setups(doc);
         let mut section_idx = 0usize;
         let mut page_section: Vec<usize> = vec![0];
         let para_gap = 10.0 * scale;
@@ -384,8 +385,15 @@ impl DocumentLayout {
                     let body_len = p.plain_text().len();
                     let prefix_len = list_prefix(p).len();
                     let indent = list_indent_px(p) * scale;
-                    let wrap_w =
-                        (max_w - indent - paragraph_right_indent_px(p) * scale).max(12.0 * scale);
+                    let sect = section_setups
+                        .get(section_idx)
+                        .unwrap_or(&doc.page_setup);
+                    let (sect_x0, sect_wrap) =
+                        section_body_origin_and_width(sect, &union, max_w, scale);
+                    let wrap_w = (sect_wrap
+                        - indent
+                        - paragraph_right_indent_px(p) * scale)
+                        .max(12.0 * scale);
                     // Body fields: page=1 until per-band PAGE resolution; DATE/FILENAME ok.
                     let resolved = resolve_paragraph_fields(
                         p,
@@ -399,7 +407,7 @@ impl DocumentLayout {
                     layouts.push(LaidBlock {
                         layout,
                         y0: total_h,
-                        x0: 0.0,
+                        x0: sect_x0,
                         indent_px: indent,
                         plain_start: plain_offset,
                         body_len,
@@ -410,7 +418,7 @@ impl DocumentLayout {
                         image_rgba: None,
                         page_break_rule_y: rule_y,
                         shade_fill: p.shade_fill,
-                        shade_w: max_w,
+                        shade_w: sect_wrap.max(1.0),
                         border_sides: p.border_sides,
                     });
                     plain_offset += body_len;
@@ -714,6 +722,36 @@ fn collect_section_page_setups(doc: &Document) -> Vec<PageSetup> {
     setups
 }
 
+/// Widest page margins across sections (canvas padding); narrower sections shift via `x0`.
+fn union_page_setup_margins(setups: &[PageSetup]) -> PageSetup {
+    let mut u = setups.first().cloned().unwrap_or_default();
+    for s in setups.iter().skip(1) {
+        u.margin_left_twips = u.margin_left_twips.max(s.margin_left_twips);
+        u.margin_right_twips = u.margin_right_twips.max(s.margin_right_twips);
+        u.margin_top_twips = u.margin_top_twips.max(s.margin_top_twips);
+        u.margin_bottom_twips = u.margin_bottom_twips.max(s.margin_bottom_twips);
+        u.width_twips = u.width_twips.max(s.width_twips);
+        u.height_twips = u.height_twips.max(s.height_twips);
+    }
+    u
+}
+
+/// Content-column origin (`x0` ≤ 0) and wrap width for a section inside the union canvas.
+fn section_body_origin_and_width(
+    sect: &PageSetup,
+    union: &PageSetup,
+    max_w: f32,
+    scale: f32,
+) -> (f32, f32) {
+    let left_delta =
+        twips_to_css_px(sect.margin_left_twips) - twips_to_css_px(union.margin_left_twips);
+    let right_delta =
+        twips_to_css_px(sect.margin_right_twips) - twips_to_css_px(union.margin_right_twips);
+    let x0 = left_delta * scale; // ≤ 0 when sect margins are narrower than the union
+    let wrap = (max_w - left_delta * scale - right_delta * scale).max(12.0 * scale);
+    (x0, wrap)
+}
+
 /// Pick header/footer stories for a 1-based preview page index.
 fn margin_stories_for_page<'a>(
     doc: &'a Document,
@@ -794,11 +832,14 @@ impl DocumentLayout {
         x: f32,
         y: f32,
     ) -> Option<Cursor> {
-        let insets = PreviewInsets::from_page_setup(&doc.page_setup);
+        let section_setups = collect_section_page_setups(doc);
+        let union = union_page_setup_margins(&section_setups);
+        let insets = PreviewInsets::from_page_setup(&union);
         let max_w = content_width.max(80.0);
         let local_x = x - insets.left;
         let local_y = y - insets.top;
         let para_gap = 10.0;
+        let mut section_idx = 0usize;
 
         let mut total_h = 0.0;
         let mut plain_offset = 0usize;
@@ -822,7 +863,12 @@ impl DocumentLayout {
                     let body_len = p.plain_text().len();
                     let prefix_len = list_prefix(p).len();
                     let indent = list_indent_px(p);
-                    let wrap_w = paragraph_wrap_width(max_w, p);
+                    let sect = section_setups
+                        .get(section_idx)
+                        .unwrap_or(&doc.page_setup);
+                    let (sect_x0, sect_wrap) =
+                        section_body_origin_and_width(sect, &union, max_w, 1.0);
+                    let wrap_w = (sect_wrap - indent - paragraph_right_indent_px(p)).max(12.0);
                     let layout = self.layout_paragraph(p, wrap_w, 1.0);
                     let h = layout.height().max(16.0);
                     let y0 = total_h;
@@ -830,7 +876,7 @@ impl DocumentLayout {
                     let y1 = total_h + h + after;
                     if local_y >= y0 && local_y < y1 {
                         let ly = (local_y - y0).max(0.0);
-                        let lx = (local_x - indent).clamp(0.0, wrap_w);
+                        let lx = (local_x - sect_x0 - indent).clamp(0.0, wrap_w);
                         let body_idx = cluster_to_body_index(&layout, lx, ly, prefix_len, body_len);
                         return Some(cursor_from_plain_offset(doc, plain_offset + body_idx));
                     }
@@ -838,6 +884,7 @@ impl DocumentLayout {
                     total_h += h + after;
                     if p.section_properties.is_some() {
                         total_h += 28.0;
+                        section_idx = (section_idx + 1).min(section_setups.len().saturating_sub(1));
                     }
                 }
                 Block::Table(t) => {
@@ -895,9 +942,12 @@ impl DocumentLayout {
     /// containing paragraph / cell item (line-precise Y is not required for MVP).
     #[must_use]
     pub fn y_for_plain_offset(&mut self, doc: &Document, content_width: f32, target: usize) -> f32 {
-        let insets = PreviewInsets::from_page_setup(&doc.page_setup);
+        let section_setups = collect_section_page_setups(doc);
+        let union = union_page_setup_margins(&section_setups);
+        let insets = PreviewInsets::from_page_setup(&union);
         let max_w = content_width.max(80.0);
         let para_gap = 10.0;
+        let mut section_idx = 0usize;
         let mut total_h = 0.0;
         let mut plain_offset = 0usize;
         let mut emitted_text = false;
@@ -925,6 +975,8 @@ impl DocumentLayout {
                     total_h += h + twips_to_css_px(p.space_after_twips).max(para_gap);
                     if p.section_properties.is_some() {
                         total_h += 28.0;
+                        section_idx =
+                            (section_idx + 1).min(section_setups.len().saturating_sub(1));
                     }
                 }
                 Block::Table(t) => {
@@ -4047,6 +4099,55 @@ mod tests {
         assert_eq!(setups[0].header_distance_twips, 240);
         assert_eq!(setups[1].header_distance_twips, 960);
     }
+
+    #[test]
+    fn preview_section_body_margin_shifts_x0() {
+        let mut narrow = PageSetup::default();
+        narrow.margin_left_twips = 720; // 0.5″
+        narrow.margin_right_twips = 720;
+        let mut wide = PageSetup::default();
+        wide.margin_left_twips = 2160; // 1.5″
+        wide.margin_right_twips = 2160;
+        let doc = Document {
+            blocks: vec![
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "Narrow".into(),
+                        style: RunStyle {
+                            bold: true,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    }],
+                    section_properties: Some(narrow.clone()),
+                    ..Default::default()
+                }),
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "WideMargin".into(),
+                        style: RunStyle {
+                            bold: true,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+            ],
+            page_setup: wide.clone(),
+            ..Default::default()
+        };
+        let union = union_page_setup_margins(&collect_section_page_setups(&doc));
+        assert_eq!(union.margin_left_twips, 2160);
+        let (x0_n, wrap_n) = section_body_origin_and_width(&narrow, &union, 400.0, 1.0);
+        let (x0_w, wrap_w) = section_body_origin_and_width(&wide, &union, 400.0, 1.0);
+        assert!(x0_n < -10.0, "narrow section should shift left (x0={x0_n})");
+        assert!((x0_w).abs() < 0.1, "wide section x0 should be ~0 (x0={x0_w})");
+        assert!(wrap_n > wrap_w + 10.0, "narrow section gets wider wrap");
+        let (_, _, h) = DocumentLayout::new().render_document(&doc, 400.0);
+        assert!(h > 40);
+    }
+
 
 
 }
