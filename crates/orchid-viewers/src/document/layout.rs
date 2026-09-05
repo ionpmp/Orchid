@@ -824,7 +824,19 @@ fn union_page_setup_margins(setups: &[PageSetup]) -> PageSetup {
     u
 }
 
-/// Content-column origin (`x0` ≤ 0) and wrap width for a section inside the union canvas.
+/// Content column width in twips (`pgSz` width minus left/right `pgMar`).
+fn page_content_width_twips(ps: &PageSetup) -> u32 {
+    ps.width_twips
+        .saturating_sub(ps.margin_left_twips)
+        .saturating_sub(ps.margin_right_twips)
+        .max(1)
+}
+
+/// Content-column origin and wrap width for a section inside the union canvas.
+///
+/// `max_w` maps to the union section’s content column (`pgSz` − L/R margins). A
+/// narrower page or wider margins shrinks wrap; a left-margin delta shifts `x0`
+/// (≤ 0 when this section’s left margin is narrower than the union).
 fn section_body_origin_and_width(
     sect: &PageSetup,
     union: &PageSetup,
@@ -833,10 +845,10 @@ fn section_body_origin_and_width(
 ) -> (f32, f32) {
     let left_delta =
         twips_to_css_px(sect.margin_left_twips) - twips_to_css_px(union.margin_left_twips);
-    let right_delta =
-        twips_to_css_px(sect.margin_right_twips) - twips_to_css_px(union.margin_right_twips);
-    let x0 = left_delta * scale; // ≤ 0 when sect margins are narrower than the union
-    let wrap = (max_w - left_delta * scale - right_delta * scale).max(12.0 * scale);
+    let x0 = left_delta * scale;
+    let union_content = page_content_width_twips(union) as f32;
+    let sect_content = page_content_width_twips(sect) as f32;
+    let wrap = (max_w * (sect_content / union_content)).max(12.0 * scale);
     (x0, wrap)
 }
 
@@ -1056,7 +1068,13 @@ impl DocumentLayout {
                     total_h += twips_to_css_px(p.space_before_twips);
                     let body_len = p.plain_text().len();
                     let y0 = total_h;
-                    let wrap_w = paragraph_wrap_width(max_w, p);
+                    let indent = list_indent_px(p);
+                    let sect = section_setups
+                        .get(section_idx)
+                        .unwrap_or(&doc.page_setup);
+                    let (_sect_x0, sect_wrap) =
+                        section_body_origin_and_width(sect, &union, max_w, 1.0);
+                    let wrap_w = (sect_wrap - indent - paragraph_right_indent_px(p)).max(12.0);
                     let styled = apply_named_paragraph_style(&doc.paragraph_styles, p);
                     let layout = self.layout_paragraph(&styled, wrap_w, 1.0);
                     let h = layout.height().max(16.0);
@@ -4356,6 +4374,55 @@ mod tests {
         assert!(h > 40);
     }
 
-
-
+    #[test]
+    fn preview_section_page_width_shrinks_wrap() {
+        // Mid-body Letter, trailing A4 — same 1″ margins; A4 content column is narrower.
+        let mut letter = PageSetup::default(); // 12240 × 15840
+        letter.margin_left_twips = 1440;
+        letter.margin_right_twips = 1440;
+        let mut a4 = PageSetup::default();
+        a4.width_twips = 11906;
+        a4.height_twips = 16838;
+        a4.margin_left_twips = 1440;
+        a4.margin_right_twips = 1440;
+        let doc = Document {
+            blocks: vec![
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "LetterSect".into(),
+                        style: RunStyle::default(),
+                        ..Default::default()
+                    }],
+                    section_properties: Some(letter.clone()),
+                    ..Default::default()
+                }),
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "A4Sect".into(),
+                        style: RunStyle::default(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+            ],
+            page_setup: a4.clone(),
+            ..Default::default()
+        };
+        let union = union_page_setup_margins(&collect_section_page_setups(&doc));
+        assert_eq!(union.width_twips, 12240);
+        let (x0_l, wrap_l) = section_body_origin_and_width(&letter, &union, 400.0, 1.0);
+        let (x0_a, wrap_a) = section_body_origin_and_width(&a4, &union, 400.0, 1.0);
+        assert!(x0_l.abs() < 0.1, "same left margin → x0≈0 (got {x0_l})");
+        assert!(x0_a.abs() < 0.1, "same left margin → x0≈0 (got {x0_a})");
+        assert!(
+            (wrap_l - 400.0).abs() < 0.5,
+            "Letter (union width) wrap ≈ max_w (got {wrap_l})"
+        );
+        assert!(
+            wrap_a < wrap_l - 5.0,
+            "A4 section wrap should be narrower than Letter (a4={wrap_a}, letter={wrap_l})"
+        );
+        let (_, _, h) = DocumentLayout::new().render_document(&doc, 400.0);
+        assert!(h > 40);
+    }
 }
