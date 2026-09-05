@@ -57,6 +57,8 @@ pub struct DocumentSnapshot {
     pub italic: bool,
     pub underline: bool,
     pub strikethrough: bool,
+    /// Double strikethrough (`w:dstrike`) at the caret.
+    pub double_strikethrough: bool,
     pub highlight: bool,
     /// All capitals (`w:caps`) at the caret.
     pub all_caps: bool,
@@ -66,6 +68,10 @@ pub struct DocumentSnapshot {
     pub vanish: bool,
     /// Character shadow (`w:shadow`) at the caret.
     pub shadow: bool,
+    /// Emboss (`w:emboss`) at the caret.
+    pub emboss: bool,
+    /// Imprint (`w:imprint`) at the caret.
+    pub imprint: bool,
     /// Paragraph shading (`w:shd`) active at the caret.
     pub shade: bool,
     /// Bottom paragraph border (`w:pBdr/w:bottom`) active at the caret.

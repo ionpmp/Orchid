@@ -330,6 +330,27 @@ export component ViewerDocumentView inherits Rectangle {
                 Rectangle {
                     width: 28px;
                     height: 28px;
+                    background: tool-bg(model.double-strikethrough, dstrike-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    dstrike-ta := TouchArea { clicked => { root.action("double-strikethrough"); } }
+                    Text {
+                        text: model.double-strikethrough-label;
+                        color: tool-btn(model.double-strikethrough);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-double-strikethrough;
+                        show: dstrike-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
                     background: tool-bg(model.all-caps, caps-ta.has-hover);
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
@@ -407,6 +428,48 @@ export component ViewerDocumentView inherits Rectangle {
                     DocHoverTip {
                         tip: model.tip-shadow;
                         show: shadow-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.emboss, emboss-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    emboss-ta := TouchArea { clicked => { root.action("emboss"); } }
+                    Text {
+                        text: model.emboss-label;
+                        color: tool-btn(model.emboss);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-emboss;
+                        show: emboss-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: tool-bg(model.imprint, imprint-ta.has-hover);
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    imprint-ta := TouchArea { clicked => { root.action("imprint"); } }
+                    Text {
+                        text: model.imprint-label;
+                        color: tool-btn(model.imprint);
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-imprint;
+                        show: imprint-ta.has-hover;
                         below: false;
                     }
                 }

@@ -944,8 +944,12 @@ fn apply_r_pr_attr(local: &str, e: &BytesStart<'_>, style: &mut RunStyle) {
             let val = attr_val(e, "val").unwrap_or_else(|| "single".into());
             style.underline = val != "none";
         }
-        "strike" | "dstrike" => {
+        "strike" => {
             style.strikethrough = !attr_val(e, "val").is_some_and(|v| v == "0" || v == "false");
+        }
+        "dstrike" => {
+            style.double_strikethrough =
+                !attr_val(e, "val").is_some_and(|v| v == "0" || v == "false");
         }
         "highlight" => {
             let val = attr_val(e, "val").unwrap_or_default();
@@ -979,6 +983,12 @@ fn apply_r_pr_attr(local: &str, e: &BytesStart<'_>, style: &mut RunStyle) {
         }
         "shadow" => {
             style.shadow = !attr_val(e, "val").is_some_and(|v| v == "0" || v == "false");
+        }
+        "emboss" => {
+            style.emboss = !attr_val(e, "val").is_some_and(|v| v == "0" || v == "false");
+        }
+        "imprint" => {
+            style.imprint = !attr_val(e, "val").is_some_and(|v| v == "0" || v == "false");
         }
         "color" => {
             if let Some(val) = attr_val(e, "val") {
@@ -1786,6 +1796,11 @@ fn write_run(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<()> {
             .write_event(Event::Empty(BytesStart::new("w:strike")))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
+    if run.style.double_strikethrough {
+        writer
+            .write_event(Event::Empty(BytesStart::new("w:dstrike")))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
     if run.style.highlight {
         let mut hl = BytesStart::new("w:highlight");
         hl.push_attribute(("w:val", "yellow"));
@@ -1824,6 +1839,16 @@ fn write_run(writer: &mut Writer<Cursor<Vec<u8>>>, run: &Run) -> Result<()> {
     if run.style.shadow {
         writer
             .write_event(Event::Empty(BytesStart::new("w:shadow")))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if run.style.emboss {
+        writer
+            .write_event(Event::Empty(BytesStart::new("w:emboss")))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if run.style.imprint {
+        writer
+            .write_event(Event::Empty(BytesStart::new("w:imprint")))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
     if let Some([r, g, b]) = run.style.color {
@@ -4557,6 +4582,42 @@ mod tests {
         let text = String::from_utf8_lossy(&out);
         assert!(text.contains("DATE") && text.contains("FILENAME"), "{text}");
     }
+
+    #[test]
+    fn parse_and_write_dstrike_emboss_imprint() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p><w:r>
+              <w:rPr><w:dstrike/><w:emboss/></w:rPr>
+              <w:t>A</w:t>
+            </w:r></w:p>
+            <w:p><w:r>
+              <w:rPr><w:imprint/></w:rPr>
+              <w:t>B</w:t>
+            </w:r></w:p>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert!(unsupported.is_empty());
+        let Block::Paragraph(p0) = &blocks[0] else { panic!("p0") };
+        assert!(p0.runs[0].style.double_strikethrough);
+        assert!(p0.runs[0].style.emboss);
+        let Block::Paragraph(p1) = &blocks[1] else { panic!("p1") };
+        assert!(p1.runs[0].style.imprint);
+        let doc = Document { blocks, page_setup, ..Default::default() };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(text.contains("w:dstrike") && text.contains("w:emboss") && text.contains("w:imprint"), "{text}");
+    }
+
 
 
 }

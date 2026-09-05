@@ -211,6 +211,8 @@ pub struct RunStylePatch {
     pub underline: Option<bool>,
     /// Set strikethrough.
     pub strikethrough: Option<bool>,
+    /// Set double strikethrough (`w:dstrike`).
+    pub double_strikethrough: Option<bool>,
     /// Set highlight.
     pub highlight: Option<bool>,
     /// Set superscript (clears subscript when enabled).
@@ -225,6 +227,10 @@ pub struct RunStylePatch {
     pub vanish: Option<bool>,
     /// Set character shadow (`w:shadow`).
     pub shadow: Option<bool>,
+    /// Set emboss (`w:emboss`).
+    pub emboss: Option<bool>,
+    /// Set imprint (`w:imprint`).
+    pub imprint: Option<bool>,
     /// Set colour (`Some(None)` clears).
     pub color: Option<Option<[u8; 3]>>,
     /// Set font family.
@@ -244,6 +250,7 @@ impl RunStylePatch {
             italic: Some(false),
             underline: Some(false),
             strikethrough: Some(false),
+            double_strikethrough: Some(false),
             highlight: Some(false),
             superscript: Some(false),
             subscript: Some(false),
@@ -251,6 +258,8 @@ impl RunStylePatch {
             small_caps: Some(false),
             vanish: Some(false),
             shadow: Some(false),
+            emboss: Some(false),
+            imprint: Some(false),
             color: Some(None),
             font_family: Some(None),
             font_size_pt: Some(None),
@@ -271,6 +280,9 @@ impl RunStylePatch {
         }
         if let Some(v) = self.strikethrough {
             style.strikethrough = v;
+        }
+        if let Some(v) = self.double_strikethrough {
+            style.double_strikethrough = v;
         }
         if let Some(v) = self.highlight {
             style.highlight = v;
@@ -298,6 +310,12 @@ impl RunStylePatch {
         }
         if let Some(v) = self.shadow {
             style.shadow = v;
+        }
+        if let Some(v) = self.emboss {
+            style.emboss = v;
+        }
+        if let Some(v) = self.imprint {
+            style.imprint = v;
         }
         if let Some(ref c) = self.color {
             style.color = *c;

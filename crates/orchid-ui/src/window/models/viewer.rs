@@ -736,10 +736,13 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         italic: false,
         underline: false,
         strikethrough: false,
+        double_strikethrough: false,
         all_caps: false,
         small_caps: false,
         vanish: false,
         shadow: false,
+        emboss: false,
+        imprint: false,
         highlight: false,
         shade: false,
         border_bottom: false,
@@ -775,10 +778,13 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         italic_label: locale.tr("viewer-document-italic").into(),
         underline_label: locale.tr("viewer-document-underline").into(),
         strikethrough_label: locale.tr("viewer-document-strikethrough").into(),
+        double_strikethrough_label: locale.tr("viewer-document-double-strikethrough").into(),
         all_caps_label: locale.tr("viewer-document-all-caps").into(),
         small_caps_label: locale.tr("viewer-document-small-caps").into(),
         vanish_label: locale.tr("viewer-document-vanish").into(),
         shadow_label: locale.tr("viewer-document-shadow").into(),
+        emboss_label: locale.tr("viewer-document-emboss").into(),
+        imprint_label: locale.tr("viewer-document-imprint").into(),
         highlight_label: locale.tr("viewer-document-highlight").into(),
         shade_label: locale.tr("viewer-document-shade").into(),
         border_bottom_label: locale.tr("viewer-document-border-bottom").into(),
@@ -824,10 +830,13 @@ fn empty_viewer_document_model(locale: &LocaleManager) -> ViewerDocumentModel {
         tip_italic: locale.tr("viewer-document-tip-italic").into(),
         tip_underline: locale.tr("viewer-document-tip-underline").into(),
         tip_strikethrough: locale.tr("viewer-document-tip-strikethrough").into(),
+        tip_double_strikethrough: locale.tr("viewer-document-tip-double-strikethrough").into(),
         tip_all_caps: locale.tr("viewer-document-tip-all-caps").into(),
         tip_small_caps: locale.tr("viewer-document-tip-small-caps").into(),
         tip_vanish: locale.tr("viewer-document-tip-vanish").into(),
         tip_shadow: locale.tr("viewer-document-tip-shadow").into(),
+        tip_emboss: locale.tr("viewer-document-tip-emboss").into(),
+        tip_imprint: locale.tr("viewer-document-tip-imprint").into(),
         tip_highlight: locale.tr("viewer-document-tip-highlight").into(),
         tip_shade: locale.tr("viewer-document-tip-shade").into(),
         tip_border_bottom: locale.tr("viewer-document-tip-border-bottom").into(),
@@ -1313,10 +1322,13 @@ fn patch_document_snapshot(
     model.italic = built.italic;
     model.underline = built.underline;
     model.strikethrough = built.strikethrough;
+    model.double_strikethrough = built.double_strikethrough;
     model.all_caps = built.all_caps;
     model.small_caps = built.small_caps;
     model.vanish = built.vanish;
     model.shadow = built.shadow;
+    model.emboss = built.emboss;
+    model.imprint = built.imprint;
     model.highlight = built.highlight;
     model.shade = built.shade;
     model.border_bottom = built.border_bottom;
@@ -1446,10 +1458,13 @@ fn build_document_snapshot(
     model.italic = s.italic;
     model.underline = s.underline;
     model.strikethrough = s.strikethrough;
+    model.double_strikethrough = s.double_strikethrough;
     model.all_caps = s.all_caps;
     model.small_caps = s.small_caps;
     model.vanish = s.vanish;
     model.shadow = s.shadow;
+    model.emboss = s.emboss;
+    model.imprint = s.imprint;
     model.highlight = s.highlight;
     model.shade = s.shade;
     model.border_bottom = s.border_bottom;

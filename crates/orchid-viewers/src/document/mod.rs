@@ -2272,6 +2272,7 @@ impl DocumentViewer {
                 'i' => s.italic,
                 'u' => s.underline,
                 's' => s.strikethrough,
+                'd' => s.double_strikethrough,
                 'h' => s.highlight,
                 '^' => s.superscript,
                 '_' => s.subscript,
@@ -2279,6 +2280,8 @@ impl DocumentViewer {
                 'm' => s.small_caps,
                 'v' => s.vanish,
                 'w' => s.shadow,
+                'e' => s.emboss,
+                'n' => s.imprint,
                 _ => false,
             })
             .unwrap_or(false);
@@ -2297,6 +2300,20 @@ impl DocumentViewer {
             },
             's' => RunStylePatch {
                 strikethrough: Some(!currently_on),
+                double_strikethrough: if currently_on {
+                    None
+                } else {
+                    Some(false)
+                },
+                ..Default::default()
+            },
+            'd' => RunStylePatch {
+                double_strikethrough: Some(!currently_on),
+                strikethrough: if currently_on {
+                    None
+                } else {
+                    Some(false)
+                },
                 ..Default::default()
             },
             'h' => RunStylePatch {
@@ -2327,6 +2344,20 @@ impl DocumentViewer {
             },
             'w' => RunStylePatch {
                 shadow: Some(!currently_on),
+                emboss: if currently_on { None } else { Some(false) },
+                imprint: if currently_on { None } else { Some(false) },
+                ..Default::default()
+            },
+            'e' => RunStylePatch {
+                emboss: Some(!currently_on),
+                imprint: if currently_on { None } else { Some(false) },
+                shadow: if currently_on { None } else { Some(false) },
+                ..Default::default()
+            },
+            'n' => RunStylePatch {
+                imprint: Some(!currently_on),
+                emboss: if currently_on { None } else { Some(false) },
+                shadow: if currently_on { None } else { Some(false) },
                 ..Default::default()
             },
             _ => return Ok(()),
@@ -4298,11 +4329,14 @@ impl Viewer for DocumentViewer {
             italic,
             underline,
             strikethrough,
+            double_strikethrough,
             highlight,
             all_caps,
             small_caps,
             vanish,
             shadow,
+            emboss,
+            imprint,
             superscript,
             subscript,
             font_size_pt,
@@ -4315,11 +4349,14 @@ impl Viewer for DocumentViewer {
             style.as_ref().is_some_and(|s| s.italic),
             style.as_ref().is_some_and(|s| s.underline),
             style.as_ref().is_some_and(|s| s.strikethrough),
+            style.as_ref().is_some_and(|s| s.double_strikethrough),
             style.as_ref().is_some_and(|s| s.highlight),
             style.as_ref().is_some_and(|s| s.all_caps),
             style.as_ref().is_some_and(|s| s.small_caps),
             style.as_ref().is_some_and(|s| s.vanish),
             style.as_ref().is_some_and(|s| s.shadow),
+            style.as_ref().is_some_and(|s| s.emboss),
+            style.as_ref().is_some_and(|s| s.imprint),
             style.as_ref().is_some_and(|s| s.superscript),
             style.as_ref().is_some_and(|s| s.subscript),
             style.as_ref().and_then(|s| s.font_size_pt).unwrap_or(0.0),
@@ -4440,11 +4477,14 @@ impl Viewer for DocumentViewer {
             italic,
             underline,
             strikethrough,
+            double_strikethrough,
             highlight,
             all_caps,
             small_caps,
             vanish,
             shadow,
+            emboss,
+            imprint,
             shade,
             border_bottom,
             keep_next,

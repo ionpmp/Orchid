@@ -22,8 +22,10 @@ pub struct RunStyle {
     pub italic: bool,
     /// Single underline.
     pub underline: bool,
-    /// Single strikethrough.
+    /// Single strikethrough (`w:strike`).
     pub strikethrough: bool,
+    /// Double strikethrough (`w:dstrike`).
+    pub double_strikethrough: bool,
     /// Yellow highlight background (Word `w:highlight`).
     pub highlight: bool,
     /// Superscript (`w:vertAlign` = `superscript`). Mutually exclusive with [`Self::subscript`].
@@ -39,6 +41,10 @@ pub struct RunStyle {
     pub vanish: bool,
     /// Character shadow (`w:shadow`).
     pub shadow: bool,
+    /// Emboss (`w:emboss`); Preview paints a raised dual-offset.
+    pub emboss: bool,
+    /// Engrave / imprint (`w:imprint`); Preview paints a sunken dual-offset.
+    pub imprint: bool,
     /// RGB colour (`None` = theme/default).
     pub color: Option<[u8; 3]>,
     /// Font family name.

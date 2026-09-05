@@ -43,6 +43,12 @@ pub struct ColorBrush {
     pub baseline_shift: f32,
     /// Soft drop-shadow for `w:shadow` runs.
     pub shadow: bool,
+    /// Second strike line for `w:dstrike`.
+    pub double_strike: bool,
+    /// Raised dual-offset for `w:emboss`.
+    pub emboss: bool,
+    /// Sunken dual-offset for `w:imprint`.
+    pub imprint: bool,
 }
 
 impl Default for ColorBrush {
@@ -55,6 +61,9 @@ impl Default for ColorBrush {
             highlight: false,
             baseline_shift: 0.0,
             shadow: false,
+            double_strike: false,
+            emboss: false,
+            imprint: false,
         }
     }
 }
@@ -219,7 +228,7 @@ impl DocumentLayout {
             if run.style.underline || is_link {
                 builder.push(StyleProperty::Underline(true), offset..end);
             }
-            if run.style.strikethrough {
+            if run.style.strikethrough || run.style.double_strikethrough {
                 builder.push(StyleProperty::Strikethrough(true), offset..end);
             }
             let base_pt = run.style.font_size_pt.unwrap_or(default_pt);
@@ -256,6 +265,9 @@ impl DocumentLayout {
                 || baseline_shift != 0.0
                 || run.style.vanish
                 || run.style.shadow
+                || run.style.double_strikethrough
+                || run.style.emboss
+                || run.style.imprint
             {
                 let mut brush = ColorBrush::default();
                 if let Some([r, g, b]) = paint_color {
@@ -266,6 +278,9 @@ impl DocumentLayout {
                 brush.highlight = run.style.highlight;
                 brush.baseline_shift = baseline_shift * scale;
                 brush.shadow = run.style.shadow;
+                brush.double_strike = run.style.double_strikethrough;
+                brush.emboss = run.style.emboss;
+                brush.imprint = run.style.imprint;
                 if run.style.vanish {
                     // Keep hidden text editable/visible in Preview as a faint ghost.
                     brush.a = 72;
@@ -2347,6 +2362,69 @@ fn render_glyph_run(
                 glyph_y + 1.5,
             );
         }
+        if brush.emboss {
+            let mut hi = brush;
+            hi.r = 255;
+            hi.g = 255;
+            hi.b = 255;
+            hi.a = hi.a.min(140);
+            render_glyph(
+                pixels,
+                width,
+                height,
+                &mut scaler,
+                hi,
+                glyph.id as u16,
+                glyph_x - 1.0,
+                glyph_y - 1.0,
+            );
+            let mut lo = brush;
+            lo.r = 0;
+            lo.g = 0;
+            lo.b = 0;
+            lo.a = lo.a.min(100);
+            render_glyph(
+                pixels,
+                width,
+                height,
+                &mut scaler,
+                lo,
+                glyph.id as u16,
+                glyph_x + 1.0,
+                glyph_y + 1.0,
+            );
+        } else if brush.imprint {
+            let mut lo = brush;
+            lo.r = 0;
+            lo.g = 0;
+            lo.b = 0;
+            lo.a = lo.a.min(100);
+            render_glyph(
+                pixels,
+                width,
+                height,
+                &mut scaler,
+                lo,
+                glyph.id as u16,
+                glyph_x - 1.0,
+                glyph_y - 1.0,
+            );
+            let mut hi = brush;
+            hi.r = 255;
+            hi.g = 255;
+            hi.b = 255;
+            hi.a = hi.a.min(120);
+            render_glyph(
+                pixels,
+                width,
+                height,
+                &mut scaler,
+                hi,
+                glyph.id as u16,
+                glyph_x + 1.0,
+                glyph_y + 1.0,
+            );
+        }
         render_glyph(
             pixels,
             width,
@@ -2391,6 +2469,19 @@ fn render_glyph_run(
             origin_x,
             origin_y,
         );
+        if decoration.brush.double_strike {
+            render_decoration(
+                pixels,
+                width,
+                height,
+                glyph_run,
+                decoration.brush,
+                offset - size * 2.5,
+                size,
+                origin_x,
+                origin_y,
+            );
+        }
     }
 }
 

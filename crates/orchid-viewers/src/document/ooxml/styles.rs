@@ -38,9 +38,12 @@ pub fn parse_styles_xml(bytes: &[u8]) -> Result<StyleDefaults> {
                     "b" if in_r_pr => defaults.run.bold = true,
                     "i" if in_r_pr => defaults.run.italic = true,
                     "u" if in_r_pr => defaults.run.underline = true,
-                    "strike" | "dstrike" if in_r_pr => defaults.run.strikethrough = true,
+                    "strike" if in_r_pr => defaults.run.strikethrough = true,
+                    "dstrike" if in_r_pr => defaults.run.double_strikethrough = true,
                     "vanish" if in_r_pr => defaults.run.vanish = true,
                     "shadow" if in_r_pr => defaults.run.shadow = true,
+                    "emboss" if in_r_pr => defaults.run.emboss = true,
+                    "imprint" if in_r_pr => defaults.run.imprint = true,
                     "highlight" if in_r_pr => {
                         let val = attr_val(&e, "val").unwrap_or_default();
                         defaults.run.highlight = !val.is_empty() && val != "none";
