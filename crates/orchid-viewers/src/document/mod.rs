@@ -747,6 +747,49 @@ impl DocumentViewer {
         self.insert_break_at_caret(true)
     }
 
+    /// Insert a next-page section break at the preview caret.
+    ///
+    /// Splits like Enter, attaches a copy of the document trailing
+    /// [`PageSetup`] as [`Paragraph::section_properties`] on the paragraph that
+    /// ends the previous section (`w:pPr/w:sectPr`), and starts the following
+    /// content on a new preview page band.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`] / edit bounds errors.
+    pub fn preview_insert_section_break(&self) -> Result<()> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let setup = doc.page_setup.clone();
+        let sel = *self.selection.lock();
+        let at = self.delete_selection_if_needed(doc, sel)?;
+        if at.cell.is_some() {
+            // Section breaks are body-level in OOXML; fall back to a page break in cells.
+            drop(doc_guard);
+            return self.insert_break_at_caret(true);
+        }
+        let blocks = split_paragraph_blocks(doc, at)?;
+        let caret = Cursor::at(at.block_idx + 1, 0, 0);
+        let mut next = blocks;
+        if let Some(Block::Paragraph(p)) = next.get_mut(at.block_idx) {
+            p.section_properties = Some(setup);
+        }
+        // split_paragraph_blocks moves any prior section_properties to the right para;
+        // clear so the new section does not immediately end.
+        if let Some(Block::Paragraph(p)) = next.get_mut(caret.block_idx) {
+            p.section_properties = None;
+        }
+        self.undo
+            .lock()
+            .push(doc, EditCommand::ReplaceBlocks { blocks: next })?;
+        *self.selection.lock() = Selection {
+            anchor: caret,
+            head: caret,
+        };
+        self.invalidate_preview();
+        Ok(())
+    }
+
     fn insert_break_at_caret(&self, page_break: bool) -> Result<()> {
         let mut doc_guard = self.document.write();
         let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
@@ -3289,6 +3332,7 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     indent_right_twips: prev.indent_right_twips,
                     shade_fill: prev.shade_fill,
                     border_sides: prev.border_sides,
+                    section_properties: None,
                     unsupported: prev.unsupported.clone(),
                 })
             } else {
@@ -3760,6 +3804,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         indent_right_twips: p.indent_right_twips,
         shade_fill: p.shade_fill,
         border_sides: p.border_sides,
+        section_properties: None,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -3785,6 +3830,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         indent_right_twips: p.indent_right_twips,
         shade_fill: p.shade_fill,
         border_sides: p.border_sides,
+        section_properties: p.section_properties.clone(),
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -3836,6 +3882,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         indent_right_twips: p.indent_right_twips,
         shade_fill: p.shade_fill,
         border_sides: p.border_sides,
+        section_properties: None,
         unsupported: p.unsupported.clone(),
     };
     let right = Paragraph {
@@ -3861,6 +3908,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         indent_right_twips: p.indent_right_twips,
         shade_fill: p.shade_fill,
         border_sides: p.border_sides,
+        section_properties: p.section_properties.clone(),
         unsupported: Vec::new(),
     };
     let mut blocks = doc.blocks.clone();
@@ -3967,6 +4015,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
         indent_right_twips: start_p.indent_right_twips,
         shade_fill: start_p.shade_fill,
         border_sides: start_p.border_sides,
+        section_properties: start_p.section_properties.clone(),
         unsupported: start_p.unsupported.clone(),
     };
     let mut new_paras = Vec::with_capacity(paras.len());
@@ -4065,6 +4114,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
         indent_right_twips: start_p.indent_right_twips,
         shade_fill: start_p.shade_fill,
         border_sides: start_p.border_sides,
+        section_properties: start_p.section_properties.clone(),
         unsupported: start_p.unsupported.clone(),
     };
     let mut blocks = Vec::with_capacity(doc.blocks.len());

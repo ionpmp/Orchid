@@ -3648,6 +3648,7 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 "outline-level-cycle" => doc.cycle_outline_level_selection(),
                 "insert-bookmark" => doc.insert_bookmark_at_selection().map(|_| ()),
                 "insert-page-field" => doc.insert_page_number_fields_in_footer(),
+                "insert-section-break" => doc.preview_insert_section_break(),
                 "superscript" => doc.toggle_style_all('^'),
                 "subscript" => doc.toggle_style_all('_'),
                 "clear-formatting" => doc.clear_formatting_selection(),

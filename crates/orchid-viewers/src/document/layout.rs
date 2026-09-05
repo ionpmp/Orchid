@@ -377,6 +377,11 @@ impl DocumentLayout {
                     plain_offset += body_len;
                     let after = (twips_to_css_px(p.space_after_twips) * scale).max(para_gap);
                     total_h += h + after;
+                    if p.section_properties.is_some() {
+                        let page_break_gap = 28.0 * scale;
+                        total_h += page_break_gap;
+                        page_starts.push(total_h);
+                    }
                 }
                 Block::Table(t) => {
                     let grid = self.append_table_grid(
@@ -764,6 +769,9 @@ impl DocumentLayout {
                     }
                     plain_offset += body_len;
                     total_h += h + after;
+                    if p.section_properties.is_some() {
+                        total_h += 28.0;
+                    }
                 }
                 Block::Table(t) => {
                     if let Some(cursor) = self.hit_test_table_cursor(
@@ -848,6 +856,9 @@ impl DocumentLayout {
                     }
                     plain_offset += body_len;
                     total_h += h + twips_to_css_px(p.space_after_twips).max(para_gap);
+                    if p.section_properties.is_some() {
+                        total_h += 28.0;
+                    }
                 }
                 Block::Table(t) => {
                     let range_start = plain_offset;
@@ -3787,4 +3798,58 @@ mod tests {
             "2″ left indent should wrap to more lines: flush={h_flush} indented={h_ind}"
         );
     }
+
+    #[test]
+    fn preview_section_break_starts_new_page_band() {
+        let doc = Document {
+            blocks: vec![
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "One".into(),
+                        style: RunStyle::default(),
+                        ..Default::default()
+                    }],
+                    section_properties: Some(PageSetup::default()),
+                    ..Default::default()
+                }),
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "Two".into(),
+                        style: RunStyle::default(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+            ],
+            ..Default::default()
+        };
+        let (_, _, h) = DocumentLayout::new().render_document(&doc, 400.0);
+        let without = Document {
+            blocks: vec![
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "One".into(),
+                        style: RunStyle::default(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+                Block::Paragraph(Paragraph {
+                    runs: vec![Run {
+                        text: "Two".into(),
+                        style: RunStyle::default(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+            ],
+            ..Default::default()
+        };
+        let (_, _, h2) = DocumentLayout::new().render_document(&without, 400.0);
+        assert!(
+            h > h2 + 10,
+            "section break should add a page-band gap (with={h}, without={h2})"
+        );
+    }
+
 }

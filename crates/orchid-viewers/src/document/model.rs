@@ -169,6 +169,67 @@ pub enum ListKind {
     Numbered,
 }
 
+/// Page size and margins in twentieths of a point (twips).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PageSetup {
+    /// Page width in twips (US Letter default = 12240).
+    pub width_twips: u32,
+    /// Page height in twips (US Letter default = 15840).
+    pub height_twips: u32,
+    /// Top margin.
+    pub margin_top_twips: u32,
+    /// Bottom margin.
+    pub margin_bottom_twips: u32,
+    /// Left margin.
+    pub margin_left_twips: u32,
+    /// Right margin.
+    pub margin_right_twips: u32,
+    /// Distance from page top to header (`w:pgMar/@w:header`).
+    pub header_distance_twips: u32,
+    /// Distance from page bottom to footer (`w:pgMar/@w:footer`).
+    pub footer_distance_twips: u32,
+    /// Default header relationship id (`w:headerReference/@r:id`, `w:type="default"`).
+    pub header_r_id: Option<String>,
+    /// Default footer relationship id (`w:footerReference/@r:id`, `w:type="default"`).
+    pub footer_r_id: Option<String>,
+    /// First-page header relationship id (`w:type="first"`).
+    pub header_first_r_id: Option<String>,
+    /// First-page footer relationship id (`w:type="first"`).
+    pub footer_first_r_id: Option<String>,
+    /// Even-page header relationship id (`w:type="even"`).
+    pub header_even_r_id: Option<String>,
+    /// Even-page footer relationship id (`w:type="even"`).
+    pub footer_even_r_id: Option<String>,
+    /// Different first page (`w:titlePg`).
+    pub title_page: bool,
+    /// Different odd/even headers (`w:evenAndOddHeaders`).
+    pub even_and_odd_headers: bool,
+}
+
+impl Default for PageSetup {
+    fn default() -> Self {
+        // US Letter, 1-inch margins.
+        Self {
+            width_twips: 12240,
+            height_twips: 15840,
+            margin_top_twips: 1440,
+            margin_bottom_twips: 1440,
+            margin_left_twips: 1440,
+            margin_right_twips: 1440,
+            header_distance_twips: 720,
+            footer_distance_twips: 720,
+            header_r_id: None,
+            footer_r_id: None,
+            header_first_r_id: None,
+            footer_first_r_id: None,
+            header_even_r_id: None,
+            footer_even_r_id: None,
+            title_page: false,
+            even_and_odd_headers: false,
+        }
+    }
+}
+
 /// A paragraph: sequence of runs plus paragraph-level properties.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Paragraph {
@@ -218,6 +279,11 @@ pub struct Paragraph {
     pub shade_fill: Option<[u8; 3]>,
     /// Paragraph borders (`w:pBdr`); same bit layout as [`TableCell::border_sides`].
     pub border_sides: u8,
+    /// End-of-section properties (`w:pPr/w:sectPr`). `None` = not a section boundary.
+    ///
+    /// When set, this paragraph is the last of its section; following body content
+    /// belongs to the next section (final section uses [`Document::page_setup`]).
+    pub section_properties: Option<PageSetup>,
     /// Unsupported child elements preserved for round-trip.
     pub unsupported: Vec<OpaqueXmlNode>,
 }
@@ -408,67 +474,6 @@ pub enum Block {
     Table(Table),
     /// Inline image treated as a block (drawing outside a paragraph run).
     Image(InlineImage),
-}
-
-/// Page size and margins in twentieths of a point (twips).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PageSetup {
-    /// Page width in twips (US Letter default = 12240).
-    pub width_twips: u32,
-    /// Page height in twips (US Letter default = 15840).
-    pub height_twips: u32,
-    /// Top margin.
-    pub margin_top_twips: u32,
-    /// Bottom margin.
-    pub margin_bottom_twips: u32,
-    /// Left margin.
-    pub margin_left_twips: u32,
-    /// Right margin.
-    pub margin_right_twips: u32,
-    /// Distance from page top to header (`w:pgMar/@w:header`).
-    pub header_distance_twips: u32,
-    /// Distance from page bottom to footer (`w:pgMar/@w:footer`).
-    pub footer_distance_twips: u32,
-    /// Default header relationship id (`w:headerReference/@r:id`, `w:type="default"`).
-    pub header_r_id: Option<String>,
-    /// Default footer relationship id (`w:footerReference/@r:id`, `w:type="default"`).
-    pub footer_r_id: Option<String>,
-    /// First-page header relationship id (`w:type="first"`).
-    pub header_first_r_id: Option<String>,
-    /// First-page footer relationship id (`w:type="first"`).
-    pub footer_first_r_id: Option<String>,
-    /// Even-page header relationship id (`w:type="even"`).
-    pub header_even_r_id: Option<String>,
-    /// Even-page footer relationship id (`w:type="even"`).
-    pub footer_even_r_id: Option<String>,
-    /// Different first page (`w:titlePg`).
-    pub title_page: bool,
-    /// Different odd/even headers (`w:evenAndOddHeaders`).
-    pub even_and_odd_headers: bool,
-}
-
-impl Default for PageSetup {
-    fn default() -> Self {
-        // US Letter, 1-inch margins.
-        Self {
-            width_twips: 12240,
-            height_twips: 15840,
-            margin_top_twips: 1440,
-            margin_bottom_twips: 1440,
-            margin_left_twips: 1440,
-            margin_right_twips: 1440,
-            header_distance_twips: 720,
-            footer_distance_twips: 720,
-            header_r_id: None,
-            footer_r_id: None,
-            header_first_r_id: None,
-            footer_first_r_id: None,
-            header_even_r_id: None,
-            footer_even_r_id: None,
-            title_page: false,
-            even_and_odd_headers: false,
-        }
-    }
 }
 
 /// Full in-memory document.

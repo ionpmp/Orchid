@@ -345,6 +345,7 @@ fn parse_paragraph(
         shade_fill: None,
         border_sides: 0,
         unsupported: Vec::new(),
+        section_properties: None,
     };
     let mut images = Vec::new();
     let mut local_bookmarks: Vec<(String, usize)> = Vec::new();
@@ -435,6 +436,9 @@ fn parse_paragraph(
                     }
                     "right" if in_p_bdr => {
                         apply_paragraph_border_side(&mut p, CELL_BORDER_RIGHT, &e);
+                    }
+                    "sectPr" if in_p_pr => {
+                        p.section_properties = Some(parse_sect_pr(reader, buf)?);
                     }
                     "hyperlink" => {
                         active_link = resolve_hyperlink(&e, rels);
@@ -1544,6 +1548,9 @@ fn write_paragraph(
         writer
             .write_event(Event::End(BytesEnd::new("w:numPr")))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if let Some(ref setup) = p.section_properties {
+        write_sect_pr(writer, setup)?;
     }
     writer
         .write_event(Event::End(BytesEnd::new("w:pPr")))
@@ -4460,4 +4467,67 @@ mod tests {
             _ => panic!("expected table"),
         }
     }
+
+    #[test]
+    fn mid_body_section_properties_round_trip() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <w:body>
+            <w:p>
+              <w:pPr>
+                <w:sectPr>
+                  <w:pgSz w:w="12240" w:h="15840"/>
+                  <w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"
+                           w:header="720" w:footer="720"/>
+                </w:sectPr>
+              </w:pPr>
+              <w:r><w:t>Section One</w:t></w:r>
+            </w:p>
+            <w:p><w:r><w:t>Section Two</w:t></w:r></w:p>
+            <w:sectPr>
+              <w:pgSz w:w="11906" w:h="16838"/>
+              <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"
+                       w:header="720" w:footer="720"/>
+            </w:sectPr>
+          </w:body>
+        </w:document>"#;
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert!(unsupported.is_empty());
+        assert_eq!(page_setup.width_twips, 11906);
+        let Block::Paragraph(p0) = &blocks[0] else {
+            panic!("p0");
+        };
+        let sect = p0.section_properties.as_ref().expect("mid-body sectPr");
+        assert_eq!(sect.margin_top_twips, 720);
+        assert_eq!(sect.width_twips, 12240);
+        let doc = Document {
+            blocks: blocks.clone(),
+            page_setup: page_setup.clone(),
+            unsupported: Vec::new(),
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let (blocks2, page_setup2, _, _) = parse_document_xml(
+            &out,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(page_setup2, page_setup);
+        let Block::Paragraph(p0b) = &blocks2[0] else {
+            panic!("p0b");
+        };
+        assert_eq!(p0b.section_properties, p0.section_properties);
+    }
+
 }
