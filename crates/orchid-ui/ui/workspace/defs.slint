@@ -822,6 +822,11 @@ export struct AudioPlayerRootItem {
     label: string,
 }
 
+export struct AudioPlayerLyricItem {
+    text: string,
+    is-current: bool,
+}
+
 export struct AudioPlayerModel {
     engine-available: bool,
     browse-tab: int,
@@ -854,6 +859,10 @@ export struct AudioPlayerModel {
     crossfade-label: string,
     lyrics-line: string,
     has-lyrics: bool,
+    lyrics-open: bool,
+    lyrics-lines: [AudioPlayerLyricItem],
+    lyrics-active-index: int,
+    lyrics-label: string,
     roots-label: string,
     empty-hint: string,
     has-cover: bool,
@@ -1519,15 +1528,13 @@ export struct ViewerDocumentModel {
     tip-print: string,
     /// External hyperlink URL at the caret (empty when none).
     link-url: string,
-    /// Default header story plain text (`\n`-joined).
+    /// Default header story plain text (newline-joined).
     header-text: string,
-    /// Default footer story plain text (`\n`-joined).
+    /// Default footer story plain text (newline-joined).
     footer-text: string,
-    /// First-page header story plain text (\
-\-joined).
+    /// First-page header story plain text (newline-joined).
     header-first-text: string,
-    /// First-page footer story plain text (\
-\-joined).
+    /// First-page footer story plain text (newline-joined).
     footer-first-text: string,
     font-smaller-label: string,
     font-larger-label: string,
