@@ -1,4 +1,4 @@
-//! Sidecar `.lrc` lyrics for the audio player.
+//! Sidecar `.lrc` and embedded ID3 lyrics for the audio player.
 
 #![allow(missing_docs)]
 
@@ -11,23 +11,36 @@ pub struct LyricLine {
     pub text: String,
 }
 
-/// Parsed LRC document (may be empty).
+/// Parsed LRC / embedded lyrics document (may be empty).
 #[derive(Debug, Clone, Default)]
 pub struct Lyrics {
     pub lines: Vec<LyricLine>,
 }
 
 impl Lyrics {
-    /// Load `stem.lrc` next to `media`, or return empty.
+    /// Load `stem.lrc` next to `media`, else ID3 `SYLT`/`USLT`, or empty.
     #[must_use]
     pub fn load_for(media: &Path) -> Self {
-        let Some(lrc) = sidecar_lrc(media) else {
-            return Self::default();
-        };
-        let Ok(body) = std::fs::read_to_string(&lrc) else {
-            return Self::default();
-        };
-        Self::parse(&body)
+        if let Some(lrc) = sidecar_lrc(media) {
+            if let Ok(body) = std::fs::read_to_string(&lrc) {
+                let parsed = Self::parse(&body);
+                if !parsed.is_empty() {
+                    return parsed;
+                }
+            }
+        }
+        if let Some(embedded) = orchid_viewers::load_embedded_lyrics(media) {
+            return Self {
+                lines: embedded
+                    .into_iter()
+                    .map(|l| LyricLine {
+                        time_ms: l.time_ms,
+                        text: l.text,
+                    })
+                    .collect(),
+            };
+        }
+        Self::default()
     }
 
     /// Parse enhanced/simple LRC timestamps (`[mm:ss.xx]` / `[mm:ss]`).
@@ -176,5 +189,43 @@ mod tests {
         fs::write(dir.path().join("song.lrc"), "[00:01.00]Hello\n").unwrap();
         let l = Lyrics::load_for(&media);
         assert_eq!(l.line_at(1500), "Hello");
+    }
+
+    #[test]
+    fn prefers_sidecar_over_uslt() {
+        use id3::TagLike;
+        use id3::frame::Lyrics as Id3Lyrics;
+        let dir = tempfile::tempdir().unwrap();
+        let media = dir.path().join("song.mp3");
+        fs::write(&media, [0xFF, 0xFB, 0x90, 0x00]).unwrap();
+        let mut tag = id3::Tag::new();
+        tag.add_lyrics(Id3Lyrics {
+            lang: "eng".into(),
+            description: String::new(),
+            text: "From tag\n".into(),
+        });
+        tag.write_to_path(&media, id3::Version::Id3v23).unwrap();
+        fs::write(dir.path().join("song.lrc"), "[00:01.00]From lrc\n").unwrap();
+        let l = Lyrics::load_for(&media);
+        assert_eq!(l.line_at(1500), "From lrc");
+    }
+
+    #[test]
+    fn loads_uslt_when_no_sidecar() {
+        use id3::TagLike;
+        use id3::frame::Lyrics as Id3Lyrics;
+        let dir = tempfile::tempdir().unwrap();
+        let media = dir.path().join("song.mp3");
+        fs::write(&media, [0xFF, 0xFB, 0x90, 0x00]).unwrap();
+        let mut tag = id3::Tag::new();
+        tag.add_lyrics(Id3Lyrics {
+            lang: "eng".into(),
+            description: String::new(),
+            text: "Tag line\n".into(),
+        });
+        tag.write_to_path(&media, id3::Version::Id3v23).unwrap();
+        let l = Lyrics::load_for(&media);
+        assert!(!l.is_synced());
+        assert_eq!(l.line_at(0), "Tag line");
     }
 }

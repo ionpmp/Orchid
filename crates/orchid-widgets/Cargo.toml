@@ -70,5 +70,6 @@ features = [
 ]
 
 [dev-dependencies]
+id3.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true }

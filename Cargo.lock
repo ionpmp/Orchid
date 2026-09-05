@@ -6152,6 +6152,7 @@ dependencies = [
  "feed-rs",
  "futures",
  "iana-time-zone",
+ "id3",
  "image",
  "opener",
  "orchid-core",

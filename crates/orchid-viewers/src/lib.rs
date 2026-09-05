@@ -20,7 +20,10 @@ pub mod thumbnail;
 pub mod viewer_trait;
 
 pub use archive::ArchiveViewer;
-pub use audio_tags::{format_id3_report, is_id3_extension, read_id3_fields, AudioTagField};
+pub use audio_tags::{
+    format_id3_report, is_id3_extension, load_embedded_lyrics, read_id3_fields, AudioTagField,
+    EmbeddedLyricLine,
+};
 pub use dispatch::{kind_for, select_viewer, ViewerKind};
 pub use document::ooxml::core_props::{
     format_office_report, is_office_extension, pack_office_props, read_office_core_props,

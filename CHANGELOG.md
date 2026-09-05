@@ -243,7 +243,9 @@ release yet.
   playlists (create / rename / delete / add tracks) and favorites, shuffle /
   repeat, sleep timer, EQ presets, ReplayGain, playback speed presets, soft
   soft volume boost (to 150%), library search, add-to-queue / play-next / reorder /
-  clear queue, soft **crossfade** (Off / 3 / 5 / 8 / 12s via button or `X`), gapless prefetch, sidecar `.lrc` lyrics, background library scan,
+  clear queue, soft **crossfade** (Off / 3 / 5 / 8 / 12s via button or `X`), gapless prefetch,
+  sidecar `.lrc` lyrics plus expandable scrollable lyrics panel (`L` / chip; auto-scroll to the
+  active line) and ID3 `SYLT`/`USLT` fallback when no sidecar, background library scan,
   focused keyboard transport, Windows SMTC (lock screen / media keys), shared
   audio-only libmpv session (separate from SMTC Now Playing and Viewer media
   chrome); widget-owned volume (not Viewer `media_prefs`); mutual pause with
