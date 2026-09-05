@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use slint::ComponentHandle;
 use slint::Model;
 use slint::VecModel;
 use uuid::Uuid;
@@ -47,7 +48,9 @@ impl MainWindowController {
                 if let Some(path) = s.local_path.as_ref() {
                     file_url_from_path(path)
                         .map(HtmlDocument::Url)
-                        .unwrap_or_else(|| HtmlDocument::Html(s.source_preview.as_ref().to_string()))
+                        .unwrap_or_else(|| {
+                            HtmlDocument::Html(s.source_preview.as_ref().to_string())
+                        })
                 } else if s.source_preview.is_empty() {
                     HtmlDocument::None
                 } else {

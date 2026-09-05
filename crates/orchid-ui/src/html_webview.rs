@@ -229,7 +229,8 @@ fn probe_runtime() -> bool {
         use windows::Win32::System::Com::CoTaskMemFree;
 
         let mut version = PWSTR::null();
-        let hr = unsafe { GetAvailableCoreWebView2BrowserVersionString(PCWSTR::null(), &mut version) };
+        let hr =
+            unsafe { GetAvailableCoreWebView2BrowserVersionString(PCWSTR::null(), &mut version) };
         let present = hr.is_ok() && !version.is_null();
         if !version.is_null() {
             unsafe { CoTaskMemFree(Some(version.0.cast())) };
@@ -268,8 +269,8 @@ impl HtmlWebViewHost {
 
     #[cfg(windows)]
     fn ensure_environment(&self) {
-        use webview2_com::Microsoft::Web::WebView2::Win32::CreateCoreWebView2EnvironmentWithOptions;
         use webview2_com::CreateCoreWebView2EnvironmentCompletedHandler;
+        use webview2_com::Microsoft::Web::WebView2::Win32::CreateCoreWebView2EnvironmentWithOptions;
         use windows::core::PCWSTR;
 
         let user_data = {
@@ -329,7 +330,7 @@ impl HtmlWebViewHost {
     fn ensure_controller(&self, id: Uuid) {
         use webview2_com::CreateCoreWebView2ControllerCompletedHandler;
 
-        let (env, parent, need) = {
+        let (env, parent) = {
             let mut st = self.state.lock();
             let Some(env) = st.env.clone() else {
                 return;
@@ -348,11 +349,8 @@ impl HtmlWebViewHost {
                 return;
             }
             slot.creating = true;
-            (env, parent, true)
+            (env, parent)
         };
-        if !need {
-            return;
-        }
 
         let host = self.clone();
         let handler = CreateCoreWebView2ControllerCompletedHandler::create(Box::new(
@@ -483,12 +481,14 @@ fn attach_history(
     let nav = host.nav.clone();
     let wv = webview.clone();
     let handler = HistoryChangedEventHandler::create(Box::new(move |_, _| {
-        let can_go_back = unsafe { wv.CanGoBack() }.unwrap_or(false.into()).as_bool();
-        let can_go_forward = unsafe { wv.CanGoForward() }.unwrap_or(false.into()).as_bool();
+        let mut can_go_back = windows::core::BOOL::from(false);
+        let mut can_go_forward = windows::core::BOOL::from(false);
+        let _ = unsafe { wv.CanGoBack(&mut can_go_back) };
+        let _ = unsafe { wv.CanGoForward(&mut can_go_forward) };
         nav.lock().push(HtmlNavState {
             instance_id: id,
-            can_go_back,
-            can_go_forward,
+            can_go_back: can_go_back.as_bool(),
+            can_go_forward: can_go_forward.as_bool(),
         });
         Ok(())
     }));
