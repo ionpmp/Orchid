@@ -537,3 +537,28 @@ fn insert_comment_on_selection_and_undo() {
         assert!(doc.comment_ranges.is_empty());
     }
 }
+
+#[test]
+fn delete_comment_at_caret_and_undo() {
+    let viewer = DocumentViewer::new();
+    *viewer.document_mut() = Some(sample_doc());
+    viewer.set_selection_plain_offsets(0, 5);
+    let id = viewer.insert_comment_at_selection().unwrap();
+    viewer.set_selection_plain_offsets(2, 2);
+    assert_eq!(viewer.delete_comment_at_selection().unwrap(), Some(id));
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        assert!(doc.comments.is_empty());
+        assert!(doc.comment_ranges.is_empty());
+    }
+    viewer.undo().unwrap();
+    {
+        let guard = viewer.document();
+        let doc = guard.as_ref().unwrap();
+        assert_eq!(doc.comments.len(), 1);
+        assert_eq!(doc.comment_ranges.len(), 1);
+    }
+    viewer.set_selection_plain_offsets(1000, 1000);
+    assert_eq!(viewer.delete_comment_at_selection().unwrap(), None);
+}

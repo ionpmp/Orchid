@@ -1833,6 +1833,31 @@ impl DocumentViewer {
         Ok(id)
     }
 
+    /// Delete the comment covering the caret (or overlapping the selection).
+    ///
+    /// Prefers the narrowest overlapping range. Returns the removed id, or `None`
+    /// when no comment touches the selection.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::DocumentNotOpen`].
+    pub fn delete_comment_at_selection(&self) -> Result<Option<u32>> {
+        let mut doc_guard = self.document.write();
+        let doc = doc_guard.as_mut().ok_or(ViewerError::DocumentNotOpen)?;
+        let sel = effective_style_selection(doc, *self.selection.lock(), *self.source_mode.read());
+        let (a, b) = sel.normalized();
+        let lo = plain_offset_from_cursor(doc, a).min(plain_offset_from_cursor(doc, b));
+        let hi = plain_offset_from_cursor(doc, a).max(plain_offset_from_cursor(doc, b));
+        let Some(id) = comment_id_overlapping(doc, lo, hi) else {
+            return Ok(None);
+        };
+        self.undo
+            .lock()
+            .push(doc, EditCommand::RemoveComment { id })?;
+        self.invalidate_preview();
+        Ok(Some(id))
+    }
+
     /// Toggle `w:keepNext` on selected paragraphs.
     ///
     /// # Errors
@@ -3584,6 +3609,29 @@ fn next_comment_id(doc: &Document) -> u32 {
         .map(|m| m.saturating_add(1))
         .unwrap_or(0)
 }
+
+fn comment_id_overlapping(doc: &Document, lo: usize, hi: usize) -> Option<u32> {
+    let hi = hi.max(lo);
+    let mut best: Option<(u32, usize)> = None; // id, span_len
+    for r in &doc.comment_ranges {
+        let r0 = r.start_plain.min(r.end_plain);
+        let r1 = r.start_plain.max(r.end_plain);
+        let overlaps = if r0 == r1 {
+            lo <= r0 && r0 <= hi
+        } else {
+            r0 < hi && r1 > lo
+        };
+        if !overlaps {
+            continue;
+        }
+        let span = r1.saturating_sub(r0);
+        if best.is_none_or(|(_, s)| span < s) {
+            best = Some((r.id, span));
+        }
+    }
+    best.map(|(id, _)| id)
+}
+
 
 
 fn clamp_spacing_twips(v: i32) -> u32 {
