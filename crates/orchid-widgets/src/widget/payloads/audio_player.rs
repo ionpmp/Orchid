@@ -54,6 +54,8 @@ impl PartialEq for AudioPlayerTrackRow {
 pub struct AudioPlayerLyricRow {
     pub text: String,
     pub is_current: bool,
+    /// Cue time in milliseconds (`0` when unsynced).
+    pub time_ms: u64,
 }
 
 /// Playlist chip / row.
@@ -129,6 +131,8 @@ pub struct AudioPlayerPayload {
     pub lyrics_open: bool,
     pub lyrics_lines: Vec<AudioPlayerLyricRow>,
     pub lyrics_active_index: i32,
+    /// Lyrics panel height in CSS pixels.
+    pub lyrics_panel_height: i32,
     pub library_count: u32,
     pub library_roots_count: u32,
     pub has_library_roots: bool,

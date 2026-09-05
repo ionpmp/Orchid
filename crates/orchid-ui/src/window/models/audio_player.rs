@@ -51,6 +51,7 @@ pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerMod
             lyrics_open: false,
             lyrics_lines: ModelRc::new(VecModel::from(Vec::<AudioPlayerLyricItem>::new())),
             lyrics_active_index: -1,
+            lyrics_panel_height: 140,
             roots_label: SharedString::new(),
             empty_hint: SharedString::new(),
             has_cover: false,
@@ -101,6 +102,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         lyrics_open: false,
         lyrics_lines: ModelRc::new(VecModel::from(Vec::<AudioPlayerLyricItem>::new())),
         lyrics_active_index: -1,
+        lyrics_panel_height: 140,
         roots_label: SharedString::new(),
         empty_hint: SharedString::new(),
         has_cover: false,
@@ -433,10 +435,12 @@ pub(crate) fn build_audio_player_model(
                     .map(|l| AudioPlayerLyricItem {
                         text: l.text.clone().into(),
                         is_current: l.is_current,
+                        time_ms: l.time_ms as i32,
                     })
                     .collect::<Vec<_>>(),
             )),
             lyrics_active_index: p.lyrics_active_index,
+            lyrics_panel_height: p.lyrics_panel_height,
             roots_label: library_stats_label(p.library_count, p.library_roots_count, locale),
             empty_hint,
             has_cover: p.has_cover,
@@ -608,10 +612,12 @@ pub(crate) fn patch_audio_player_model(
             .map(|l| AudioPlayerLyricItem {
                 text: l.text.clone().into(),
                 is_current: l.is_current,
+                time_ms: l.time_ms as i32,
             })
             .collect(),
     );
     model.lyrics_active_index = p.lyrics_active_index;
+    model.lyrics_panel_height = p.lyrics_panel_height;
     model.roots_label = library_stats_label(p.library_count, p.library_roots_count, locale);
     model.empty_hint = empty_hint;
     model.has_cover = p.has_cover;

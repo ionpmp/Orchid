@@ -652,6 +652,15 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             drop(cfg);
             h.publish();
         }
+        cmd if let Some(raw) = cmd.strip_prefix("lyrics-seek:") => {
+            if let Ok(idx) = raw.parse::<usize>() {
+                let ms = h.lyrics.read().lines.get(idx).map(|l| l.time_ms);
+                if let Some(ms) = ms.filter(|&t| t > 0) {
+                    h.player.seek_abs(ms as f64 / 1000.0);
+                    h.publish();
+                }
+            }
+        }
         "sort" => {
             h.config.write().library_sort = h.config.read().library_sort.cycle();
             h.publish();
@@ -1701,6 +1710,7 @@ impl AudioPlayerWidget {
                 .map(|(i, line)| AudioPlayerLyricRow {
                     text: line.text.clone(),
                     is_current: active >= 0 && i as i32 == active,
+                    time_ms: line.time_ms,
                 })
                 .collect();
             (!ly.is_empty(), ly.line_at(pos), lines, active)
@@ -1792,6 +1802,7 @@ impl AudioPlayerWidget {
             lyrics_open: cfg.lyrics_open && has_lyrics,
             lyrics_lines,
             lyrics_active_index,
+            lyrics_panel_height: i32::from(cfg.lyrics_panel_height),
             library_count: lib.tracks.len() as u32,
             library_roots_count,
             has_library_roots,

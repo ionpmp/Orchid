@@ -825,6 +825,8 @@ export struct AudioPlayerRootItem {
 export struct AudioPlayerLyricItem {
     text: string,
     is-current: bool,
+    /// Milliseconds; 0 when unsynced / not seekable.
+    time-ms: int,
 }
 
 export struct AudioPlayerModel {
@@ -863,6 +865,7 @@ export struct AudioPlayerModel {
     lyrics-lines: [AudioPlayerLyricItem],
     lyrics-active-index: int,
     lyrics-label: string,
+    lyrics-panel-height: int,
     roots-label: string,
     empty-hint: string,
     has-cover: bool,

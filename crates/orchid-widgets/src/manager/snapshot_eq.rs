@@ -874,6 +874,7 @@ fn audio_player_payload_eq(a: &AudioPlayerPayload, b: &AudioPlayerPayload) -> bo
         && a.lyrics_open == b.lyrics_open
         && a.lyrics_lines == b.lyrics_lines
         && a.lyrics_active_index == b.lyrics_active_index
+        && a.lyrics_panel_height == b.lyrics_panel_height
         && a.library_count == b.library_count
         && a.library_roots_count == b.library_roots_count
         && a.has_library_roots == b.has_library_roots

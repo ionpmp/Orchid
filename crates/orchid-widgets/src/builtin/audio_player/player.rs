@@ -66,6 +66,12 @@ impl PlayerSession {
         }
     }
 
+    pub fn seek_abs(&self, seconds: f64) {
+        if seconds.is_finite() && seconds >= 0.0 {
+            self.engine.seek_abs(seconds);
+        }
+    }
+
     pub fn set_volume(&self, volume: f64) {
         self.engine.set_volume(volume);
     }

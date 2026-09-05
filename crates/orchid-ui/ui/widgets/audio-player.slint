@@ -977,7 +977,7 @@ export component AudioPlayerView inherits Rectangle {
 
             if root.model.lyrics-open && root.model.has-lyrics : Rectangle {
                 vertical-stretch: 0;
-                height: 140px;
+                height: root.model.lyrics-panel-height * 1px;
                 background: Theme.surface-raised;
                 border-radius: Theme.radius-md;
                 clip: true;
@@ -1009,13 +1009,25 @@ export component AudioPlayerView inherits Rectangle {
                         width: parent.width;
                         lyrics-col := VerticalLayout {
                             spacing: 2px;
-                            for line in root.model.lyrics-lines : Text {
+                            for line[idx] in root.model.lyrics-lines : Rectangle {
                                 height: 20px;
-                                text: line.text;
-                                color: line.is-current ? Theme.accent-brand : Theme.text-secondary;
-                                font-size: Theme.font-size-sm;
-                                font-weight: line.is-current ? Theme.weight-semibold : Theme.weight-regular;
-                                overflow: elide;
+                                HorizontalLayout {
+                                    Text {
+                                        width: 100%;
+                                        height: 20px;
+                                        text: line.text;
+                                        color: line.is-current ? Theme.accent-brand : Theme.text-secondary;
+                                        font-size: Theme.font-size-sm;
+                                        font-weight: line.is-current ? Theme.weight-semibold : Theme.weight-regular;
+                                        overflow: elide;
+                                    }
+                                }
+                                if line.time-ms > 0 : TouchArea {
+                                    clicked => {
+                                        focus-scope.focus();
+                                        root.command("lyrics-seek:" + idx);
+                                    }
+                                }
                             }
                         }
                     }
