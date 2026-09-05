@@ -1,16 +1,17 @@
-//! Phase 1 CLI: create and inspect sealed `.orchid` files.
+//! Phase 1–2 CLI: create and inspect sealed `.orchid` files.
 
 use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use orchid_crypto::Identity;
 use orchid_format::{write_sealed_file, SealedCreateRequest, SealedFile, EXTENSION, MIME_TYPE};
 
 #[derive(Debug, Parser)]
 #[command(
     name = "orchid-format",
-    about = "Create and read sealed .orchid containers (Phase 1 framing)",
+    about = "Create and read sealed .orchid containers",
     version
 )]
 struct Cli {
@@ -37,11 +38,17 @@ enum Commands {
         /// Optional MIME for the Raw region.
         #[arg(long)]
         raw_content_type: Option<String>,
+        /// Encrypt all regions to this passphrase (age).
+        #[arg(long)]
+        passphrase: Option<String>,
     },
     /// Open a sealed .orchid and print header / TOC / Clean-Text summary.
     Read {
         /// Path to a `.orchid` file.
         path: PathBuf,
+        /// Passphrase for private regions.
+        #[arg(long)]
+        passphrase: Option<String>,
         /// Also write Clean-Text plaintext to this path.
         #[arg(long)]
         dump_clean_text: Option<PathBuf>,
@@ -70,13 +77,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             structured,
             raw,
             raw_content_type,
+            passphrase,
         } => {
             let output = ensure_extension(output);
             let raw_bytes = match raw {
                 Some(p) => fs::read(p)?,
                 None => Vec::new(),
             };
-            let raw_name = None;
             write_sealed_file(
                 &output,
                 &SealedCreateRequest {
@@ -84,21 +91,25 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     created_unix_ms: None,
                     raw: raw_bytes,
                     raw_content_type,
-                    raw_name,
+                    raw_name: None,
                     clean_text: fs::read(clean_text)?,
                     structured: fs::read(structured)?,
                     structured_content_type: Some("application/octet-stream".into()),
+                    encrypt_with: passphrase.map(Identity::passphrase),
                 },
             )?;
             println!("wrote {} ({MIME_TYPE})", output.display());
         }
         Commands::Read {
             path,
+            passphrase,
             dump_clean_text,
             dump_structured,
             dump_raw,
         } => {
             let file = SealedFile::open(&path)?;
+            let identity = passphrase.map(Identity::passphrase);
+            let id_ref = identity.as_ref();
             let header = file.header();
             let toc = file.toc()?;
             println!("path: {}", path.display());
@@ -109,30 +120,37 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             );
             println!("file_uuid: {}", hex_uuid(&header.file_uuid));
             println!("created_unix_ms: {}", header.created_unix_ms);
+            println!("capability_flags: {:#x}", header.capability_flags);
             println!("generation: {}", toc.generation());
             let regions = toc.regions().ok_or("TOC missing regions")?;
             println!("regions: {}", regions.len());
             for i in 0..regions.len() {
                 let r = regions.get(i);
                 let name = r.name().unwrap_or("");
+                let enc = if r.encryption().is_some() {
+                    "encrypted"
+                } else {
+                    "plain"
+                };
                 println!(
-                    "  [{i}] type={} offset={} length={} compression={} name={name}",
+                    "  [{i}] type={} offset={} length={} compression={} storage={} {enc} name={name}",
                     r.type_().0,
                     r.offset(),
                     r.length(),
-                    r.compression().0
+                    r.compression().0,
+                    r.storage().0
                 );
             }
-            let clean = file.clean_text()?;
+            let clean = file.clean_text(id_ref)?;
             println!("clean_text_bytes: {}", clean.len());
             if let Some(out) = dump_clean_text {
                 fs::write(out, &clean)?;
             }
             if let Some(out) = dump_structured {
-                fs::write(out, file.structured()?)?;
+                fs::write(out, file.structured(id_ref)?)?;
             }
             if let Some(out) = dump_raw {
-                fs::write(out, file.raw()?)?;
+                fs::write(out, file.raw(id_ref)?)?;
             }
         }
     }

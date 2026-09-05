@@ -6,10 +6,15 @@
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 #![deny(unsafe_code)]
+// Aggregate errors include orchid_crypto::CryptoError; boxing on every path
+// would allocate for no benefit (same rationale as orchid-crypto).
+#![allow(clippy::result_large_err)]
 
 mod compress;
+mod crypto_region;
 mod error;
 mod framing;
+mod linked;
 mod reader;
 mod toc_build;
 mod writer;
@@ -28,12 +33,19 @@ mod writer;
 mod toc_generated;
 
 pub use compress::{compress_zstd, decompress_zstd};
+pub use crypto_region::{
+    decode_region_body, prepare_region_body, PreparedRegionBody, RegionEncryptionSpec,
+};
 pub use error::{FormatError, Result};
 pub use framing::{
     align_up, pad_len, pad_to_alignment, Footer, Header, RegionHeader,
 };
+pub use linked::{
+    build_linked_bytes, linked_region_plaintext, linked_to_sealed, sealed_to_linked,
+    write_linked_file, LinkedCreateRequest,
+};
 pub use reader::SealedFile;
-pub use toc_build::{build_toc, TocRegionSpec, TocSpec};
+pub use toc_build::{build_toc, TocChunkSpec, TocRegionSpec, TocSpec};
 pub use writer::{build_sealed_bytes, empty_raw, write_sealed_file, SealedCreateRequest};
 
 /// File extension including the leading dot.

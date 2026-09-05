@@ -1,4 +1,4 @@
-//! mmap-backed sealed `.orchid` reader (Phase 1).
+//! mmap-backed `.orchid` reader (Phase 1 + Phase 2 decrypt).
 
 #![allow(unsafe_code)]
 
@@ -7,13 +7,14 @@ use std::path::Path;
 
 use memmap2::Mmap;
 use orchid_crypto::content::hash_bytes;
+use orchid_crypto::Identity;
 
-use crate::compress::decompress_zstd;
+use crate::crypto_region::{decode_region_body, RegionEncryptionSpec};
 use crate::framing::{Footer, Header, RegionHeader};
-use crate::toc::{root_as_toc, CompressionCodec, RegionEntry, RegionType, Toc};
+use crate::toc::{root_as_toc, RegionEntry, RegionType, StorageMode, Toc};
 use crate::{FormatError, Result, FOOTER_SIZE, HEADER_SIZE, REGION_MINI_HEADER_SIZE};
 
-/// Opened sealed `.orchid` file backed by an immutable mmap.
+/// Opened `.orchid` file backed by an immutable mmap.
 pub struct SealedFile {
     mmap: Mmap,
     header: Header,
@@ -91,8 +92,14 @@ impl SealedFile {
         Err(FormatError::RegionNotFound(type_.0))
     }
 
-    /// Read raw stored payload bytes for a TOC region (still compressed if zstd).
-    pub fn region_payload(&self, entry: &RegionEntry<'_>) -> Result<&[u8]> {
+    /// Inline stored bytes for a region (ciphertext or compressed plaintext).
+    ///
+    /// Linked regions (`StorageMode::Linked`) return an empty slice; callers
+    /// must reassemble from the chunk store.
+    pub fn region_stored_bytes(&self, entry: &RegionEntry<'_>) -> Result<&[u8]> {
+        if entry.storage() == StorageMode::Linked {
+            return Ok(&[]);
+        }
         let offset = entry.offset() as usize;
         let length = entry.length() as usize;
         let end = offset
@@ -103,7 +110,19 @@ impl SealedFile {
             return Err(FormatError::RegionDecode("region extends past EOF".into()));
         }
         let _ = RegionHeader::decode(&self.mmap[offset..], entry.offset())?;
-        let payload = &self.mmap[offset + REGION_MINI_HEADER_SIZE..end];
+        Ok(&self.mmap[offset + REGION_MINI_HEADER_SIZE..end])
+    }
+
+    /// Read raw stored payload bytes for an inline unencrypted region.
+    ///
+    /// Prefer [`Self::region_plaintext`] when encryption or compression apply.
+    pub fn region_payload(&self, entry: &RegionEntry<'_>) -> Result<&[u8]> {
+        let payload = self.region_stored_bytes(entry)?;
+        if entry.encryption().is_some() {
+            return Err(FormatError::Unsupported(
+                "region is encrypted; use region_plaintext with an Identity",
+            ));
+        }
         if let Some(expected) = entry.payload_blake3() {
             if expected.len() == 32 {
                 let mut hash = [0u8; 32];
@@ -118,31 +137,74 @@ impl SealedFile {
         Ok(payload)
     }
 
-    /// Decode region payload applying TOC compression.
-    pub fn region_plaintext(&self, entry: &RegionEntry<'_>) -> Result<Vec<u8>> {
-        let payload = self.region_payload(entry)?;
-        match entry.compression() {
-            CompressionCodec::None => Ok(payload.to_vec()),
-            CompressionCodec::Zstd => decompress_zstd(payload),
-            other => Err(FormatError::UnsupportedCompression(other.0)),
+    /// Decode region plaintext (decrypt + decompress).
+    ///
+    /// Linked regions are not supported here — use the linked reader helpers.
+    pub fn region_plaintext(
+        &self,
+        entry: &RegionEntry<'_>,
+        identity: Option<&Identity>,
+    ) -> Result<Vec<u8>> {
+        if entry.storage() == StorageMode::Linked {
+            return Err(FormatError::Unsupported(
+                "linked region; reassemble from ChunkStore first",
+            ));
+        }
+        let stored = self.region_stored_bytes(entry)?;
+        let payload_blake3 = entry.payload_blake3().and_then(|v| {
+            if v.len() == 32 {
+                let mut h = [0u8; 32];
+                h.copy_from_slice(v.bytes());
+                Some(h)
+            } else {
+                None
+            }
+        });
+        let enc = entry.encryption().map(encryption_from_toc);
+        let enc_ref = enc.as_ref();
+        decode_region_body(
+            stored,
+            entry.compression(),
+            payload_blake3,
+            enc_ref,
+            identity,
+        )
+    }
+
+    /// Convenience: Clean-Text plaintext after decrypt/decompress.
+    pub fn clean_text(&self, identity: Option<&Identity>) -> Result<Vec<u8>> {
+        let entry = self.find_region(RegionType::CleanText)?;
+        self.region_plaintext(&entry, identity)
+    }
+
+    /// Convenience: Structured plaintext after decrypt/decompress.
+    pub fn structured(&self, identity: Option<&Identity>) -> Result<Vec<u8>> {
+        let entry = self.find_region(RegionType::Structured)?;
+        self.region_plaintext(&entry, identity)
+    }
+
+    /// Convenience: Raw plaintext after decrypt.
+    pub fn raw(&self, identity: Option<&Identity>) -> Result<Vec<u8>> {
+        let entry = self.find_region(RegionType::Raw)?;
+        self.region_plaintext(&entry, identity)
+    }
+}
+
+fn encryption_from_toc(enc: crate::toc::EncryptionInfo<'_>) -> RegionEncryptionSpec {
+    let mut plaintext_blake3 = [0u8; 32];
+    if let Some(v) = enc.plaintext_blake3() {
+        if v.len() == 32 {
+            plaintext_blake3.copy_from_slice(v.bytes());
         }
     }
-
-    /// Convenience: Clean-Text plaintext after decompress.
-    pub fn clean_text(&self) -> Result<Vec<u8>> {
-        let entry = self.find_region(RegionType::CleanText)?;
-        self.region_plaintext(&entry)
-    }
-
-    /// Convenience: Structured plaintext after decompress.
-    pub fn structured(&self) -> Result<Vec<u8>> {
-        let entry = self.find_region(RegionType::Structured)?;
-        self.region_plaintext(&entry)
-    }
-
-    /// Convenience: Raw plaintext (uncompressed in Phase 1).
-    pub fn raw(&self) -> Result<Vec<u8>> {
-        let entry = self.find_region(RegionType::Raw)?;
-        self.region_plaintext(&entry)
+    let age_header = enc
+        .age_header()
+        .map(|v| v.bytes().to_vec())
+        .unwrap_or_default();
+    RegionEncryptionSpec {
+        age_header,
+        plaintext_blake3,
+        identity_kind: enc.identity_kind(),
+        is_public: enc.is_public(),
     }
 }

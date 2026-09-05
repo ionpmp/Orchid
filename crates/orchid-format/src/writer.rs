@@ -1,27 +1,29 @@
-//! Sealed `.orchid` writer (Phase 1).
+//! Sealed `.orchid` writer (Phase 1 + Phase 2 encryption).
 
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
 use orchid_crypto::content::hash_bytes;
+use orchid_crypto::Identity;
 use uuid::Uuid;
 
-use crate::compress::compress_zstd;
+use crate::capability;
+use crate::crypto_region::prepare_region_body;
 use crate::framing::{pad_to_alignment, Footer, Header, RegionHeader};
 use crate::region_type::{CLEAN_TEXT, RAW, STRUCTURED};
-use crate::toc::{CompressionCodec, RegionType};
+use crate::toc::{CompressionCodec, RegionType, StorageMode};
 use crate::toc_build::{build_toc, TocRegionSpec, TocSpec};
 use crate::{Result, FOOTER_SIZE, HEADER_SIZE};
 
-/// Inputs for a Phase 1 sealed file with Raw + Clean-Text + Structured.
+/// Inputs for a sealed file with Raw + Clean-Text + Structured.
 #[derive(Debug, Clone)]
 pub struct SealedCreateRequest {
     /// Optional document UUID; allocated when `None`.
     pub file_uuid: Option<[u8; 16]>,
     /// UTC ms; wall clock when `None`.
     pub created_unix_ms: Option<u64>,
-    /// Raw region plaintext (stored uncompressed).
+    /// Raw region plaintext (stored uncompressed unless encrypted).
     pub raw: Vec<u8>,
     /// Optional Raw MIME hint.
     pub raw_content_type: Option<String>,
@@ -33,6 +35,8 @@ pub struct SealedCreateRequest {
     pub structured: Vec<u8>,
     /// Optional Structured content-type / schema id.
     pub structured_content_type: Option<String>,
+    /// When set, private regions are age-encrypted to this identity.
+    pub encrypt_with: Option<Identity>,
 }
 
 /// Write a sealed `.orchid` to `path`.
@@ -47,13 +51,19 @@ pub fn write_sealed_file(path: &Path, req: &SealedCreateRequest) -> Result<()> {
 pub fn build_sealed_bytes(req: &SealedCreateRequest) -> Result<Vec<u8>> {
     let file_uuid = req.file_uuid.unwrap_or_else(|| *Uuid::new_v4().as_bytes());
     let created_unix_ms = req.created_unix_ms.unwrap_or_else(now_unix_ms);
+    let identity = req.encrypt_with.as_ref();
+    let mut caps = 0u64;
+    if identity.is_some() {
+        caps |= capability::ENCRYPTED;
+    }
 
-    let raw_payload = req.raw.clone();
-    let clean_payload = compress_zstd(&req.clean_text)?;
-    let structured_payload = compress_zstd(&req.structured)?;
+    let raw_body = prepare_region_body(&req.raw, CompressionCodec::None, identity)?;
+    let clean_body = prepare_region_body(&req.clean_text, CompressionCodec::Zstd, identity)?;
+    let structured_body =
+        prepare_region_body(&req.structured, CompressionCodec::Zstd, identity)?;
 
     let mut buf = Vec::new();
-    let header = Header::new_sealed(file_uuid, created_unix_ms);
+    let header = Header::new(file_uuid, created_unix_ms, caps);
     buf.extend_from_slice(&header.encode());
     debug_assert_eq!(buf.len() as u64, HEADER_SIZE);
 
@@ -65,8 +75,10 @@ pub fn build_sealed_bytes(req: &SealedCreateRequest) -> Result<Vec<u8>> {
         RegionWrite {
             type_id: RAW,
             fb_type: RegionType::Raw,
-            payload: &raw_payload,
-            compression: CompressionCodec::None,
+            payload: &raw_body.stored,
+            compression: raw_body.compression,
+            payload_blake3: raw_body.payload_blake3,
+            encryption: raw_body.encryption,
             name: req.raw_name.clone(),
             ordinal: 0,
             content_type: req.raw_content_type.clone(),
@@ -78,8 +90,10 @@ pub fn build_sealed_bytes(req: &SealedCreateRequest) -> Result<Vec<u8>> {
         RegionWrite {
             type_id: CLEAN_TEXT,
             fb_type: RegionType::CleanText,
-            payload: &clean_payload,
-            compression: CompressionCodec::Zstd,
+            payload: &clean_body.stored,
+            compression: clean_body.compression,
+            payload_blake3: clean_body.payload_blake3,
+            encryption: clean_body.encryption,
             name: Some("clean-text".into()),
             ordinal: 0,
             content_type: Some("text/plain; charset=utf-8".into()),
@@ -91,8 +105,10 @@ pub fn build_sealed_bytes(req: &SealedCreateRequest) -> Result<Vec<u8>> {
         RegionWrite {
             type_id: STRUCTURED,
             fb_type: RegionType::Structured,
-            payload: &structured_payload,
-            compression: CompressionCodec::Zstd,
+            payload: &structured_body.stored,
+            compression: structured_body.compression,
+            payload_blake3: structured_body.payload_blake3,
+            encryption: structured_body.encryption,
             name: Some("structured".into()),
             ordinal: 0,
             content_type: req
@@ -108,6 +124,7 @@ pub fn build_sealed_bytes(req: &SealedCreateRequest) -> Result<Vec<u8>> {
         generation: 1,
         parent_generation: 0,
         file_uuid,
+        default_storage: StorageMode::Inline,
         regions: toc_regions,
     })?;
     buf.extend_from_slice(&toc_bytes);
@@ -128,6 +145,8 @@ struct RegionWrite<'a> {
     fb_type: RegionType,
     payload: &'a [u8],
     compression: CompressionCodec,
+    payload_blake3: [u8; 32],
+    encryption: Option<crate::crypto_region::RegionEncryptionSpec>,
     name: Option<String>,
     ordinal: u32,
     content_type: Option<String>,
@@ -154,8 +173,11 @@ fn append_region(
         name: region.name,
         ordinal: region.ordinal,
         compression: region.compression,
+        storage: StorageMode::Inline,
+        chunks: vec![],
+        encryption: region.encryption,
         content_type: region.content_type,
-        payload_blake3: hash_bytes(region.payload),
+        payload_blake3: region.payload_blake3,
     });
     Ok(())
 }
@@ -185,6 +207,7 @@ impl Default for SealedCreateRequest {
             clean_text: Vec::new(),
             structured: Vec::new(),
             structured_content_type: None,
+            encrypt_with: None,
         }
     }
 }
@@ -206,6 +229,7 @@ mod tests {
             clean_text: b"hello\n".to_vec(),
             structured: b"{\"v\":1}".to_vec(),
             structured_content_type: Some("application/json".into()),
+            encrypt_with: None,
         })
         .unwrap();
         assert!(bytes.len() > 4096 + FOOTER_SIZE);
@@ -213,6 +237,7 @@ mod tests {
         let header = Header::decode(&bytes).unwrap();
         assert_eq!(header.file_uuid, [3u8; 16]);
         assert_eq!(header.created_unix_ms, 42);
+        assert_eq!(header.capability_flags, 0);
 
         let footer = Footer::decode(&bytes).unwrap();
         let toc_start = bytes.len() as u64 - footer.toc_offset_from_end;
@@ -220,7 +245,6 @@ mod tests {
         let toc = &bytes[toc_start as usize..bytes.len() - FOOTER_SIZE];
         assert_eq!(hash_bytes(toc), footer.toc_blake3);
 
-        // Scan aligned ORCR markers
         let mut found = 0u32;
         let mut off = 4096usize;
         while off + 14 < toc_start as usize {
@@ -228,7 +252,6 @@ mod tests {
                 let rh = RegionHeader::decode(&bytes[off..], off as u64).unwrap();
                 found += 1;
                 off += 14 + rh.length as usize;
-                // next region is aligned
                 let aligned = crate::framing::align_up(off as u64) as usize;
                 off = aligned;
             } else {

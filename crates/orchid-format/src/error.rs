@@ -12,6 +12,10 @@ pub enum FormatError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Underlying `orchid-crypto` failure (age, chunk store, …).
+    #[error("crypto error: {0}")]
+    Crypto(#[from] orchid_crypto::CryptoError),
+
     /// Header or footer magic bytes were not `ORCD`.
     #[error("invalid file magic")]
     InvalidMagic,
@@ -36,11 +40,15 @@ pub enum FormatError {
     #[error("region type 0x{0:04x} not found")]
     RegionNotFound(u16),
 
-    /// Unsupported compression codec for Phase 1.
+    /// Unsupported compression codec.
     #[error("unsupported compression codec {0}")]
     UnsupportedCompression(u8),
 
-    /// Feature not implemented in this Phase 1 sealed path.
+    /// Private region requires an [`orchid_crypto::Identity`].
+    #[error("identity required to decrypt private region")]
+    IdentityRequired,
+
+    /// Feature not implemented on this code path.
     #[error("unsupported: {0}")]
     Unsupported(&'static str),
 }

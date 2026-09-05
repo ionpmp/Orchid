@@ -23,13 +23,19 @@ pub struct Header {
 }
 
 impl Header {
-    /// Build a Phase 1 header for a new sealed document.
+    /// Build a header for a new sealed document (no capability flags).
     #[must_use]
     pub fn new_sealed(file_uuid: [u8; 16], created_unix_ms: u64) -> Self {
+        Self::new(file_uuid, created_unix_ms, 0)
+    }
+
+    /// Build a header with explicit capability flags.
+    #[must_use]
+    pub fn new(file_uuid: [u8; 16], created_unix_ms: u64, capability_flags: u64) -> Self {
         Self {
             version_major: FORMAT_VERSION_MAJOR,
             version_minor: FORMAT_VERSION_MINOR,
-            capability_flags: 0,
+            capability_flags,
             file_uuid,
             created_unix_ms,
             header_flags: 0,

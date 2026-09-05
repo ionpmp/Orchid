@@ -25,6 +25,7 @@ fn sealed_clean_text_roundtrip_bit_identical() {
             clean_text: clean.clone(),
             structured: structured.clone(),
             structured_content_type: Some("application/vnd.orchid.structured+json".into()),
+            encrypt_with: None,
         },
     )
     .unwrap();
@@ -35,19 +36,18 @@ fn sealed_clean_text_roundtrip_bit_identical() {
     assert_eq!(opened.header().file_uuid, [0x11; 16]);
     assert_eq!(opened.header().created_unix_ms, 1_700_000_000_123);
 
-    let got_clean = opened.clean_text().unwrap();
+    let got_clean = opened.clean_text(None).unwrap();
     assert_eq!(got_clean, clean);
 
-    assert_eq!(opened.raw().unwrap(), raw);
-    assert_eq!(opened.structured().unwrap(), structured);
+    assert_eq!(opened.raw(None).unwrap(), raw);
+    assert_eq!(opened.structured(None).unwrap(), structured);
 
     let toc = opened.toc().unwrap();
     assert_eq!(toc.generation(), 1);
     assert_eq!(toc.regions().unwrap().len(), 3);
 
-    // Re-open after a full file copy to ensure mmap path is stable.
     let copy = dir.path().join("copy.orchid");
     fs::copy(&path, &copy).unwrap();
     let again = SealedFile::open(&copy).unwrap();
-    assert_eq!(again.clean_text().unwrap(), clean);
+    assert_eq!(again.clean_text(None).unwrap(), clean);
 }
