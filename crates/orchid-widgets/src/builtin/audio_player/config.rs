@@ -173,6 +173,9 @@ pub struct AudioPlayerConfig {
     /// Soft crossfade window in seconds (0 = off). Values: 0, 3, 5, 8, 12.
     #[serde(default)]
     pub crossfade_secs: u8,
+    /// Whether the lyrics panel is expanded.
+    #[serde(default)]
+    pub lyrics_open: bool,
 }
 
 impl Default for AudioPlayerConfig {
@@ -198,6 +201,7 @@ impl Default for AudioPlayerConfig {
             speed_x100: 100,
             recent_tracks: Vec::new(),
             crossfade_secs: 0,
+            lyrics_open: false,
         }
     }
 }

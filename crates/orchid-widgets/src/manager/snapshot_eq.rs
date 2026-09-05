@@ -871,6 +871,9 @@ fn audio_player_payload_eq(a: &AudioPlayerPayload, b: &AudioPlayerPayload) -> bo
         && a.crossfade_secs == b.crossfade_secs
         && a.lyrics_line == b.lyrics_line
         && a.has_lyrics == b.has_lyrics
+        && a.lyrics_open == b.lyrics_open
+        && a.lyrics_lines == b.lyrics_lines
+        && a.lyrics_active_index == b.lyrics_active_index
         && a.library_count == b.library_count
         && a.library_roots_count == b.library_roots_count
         && a.has_library_roots == b.has_library_roots

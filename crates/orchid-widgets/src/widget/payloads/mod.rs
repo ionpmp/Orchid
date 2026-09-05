@@ -6,7 +6,6 @@
 //! the UI renderer.
 
 pub mod audio_player;
-pub mod video_player;
 pub mod calculator;
 pub mod calendar;
 pub mod clock;
@@ -21,14 +20,14 @@ pub mod recent_files;
 pub mod rss;
 pub mod search;
 pub mod system;
+pub mod video_player;
 pub mod viewer;
 pub mod weather;
 
 pub use audio_player::{
-    AudioPlayerGroupRow, AudioPlayerPayload, AudioPlayerPlaylistRow, AudioPlayerRootRow,
-    AudioPlayerTrackRow,
+    AudioPlayerGroupRow, AudioPlayerLyricRow, AudioPlayerPayload, AudioPlayerPlaylistRow,
+    AudioPlayerRootRow, AudioPlayerTrackRow,
 };
-pub use video_player::{VideoPlayerItemRow, VideoPlayerPayload, VideoPlayerRootRow};
 pub use calculator::{CalcHistoryRow, CalculatorPayload};
 pub use calendar::{CalendarDayCell, CalendarEventRow, CalendarPayload, CalendarUpcomingRow};
 pub use clock::{ClockCityView, ClockPayload, ClockSearchHit};
@@ -54,6 +53,7 @@ pub use recent_files::{RecentFileItemView, RecentFilesPayload};
 pub use rss::{RssItemView, RssPayload};
 pub use search::{SearchCandidateView, UniversalSearchPayload};
 pub use system::{IndicatorStatus, SystemIndicator, SystemIndicatorKind, SystemPayload};
+pub use video_player::{VideoPlayerItemRow, VideoPlayerPayload, VideoPlayerRootRow};
 pub use viewer::ViewerPayload;
 pub use weather::{
     WeatherCityEntry, WeatherForecastDay, WeatherPayload, WeatherSearchHit, WeatherStatusTag,

@@ -101,6 +101,12 @@ export component AudioPlayerView inherits Rectangle {
                 root.command("crossfade");
                 return accept;
             }
+            if event.text == "l" || event.text == "L" {
+                if root.model.has-lyrics {
+                    root.command("toggle-lyrics");
+                    return accept;
+                }
+            }
             if event.text == "f" || event.text == "F" {
                 if root.model.has-track {
                     root.command("toggle-favorite-current");
@@ -969,6 +975,53 @@ export component AudioPlayerView inherits Rectangle {
                 }
             }
 
+            if root.model.lyrics-open && root.model.has-lyrics : Rectangle {
+                vertical-stretch: 0;
+                height: 140px;
+                background: Theme.surface-raised;
+                border-radius: Theme.radius-md;
+                clip: true;
+
+                property <int> applied-lyrics-idx: -2;
+                property <length> lyrics-row-stride: 22px;
+
+                lyrics-scroll-timer := Timer {
+                    interval: 1ms;
+                    running: root.model.lyrics-active-index != parent.applied-lyrics-idx;
+                    triggered => {
+                        if root.model.lyrics-active-index >= 0 {
+                            let y = root.model.lyrics-active-index * parent.lyrics-row-stride;
+                            let max-y = max(0px, lyrics-flick.viewport-height - lyrics-flick.height);
+                            lyrics-flick.viewport-y = min(max-y, max(0px, y - lyrics-flick.height / 3));
+                        }
+                        parent.applied-lyrics-idx = root.model.lyrics-active-index;
+                    }
+                }
+
+                lyrics-flick := Flickable {
+                    width: 100%;
+                    height: 100%;
+                    viewport-width: self.width;
+                    viewport-height: lyrics-col.preferred-height;
+                    VerticalLayout {
+                        padding: 8px;
+                        spacing: 2px;
+                        width: parent.width;
+                        lyrics-col := VerticalLayout {
+                            spacing: 2px;
+                            for line in root.model.lyrics-lines : Text {
+                                height: 20px;
+                                text: line.text;
+                                color: line.is-current ? Theme.accent-brand : Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                font-weight: line.is-current ? Theme.weight-semibold : Theme.weight-regular;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                }
+            }
+
             // Now-playing chrome — sized to content, never pushed outside the widget.
             Rectangle {
                 vertical-stretch: 0;
@@ -1027,11 +1080,17 @@ export component AudioPlayerView inherits Rectangle {
                                 font-size: Theme.font-size-sm;
                                 overflow: elide;
                             }
-                            if root.model.has-lyrics : Text {
-                                text: root.model.lyrics-line;
-                                color: Theme.accent-brand;
-                                font-size: Theme.font-size-sm;
-                                overflow: elide;
+                            if root.model.has-lyrics : Rectangle {
+                                height: 18px;
+                                TouchArea { clicked => { root.command("toggle-lyrics"); } }
+                                Text {
+                                    text: root.model.lyrics-open ? root.model.lyrics-label : (root.model.lyrics-line != "" ? root.model.lyrics-line : root.model.lyrics-label);
+                                    color: Theme.accent-brand;
+                                    font-size: Theme.font-size-sm;
+                                    overflow: elide;
+                                    width: 100%; height: 100%;
+                                    vertical-alignment: center;
+                                }
                             }
                         }
                         if root.model.has-track : Rectangle {

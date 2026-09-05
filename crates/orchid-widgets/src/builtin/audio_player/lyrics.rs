@@ -73,6 +73,9 @@ impl Lyrics {
         if self.lines.is_empty() {
             return String::new();
         }
+        if !self.is_synced() {
+            return self.lines[0].text.clone();
+        }
         let mut cur = String::new();
         for line in &self.lines {
             if line.time_ms > position_ms {
@@ -81,6 +84,28 @@ impl Lyrics {
             cur = line.text.clone();
         }
         cur
+    }
+
+    /// Active line index at `position_ms` (−1 if none / unsynced).
+    #[must_use]
+    pub fn active_index(&self, position_ms: u64) -> i32 {
+        if !self.is_synced() {
+            return -1;
+        }
+        let mut idx = -1_i32;
+        for (i, line) in self.lines.iter().enumerate() {
+            if line.time_ms > position_ms {
+                break;
+            }
+            idx = i as i32;
+        }
+        idx
+    }
+
+    /// True when at least one line has a non-zero timestamp.
+    #[must_use]
+    pub fn is_synced(&self) -> bool {
+        self.lines.iter().any(|l| l.time_ms > 0)
     }
 
     #[must_use]

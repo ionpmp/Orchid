@@ -25,8 +25,8 @@ use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
 use crate::widget::payloads::{
-    AudioPlayerGroupRow, AudioPlayerPayload, AudioPlayerPlaylistRow, AudioPlayerRootRow,
-    AudioPlayerTrackRow,
+    AudioPlayerGroupRow, AudioPlayerLyricRow, AudioPlayerPayload, AudioPlayerPlaylistRow,
+    AudioPlayerRootRow, AudioPlayerTrackRow,
 };
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
@@ -597,6 +597,15 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             if xf == 0 {
                 h.player.set_volume(f64::from(vol));
             }
+            h.publish();
+        }
+        "toggle-lyrics" => {
+            if h.lyrics.read().is_empty() {
+                return;
+            }
+            let mut cfg = h.config.write();
+            cfg.lyrics_open = !cfg.lyrics_open;
+            drop(cfg);
             h.publish();
         }
         "sort" => {
@@ -1627,6 +1636,20 @@ impl AudioPlayerWidget {
             .handle
             .note_queue_scroll(cfg.browse_tab, current.as_deref());
         let (queue_remaining_count, queue_remaining_ms) = queue_remaining(&lib, &q, pos, dur);
+        let (has_lyrics, lyrics_line, lyrics_lines, lyrics_active_index) = {
+            let ly = self.handle.lyrics.read();
+            let active = ly.active_index(pos);
+            let lines: Vec<AudioPlayerLyricRow> = ly
+                .lines
+                .iter()
+                .enumerate()
+                .map(|(i, line)| AudioPlayerLyricRow {
+                    text: line.text.clone(),
+                    is_current: active >= 0 && i as i32 == active,
+                })
+                .collect();
+            (!ly.is_empty(), ly.line_at(pos), lines, active)
+        };
 
         AudioPlayerPayload {
             engine_available: self.handle.player.available(),
@@ -1709,8 +1732,11 @@ impl AudioPlayerWidget {
             rg_label: self.handle.player.replaygain_label(),
             speed_label: self.handle.player.speed_label(),
             crossfade_secs: cfg.crossfade_secs,
-            lyrics_line: self.handle.lyrics.read().line_at(pos),
-            has_lyrics: !self.handle.lyrics.read().is_empty(),
+            lyrics_line,
+            has_lyrics,
+            lyrics_open: cfg.lyrics_open && has_lyrics,
+            lyrics_lines,
+            lyrics_active_index,
             library_count: lib.tracks.len() as u32,
             library_roots_count,
             has_library_roots,

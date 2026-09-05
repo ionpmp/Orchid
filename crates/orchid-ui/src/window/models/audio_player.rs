@@ -10,8 +10,8 @@ use slint::{Image, Model, ModelRc, SharedPixelBuffer, SharedString, VecModel};
 use super::sync_eq_rows;
 
 use crate::slint_generated::{
-    AudioPlayerGroupItem, AudioPlayerModel, AudioPlayerPlaylistItem, AudioPlayerRootItem,
-    AudioPlayerTrackItem,
+    AudioPlayerGroupItem, AudioPlayerLyricItem, AudioPlayerModel, AudioPlayerPlaylistItem,
+    AudioPlayerRootItem, AudioPlayerTrackItem,
 };
 
 pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerModel {
@@ -48,6 +48,9 @@ pub(crate) fn empty_audio_player_model(locale: &LocaleManager) -> AudioPlayerMod
             crossfade_label: SharedString::new(),
             lyrics_line: SharedString::new(),
             has_lyrics: false,
+            lyrics_open: false,
+            lyrics_lines: ModelRc::new(VecModel::from(Vec::<AudioPlayerLyricItem>::new())),
+            lyrics_active_index: -1,
             roots_label: SharedString::new(),
             empty_hint: SharedString::new(),
             has_cover: false,
@@ -95,6 +98,9 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         crossfade_label: SharedString::new(),
         lyrics_line: SharedString::new(),
         has_lyrics: false,
+        lyrics_open: false,
+        lyrics_lines: ModelRc::new(VecModel::from(Vec::<AudioPlayerLyricItem>::new())),
+        lyrics_active_index: -1,
         roots_label: SharedString::new(),
         empty_hint: SharedString::new(),
         has_cover: false,
@@ -142,6 +148,7 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
         import_m3u_label: locale.tr("audio-player-import-m3u").into(),
         is_current_favorite: false,
         engine_missing_label: locale.tr("audio-player-engine-missing").into(),
+        lyrics_label: locale.tr("audio-player-lyrics").into(),
     }
 }
 
@@ -301,6 +308,7 @@ fn fill_labels(mut m: AudioPlayerModel, locale: &LocaleManager) -> AudioPlayerMo
     m.export_m3u_label = base.export_m3u_label;
     m.import_m3u_label = base.import_m3u_label;
     m.engine_missing_label = base.engine_missing_label;
+    m.lyrics_label = base.lyrics_label;
     m
 }
 
@@ -418,6 +426,17 @@ pub(crate) fn build_audio_player_model(
             crossfade_label: crossfade_label(p.crossfade_secs, locale),
             lyrics_line: p.lyrics_line.clone().into(),
             has_lyrics: p.has_lyrics,
+            lyrics_open: p.lyrics_open,
+            lyrics_lines: ModelRc::new(VecModel::from(
+                p.lyrics_lines
+                    .iter()
+                    .map(|l| AudioPlayerLyricItem {
+                        text: l.text.clone().into(),
+                        is_current: l.is_current,
+                    })
+                    .collect::<Vec<_>>(),
+            )),
+            lyrics_active_index: p.lyrics_active_index,
             roots_label: library_stats_label(p.library_count, p.library_roots_count, locale),
             empty_hint,
             has_cover: p.has_cover,
@@ -581,6 +600,18 @@ pub(crate) fn patch_audio_player_model(
     model.crossfade_label = crossfade_label(p.crossfade_secs, locale);
     model.lyrics_line = p.lyrics_line.clone().into();
     model.has_lyrics = p.has_lyrics;
+    model.lyrics_open = p.lyrics_open;
+    sync_eq_rows(
+        &model.lyrics_lines,
+        p.lyrics_lines
+            .iter()
+            .map(|l| AudioPlayerLyricItem {
+                text: l.text.clone().into(),
+                is_current: l.is_current,
+            })
+            .collect(),
+    );
+    model.lyrics_active_index = p.lyrics_active_index;
     model.roots_label = library_stats_label(p.library_count, p.library_roots_count, locale);
     model.empty_hint = empty_hint;
     model.has_cover = p.has_cover;

@@ -49,6 +49,13 @@ impl PartialEq for AudioPlayerTrackRow {
     }
 }
 
+/// One lyric line for the scrollable lyrics panel.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AudioPlayerLyricRow {
+    pub text: String,
+    pub is_current: bool,
+}
+
 /// Playlist chip / row.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct AudioPlayerPlaylistRow {
@@ -119,6 +126,9 @@ pub struct AudioPlayerPayload {
     pub crossfade_secs: u8,
     pub lyrics_line: String,
     pub has_lyrics: bool,
+    pub lyrics_open: bool,
+    pub lyrics_lines: Vec<AudioPlayerLyricRow>,
+    pub lyrics_active_index: i32,
     pub library_count: u32,
     pub library_roots_count: u32,
     pub has_library_roots: bool,
