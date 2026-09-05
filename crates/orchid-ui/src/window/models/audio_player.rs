@@ -215,7 +215,31 @@ fn crossfade_label(secs: u8, locale: &LocaleManager) -> SharedString {
     }
 }
 
-fn queue_stats_label(count: u32, duration_ms: u64, locale: &LocaleManager) -> SharedString {
+fn queue_stats_label(
+    count: u32,
+    duration_ms: u64,
+    remaining_count: u32,
+    remaining_ms: u64,
+    locale: &LocaleManager,
+) -> SharedString {
+    if remaining_count > 0 {
+        if remaining_ms == 0 {
+            return locale
+                .tr_args(
+                    "audio-player-queue-remaining-tracks",
+                    &FluentArgs::new().with("tracks", remaining_count.to_string()),
+                )
+                .into();
+        }
+        return locale
+            .tr_args(
+                "audio-player-queue-remaining",
+                &FluentArgs::new()
+                    .with("tracks", remaining_count.to_string())
+                    .with("duration", format_queue_duration(remaining_ms)),
+            )
+            .into();
+    }
     if count == 0 {
         return SharedString::new();
     }
@@ -398,7 +422,13 @@ pub(crate) fn build_audio_player_model(
             empty_hint,
             has_cover: p.has_cover,
             cover,
-            queue_stats_label: queue_stats_label(p.queue_count, p.queue_duration_ms, locale),
+            queue_stats_label: queue_stats_label(
+                p.queue_count,
+                p.queue_duration_ms,
+                p.queue_remaining_count,
+                p.queue_remaining_ms,
+                locale,
+            ),
             current_track_index: p.current_track_index,
             scroll_gen: p.scroll_gen,
             has_library_roots: p.has_library_roots,
@@ -555,7 +585,13 @@ pub(crate) fn patch_audio_player_model(
     model.empty_hint = empty_hint;
     model.has_cover = p.has_cover;
     model.cover = cover;
-    model.queue_stats_label = queue_stats_label(p.queue_count, p.queue_duration_ms, locale);
+    model.queue_stats_label = queue_stats_label(
+        p.queue_count,
+        p.queue_duration_ms,
+        p.queue_remaining_count,
+        p.queue_remaining_ms,
+        locale,
+    );
     model.current_track_index = p.current_track_index;
     model.scroll_gen = p.scroll_gen;
     model.has_library_roots = p.has_library_roots;

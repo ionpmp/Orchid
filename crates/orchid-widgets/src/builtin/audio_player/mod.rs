@@ -478,7 +478,8 @@ pub fn enqueue_paths(instance_id: Uuid, paths: &[String]) {
 /// Current queue track path, if any.
 #[must_use]
 pub fn current_track_path(instance_id: Uuid) -> Option<String> {
-    AUDIO_LIVE.get(&instance_id)?
+    AUDIO_LIVE
+        .get(&instance_id)?
         .queue
         .read()
         .current()
@@ -702,9 +703,7 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         }
         "start-rename-playlist" => {
             let mut cfg = h.config.write();
-            if !cfg.active_playlist_id.is_empty()
-                && cfg.active_playlist_id != RECENT_PLAYLIST_ID
-            {
+            if !cfg.active_playlist_id.is_empty() && cfg.active_playlist_id != RECENT_PLAYLIST_ID {
                 cfg.renaming_playlist = true;
             }
             drop(cfg);
@@ -1066,22 +1065,20 @@ fn browse_track_paths(h: &AudioHandle) -> Vec<String> {
         q.display_paths()
             .into_iter()
             .filter_map(|p| {
-                lib.find_by_path(&p)
-                    .map(library::track_row)
-                    .or_else(|| {
-                        let stem = PathBuf::from(&p)
-                            .file_stem()
-                            .map(|s| s.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| p.clone());
-                        Some(TrackRow {
-                            path: p.clone(),
-                            title: stem,
-                            artist: String::new(),
-                            album: String::new(),
-                            subtitle: p,
-                            duration_label: String::new(),
-                        })
+                lib.find_by_path(&p).map(library::track_row).or_else(|| {
+                    let stem = PathBuf::from(&p)
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| p.clone());
+                    Some(TrackRow {
+                        path: p.clone(),
+                        title: stem,
+                        artist: String::new(),
+                        album: String::new(),
+                        subtitle: p,
+                        duration_label: String::new(),
                     })
+                })
             })
             .filter(|row| library::track_row_matches(row, &search))
             .map(|row| row.path)
@@ -1346,6 +1343,27 @@ fn queue_known_duration_ms(lib: &library::LibraryIndex, paths: &[String]) -> u64
         .sum()
 }
 
+/// Tracks from the current row onward, plus remaining ms of the playing track.
+fn queue_remaining(
+    lib: &library::LibraryIndex,
+    q: &PlayQueue,
+    position_ms: u64,
+    duration_ms: u64,
+) -> (u32, u64) {
+    let paths = q.display_paths();
+    let Some(cur) = q.current() else {
+        return (0, 0);
+    };
+    let Some(idx) = paths.iter().position(|p| p == cur) else {
+        return (0, 0);
+    };
+    let count = (paths.len() - idx) as u32;
+    let after = &paths[idx + 1..];
+    let rem_current = duration_ms.saturating_sub(position_ms);
+    let after_ms = queue_known_duration_ms(lib, after);
+    (count, rem_current.saturating_add(after_ms))
+}
+
 fn track_rows_from(
     rows: &[TrackRow],
     current: Option<&str>,
@@ -1459,22 +1477,20 @@ impl AudioPlayerWidget {
                     .display_paths()
                     .into_iter()
                     .filter_map(|p| {
-                        lib.find_by_path(&p)
-                            .map(library::track_row)
-                            .or_else(|| {
-                                let stem = PathBuf::from(&p)
-                                    .file_stem()
-                                    .map(|s| s.to_string_lossy().into_owned())
-                                    .unwrap_or_else(|| p.clone());
-                                Some(TrackRow {
-                                    path: p.clone(),
-                                    title: stem,
-                                    artist: String::new(),
-                                    album: String::new(),
-                                    subtitle: p,
-                                    duration_label: String::new(),
-                                })
+                        lib.find_by_path(&p).map(library::track_row).or_else(|| {
+                            let stem = PathBuf::from(&p)
+                                .file_stem()
+                                .map(|s| s.to_string_lossy().into_owned())
+                                .unwrap_or_else(|| p.clone());
+                            Some(TrackRow {
+                                path: p.clone(),
+                                title: stem,
+                                artist: String::new(),
+                                album: String::new(),
+                                subtitle: p,
+                                duration_label: String::new(),
                             })
+                        })
                     })
                     .filter(|row| library::track_row_matches(row, &search))
                     .collect(),
@@ -1610,6 +1626,7 @@ impl AudioPlayerWidget {
         let scroll_gen = self
             .handle
             .note_queue_scroll(cfg.browse_tab, current.as_deref());
+        let (queue_remaining_count, queue_remaining_ms) = queue_remaining(&lib, &q, pos, dur);
 
         AudioPlayerPayload {
             engine_available: self.handle.player.available(),
@@ -1667,6 +1684,8 @@ impl AudioPlayerWidget {
             scroll_gen,
             queue_count: q.paths.len() as u32,
             queue_duration_ms: queue_known_duration_ms(&lib, &q.paths),
+            queue_remaining_count: queue_remaining_count,
+            queue_remaining_ms: queue_remaining_ms,
             has_track: current.is_some(),
             title,
             artist,

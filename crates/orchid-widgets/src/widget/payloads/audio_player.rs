@@ -93,6 +93,10 @@ pub struct AudioPlayerPayload {
     pub queue_count: u32,
     /// Sum of known ID3 durations for queued tracks (ms); 0 if none known.
     pub queue_duration_ms: u64,
+    /// Tracks left from the current row (inclusive); 0 if nothing playing.
+    pub queue_remaining_count: u32,
+    /// Remaining playtime from now: leftover of current + known durations after it.
+    pub queue_remaining_ms: u64,
     pub has_track: bool,
     pub title: String,
     pub artist: String,

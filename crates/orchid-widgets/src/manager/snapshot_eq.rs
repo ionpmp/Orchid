@@ -851,6 +851,8 @@ fn audio_player_payload_eq(a: &AudioPlayerPayload, b: &AudioPlayerPayload) -> bo
         && a.queue_index == b.queue_index
         && a.queue_count == b.queue_count
         && a.queue_duration_ms == b.queue_duration_ms
+        && a.queue_remaining_count == b.queue_remaining_count
+        && a.queue_remaining_ms / 1000 == b.queue_remaining_ms / 1000
         && a.has_track == b.has_track
         && a.title == b.title
         && a.artist == b.artist
