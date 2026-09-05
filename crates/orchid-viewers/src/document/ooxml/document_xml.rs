@@ -982,6 +982,12 @@ fn parse_sect_pr(reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>) -> Result<PageSe
                         if let Some(v) = attr_val(&e, "right").and_then(|v| v.parse().ok()) {
                             setup.margin_right_twips = v;
                         }
+                        if let Some(v) = attr_val(&e, "header").and_then(|v| v.parse().ok()) {
+                            setup.header_distance_twips = v;
+                        }
+                        if let Some(v) = attr_val(&e, "footer").and_then(|v| v.parse().ok()) {
+                            setup.footer_distance_twips = v;
+                        }
                     }
                     "headerReference" => {
                         let ty = attr_val(&e, "type").unwrap_or_else(|| "default".into());
@@ -1888,6 +1894,8 @@ fn write_sect_pr(writer: &mut Writer<Cursor<Vec<u8>>>, setup: &PageSetup) -> Res
     mar.push_attribute(("w:bottom", setup.margin_bottom_twips.to_string().as_str()));
     mar.push_attribute(("w:left", setup.margin_left_twips.to_string().as_str()));
     mar.push_attribute(("w:right", setup.margin_right_twips.to_string().as_str()));
+    mar.push_attribute(("w:header", setup.header_distance_twips.to_string().as_str()));
+    mar.push_attribute(("w:footer", setup.footer_distance_twips.to_string().as_str()));
     writer
         .write_event(Event::Empty(mar))
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
@@ -3721,6 +3729,44 @@ mod tests {
         assert!(
             text.contains("r:id=\"rId4\""),
             "missing even footerReference: {text}"
+        );
+    }
+
+    #[test]
+    fn parse_and_write_pgmar_header_footer_distance() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p><w:r><w:t>Body</w:t></w:r></w:p>
+            <w:sectPr>
+              <w:pgMar w:top="1440" w:bottom="1440" w:left="1440" w:right="1440"
+                       w:header="576" w:footer="864"/>
+            </w:sectPr>
+          </w:body>
+        </w:document>"#;
+        let (_, page_setup, _, _) = parse_document_xml(
+            xml,
+            &StyleDefaults::default(),
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(page_setup.header_distance_twips, 576);
+        assert_eq!(page_setup.footer_distance_twips, 864);
+        let doc = Document {
+            page_setup,
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("w:header=\"576\""),
+            "missing header distance: {text}"
+        );
+        assert!(
+            text.contains("w:footer=\"864\""),
+            "missing footer distance: {text}"
         );
     }
 

@@ -562,7 +562,10 @@ impl DocumentLayout {
         }
 
         // Header / footer stories in page margins. Preview paints the correct
-        // first / even / default story at each `w:pageBreakBefore` band.
+        // first / even / default story at each `w:pageBreakBefore` band, using
+        // `w:pgMar` `@w:header` / `@w:footer` distances from the page edge.
+        let header_off = twips_to_css_px(doc.page_setup.header_distance_twips) * scale;
+        let footer_off = twips_to_css_px(doc.page_setup.footer_distance_twips) * scale;
         for (page_i, &start_y) in page_starts.iter().enumerate() {
             let page = (page_i + 1) as u32;
             let end_y = page_starts
@@ -570,15 +573,12 @@ impl DocumentLayout {
                 .copied()
                 .unwrap_or(total_h);
             let (header_story, footer_story) = margin_stories_for_page(doc, page);
-            let header_y = if page_i == 0 {
-                6.0 * scale
-            } else {
-                (insets.top + start_y - 18.0 * scale).max(0.0)
-            };
+            // `start_y` is content-relative; header sits `header_off` below the page top.
+            let header_y = (start_y + header_off).max(0.0);
             let footer_y = if page_i + 1 == page_starts.len() {
-                height as f32 - insets.bottom + 6.0 * scale
+                (height as f32 - footer_off - 14.0 * scale).max(0.0)
             } else {
-                (insets.top + end_y - 18.0 * scale).max(0.0)
+                (insets.top + end_y - footer_off.min(insets.bottom).max(12.0 * scale)).max(0.0)
             };
             if !header_story.is_empty() {
                 self.paint_margin_story(
@@ -3541,6 +3541,59 @@ mod tests {
             cursor.cell.and_then(|c| c.image_idx),
             Some(0),
             "expected cell image cursor"
+        );
+    }
+
+    #[test]
+    fn preview_honors_header_distance_from_page_edge() {
+        // Larger header distance should push header ink lower in the top margin.
+        let mut near = PageSetup::default();
+        near.margin_top_twips = 1440;
+        near.header_distance_twips = 240; // 1/6″
+        let mut far = near.clone();
+        far.header_distance_twips = 960; // 2/3″
+        let mk = |page_setup: PageSetup| Document {
+            blocks: vec![Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Body".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })],
+            page_setup,
+            header: vec![Paragraph {
+                runs: vec![Run {
+                    text: "HDRDIST".into(),
+                    style: RunStyle {
+                        bold: true,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let (bytes_near, w, h) = DocumentLayout::new().render_document(&mk(near), 400.0);
+        let (bytes_far, w2, h2) = DocumentLayout::new().render_document(&mk(far), 400.0);
+        assert_eq!((w, h), (w2, h2));
+        let first_dark_y = |bytes: &[u8]| -> Option<u32> {
+            for y in 0..h {
+                for x in 0..w {
+                    let i = ((y as usize) * (w as usize) + (x as usize)) * 4;
+                    if bytes[i] < 100 || bytes[i + 1] < 100 || bytes[i + 2] < 100 {
+                        return Some(y);
+                    }
+                }
+            }
+            None
+        };
+        let y_near = first_dark_y(&bytes_near).expect("near header ink");
+        let y_far = first_dark_y(&bytes_far).expect("far header ink");
+        assert!(
+            y_far > y_near + 4,
+            "larger w:header distance should paint lower (near={y_near}, far={y_far})"
         );
     }
 

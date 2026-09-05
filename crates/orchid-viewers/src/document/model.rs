@@ -379,6 +379,10 @@ pub struct PageSetup {
     pub margin_left_twips: u32,
     /// Right margin.
     pub margin_right_twips: u32,
+    /// Distance from page top to header (`w:pgMar/@w:header`).
+    pub header_distance_twips: u32,
+    /// Distance from page bottom to footer (`w:pgMar/@w:footer`).
+    pub footer_distance_twips: u32,
     /// Default header relationship id (`w:headerReference/@r:id`, `w:type="default"`).
     pub header_r_id: Option<String>,
     /// Default footer relationship id (`w:footerReference/@r:id`, `w:type="default"`).
@@ -407,6 +411,8 @@ impl Default for PageSetup {
             margin_bottom_twips: 1440,
             margin_left_twips: 1440,
             margin_right_twips: 1440,
+            header_distance_twips: 720,
+            footer_distance_twips: 720,
             header_r_id: None,
             footer_r_id: None,
             header_first_r_id: None,
