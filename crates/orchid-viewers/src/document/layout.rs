@@ -22,8 +22,8 @@ use swash::FontRef;
 
 use crate::document::cursor::{cursor_from_plain_offset, plain_offset_from_cursor, Cursor};
 use crate::document::model::{
-    Alignment, Block, Document, LineSpacingRule, ListKind, PageSetup, Paragraph, Table, TableCell,
-    TableRow, VMerge,
+    Alignment, Block, Document, LineSpacingRule, ListKind, NamedParagraphStyle, PageSetup,
+    Paragraph, RunStyle, Table, TableCell, TableRow, VMerge,
 };
 
 /// Brush colour for styled runs (RGBA).
@@ -395,8 +395,9 @@ impl DocumentLayout {
                         - paragraph_right_indent_px(p) * scale)
                         .max(12.0 * scale);
                     // Body fields: page=1 until per-band PAGE resolution; DATE/FILENAME ok.
+                    let styled = apply_named_paragraph_style(&doc.paragraph_styles, p);
                     let resolved = resolve_paragraph_fields(
-                        p,
+                        &styled,
                         1,
                         page_starts.len().max(1) as u32,
                         self.field_file_name.as_deref(),
@@ -434,6 +435,7 @@ impl DocumentLayout {
                 }
                 Block::Table(t) => {
                     let grid = self.append_table_grid(
+                        &doc.paragraph_styles,
                         t,
                         max_w,
                         &mut total_h,
@@ -642,6 +644,7 @@ impl DocumentLayout {
             };
             if !header_resolved.is_empty() {
                 self.paint_margin_story(
+                    &doc.paragraph_styles,
                     &header_resolved,
                     max_w,
                     insets.left,
@@ -654,6 +657,7 @@ impl DocumentLayout {
             }
             if !footer_resolved.is_empty() {
                 self.paint_margin_story(
+                    &doc.paragraph_styles,
                     &footer_resolved,
                     max_w,
                     insets.left,
@@ -678,6 +682,81 @@ impl DocumentLayout {
         });
         overlay_selection_on_scene(self.scene.as_ref().expect("scene just stored"), selection)
     }
+}
+
+
+/// Fill unset run props from a named paragraph style (direct formatting wins).
+fn merge_run_under_named(dst: &mut RunStyle, base: &RunStyle) {
+    if !dst.bold {
+        dst.bold = base.bold;
+    }
+    if !dst.italic {
+        dst.italic = base.italic;
+    }
+    if !dst.underline {
+        dst.underline = base.underline;
+    }
+    if !dst.strikethrough {
+        dst.strikethrough = base.strikethrough;
+    }
+    if !dst.double_strikethrough {
+        dst.double_strikethrough = base.double_strikethrough;
+    }
+    if !dst.highlight {
+        dst.highlight = base.highlight;
+    }
+    if !dst.superscript && !dst.subscript {
+        dst.superscript = base.superscript;
+        dst.subscript = base.subscript;
+    }
+    if !dst.all_caps {
+        dst.all_caps = base.all_caps;
+    }
+    if !dst.small_caps {
+        dst.small_caps = base.small_caps;
+    }
+    if !dst.vanish {
+        dst.vanish = base.vanish;
+    }
+    if !dst.shadow {
+        dst.shadow = base.shadow;
+    }
+    if !dst.emboss {
+        dst.emboss = base.emboss;
+    }
+    if !dst.imprint {
+        dst.imprint = base.imprint;
+    }
+    if dst.color.is_none() {
+        dst.color = base.color;
+    }
+    if dst.font_family.is_none() {
+        dst.font_family = base.font_family.clone();
+    }
+    if dst.font_size_pt.is_none() {
+        dst.font_size_pt = base.font_size_pt;
+    }
+}
+
+/// Apply `w:pStyle` character/outline defaults for Preview layout.
+fn apply_named_paragraph_style(
+    styles: &HashMap<String, NamedParagraphStyle>,
+    p: &Paragraph,
+) -> Paragraph {
+    let Some(id) = p.style_id.as_deref() else {
+        return p.clone();
+    };
+    let Some(ns) = styles.get(id) else {
+        return p.clone();
+    };
+    let mut out = p.clone();
+    if out.outline_level.is_none() {
+        out.outline_level = ns.outline_level;
+    }
+    for run in &mut out.runs {
+        merge_run_under_named(&mut run.style, &ns.run);
+    }
+    out
 }
 
 /// Substitute field display text (`PAGE`, `DATE`, `FILENAME`, …) for preview paint.
@@ -784,6 +863,7 @@ impl DocumentLayout {
     /// Layout and paint header/footer paragraphs into the page margin band.
     fn paint_margin_story(
         &mut self,
+        styles: &HashMap<String, NamedParagraphStyle>,
         paragraphs: &[crate::document::model::Paragraph],
         max_w: f32,
         origin_x: f32,
@@ -796,10 +876,11 @@ impl DocumentLayout {
         let mut y = origin_y;
         let gap = 4.0 * scale;
         for p in paragraphs {
-            let indent = list_indent_px(p) * scale;
+            let styled = apply_named_paragraph_style(styles, p);
+            let indent = list_indent_px(&styled) * scale;
             let layout = self.layout_paragraph(
-                p,
-                (max_w - indent - paragraph_right_indent_px(p) * scale).max(12.0 * scale),
+                &styled,
+                (max_w - indent - paragraph_right_indent_px(&styled) * scale).max(12.0 * scale),
                 scale,
             );
             if !layout.is_empty() {
@@ -869,7 +950,8 @@ impl DocumentLayout {
                     let (sect_x0, sect_wrap) =
                         section_body_origin_and_width(sect, &union, max_w, 1.0);
                     let wrap_w = (sect_wrap - indent - paragraph_right_indent_px(p)).max(12.0);
-                    let layout = self.layout_paragraph(p, wrap_w, 1.0);
+                    let styled = apply_named_paragraph_style(&doc.paragraph_styles, p);
+                    let layout = self.layout_paragraph(&styled, wrap_w, 1.0);
                     let h = layout.height().max(16.0);
                     let y0 = total_h;
                     let after = twips_to_css_px(p.space_after_twips).max(para_gap);
@@ -966,7 +1048,8 @@ impl DocumentLayout {
                     let body_len = p.plain_text().len();
                     let y0 = total_h;
                     let wrap_w = paragraph_wrap_width(max_w, p);
-                    let layout = self.layout_paragraph(p, wrap_w, 1.0);
+                    let styled = apply_named_paragraph_style(&doc.paragraph_styles, p);
+                    let layout = self.layout_paragraph(&styled, wrap_w, 1.0);
                     let h = layout.height().max(16.0);
                     if target >= plain_offset && target <= plain_offset + body_len {
                         return insets.top + y0;
@@ -982,7 +1065,7 @@ impl DocumentLayout {
                 Block::Table(t) => {
                     let range_start = plain_offset;
                     let measured =
-                        self.measure_table(t, max_w, &mut plain_offset, &mut emitted_text, 1.0);
+                        self.measure_table(&doc.paragraph_styles, t, max_w, &mut plain_offset, &mut emitted_text, 1.0);
                     let table_y0 = total_h;
                     let row_y0s = row_origins(table_y0, &measured.row_heights);
                     if target >= range_start && target <= plain_offset {
@@ -1047,6 +1130,7 @@ impl DocumentLayout {
     /// Lay out a table on the `tblGrid` / `gridSpan` / `vMerge` geometry.
     fn append_table_grid(
         &mut self,
+        styles: &HashMap<String, NamedParagraphStyle>,
         t: &Table,
         max_w: f32,
         total_h: &mut f32,
@@ -1055,7 +1139,7 @@ impl DocumentLayout {
         layouts: &mut Vec<LaidBlock>,
         scale: f32,
     ) -> TableGridGeom {
-        let mut measured = self.measure_table(t, max_w, plain_offset, emitted_text, scale);
+        let mut measured = self.measure_table(styles, t, max_w, plain_offset, emitted_text, scale);
         let table_y0 = *total_h;
         let row_y0s = row_origins(table_y0, &measured.row_heights);
         let mut cell_rects = Vec::new();
@@ -1183,7 +1267,7 @@ impl DocumentLayout {
         plain_offset: &mut usize,
         emitted_text: &mut bool,
     ) -> Option<Cursor> {
-        let measured = self.measure_table(t, max_w, plain_offset, emitted_text, 1.0);
+        let measured = self.measure_table(&doc.paragraph_styles, t, max_w, plain_offset, emitted_text, 1.0);
         let table_y0 = *total_h;
         let row_y0s = row_origins(table_y0, &measured.row_heights);
         *total_h = table_y0 + measured.row_heights.iter().sum::<f32>();
@@ -1279,6 +1363,7 @@ impl DocumentLayout {
 
     fn measure_table(
         &mut self,
+        styles: &HashMap<String, NamedParagraphStyle>,
         t: &Table,
         max_w: f32,
         plain_offset: &mut usize,
@@ -1305,8 +1390,14 @@ impl DocumentLayout {
                     .unwrap_or((0, 1));
                 let cell_w = col_widths.iter().skip(col0).take(span).sum::<f32>();
                 let inner_w = (cell_w - pad * 2.0).max(16.0 * scale);
-                let cell_items =
-                    self.layout_cell_items(cell, inner_w, plain_offset, emitted_text, scale);
+                let cell_items = self.layout_cell_items(
+                    styles,
+                    cell,
+                    inner_w,
+                    plain_offset,
+                    emitted_text,
+                    scale,
+                );
                 let mut content_h: f32 = cell_items.iter().map(|i| i.height() + gap).sum();
                 if content_h > 0.0 {
                     content_h -= gap;
@@ -1365,6 +1456,7 @@ impl DocumentLayout {
 
     fn layout_cell_items(
         &mut self,
+        styles: &HashMap<String, NamedParagraphStyle>,
         cell: &crate::document::model::TableCell,
         inner_w: f32,
         plain_offset: &mut usize,
@@ -1399,7 +1491,8 @@ impl DocumentLayout {
             let indent = list_indent_px(p) * scale;
             let wrap_w =
                 (inner_w - indent - paragraph_right_indent_px(p) * scale).max(12.0 * scale);
-            let layout = self.layout_paragraph(p, wrap_w, scale);
+            let styled = apply_named_paragraph_style(styles, p);
+            let layout = self.layout_paragraph(&styled, wrap_w, scale);
             let h = layout.height().max(14.0 * scale);
             let plain_start = *plain_offset;
             items.push(CellItemLayout::Para {

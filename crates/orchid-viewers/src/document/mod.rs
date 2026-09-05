@@ -2026,10 +2026,12 @@ impl DocumentViewer {
         };
         let mut blocks = doc.blocks.clone();
         let mut changed = false;
+        let next_style = Document::heading_style_id(next);
         for cursor in cursors {
             if let Some(p) = paragraph_mut_in_blocks(&mut blocks, cursor) {
-                if p.outline_level != next {
+                if p.outline_level != next || p.style_id != next_style {
                     p.outline_level = next;
+                    p.style_id = next_style.clone();
                     changed = true;
                 }
             }
@@ -3409,6 +3411,7 @@ fn plain_text_to_blocks_preserving(doc: &Document, text: &str) -> Vec<Block> {
                     bidi: prev.bidi,
                     suppress_auto_hyphens: prev.suppress_auto_hyphens,
                     outline_level: prev.outline_level,
+                    style_id: None,
                     space_before_twips: prev.space_before_twips,
                     space_after_twips: prev.space_after_twips,
                     line_spacing: prev.line_spacing,
@@ -3881,6 +3884,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         bidi: p.bidi,
         suppress_auto_hyphens: p.suppress_auto_hyphens,
         outline_level: p.outline_level,
+        style_id: p.style_id.clone(),
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
         line_spacing: p.line_spacing,
@@ -3907,6 +3911,7 @@ fn split_paragraph_blocks(doc: &Document, at: Cursor) -> Result<Vec<Block>> {
         bidi: false,
         suppress_auto_hyphens: false,
         outline_level: None,
+        style_id: None,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
         line_spacing: p.line_spacing,
@@ -3959,6 +3964,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         bidi: p.bidi,
         suppress_auto_hyphens: p.suppress_auto_hyphens,
         outline_level: p.outline_level,
+        style_id: p.style_id.clone(),
         space_before_twips: p.space_before_twips,
         space_after_twips: 0,
         line_spacing: p.line_spacing,
@@ -3985,6 +3991,7 @@ fn split_cell_paragraph(doc: &Document, at: Cursor) -> Result<(Vec<Block>, Curso
         bidi: false,
         suppress_auto_hyphens: false,
         outline_level: None,
+        style_id: None,
         space_before_twips: 0,
         space_after_twips: p.space_after_twips,
         line_spacing: p.line_spacing,
@@ -4092,6 +4099,7 @@ fn delete_multi_cell_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Re
         bidi: start_p.bidi,
         suppress_auto_hyphens: start_p.suppress_auto_hyphens,
         outline_level: start_p.outline_level,
+        style_id: None,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
         line_spacing: start_p.line_spacing,
@@ -4191,6 +4199,7 @@ fn delete_multi_paragraph(doc: &Document, start: Cursor, end: Cursor) -> Result<
         bidi: start_p.bidi,
         suppress_auto_hyphens: start_p.suppress_auto_hyphens,
         outline_level: start_p.outline_level,
+        style_id: None,
         space_before_twips: start_p.space_before_twips,
         space_after_twips: start_p.space_after_twips,
         line_spacing: start_p.line_spacing,

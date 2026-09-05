@@ -335,6 +335,7 @@ fn parse_paragraph(
         bidi: false,
         suppress_auto_hyphens: false,
         outline_level: None,
+        style_id: None,
         space_before_twips: 0,
         space_after_twips: 0,
         line_spacing: 0,
@@ -411,6 +412,16 @@ fn parse_paragraph(
                             if let Ok(lvl) = val.parse::<u8>() {
                                 p.outline_level = Some(lvl.min(8));
                             }
+                        }
+                    }
+                    "pStyle" if in_p_pr => {
+                        if let Some(val) = attr_val(&e, "val").filter(|v| !v.is_empty()) {
+                            if p.outline_level.is_none() {
+                                if let Some(ns) = styles.paragraph_styles.get(&val) {
+                                    p.outline_level = ns.outline_level;
+                                }
+                            }
+                            p.style_id = Some(val);
                         }
                     }
                     "spacing" if in_p_pr => {
@@ -558,6 +569,16 @@ fn parse_paragraph(
                                 if let Ok(lvl) = val.parse::<u8>() {
                                     p.outline_level = Some(lvl.min(8));
                                 }
+                            }
+                        }
+                        "pStyle" => {
+                            if let Some(val) = attr_val(&e, "val").filter(|v| !v.is_empty()) {
+                                if p.outline_level.is_none() {
+                                    if let Some(ns) = styles.paragraph_styles.get(&val) {
+                                        p.outline_level = ns.outline_level;
+                                    }
+                                }
+                                p.style_id = Some(val);
                             }
                         }
                         "spacing" => {
@@ -1460,6 +1481,13 @@ fn write_paragraph(
     if p.suppress_auto_hyphens {
         writer
             .write_event(Event::Empty(BytesStart::new("w:suppressAutoHyphens")))
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    }
+    if let Some(ref sid) = p.style_id {
+        let mut ps = BytesStart::new("w:pStyle");
+        ps.push_attribute(("w:val", sid.as_str()));
+        writer
+            .write_event(Event::Empty(ps))
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     }
     if let Some(lvl) = p.outline_level {
@@ -4553,6 +4581,75 @@ mod tests {
             panic!("p0b");
         };
         assert_eq!(p0b.section_properties, p0.section_properties);
+    }
+
+    #[test]
+    fn pstyle_round_trip_and_outline_from_named_style() {
+        use crate::document::model::{NamedParagraphStyle, RunStyle};
+
+        let xml = br#"<?xml version="1.0"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p>
+              <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+              <w:r><w:t>Title</w:t></w:r>
+            </w:p>
+            <w:sectPr/>
+          </w:body>
+        </w:document>"#;
+        let mut styles = StyleDefaults::default();
+        styles.paragraph_styles.insert(
+            "Heading1".into(),
+            NamedParagraphStyle {
+                style_id: "Heading1".into(),
+                name: "heading 1".into(),
+                outline_level: Some(0),
+                run: RunStyle {
+                    bold: true,
+                    font_size_pt: Some(16.0),
+                    ..Default::default()
+                },
+            },
+        );
+        let (blocks, page_setup, unsupported, _) = parse_document_xml(
+            xml,
+            &styles,
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert!(unsupported.is_empty());
+        let Block::Paragraph(p) = &blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert_eq!(p.style_id.as_deref(), Some("Heading1"));
+        assert_eq!(p.outline_level, Some(0));
+        let doc = Document {
+            blocks: blocks.clone(),
+            page_setup,
+            paragraph_styles: styles.paragraph_styles.clone(),
+            ..Default::default()
+        };
+        let out = write_document_xml(&doc).unwrap();
+        let text = String::from_utf8(out.clone()).unwrap();
+        assert!(
+            text.contains("w:pStyle") && text.contains("Heading1"),
+            "missing pStyle: {text}"
+        );
+        let (blocks2, _, _, _) = parse_document_xml(
+            &out,
+            &styles,
+            &NumberingDefs::default(),
+            &Relationships::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        let Block::Paragraph(p2) = &blocks2[0] else {
+            panic!("expected paragraph");
+        };
+        assert_eq!(p2.style_id.as_deref(), Some("Heading1"));
+        assert_eq!(p2.outline_level, Some(0));
     }
 
     #[test]

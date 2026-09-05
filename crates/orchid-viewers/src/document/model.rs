@@ -1,5 +1,6 @@
 //! In-memory document model for Tier-1 rich text (DOCX-compatible).
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::error::{Result, ViewerError};
@@ -281,6 +282,8 @@ pub struct Paragraph {
     /// Outline/heading level (`w:outlineLvl`, 0 = Heading 1 … 8 = Heading 9).
     /// `None` = body text (element omitted).
     pub outline_level: Option<u8>,
+    /// Named paragraph style id (`w:pStyle/@w:val`, e.g. `Heading1`).
+    pub style_id: Option<String>,
     /// Space before paragraph in twips (`w:spacing/@w:before`). `0` = none.
     pub space_before_twips: u32,
     /// Space after paragraph in twips (`w:spacing/@w:after`). `0` = none.
@@ -497,6 +500,19 @@ pub enum Block {
     Image(InlineImage),
 }
 
+/// Paragraph style from `word/styles.xml` (`w:style` type `paragraph`).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct NamedParagraphStyle {
+    /// Style id (`w:styleId`).
+    pub style_id: String,
+    /// Display name (`w:name/@w:val`).
+    pub name: String,
+    /// Default outline level when the style is applied.
+    pub outline_level: Option<u8>,
+    /// Character defaults from the style's `w:rPr`.
+    pub run: RunStyle,
+}
+
 /// Full in-memory document.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Document {
@@ -504,6 +520,8 @@ pub struct Document {
     pub blocks: Vec<Block>,
     /// Page geometry.
     pub page_setup: PageSetup,
+    /// Named paragraph styles keyed by `style_id` (from `styles.xml`).
+    pub paragraph_styles: HashMap<String, NamedParagraphStyle>,
     /// Default header story paragraphs (`word/header*.xml`).
     pub header: Vec<Paragraph>,
     /// Default footer story paragraphs (`word/footer*.xml`).
@@ -532,6 +550,18 @@ pub struct Document {
 }
 
 impl Document {
+    /// Look up a named paragraph style by id.
+    #[must_use]
+    pub fn paragraph_style(&self, style_id: &str) -> Option<&NamedParagraphStyle> {
+        self.paragraph_styles.get(style_id)
+    }
+
+    /// OOXML style id for outline level (`Heading1`…`Heading9`), or `None` for body.
+    #[must_use]
+    pub fn heading_style_id(level: Option<u8>) -> Option<String> {
+        level.map(|lvl| format!("Heading{}", lvl.min(8) + 1))
+    }
+
     /// Plain-text offset of the first bookmark named `name`, if any.
     #[must_use]
     pub fn bookmark_offset(&self, name: &str) -> Option<usize> {

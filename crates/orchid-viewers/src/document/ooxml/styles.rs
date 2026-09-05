@@ -1,16 +1,20 @@
-//! Parse `word/styles.xml` for document defaults.
+//! Parse `word/styles.xml` for document defaults and named paragraph styles.
+
+use std::collections::HashMap;
 
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 
-use crate::document::model::RunStyle;
+use crate::document::model::{NamedParagraphStyle, RunStyle};
 use crate::error::{Result, ViewerError};
 
-/// Default run style from `<w:docDefaults>`.
+/// Default run style from `<w:docDefaults>` plus named paragraph styles.
 #[derive(Debug, Clone, Default)]
 pub struct StyleDefaults {
     /// Base character style applied when a run omits `<w:rPr>`.
     pub run: RunStyle,
+    /// Paragraph styles keyed by `w:styleId`.
+    pub paragraph_styles: HashMap<String, NamedParagraphStyle>,
 }
 
 /// Parse styles.xml bytes.
@@ -26,6 +30,10 @@ pub fn parse_styles_xml(bytes: &[u8]) -> Result<StyleDefaults> {
     let mut in_doc_defaults = false;
     let mut in_r_pr_default = false;
     let mut in_r_pr = false;
+    let mut in_style = false;
+    let mut cur_style: Option<NamedParagraphStyle> = None;
+    let mut in_style_r_pr = false;
+    let mut in_style_p_pr = false;
 
     loop {
         match reader.read_event_into(&mut buf) {
@@ -35,6 +43,38 @@ pub fn parse_styles_xml(bytes: &[u8]) -> Result<StyleDefaults> {
                     "docDefaults" => in_doc_defaults = true,
                     "rPrDefault" if in_doc_defaults => in_r_pr_default = true,
                     "rPr" if in_r_pr_default => in_r_pr = true,
+                    "style" => {
+                        in_style = true;
+                        let is_paragraph =
+                            attr_val(&e, "type").as_deref() == Some("paragraph");
+                        let id = attr_val(&e, "styleId").unwrap_or_default();
+                        if is_paragraph && !id.is_empty() {
+                            cur_style = Some(NamedParagraphStyle {
+                                style_id: id,
+                                ..Default::default()
+                            });
+                        } else {
+                            cur_style = None;
+                        }
+                    }
+                    "name" if in_style => {
+                        if let Some(ref mut s) = cur_style {
+                            if let Some(n) = attr_val(&e, "val") {
+                                s.name = n;
+                            }
+                        }
+                    }
+                    "pPr" if in_style && cur_style.is_some() => in_style_p_pr = true,
+                    "outlineLvl" if in_style_p_pr => {
+                        if let Some(ref mut s) = cur_style {
+                            if let Some(v) = attr_val(&e, "val") {
+                                if let Ok(lvl) = v.parse::<u8>() {
+                                    s.outline_level = Some(lvl.min(8));
+                                }
+                            }
+                        }
+                    }
+                    "rPr" if in_style && cur_style.is_some() => in_style_r_pr = true,
                     "b" if in_r_pr => defaults.run.bold = true,
                     "i" if in_r_pr => defaults.run.italic = true,
                     "u" if in_r_pr => defaults.run.underline = true,
@@ -80,6 +120,47 @@ pub fn parse_styles_xml(bytes: &[u8]) -> Result<StyleDefaults> {
                             }
                         }
                     }
+                    // Style rPr
+                    "b" if in_style_r_pr => {
+                        if let Some(ref mut s) = cur_style {
+                            s.run.bold = true;
+                        }
+                    }
+                    "i" if in_style_r_pr => {
+                        if let Some(ref mut s) = cur_style {
+                            s.run.italic = true;
+                        }
+                    }
+                    "u" if in_style_r_pr => {
+                        if let Some(ref mut s) = cur_style {
+                            s.run.underline = true;
+                        }
+                    }
+                    "rFonts" if in_style_r_pr => {
+                        if let Some(ref mut s) = cur_style {
+                            if let Some(ascii) =
+                                attr_val(&e, "ascii").or_else(|| attr_val(&e, "hAnsi"))
+                            {
+                                s.run.font_family = Some(ascii);
+                            }
+                        }
+                    }
+                    "sz" if in_style_r_pr => {
+                        if let Some(ref mut s) = cur_style {
+                            if let Some(val) = attr_val(&e, "val") {
+                                if let Ok(half) = val.parse::<f32>() {
+                                    s.run.font_size_pt = Some(half / 2.0);
+                                }
+                            }
+                        }
+                    }
+                    "color" if in_style_r_pr => {
+                        if let Some(ref mut s) = cur_style {
+                            if let Some(val) = attr_val(&e, "val") {
+                                s.run.color = parse_rgb(&val);
+                            }
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -88,7 +169,23 @@ pub fn parse_styles_xml(bytes: &[u8]) -> Result<StyleDefaults> {
                 match local.as_str() {
                     "docDefaults" => in_doc_defaults = false,
                     "rPrDefault" => in_r_pr_default = false,
-                    "rPr" => in_r_pr = false,
+                    "rPr" if in_r_pr => in_r_pr = false,
+                    "rPr" if in_style_r_pr => in_style_r_pr = false,
+                    "pPr" if in_style_p_pr => in_style_p_pr = false,
+                    "style" => {
+                        if let Some(s) = cur_style.take() {
+                            if s.name.is_empty() {
+                                let mut s = s;
+                                s.name = s.style_id.clone();
+                                defaults.paragraph_styles.insert(s.style_id.clone(), s);
+                            } else {
+                                defaults.paragraph_styles.insert(s.style_id.clone(), s);
+                            }
+                        }
+                        in_style = false;
+                        in_style_r_pr = false;
+                        in_style_p_pr = false;
+                    }
                     _ => {}
                 }
             }
@@ -100,6 +197,7 @@ pub fn parse_styles_xml(bytes: &[u8]) -> Result<StyleDefaults> {
         }
         buf.clear();
     }
+    let _ = in_style;
     Ok(defaults)
 }
 
@@ -148,5 +246,26 @@ mod tests {
         let d = parse_styles_xml(xml).unwrap();
         assert_eq!(d.run.font_family.as_deref(), Some("Calibri"));
         assert_eq!(d.run.font_size_pt, Some(11.0));
+    }
+
+    #[test]
+    fn parses_heading1_named_style() {
+        let xml = br#"<?xml version="1.0"?>
+        <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:style w:type="paragraph" w:styleId="Heading1">
+            <w:name w:val="heading 1"/>
+            <w:pPr><w:outlineLvl w:val="0"/></w:pPr>
+            <w:rPr>
+              <w:b/>
+              <w:sz w:val="32"/>
+            </w:rPr>
+          </w:style>
+        </w:styles>"#;
+        let d = parse_styles_xml(xml).unwrap();
+        let h1 = d.paragraph_styles.get("Heading1").expect("Heading1");
+        assert_eq!(h1.name, "heading 1");
+        assert_eq!(h1.outline_level, Some(0));
+        assert!(h1.run.bold);
+        assert_eq!(h1.run.font_size_pt, Some(16.0));
     }
 }

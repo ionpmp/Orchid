@@ -159,6 +159,7 @@ pub fn open_document(path: &Path) -> Result<Document> {
     Ok(Document {
         blocks,
         page_setup,
+        paragraph_styles: styles.paragraph_styles.clone(),
         header,
         footer,
         header_first,
