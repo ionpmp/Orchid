@@ -245,7 +245,8 @@ release yet.
   soft volume boost (to 150%), library search, add-to-queue / play-next / reorder /
   clear queue, soft **crossfade** (Off / 3 / 5 / 8 / 12s via button or `X`), gapless prefetch,
   sidecar `.lrc` lyrics plus expandable scrollable lyrics panel (`L` / chip; auto-scroll to the
-  active line) and ID3 `SYLT`/`USLT` fallback when no sidecar, background library scan,
+  active line; click a synced line to seek; panel open state + height persist) and ID3 `SYLT`/`USLT`
+  plus Vorbis/FLAC comment lyrics when no sidecar, background library scan,
   libmpv duration probe for tracks without ID3 `TLEN` (library rows + queue remaining),
   focused keyboard transport, Windows SMTC (lock screen / media keys), shared
   audio-only libmpv session (separate from SMTC Now Playing and Viewer media

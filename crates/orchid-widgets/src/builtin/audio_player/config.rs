@@ -176,6 +176,13 @@ pub struct AudioPlayerConfig {
     /// Whether the lyrics panel is expanded.
     #[serde(default)]
     pub lyrics_open: bool,
+    /// Lyrics panel height in CSS px (clamped on normalize).
+    #[serde(default = "default_lyrics_panel_height")]
+    pub lyrics_panel_height: u16,
+}
+
+fn default_lyrics_panel_height() -> u16 {
+    140
 }
 
 impl Default for AudioPlayerConfig {
@@ -202,6 +209,7 @@ impl Default for AudioPlayerConfig {
             recent_tracks: Vec::new(),
             crossfade_secs: 0,
             lyrics_open: false,
+            lyrics_panel_height: default_lyrics_panel_height(),
         }
     }
 }
@@ -237,6 +245,10 @@ impl AudioPlayerConfig {
             0 | 3 | 5 | 8 | 12 => self.crossfade_secs,
             _ => 0,
         };
+        if self.lyrics_panel_height == 0 {
+            self.lyrics_panel_height = default_lyrics_panel_height();
+        }
+        self.lyrics_panel_height = self.lyrics_panel_height.clamp(80, 320);
     }
 
     pub fn cycle_crossfade(&mut self) {
