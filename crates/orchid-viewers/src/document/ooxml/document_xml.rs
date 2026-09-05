@@ -4754,6 +4754,7 @@ mod tests {
                     font_size_pt: Some(16.0),
                     ..Default::default()
                 },
+                ..Default::default()
             },
         );
         let (blocks, page_setup, unsupported, _, _) = parse_document_xml(

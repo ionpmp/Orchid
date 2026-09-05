@@ -528,6 +528,46 @@ pub enum Block {
     Image(InlineImage),
 }
 
+/// Paragraph-level defaults from a named style's `w:pPr`.
+///
+/// `None` / `false` means the style does not set that property. Preview merges
+/// these under direct paragraph formatting (empty/default direct wins).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ParagraphStyleProps {
+    /// Alignment (`w:jc`).
+    pub alignment: Option<Alignment>,
+    /// Space before (`w:spacing/@w:before`).
+    pub space_before_twips: Option<u32>,
+    /// Space after (`w:spacing/@w:after`).
+    pub space_after_twips: Option<u32>,
+    /// Line spacing value (`w:spacing/@w:line`).
+    pub line_spacing: Option<u32>,
+    /// Line spacing rule (`w:spacing/@w:lineRule`).
+    pub line_spacing_rule: Option<LineSpacingRule>,
+    /// Left indent (`w:ind/@w:left`).
+    pub indent_left_twips: Option<u32>,
+    /// First-line / hanging indent (`w:firstLine` / −`w:hanging`).
+    pub indent_first_line_twips: Option<i32>,
+    /// Right indent (`w:ind/@w:right`).
+    pub indent_right_twips: Option<u32>,
+    /// Background fill (`w:shd/@w:fill`).
+    pub shade_fill: Option<[u8; 3]>,
+    /// Box border sides bitset (`w:pBdr`).
+    pub border_sides: Option<u8>,
+    /// Keep with next (`w:keepNext`).
+    pub keep_next: bool,
+    /// Keep lines together (`w:keepLines`).
+    pub keep_lines: bool,
+    /// Widow/orphan control (`w:widowControl`).
+    pub widow_control: bool,
+    /// Contextual spacing (`w:contextualSpacing`).
+    pub contextual_spacing: bool,
+    /// RTL (`w:bidi`).
+    pub bidi: bool,
+    /// Suppress auto hyphenation (`w:suppressAutoHyphens`).
+    pub suppress_auto_hyphens: bool,
+}
+
 /// Paragraph style from `word/styles.xml` (`w:style` type `paragraph`).
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NamedParagraphStyle {
@@ -539,6 +579,8 @@ pub struct NamedParagraphStyle {
     pub outline_level: Option<u8>,
     /// Character defaults from the style's `w:rPr`.
     pub run: RunStyle,
+    /// Paragraph defaults from the style's `w:pPr`.
+    pub paragraph: ParagraphStyleProps,
 }
 
 /// Character style from `word/styles.xml` (`w:style` type `character`).
@@ -672,10 +714,7 @@ impl Document {
 #[must_use]
 pub fn text_stats(plain: &str) -> (u32, u32) {
     let words = plain.split_whitespace().count() as u32;
-    let chars = plain
-        .chars()
-        .filter(|c| *c != '\n' && *c != '\r')
-        .count() as u32;
+    let chars = plain.chars().filter(|c| *c != '\n' && *c != '\r').count() as u32;
     (words, chars)
 }
 

@@ -22,8 +22,8 @@ use swash::FontRef;
 
 use crate::document::cursor::{cursor_from_plain_offset, plain_offset_from_cursor, Cursor};
 use crate::document::model::{
-    Alignment, Block, Document, LineSpacingRule, ListKind, NamedCharacterStyle, NamedParagraphStyle,
-    PageSetup, Paragraph, RunStyle, Table, TableCell, TableRow, VMerge,
+    Alignment, Block, Document, LineSpacingRule, ListKind, NamedCharacterStyle,
+    NamedParagraphStyle, PageSetup, Paragraph, RunStyle, Table, TableCell, TableRow, VMerge,
 };
 
 /// Brush colour for styled runs (RGBA).
@@ -381,29 +381,28 @@ impl DocumentLayout {
                         page_starts.push(total_h);
                         page_section.push(section_idx);
                     }
-                    total_h += twips_to_css_px(p.space_before_twips) * scale;
+                    // Body fields: page=1 until per-band PAGE resolution; DATE/FILENAME ok.
+                    let styled = apply_named_paragraph_style(
+                        &doc.paragraph_styles,
+                        &doc.character_styles,
+                        p,
+                    );
+                    total_h += twips_to_css_px(styled.space_before_twips) * scale;
                     let body_len = p.plain_text().len();
-                    let prefix_len = list_prefix(p).len();
-                    let indent = list_indent_px(p) * scale;
-                    let sect = section_setups
-                        .get(section_idx)
-                        .unwrap_or(&doc.page_setup);
+                    let prefix_len = list_prefix(&styled).len();
+                    let indent = list_indent_px(&styled) * scale;
+                    let sect = section_setups.get(section_idx).unwrap_or(&doc.page_setup);
                     let (sect_x0, sect_wrap) =
                         section_body_origin_and_width(sect, &union, max_w, scale);
-                    let wrap_w = (sect_wrap
-                        - indent
-                        - paragraph_right_indent_px(p) * scale)
+                    let wrap_w = (sect_wrap - indent - paragraph_right_indent_px(&styled) * scale)
                         .max(12.0 * scale);
-                    // Body fields: page=1 until per-band PAGE resolution; DATE/FILENAME ok.
-                    let styled = apply_named_paragraph_style(&doc.paragraph_styles, &doc.character_styles, p);
                     let resolved = resolve_paragraph_fields(
                         &styled,
                         1,
                         page_starts.len().max(1) as u32,
                         self.field_file_name.as_deref(),
                     );
-                    let layout =
-                        self.cached_paragraph_layout(block_idx, &resolved, wrap_w, scale);
+                    let layout = self.cached_paragraph_layout(block_idx, &resolved, wrap_w, scale);
                     let h = layout.height().max(16.0 * scale);
                     layouts.push(LaidBlock {
                         layout,
@@ -418,12 +417,12 @@ impl DocumentLayout {
                         image_w: 0,
                         image_rgba: None,
                         page_break_rule_y: rule_y,
-                        shade_fill: p.shade_fill,
+                        shade_fill: styled.shade_fill,
                         shade_w: sect_wrap.max(1.0),
-                        border_sides: p.border_sides,
+                        border_sides: styled.border_sides,
                     });
                     plain_offset += body_len;
-                    let after = (twips_to_css_px(p.space_after_twips) * scale).max(para_gap);
+                    let after = (twips_to_css_px(styled.space_after_twips) * scale).max(para_gap);
                     total_h += h + after;
                     if p.section_properties.is_some() {
                         let page_break_gap = 28.0 * scale;
@@ -624,18 +623,25 @@ impl DocumentLayout {
         let page_count = (page_starts.len() as u32).max(1);
         for (page_i, &start_y) in page_starts.iter().enumerate() {
             let page = (page_i + 1) as u32;
-            let end_y = page_starts
-                .get(page_i + 1)
-                .copied()
-                .unwrap_or(total_h);
+            let end_y = page_starts.get(page_i + 1).copied().unwrap_or(total_h);
             let setup = section_setups
                 .get(page_section.get(page_i).copied().unwrap_or(0))
                 .unwrap_or(&doc.page_setup);
             let header_off = twips_to_css_px(setup.header_distance_twips) * scale;
             let footer_off = twips_to_css_px(setup.footer_distance_twips) * scale;
             let (header_story, footer_story) = margin_stories_for_page(doc, page, setup);
-            let header_resolved = resolve_story_fields(header_story, page, page_count, self.field_file_name.as_deref());
-            let footer_resolved = resolve_story_fields(footer_story, page, page_count, self.field_file_name.as_deref());
+            let header_resolved = resolve_story_fields(
+                header_story,
+                page,
+                page_count,
+                self.field_file_name.as_deref(),
+            );
+            let footer_resolved = resolve_story_fields(
+                footer_story,
+                page,
+                page_count,
+                self.field_file_name.as_deref(),
+            );
             // `start_y` is content-relative; header sits `header_off` below the page top.
             let header_y = (start_y + header_off).max(0.0);
             let footer_y = if page_i + 1 == page_starts.len() {
@@ -696,7 +702,6 @@ impl DocumentLayout {
     }
 }
 
-
 /// Fill unset run props from a named paragraph style (direct formatting wins).
 fn merge_run_under_named(dst: &mut RunStyle, base: &RunStyle) {
     if !dst.bold {
@@ -750,9 +755,9 @@ fn merge_run_under_named(dst: &mut RunStyle, base: &RunStyle) {
     }
 }
 
-/// Apply `w:rStyle` then `w:pStyle` character/outline defaults for Preview layout.
+/// Apply `w:rStyle` then `w:pStyle` character/paragraph defaults for Preview layout.
 ///
-/// Precedence: direct run formatting > character style > paragraph style.
+/// Precedence: direct formatting > character style > paragraph style.
 fn apply_named_paragraph_style(
     paragraph_styles: &HashMap<String, NamedParagraphStyle>,
     character_styles: &HashMap<String, NamedCharacterStyle>,
@@ -775,10 +780,82 @@ fn apply_named_paragraph_style(
     if out.outline_level.is_none() {
         out.outline_level = ns.outline_level;
     }
+    merge_paragraph_under_named(&mut out, &ns.paragraph);
     for run in &mut out.runs {
         merge_run_under_named(&mut run.style, &ns.run);
     }
     out
+}
+
+/// Fill unset paragraph props from a named style `w:pPr` (direct formatting wins).
+fn merge_paragraph_under_named(
+    dst: &mut Paragraph,
+    base: &crate::document::model::ParagraphStyleProps,
+) {
+    if let Some(a) = base.alignment {
+        if dst.alignment == Alignment::Left {
+            dst.alignment = a;
+        }
+    }
+    if dst.space_before_twips == 0 {
+        if let Some(v) = base.space_before_twips {
+            dst.space_before_twips = v;
+        }
+    }
+    if dst.space_after_twips == 0 {
+        if let Some(v) = base.space_after_twips {
+            dst.space_after_twips = v;
+        }
+    }
+    if dst.line_spacing == 0 && dst.line_spacing_rule == LineSpacingRule::Auto {
+        if let Some(v) = base.line_spacing {
+            dst.line_spacing = v;
+        }
+        if let Some(r) = base.line_spacing_rule {
+            dst.line_spacing_rule = r;
+        }
+    }
+    if dst.indent_left_twips == 0 {
+        if let Some(v) = base.indent_left_twips {
+            dst.indent_left_twips = v;
+        }
+    }
+    if dst.indent_right_twips == 0 {
+        if let Some(v) = base.indent_right_twips {
+            dst.indent_right_twips = v;
+        }
+    }
+    if dst.indent_first_line_twips == 0 {
+        if let Some(v) = base.indent_first_line_twips {
+            dst.indent_first_line_twips = v;
+        }
+    }
+    if dst.shade_fill.is_none() {
+        dst.shade_fill = base.shade_fill;
+    }
+    if dst.border_sides == 0 {
+        if let Some(sides) = base.border_sides {
+            dst.border_sides = sides;
+        }
+    }
+    if !dst.keep_next {
+        dst.keep_next = base.keep_next;
+    }
+    if !dst.keep_lines {
+        dst.keep_lines = base.keep_lines;
+    }
+    if !dst.widow_control {
+        dst.widow_control = base.widow_control;
+    }
+    if !dst.contextual_spacing {
+        dst.contextual_spacing = base.contextual_spacing;
+    }
+    if !dst.bidi {
+        dst.bidi = base.bidi;
+    }
+    if !dst.suppress_auto_hyphens {
+        dst.suppress_auto_hyphens = base.suppress_auto_hyphens;
+    }
 }
 
 /// Substitute field display text (`PAGE`, `DATE`, `FILENAME`, …) for preview paint.
@@ -975,21 +1052,24 @@ impl DocumentLayout {
                     if p.page_break_before {
                         total_h += 28.0;
                     }
-                    total_h += twips_to_css_px(p.space_before_twips);
+                    let styled = apply_named_paragraph_style(
+                        &doc.paragraph_styles,
+                        &doc.character_styles,
+                        p,
+                    );
+                    total_h += twips_to_css_px(styled.space_before_twips);
                     let body_len = p.plain_text().len();
-                    let prefix_len = list_prefix(p).len();
-                    let indent = list_indent_px(p);
-                    let sect = section_setups
-                        .get(section_idx)
-                        .unwrap_or(&doc.page_setup);
+                    let prefix_len = list_prefix(&styled).len();
+                    let indent = list_indent_px(&styled);
+                    let sect = section_setups.get(section_idx).unwrap_or(&doc.page_setup);
                     let (sect_x0, sect_wrap) =
                         section_body_origin_and_width(sect, &union, max_w, 1.0);
-                    let wrap_w = (sect_wrap - indent - paragraph_right_indent_px(p)).max(12.0);
-                    let styled = apply_named_paragraph_style(&doc.paragraph_styles, &doc.character_styles, p);
+                    let wrap_w =
+                        (sect_wrap - indent - paragraph_right_indent_px(&styled)).max(12.0);
                     let layout = self.layout_paragraph(&styled, wrap_w, 1.0);
                     let h = layout.height().max(16.0);
                     let y0 = total_h;
-                    let after = twips_to_css_px(p.space_after_twips).max(para_gap);
+                    let after = twips_to_css_px(styled.space_after_twips).max(para_gap);
                     let y1 = total_h + h + after;
                     if local_y >= y0 && local_y < y1 {
                         let ly = (local_y - y0).max(0.0);
@@ -1079,34 +1159,43 @@ impl DocumentLayout {
                     if p.page_break_before {
                         total_h += 28.0;
                     }
-                    total_h += twips_to_css_px(p.space_before_twips);
+                    let styled = apply_named_paragraph_style(
+                        &doc.paragraph_styles,
+                        &doc.character_styles,
+                        p,
+                    );
+                    total_h += twips_to_css_px(styled.space_before_twips);
                     let body_len = p.plain_text().len();
                     let y0 = total_h;
-                    let indent = list_indent_px(p);
-                    let sect = section_setups
-                        .get(section_idx)
-                        .unwrap_or(&doc.page_setup);
+                    let indent = list_indent_px(&styled);
+                    let sect = section_setups.get(section_idx).unwrap_or(&doc.page_setup);
                     let (_sect_x0, sect_wrap) =
                         section_body_origin_and_width(sect, &union, max_w, 1.0);
-                    let wrap_w = (sect_wrap - indent - paragraph_right_indent_px(p)).max(12.0);
-                    let styled = apply_named_paragraph_style(&doc.paragraph_styles, &doc.character_styles, p);
+                    let wrap_w =
+                        (sect_wrap - indent - paragraph_right_indent_px(&styled)).max(12.0);
                     let layout = self.layout_paragraph(&styled, wrap_w, 1.0);
                     let h = layout.height().max(16.0);
                     if target >= plain_offset && target <= plain_offset + body_len {
                         return insets.top + y0;
                     }
                     plain_offset += body_len;
-                    total_h += h + twips_to_css_px(p.space_after_twips).max(para_gap);
+                    total_h += h + twips_to_css_px(styled.space_after_twips).max(para_gap);
                     if p.section_properties.is_some() {
                         total_h += 28.0;
-                        section_idx =
-                            (section_idx + 1).min(section_setups.len().saturating_sub(1));
+                        section_idx = (section_idx + 1).min(section_setups.len().saturating_sub(1));
                     }
                 }
                 Block::Table(t) => {
                     let range_start = plain_offset;
-                    let measured =
-                        self.measure_table(&doc.paragraph_styles, &doc.character_styles, t, max_w, &mut plain_offset, &mut emitted_text, 1.0);
+                    let measured = self.measure_table(
+                        &doc.paragraph_styles,
+                        &doc.character_styles,
+                        t,
+                        max_w,
+                        &mut plain_offset,
+                        &mut emitted_text,
+                        1.0,
+                    );
                     let table_y0 = total_h;
                     let row_y0s = row_origins(table_y0, &measured.row_heights);
                     if target >= range_start && target <= plain_offset {
@@ -1181,7 +1270,15 @@ impl DocumentLayout {
         layouts: &mut Vec<LaidBlock>,
         scale: f32,
     ) -> TableGridGeom {
-        let mut measured = self.measure_table(paragraph_styles, character_styles, t, max_w, plain_offset, emitted_text, scale);
+        let mut measured = self.measure_table(
+            paragraph_styles,
+            character_styles,
+            t,
+            max_w,
+            plain_offset,
+            emitted_text,
+            scale,
+        );
         let table_y0 = *total_h;
         let row_y0s = row_origins(table_y0, &measured.row_heights);
         let mut cell_rects = Vec::new();
@@ -1309,7 +1406,15 @@ impl DocumentLayout {
         plain_offset: &mut usize,
         emitted_text: &mut bool,
     ) -> Option<Cursor> {
-        let measured = self.measure_table(&doc.paragraph_styles, &doc.character_styles, t, max_w, plain_offset, emitted_text, 1.0);
+        let measured = self.measure_table(
+            &doc.paragraph_styles,
+            &doc.character_styles,
+            t,
+            max_w,
+            plain_offset,
+            emitted_text,
+            1.0,
+        );
         let table_y0 = *total_h;
         let row_y0s = row_origins(table_y0, &measured.row_heights);
         *total_h = table_y0 + measured.row_heights.iter().sum::<f32>();
@@ -1531,12 +1636,12 @@ impl DocumentLayout {
                 *plain_offset += 1;
             }
             *emitted_text = true;
-            let body_len = p.plain_text().len();
-            let prefix_len = list_prefix(p).len();
-            let indent = list_indent_px(p) * scale;
-            let wrap_w =
-                (inner_w - indent - paragraph_right_indent_px(p) * scale).max(12.0 * scale);
             let styled = apply_named_paragraph_style(paragraph_styles, character_styles, p);
+            let body_len = p.plain_text().len();
+            let prefix_len = list_prefix(&styled).len();
+            let indent = list_indent_px(&styled) * scale;
+            let wrap_w =
+                (inner_w - indent - paragraph_right_indent_px(&styled) * scale).max(12.0 * scale);
             let layout = self.layout_paragraph(&styled, wrap_w, scale);
             let h = layout.height().max(14.0 * scale);
             let plain_start = *plain_offset;
@@ -1547,9 +1652,9 @@ impl DocumentLayout {
                 prefix_len,
                 indent_px: indent,
                 height: h,
-                shade_fill: p.shade_fill,
+                shade_fill: styled.shade_fill,
                 shade_w: inner_w,
-                border_sides: p.border_sides,
+                border_sides: styled.border_sides,
             });
             *plain_offset += body_len;
             let after_text = *plain_offset;
@@ -2238,7 +2343,9 @@ fn paint_comment_highlights(
                         origin_x,
                         origin_y,
                         layout_idx,
-                        layout_idx.saturating_add(1).min(item.prefix_len + item.body_len),
+                        layout_idx
+                            .saturating_add(1)
+                            .min(item.prefix_len + item.body_len),
                         COMMENT_FILL,
                     );
                 }
@@ -3285,8 +3392,7 @@ mod tests {
         };
         // Separate layout engines — `DocumentLayout` caches the last scene by width.
         let (bytes_with, w, h) = DocumentLayout::new().render_document(&with_even, 400.0);
-        let (bytes_without, w2, h2) =
-            DocumentLayout::new().render_document(&without_even, 400.0);
+        let (bytes_without, w2, h2) = DocumentLayout::new().render_document(&without_even, 400.0);
         assert_eq!((w, h), (w2, h2));
         let s = PREVIEW_RENDER_SCALE;
         let insets = PreviewInsets::from_page_setup(&with_even.page_setup);
@@ -3311,8 +3417,7 @@ mod tests {
             for y in 0..margin_bottom.min(h) {
                 for x in 0..w {
                     let i = ((y as usize) * (w as usize) + (x as usize)) * 4;
-                    if bytes_with[i] < 100 || bytes_with[i + 1] < 100 || bytes_with[i + 2] < 100
-                    {
+                    if bytes_with[i] < 100 || bytes_with[i + 1] < 100 || bytes_with[i + 2] < 100 {
                         n += 1;
                     }
                 }
@@ -4386,7 +4491,10 @@ mod tests {
         let (x0_n, wrap_n) = section_body_origin_and_width(&narrow, &union, 400.0, 1.0);
         let (x0_w, wrap_w) = section_body_origin_and_width(&wide, &union, 400.0, 1.0);
         assert!(x0_n < -10.0, "narrow section should shift left (x0={x0_n})");
-        assert!((x0_w).abs() < 0.1, "wide section x0 should be ~0 (x0={x0_w})");
+        assert!(
+            (x0_w).abs() < 0.1,
+            "wide section x0 should be ~0 (x0={x0_w})"
+        );
         assert!(wrap_n > wrap_w + 10.0, "narrow section gets wider wrap");
         let (_, _, h) = DocumentLayout::new().render_document(&doc, 400.0);
         assert!(h > 40);
@@ -4442,5 +4550,58 @@ mod tests {
         );
         let (_, _, h) = DocumentLayout::new().render_document(&doc, 400.0);
         assert!(h > 40);
+    }
+
+    #[test]
+    fn preview_merges_paragraph_style_ppr_spacing_and_shade() {
+        use crate::document::model::{NamedParagraphStyle, ParagraphStyleProps};
+        use std::collections::HashMap;
+
+        let mut paragraph_styles = HashMap::new();
+        paragraph_styles.insert(
+            "Title".into(),
+            NamedParagraphStyle {
+                style_id: "Title".into(),
+                name: "Title".into(),
+                paragraph: ParagraphStyleProps {
+                    alignment: Some(Alignment::Center),
+                    space_before_twips: Some(480),
+                    space_after_twips: Some(240),
+                    shade_fill: Some([0xFF, 0xF2, 0xCC]),
+                    ..Default::default()
+                },
+                run: RunStyle {
+                    bold: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        let p = Paragraph {
+            runs: vec![Run {
+                text: "Hello".into(),
+                ..Default::default()
+            }],
+            style_id: Some("Title".into()),
+            ..Default::default()
+        };
+        let styled = apply_named_paragraph_style(&paragraph_styles, &HashMap::new(), &p);
+        assert_eq!(styled.alignment, Alignment::Center);
+        assert_eq!(styled.space_before_twips, 480);
+        assert_eq!(styled.space_after_twips, 240);
+        assert_eq!(styled.shade_fill, Some([0xFF, 0xF2, 0xCC]));
+        assert!(styled.runs[0].style.bold);
+        let override_p = Paragraph {
+            style_id: Some("Title".into()),
+            space_before_twips: 100,
+            runs: vec![Run {
+                text: "X".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let merged = apply_named_paragraph_style(&paragraph_styles, &HashMap::new(), &override_p);
+        assert_eq!(merged.space_before_twips, 100);
+        assert_eq!(merged.space_after_twips, 240);
     }
 }
