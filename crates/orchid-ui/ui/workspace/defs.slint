@@ -822,6 +822,11 @@ export struct AudioPlayerRootItem {
     label: string,
 }
 
+export struct AudioPlayerLyricItem {
+    text: string,
+    is-current: bool,
+}
+
 export struct AudioPlayerModel {
     engine-available: bool,
     browse-tab: int,
@@ -854,6 +859,10 @@ export struct AudioPlayerModel {
     crossfade-label: string,
     lyrics-line: string,
     has-lyrics: bool,
+    lyrics-open: bool,
+    lyrics-lines: [AudioPlayerLyricItem],
+    lyrics-active-index: int,
+    lyrics-label: string,
     roots-label: string,
     empty-hint: string,
     has-cover: bool,
