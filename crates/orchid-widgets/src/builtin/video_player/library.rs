@@ -2,7 +2,7 @@
 
 #![allow(missing_docs)]
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use orchid_viewers::is_video_file_extension;
@@ -46,6 +46,22 @@ pub struct VideoRow {
     pub title: String,
     pub subtitle: String,
     pub duration_label: String,
+}
+
+/// Folder group in the library browse list.
+#[derive(Debug, Clone)]
+pub struct BrowseGroup {
+    pub key: String,
+    pub label: String,
+    pub count: u32,
+    pub is_library_root: bool,
+}
+
+/// Result of a library browse query.
+#[derive(Debug, Clone, Default)]
+pub struct BrowseResult {
+    pub groups: Vec<BrowseGroup>,
+    pub items: Vec<VideoRow>,
 }
 
 /// In-memory library index.
@@ -92,23 +108,90 @@ impl LibraryIndex {
             .find(|v| v.path.to_string_lossy() == path)
     }
 
-    /// Filtered library rows for the browse list.
+    /// Paths under `folder` (exact folder match).
     #[must_use]
-    pub fn browse_rows(&self, search: &str) -> Vec<VideoRow> {
+    pub fn paths_in_folder(&self, folder: &str) -> Vec<String> {
+        self.videos
+            .iter()
+            .filter(|v| v.folder == folder)
+            .map(|v| v.path.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    /// All library paths matching `search` (empty = all).
+    #[must_use]
+    pub fn paths_matching(&self, search: &str) -> Vec<String> {
         let q = search.trim().to_lowercase();
         self.videos
             .iter()
-            .filter(|v| {
-                if q.is_empty() {
-                    return true;
-                }
-                v.title.to_lowercase().contains(&q)
-                    || v.path.to_string_lossy().to_lowercase().contains(&q)
-                    || v.folder.to_lowercase().contains(&q)
-            })
-            .map(video_row)
+            .filter(|v| matches_search(v, &q))
+            .map(|v| v.path.to_string_lossy().into_owned())
             .collect()
     }
+
+    /// Browse library: folder groups when `filter` empty; folder contents when set.
+    /// Free-text `search` always returns a flat item list.
+    #[must_use]
+    pub fn browse_rows(
+        &self,
+        search: &str,
+        filter: &str,
+        library_roots: &[String],
+    ) -> BrowseResult {
+        let q = search.trim().to_lowercase();
+        if !q.is_empty() {
+            return BrowseResult {
+                groups: Vec::new(),
+                items: self
+                    .videos
+                    .iter()
+                    .filter(|v| matches_search(v, &q))
+                    .map(video_row)
+                    .collect(),
+            };
+        }
+        if filter.is_empty() {
+            let mut folders: BTreeMap<String, usize> = BTreeMap::new();
+            for v in &self.videos {
+                *folders.entry(v.folder.clone()).or_default() += 1;
+            }
+            BrowseResult {
+                groups: folders
+                    .into_iter()
+                    .map(|(name, count)| BrowseGroup {
+                        is_library_root: library_roots.iter().any(|r| r == &name),
+                        key: name.clone(),
+                        label: PathBuf::from(&name)
+                            .file_name()
+                            .map(|s| s.to_string_lossy().into_owned())
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or_else(|| name.clone()),
+                        count: count as u32,
+                    })
+                    .collect(),
+                items: Vec::new(),
+            }
+        } else {
+            BrowseResult {
+                groups: Vec::new(),
+                items: self
+                    .videos
+                    .iter()
+                    .filter(|v| v.folder == filter)
+                    .map(video_row)
+                    .collect(),
+            }
+        }
+    }
+}
+
+fn matches_search(v: &LibraryVideo, q: &str) -> bool {
+    if q.is_empty() {
+        return true;
+    }
+    v.title.to_lowercase().contains(q)
+        || v.path.to_string_lossy().to_lowercase().contains(q)
+        || v.folder.to_lowercase().contains(q)
 }
 
 #[must_use]

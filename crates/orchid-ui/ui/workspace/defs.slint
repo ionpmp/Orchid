@@ -920,6 +920,13 @@ export struct VideoPlayerRootItem {
     label: string,
 }
 
+export struct VideoPlayerGroupItem {
+    key: string,
+    label: string,
+    count: int,
+    is-library-root: bool,
+}
+
 export struct VideoPlayerItem {
     path: string,
     title: string,
@@ -931,8 +938,11 @@ export struct VideoPlayerItem {
 export struct VideoPlayerModel {
     engine-available: bool,
     browse-tab: int,
+    browse-filter: string,
+    browse-filter-label: string,
     search-query: string,
     roots: [VideoPlayerRootItem],
+    groups: [VideoPlayerGroupItem],
     items: [VideoPlayerItem],
     has-track: bool,
     title: string,
@@ -951,6 +961,9 @@ export struct VideoPlayerModel {
     frame: image,
     queue-count: int,
     library-count: int,
+    queue-stats-label: string,
+    current-track-index: int,
+    scroll-gen: int,
     tab-library: string,
     tab-queue: string,
     add-folder-label: string,
@@ -959,9 +972,16 @@ export struct VideoPlayerModel {
     no-track-label: string,
     search-placeholder: string,
     enqueue-label: string,
+    play-next-label: string,
     remove-label: string,
     clear-queue-label: string,
     remove-root-label: string,
+    back-label: string,
+    play-group-label: string,
+    jump-to-current-label: string,
+    reshuffle-label: string,
+    move-up-label: string,
+    move-down-label: string,
     engine-missing-label: string,
 }
 

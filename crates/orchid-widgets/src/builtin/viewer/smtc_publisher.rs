@@ -28,6 +28,7 @@ static STATE: OnceLock<Mutex<Option<PublisherState>>> = OnceLock::new();
 enum ActiveKind {
     Viewer,
     AudioPlayer,
+    VideoPlayer,
 }
 
 struct PublisherState {
@@ -153,6 +154,9 @@ fn dispatch_command(command: &'static str) {
         ActiveKind::AudioPlayer => {
             crate::builtin::audio_player::execute_command(id, command);
         }
+        ActiveKind::VideoPlayer => {
+            crate::builtin::video_player::execute_command(id, command);
+        }
     }
 }
 
@@ -175,6 +179,11 @@ pub fn set_active(instance_id: Uuid) {
 /// Bind OS media keys to this audio-player instance.
 pub fn set_active_audio(instance_id: Uuid) {
     set_active_kind(ActiveKind::AudioPlayer, instance_id);
+}
+
+/// Bind OS media keys to this video-player instance.
+pub fn set_active_video(instance_id: Uuid) {
+    set_active_kind(ActiveKind::VideoPlayer, instance_id);
 }
 
 /// Clear SMTC when the active widget closes or switches away.
@@ -220,8 +229,16 @@ pub fn publish_now_playing(instance_id: Uuid, snap: &NowPlaying) {
     let cover_changed = cover_sig != state.last_cover_sig;
     if meta_changed || cover_changed {
         if let Ok(updater) = state.smtc.DisplayUpdater() {
-            let _ = updater.SetType(MediaPlaybackType::Music);
-            if let Ok(props) = updater.MusicProperties() {
+            let playback_type = match state.active.map(|(k, _)| k) {
+                Some(ActiveKind::VideoPlayer) => MediaPlaybackType::Video,
+                _ => MediaPlaybackType::Music,
+            };
+            let _ = updater.SetType(playback_type);
+            if playback_type == MediaPlaybackType::Video {
+                if let Ok(props) = updater.VideoProperties() {
+                    let _ = props.SetTitle(&HSTRING::from(title.as_str()));
+                }
+            } else if let Ok(props) = updater.MusicProperties() {
                 let _ = props.SetTitle(&HSTRING::from(title.as_str()));
                 let _ = props.SetArtist(&HSTRING::from(artist.as_str()));
             }

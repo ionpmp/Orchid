@@ -10,6 +10,29 @@ export component VideoPlayerView inherits Rectangle {
     background: transparent;
     clip: true;
 
+    property <int> applied-scroll-gen: -1;
+    property <string> q-drag-path: "";
+    property <int> q-drag-from: -1;
+    property <int> q-drop-index: -1;
+    property <length> q-row-stride: 38px;
+
+    scroll-apply-timer := Timer {
+        interval: 16ms;
+        running: root.model.browse-tab == 1 && root.model.scroll-gen != root.applied-scroll-gen;
+        triggered => {
+            root.scroll-to-current();
+            root.applied-scroll-gen = root.model.scroll-gen;
+        }
+    }
+
+    public function scroll-to-current() {
+        if root.model.current-track-index < 0 { return; }
+        let y = root.q-row-stride * root.model.current-track-index;
+        let margin = browse-flick.height / 3;
+        let max-y = max(0px, browse-flick.viewport-height - browse-flick.height);
+        browse-flick.viewport-y = min(max-y, max(0px, y - margin));
+    }
+
     focus-scope := FocusScope {
         width: 100%;
         height: 100%;
@@ -67,6 +90,14 @@ export component VideoPlayerView inherits Rectangle {
                 root.command("tab:1");
                 return accept;
             }
+            if event.text == Key.Home {
+                root.command("queue-first");
+                return accept;
+            }
+            if event.text == Key.End {
+                root.command("queue-last");
+                return accept;
+            }
             return reject;
         }
 
@@ -76,7 +107,7 @@ export component VideoPlayerView inherits Rectangle {
 
             // Video surface
             Rectangle {
-                height: parent.height * 0.48;
+                height: parent.height * 0.42;
                 background: #111111;
                 border-radius: Theme.radius-md;
                 clip: true;
@@ -121,7 +152,6 @@ export component VideoPlayerView inherits Rectangle {
                 }
             }
 
-            // Now playing + transport
             Text {
                 text: root.model.has-track ? root.model.title : root.model.no-track-label;
                 color: Theme.text-primary;
@@ -130,7 +160,6 @@ export component VideoPlayerView inherits Rectangle {
                 overflow: elide;
             }
 
-            // Progress
             TouchArea {
                 height: 10px;
                 width: 100%;
@@ -313,11 +342,150 @@ export component VideoPlayerView inherits Rectangle {
                 }
             }
 
-            SearchField {
-                field-height: 28px;
-                query: root.model.search-query;
-                placeholder: root.model.search-placeholder;
-                edited(q) => { root.command("search:" + q); }
+            HorizontalLayout {
+                spacing: 6px;
+                height: 28px;
+
+                if root.model.browse-filter != "" : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-raised;
+                    width: back-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("clear-filter"); } }
+                    back-txt := Text {
+                        text: root.model.browse-filter-label != ""
+                            ? root.model.back-label + " · " + root.model.browse-filter-label
+                            : root.model.back-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                SearchField {
+                    horizontal-stretch: 1;
+                    field-height: 28px;
+                    query: root.model.search-query;
+                    placeholder: root.model.search-placeholder;
+                    edited(q) => { root.command("search:" + q); }
+                    escape-pressed => { root.command("clear-search"); }
+                }
+
+                if root.model.search-query != "" && root.model.items.length > 0 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-raised;
+                    width: play-search-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("play-search"); } }
+                    play-search-txt := Text {
+                        text: root.model.play-group-label;
+                        color: Theme.accent-brand;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                if root.model.search-query != "" && root.model.items.length > 0 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-raised;
+                    width: enq-search-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("enqueue-search"); } }
+                    enq-search-txt := Text {
+                        text: root.model.enqueue-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                if root.model.browse-tab == 1 && root.model.queue-stats-label != "" : Text {
+                    text: root.model.queue-stats-label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+
+                if root.model.browse-tab == 1 && root.model.current-track-index >= 0 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-raised;
+                    width: jump-cur-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.scroll-to-current(); } }
+                    jump-cur-txt := Text {
+                        text: root.model.jump-to-current-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                if root.model.browse-tab == 1 && root.model.items.length > 1 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-raised;
+                    width: reshuffle-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("reshuffle"); } }
+                    reshuffle-txt := Text {
+                        text: root.model.reshuffle-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+
+                if root.model.browse-tab == 1 && root.model.queue-count > 0 : Rectangle {
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-raised;
+                    width: clear-q-txt.preferred-width + 16px;
+                    TouchArea { clicked => { root.command("clear-queue"); } }
+                    clear-q-txt := Text {
+                        text: root.model.clear-queue-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        width: 100%; height: 100%;
+                    }
+                }
+            }
+
+            if root.model.browse-tab == 0 && root.model.has-library-roots : Flickable {
+                height: 24px;
+                viewport-height: self.height;
+                HorizontalLayout {
+                    spacing: 4px;
+                    for root-item in root.model.roots : TouchArea {
+                        height: 24px;
+                        clicked => { root.command("remove-root:" + root-item.path); }
+                        Rectangle {
+                            background: Theme.surface-raised;
+                            border-radius: Theme.radius-md;
+                            HorizontalLayout {
+                                padding-left: 6px;
+                                padding-right: 6px;
+                                spacing: 4px;
+                                Text {
+                                    text: root-item.label;
+                                    color: Theme.text-secondary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: "×";
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             if root.model.empty-hint != "" : Text {
@@ -328,100 +496,224 @@ export component VideoPlayerView inherits Rectangle {
                 wrap: word-wrap;
             }
 
-            // Roots chips (library tab)
-            if root.model.browse-tab == 0 && root.model.has-library-roots : HorizontalLayout {
-                spacing: 4px;
-                height: 24px;
-                for root-item[idx] in root.model.roots : TouchArea {
-                    height: 24px;
-                    clicked => { root.command("remove-root:" + root-item.path); }
-                    Rectangle {
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        HorizontalLayout {
-                            padding-left: 6px;
-                            padding-right: 6px;
-                            spacing: 4px;
-                            Text {
-                                text: root-item.label;
-                                color: Theme.text-secondary;
-                                font-size: Theme.font-size-sm;
-                                vertical-alignment: center;
-                            }
-                            Text {
-                                text: "×";
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
-                                vertical-alignment: center;
+            Rectangle {
+                vertical-stretch: 1;
+                horizontal-stretch: 1;
+                clip: true;
+                background: transparent;
+
+                browse-flick := Flickable {
+                    width: 100%;
+                    height: 100%;
+                    visible: root.model.empty-hint == "";
+                    viewport-width: self.width;
+                    viewport-height: browse-col.preferred-height;
+
+                    browse-col := VerticalLayout {
+                        spacing: 2px;
+                        width: parent.width;
+
+                        if root.model.browse-tab == 0 && root.model.groups.length > 0 : VerticalLayout {
+                            spacing: 2px;
+                            for g in root.model.groups : Rectangle {
+                                height: 32px;
+                                background: g-ta.has-hover ? Theme.surface-raised : transparent;
+                                border-radius: Theme.radius-md;
+                                HorizontalLayout {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    spacing: 6px;
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        g-ta := TouchArea { clicked => { root.command("open-group:" + g.key); } }
+                                        HorizontalLayout {
+                                            Text {
+                                                text: g.label;
+                                                color: Theme.text-primary;
+                                                font-size: Theme.font-size-md;
+                                                vertical-alignment: center;
+                                                horizontal-stretch: 1;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: g.count;
+                                                color: Theme.text-tertiary;
+                                                font-size: Theme.font-size-sm;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                    }
+                                    Rectangle {
+                                        width: 36px;
+                                        height: 28px;
+                                        TouchArea { clicked => { root.command("play-group:" + g.key); } }
+                                        Text {
+                                            text: root.model.play-group-label;
+                                            color: Theme.accent-brand;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                    }
+                                    Rectangle {
+                                        width: 36px;
+                                        height: 28px;
+                                        TouchArea { clicked => { root.command("enqueue-group:" + g.key); } }
+                                        Text {
+                                            text: "+";
+                                            color: Theme.text-tertiary;
+                                            font-size: 16px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
-                }
-            }
 
-            if root.model.browse-tab == 1 && root.model.queue-count > 0 : TouchArea {
-                height: 24px;
-                clicked => { root.command("clear-queue"); }
-                Text {
-                    text: root.model.clear-queue-label;
-                    color: Theme.text-tertiary;
-                    font-size: Theme.font-size-sm;
-                }
-            }
+                        if root.model.items.length > 0 : VerticalLayout {
+                            spacing: 2px;
+                            for item[i] in root.model.items : Rectangle {
+                                height: 36px;
+                                background: root.q-drag-path == item.path
+                                    ? Theme.surface-raised
+                                    : (root.q-drag-path != "" && root.q-drop-index == i
+                                        ? Theme.accent-brand
+                                        : (item.is-current ? Theme.surface-raised : (item-ta.has-hover ? Theme.surface-base : transparent)));
+                                opacity: root.q-drag-path == item.path ? 0.55 : 1.0;
+                                border-radius: Theme.radius-md;
+                                HorizontalLayout {
+                                    padding-left: 6px;
+                                    padding-right: 4px;
+                                    spacing: 6px;
 
-            // Item list
-            Flickable {
-                vertical-stretch: 1;
-                viewport-width: self.width;
-                VerticalLayout {
-                    spacing: 2px;
-                    for item[idx] in root.model.items : Rectangle {
-                        height: 36px;
-                        background: item.is-current ? Theme.surface-raised : transparent;
-                        border-radius: Theme.radius-md;
-                        HorizontalLayout {
-                            padding-left: 6px;
-                            padding-right: 4px;
-                            spacing: 6px;
-                            TouchArea {
-                                horizontal-stretch: 1;
-                                clicked => { root.command("play:" + item.path); }
-                                VerticalLayout {
-                                    alignment: center;
-                                    Text {
-                                        text: item.title;
-                                        color: item.is-current ? Theme.accent-brand : Theme.text-primary;
-                                        font-size: Theme.font-size-sm;
-                                        overflow: elide;
+                                    if root.model.browse-tab == 1 : Rectangle {
+                                        width: 18px;
+                                        height: 28px;
+                                        Text {
+                                            text: "⋮⋮";
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: 100%; height: 100%;
+                                        }
+                                        TouchArea {
+                                            pointer-event(e) => {
+                                                if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                                                    root.q-drag-path = item.path;
+                                                    root.q-drag-from = i;
+                                                    root.q-drop-index = i;
+                                                }
+                                                if root.q-drag-path == item.path && e.kind == PointerEventKind.move {
+                                                    let pointer-y = self.absolute-position.y - browse-flick.absolute-position.y + self.mouse-y;
+                                                    let content-y = pointer-y + browse-flick.viewport-y;
+                                                    let raw = content-y / root.q-row-stride;
+                                                    let idx = min(root.model.items.length - 1, max(0, floor(raw)));
+                                                    root.q-drop-index = idx;
+                                                }
+                                                if root.q-drag-path == item.path && e.kind == PointerEventKind.up {
+                                                    if root.q-drop-index >= 0 && root.q-drop-index != root.q-drag-from {
+                                                        root.command("queue-move-to:" + root.q-drop-index + "|" + root.q-drag-path);
+                                                    }
+                                                    root.q-drag-path = "";
+                                                    root.q-drag-from = -1;
+                                                    root.q-drop-index = -1;
+                                                }
+                                                if e.kind == PointerEventKind.cancel {
+                                                    root.q-drag-path = "";
+                                                    root.q-drag-from = -1;
+                                                    root.q-drop-index = -1;
+                                                }
+                                            }
+                                        }
                                     }
-                                    Text {
-                                        text: item.subtitle;
-                                        color: Theme.text-tertiary;
-                                        font-size: Theme.font-size-sm;
-                                        overflow: elide;
+
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        item-ta := TouchArea {
+                                            clicked => {
+                                                if root.model.browse-tab == 1 {
+                                                    root.command("queue-play:" + item.path);
+                                                } else {
+                                                    root.command("play:" + item.path);
+                                                }
+                                            }
+                                        }
+                                        VerticalLayout {
+                                            alignment: center;
+                                            Text {
+                                                text: item.title;
+                                                color: item.is-current ? Theme.accent-brand : Theme.text-primary;
+                                                font-size: Theme.font-size-sm;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: item.subtitle;
+                                                color: Theme.text-tertiary;
+                                                font-size: Theme.font-size-sm;
+                                                overflow: elide;
+                                            }
+                                        }
                                     }
-                                }
-                            }
-                            if root.model.browse-tab == 0 : TouchArea {
-                                width: 28px;
-                                clicked => { root.command("enqueue:" + item.path); }
-                                Text {
-                                    text: "+";
-                                    color: Theme.text-tertiary;
-                                    font-size: 16px;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
-                            if root.model.browse-tab == 1 : TouchArea {
-                                width: 28px;
-                                clicked => { root.command("remove-queue:" + item.path); }
-                                Text {
-                                    text: "×";
-                                    color: Theme.text-tertiary;
-                                    font-size: 14px;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
+
+                                    if root.model.browse-tab == 0 : TouchArea {
+                                        width: 28px;
+                                        clicked => { root.command("enqueue:" + item.path); }
+                                        Text {
+                                            text: "+";
+                                            color: Theme.text-tertiary;
+                                            font-size: 16px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    if root.model.browse-tab == 0 : TouchArea {
+                                        width: 28px;
+                                        clicked => { root.command("play-next:" + item.path); }
+                                        Text {
+                                            text: root.model.play-next-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    if root.model.browse-tab == 1 : TouchArea {
+                                        width: 22px;
+                                        clicked => { root.command("queue-up:" + item.path); }
+                                        Text {
+                                            text: root.model.move-up-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    if root.model.browse-tab == 1 : TouchArea {
+                                        width: 22px;
+                                        clicked => { root.command("queue-down:" + item.path); }
+                                        Text {
+                                            text: root.model.move-down-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    if root.model.browse-tab == 1 : TouchArea {
+                                        width: 28px;
+                                        clicked => { root.command("remove-queue:" + item.path); }
+                                        Text {
+                                            text: "×";
+                                            color: Theme.text-tertiary;
+                                            font-size: 14px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
                                 }
                             }
                         }

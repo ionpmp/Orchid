@@ -1,4 +1,4 @@
-# Orchid Japanese (ja-JP) message catalog.
+﻿# Orchid Japanese (ja-JP) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -786,8 +786,12 @@ viewer-media-shuffle = シャッフル
 viewer-media-loop = ループ
 viewer-media-subs-off = 字幕オフ
 viewer-html-open = ブラウザーで開く
-viewer-html-hint = HTML プレビューはシステムのブラウザーを使います
+viewer-html-hint = 埋め込みプレビューです。「ブラウザーで開く」はシステムのウィンドウを使います。
 viewer-html-source = ソース
+viewer-html-back = 戻る
+viewer-html-forward = 進む
+viewer-html-reload = 再読み込み
+viewer-html-unavailable = WebView2 ランタイムがありません。ソースを表示しています。システムブラウザーで開いてください。
 viewer-document-info = 文書 · { $words } 語 · { $chars } 文字 · { $comments } コメント · { $blocks } ブロック · 未対応 { $warnings }
 
 viewer-document-save = 保存
@@ -2418,6 +2422,18 @@ video-player-rescan = Rescan
 video-player-no-track = No video
 video-player-search-placeholder = Search videos…
 video-player-enqueue = Add to queue
+video-player-back = Back
+video-player-play-next = N>
+video-player-play-group = Play
+video-player-jump-to-current = Jump to current
+video-player-reshuffle = Reshuffle
+video-player-move-up = ^
+video-player-move-down = v
+video-player-queue-stats = { $tracks } videos · { $duration }
+video-player-queue-stats-tracks = { $tracks } videos
+video-player-queue-remaining = { $tracks } left · { $duration }
+video-player-queue-remaining-tracks = { $tracks } left
+video-player-empty-folder = No videos in this folder
 video-player-remove = Remove
 video-player-clear-queue = Clear queue
 video-player-remove-root = Remove folder

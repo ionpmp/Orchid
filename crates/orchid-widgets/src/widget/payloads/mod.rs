@@ -53,7 +53,9 @@ pub use recent_files::{RecentFileItemView, RecentFilesPayload};
 pub use rss::{RssItemView, RssPayload};
 pub use search::{SearchCandidateView, UniversalSearchPayload};
 pub use system::{IndicatorStatus, SystemIndicator, SystemIndicatorKind, SystemPayload};
-pub use video_player::{VideoPlayerItemRow, VideoPlayerPayload, VideoPlayerRootRow};
+pub use video_player::{
+    VideoPlayerGroupRow, VideoPlayerItemRow, VideoPlayerPayload, VideoPlayerRootRow,
+};
 pub use viewer::ViewerPayload;
 pub use weather::{
     WeatherCityEntry, WeatherForecastDay, WeatherPayload, WeatherSearchHit, WeatherStatusTag,

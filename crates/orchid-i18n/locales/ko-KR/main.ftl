@@ -1,4 +1,4 @@
-# Orchid Korean (ko-KR) message catalog.
+﻿# Orchid Korean (ko-KR) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -786,8 +786,12 @@ viewer-media-shuffle = 셔플
 viewer-media-loop = 반복
 viewer-media-subs-off = 자막 끔
 viewer-html-open = 브라우저에서 열기
-viewer-html-hint = HTML 미리보기는 시스템 브라우저를 사용합니다
+viewer-html-hint = 내장 미리보기입니다. «브라우저에서 열기»는 시스템 창을 사용합니다.
 viewer-html-source = 소스
+viewer-html-back = 뒤로
+viewer-html-forward = 앞으로
+viewer-html-reload = 새로 고침
+viewer-html-unavailable = WebView2 런타임이 없어 소스를 표시합니다. 시스템 브라우저에서 페이지를 여세요.
 viewer-document-info = 문서 · { $words }단어 · { $chars }자 · { $comments }댓글 · { $blocks }개 블록 · 미지원 { $warnings }
 
 viewer-document-save = 저장
@@ -2419,6 +2423,18 @@ video-player-rescan = Rescan
 video-player-no-track = No video
 video-player-search-placeholder = Search videos…
 video-player-enqueue = Add to queue
+video-player-back = Back
+video-player-play-next = N>
+video-player-play-group = Play
+video-player-jump-to-current = Jump to current
+video-player-reshuffle = Reshuffle
+video-player-move-up = ^
+video-player-move-down = v
+video-player-queue-stats = { $tracks } videos · { $duration }
+video-player-queue-stats-tracks = { $tracks } videos
+video-player-queue-remaining = { $tracks } left · { $duration }
+video-player-queue-remaining-tracks = { $tracks } left
+video-player-empty-folder = No videos in this folder
 video-player-remove = Remove
 video-player-clear-queue = Clear queue
 video-player-remove-root = Remove folder

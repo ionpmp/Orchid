@@ -1,4 +1,4 @@
-# Orchid German (de-DE) message catalog.
+﻿# Orchid German (de-DE) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -786,8 +786,12 @@ viewer-media-shuffle = Zufall
 viewer-media-loop = Wiederholen
 viewer-media-subs-off = Untertitel aus
 viewer-html-open = Im Browser öffnen
-viewer-html-hint = HTML-Vorschau nutzt den Systembrowser
+viewer-html-hint = Eingebettete Vorschau. „Im Browser öffnen“ nutzt das Systemfenster.
 viewer-html-source = Quelltext
+viewer-html-back = Zurück
+viewer-html-forward = Vor
+viewer-html-reload = Neu laden
+viewer-html-unavailable = WebView2-Runtime fehlt; Quelltext wird angezeigt. Seite im Systembrowser öffnen.
 viewer-document-info = Dokument · { $words } Wörter · { $chars } Zeichen · { $comments } Kommentare · { $blocks } Blöcke · { $warnings } nicht unterstützte Features
 
 viewer-document-save = Speichern
@@ -2420,6 +2424,18 @@ video-player-rescan = Rescan
 video-player-no-track = No video
 video-player-search-placeholder = Search videos…
 video-player-enqueue = Add to queue
+video-player-back = Back
+video-player-play-next = N>
+video-player-play-group = Play
+video-player-jump-to-current = Jump to current
+video-player-reshuffle = Reshuffle
+video-player-move-up = ^
+video-player-move-down = v
+video-player-queue-stats = { $tracks } videos · { $duration }
+video-player-queue-stats-tracks = { $tracks } videos
+video-player-queue-remaining = { $tracks } left · { $duration }
+video-player-queue-remaining-tracks = { $tracks } left
+video-player-empty-folder = No videos in this folder
 video-player-remove = Remove
 video-player-clear-queue = Clear queue
 video-player-remove-root = Remove folder

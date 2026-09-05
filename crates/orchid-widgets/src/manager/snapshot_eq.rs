@@ -897,12 +897,20 @@ fn audio_player_payload_eq(a: &AudioPlayerPayload, b: &AudioPlayerPayload) -> bo
 fn video_player_payload_eq(a: &VideoPlayerPayload, b: &VideoPlayerPayload) -> bool {
     a.engine_available == b.engine_available
         && a.browse_tab == b.browse_tab
+        && a.browse_filter == b.browse_filter
+        && a.browse_filter_label == b.browse_filter_label
         && a.search_query == b.search_query
         && a.roots == b.roots
+        && a.groups == b.groups
         && a.items == b.items
         && a.queue == b.queue
         && a.queue_index == b.queue_index
         && a.queue_count == b.queue_count
+        && a.current_track_index == b.current_track_index
+        && a.scroll_gen == b.scroll_gen
+        && a.queue_remaining_count == b.queue_remaining_count
+        && a.queue_remaining_ms == b.queue_remaining_ms
+        && a.queue_duration_ms == b.queue_duration_ms
         && a.has_track == b.has_track
         && a.title == b.title
         && a.is_playing == b.is_playing
@@ -914,6 +922,7 @@ fn video_player_payload_eq(a: &VideoPlayerPayload, b: &VideoPlayerPayload) -> bo
         && a.repeat == b.repeat
         && a.speed_label == b.speed_label
         && a.library_count == b.library_count
+        && a.library_folders_count == b.library_folders_count
         && a.has_library_roots == b.has_library_roots
         && a.empty_hint == b.empty_hint
         && a.has_video == b.has_video

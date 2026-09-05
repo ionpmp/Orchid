@@ -10,7 +10,6 @@
 //! the per-widget descriptor builders directly.
 
 pub mod audio_player;
-pub mod video_player;
 pub mod calculator;
 pub mod calendar;
 pub mod clock;
@@ -25,6 +24,7 @@ pub mod recent_files;
 pub mod rss;
 pub mod search;
 pub mod system;
+pub mod video_player;
 pub mod viewer;
 pub mod weather;
 

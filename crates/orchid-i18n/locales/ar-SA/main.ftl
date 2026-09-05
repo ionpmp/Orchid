@@ -1,4 +1,4 @@
-# Orchid Arabic (ar-SA) message catalog.
+﻿# Orchid Arabic (ar-SA) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -787,8 +787,12 @@ viewer-media-shuffle = عشوائي
 viewer-media-loop = تكرار
 viewer-media-subs-off = الترجمة متوقفة
 viewer-html-open = فتح في المتصفح
-viewer-html-hint = معاينة HTML تستخدم متصفح النظام
+viewer-html-hint = معاينة مضمّنة. «فتح في المتصفح» يستخدم نافذة النظام.
 viewer-html-source = المصدر
+viewer-html-back = رجوع
+viewer-html-forward = تقدم
+viewer-html-reload = إعادة تحميل
+viewer-html-unavailable = وقت تشغيل WebView2 غير مثبت؛ يُعرض المصدر. افتح الصفحة في متصفح النظام.
 viewer-document-info = مستند · { $words } كلمة · { $chars } حرف · { $comments } تعليقات · { $blocks } كتل · { $warnings } ميزات غير مدعومة
 
 viewer-document-save = حفظ
@@ -2421,6 +2425,18 @@ video-player-rescan = Rescan
 video-player-no-track = No video
 video-player-search-placeholder = Search videos…
 video-player-enqueue = Add to queue
+video-player-back = Back
+video-player-play-next = N>
+video-player-play-group = Play
+video-player-jump-to-current = Jump to current
+video-player-reshuffle = Reshuffle
+video-player-move-up = ^
+video-player-move-down = v
+video-player-queue-stats = { $tracks } videos · { $duration }
+video-player-queue-stats-tracks = { $tracks } videos
+video-player-queue-remaining = { $tracks } left · { $duration }
+video-player-queue-remaining-tracks = { $tracks } left
+video-player-empty-folder = No videos in this folder
 video-player-remove = Remove
 video-player-clear-queue = Clear queue
 video-player-remove-root = Remove folder

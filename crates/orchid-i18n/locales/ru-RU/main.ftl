@@ -1,4 +1,4 @@
-# Orchid Russian (ru-RU) message catalog.
+﻿# Orchid Russian (ru-RU) message catalog.
 
 # ---- Widget registry metadata ----
 widget-terminal-name = Терминал
@@ -776,8 +776,12 @@ viewer-media-shuffle = Случайно
 viewer-media-loop = Повтор
 viewer-media-subs-off = Субтитры выкл.
 viewer-html-open = Открыть в браузере
-viewer-html-hint = HTML открывается в системном браузере
+viewer-html-hint = Встроенный просмотр. «Открыть в браузере» — отдельное окно системы.
 viewer-html-source = Исходник
+viewer-html-back = Назад
+viewer-html-forward = Вперёд
+viewer-html-reload = Обновить
+viewer-html-unavailable = Среда WebView2 не установлена; показан исходник. Откройте страницу в системном браузере.
 viewer-document-info = Документ · { $words } слов · { $chars } символов · { $comments } коммент. · { $blocks } блоков · { $warnings } неподдерж. элементов
 
 viewer-document-save = Сохранить
@@ -2422,6 +2426,18 @@ video-player-rescan = Rescan
 video-player-no-track = No video
 video-player-search-placeholder = Search videos…
 video-player-enqueue = Add to queue
+video-player-back = Back
+video-player-play-next = N>
+video-player-play-group = Play
+video-player-jump-to-current = Jump to current
+video-player-reshuffle = Reshuffle
+video-player-move-up = ^
+video-player-move-down = v
+video-player-queue-stats = { $tracks } videos · { $duration }
+video-player-queue-stats-tracks = { $tracks } videos
+video-player-queue-remaining = { $tracks } left · { $duration }
+video-player-queue-remaining-tracks = { $tracks } left
+video-player-empty-folder = No videos in this folder
 video-player-remove = Remove
 video-player-clear-queue = Clear queue
 video-player-remove-root = Remove folder

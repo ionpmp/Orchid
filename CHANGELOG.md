@@ -278,10 +278,12 @@ release yet.
   (last 50 played tracks, chronological). Library / queue rows show ID3
   duration when TLEN is present. Digits **1–7** switch browse tabs
   when the player has focus Library/queue rows show cover thumbnails (APIC / folder cover).
-- **Video Player**: dockable local video library (folders + queue, shuffle /
-  repeat, libmpv RGBA surface) — catalog creates the widget (no longer a
-  one-shot file-picker → viewer launcher). File Manager **Play in Video Player**
-  / **Add to queue**; Explorer drop onto the player.
+- **Video Player**: dockable local video library (folder drill-down + play/enqueue
+  group, queue with play-next / reorder / reshuffle / jump-to-current /
+  remaining strip, shuffle/repeat, libmpv RGBA surface, Windows SMTC) — catalog
+  creates the widget (no longer a one-shot file-picker → viewer launcher). File
+  Manager **Play in Video Player** / **Add to queue**; Explorer drop onto the
+  player.
 - Terminal (PTY: PowerShell / cmd / WSL / SSH; tabs + splits).
 - Weather, Moon (geometric phase disk), System indicators, Media, RSS,
   Recent files, Universal search, Password manager (KDBX4 + Windows Hello).
@@ -307,6 +309,10 @@ release yet.
   listed only in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ### Changed
+- **Video Player** library/queue UX brought to Audio Player parity: folder
+  drill-down (play/enqueue group), play-next, queue reorder (drag + up/down),
+  reshuffle remaining, jump-to-current auto-scroll, remaining-count strip,
+  search play/enqueue, Windows SMTC (`MediaPlaybackType::Video`).
 - MSRV / pinned toolchain **1.97 → 1.98.0**; Cargo.lock refreshed to latest
   compatible crate versions, plus intentional bumps: `icu` 2.3, `swash` 0.2.10,
   `crc32fast` 1.5, `fontdb` 0.24, `resvg`/`usvg` 0.48, `parley` 0.11,

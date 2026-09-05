@@ -1,4 +1,4 @@
-# Orchid Simplified Chinese (zh-CN) message catalog.
+﻿# Orchid Simplified Chinese (zh-CN) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -786,8 +786,12 @@ viewer-media-shuffle = 随机
 viewer-media-loop = 循环
 viewer-media-subs-off = 字幕关闭
 viewer-html-open = 在浏览器中打开
-viewer-html-hint = HTML 预览使用系统浏览器
+viewer-html-hint = 内嵌预览。「在浏览器中打开」会使用系统窗口。
 viewer-html-source = 源码
+viewer-html-back = 后退
+viewer-html-forward = 前进
+viewer-html-reload = 刷新
+viewer-html-unavailable = 未安装 WebView2 运行时，正在显示源码。请在系统浏览器中打开页面。
 viewer-document-info = 文档 · { $words } 词 · { $chars } 字符 · { $comments } 条批注 · { $blocks } 个块 · { $warnings } 个不支持的功能
 
 viewer-document-save = 保存
@@ -2419,6 +2423,18 @@ video-player-rescan = Rescan
 video-player-no-track = No video
 video-player-search-placeholder = Search videos…
 video-player-enqueue = Add to queue
+video-player-back = Back
+video-player-play-next = N>
+video-player-play-group = Play
+video-player-jump-to-current = Jump to current
+video-player-reshuffle = Reshuffle
+video-player-move-up = ^
+video-player-move-down = v
+video-player-queue-stats = { $tracks } videos · { $duration }
+video-player-queue-stats-tracks = { $tracks } videos
+video-player-queue-remaining = { $tracks } left · { $duration }
+video-player-queue-remaining-tracks = { $tracks } left
+video-player-empty-folder = No videos in this folder
 video-player-remove = Remove
 video-player-clear-queue = Clear queue
 video-player-remove-root = Remove folder

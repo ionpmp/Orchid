@@ -77,6 +77,8 @@ pub struct VideoPlayerConfig {
     pub shuffle: bool,
     pub repeat: RepeatMode,
     pub browse_tab: BrowseTab,
+    /// Folder drill-down key (empty = folder list).
+    pub browse_filter: String,
     /// Free-text library search (title / path).
     pub search_query: String,
     /// Playback speed ×100 (100 = 1.0×).
@@ -94,6 +96,7 @@ impl Default for VideoPlayerConfig {
             shuffle: false,
             repeat: RepeatMode::Off,
             browse_tab: BrowseTab::Library,
+            browse_filter: String::new(),
             search_query: String::new(),
             speed_x100: 100,
         }

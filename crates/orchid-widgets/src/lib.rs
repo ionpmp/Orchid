@@ -49,9 +49,10 @@ pub use widget::payloads::{
     PasswordManagerPayload, ProcessGroup, ProcessRowView, ProcessSortColumn, ProcessesPayload,
     ProcessesTab, RecentFileItemView, RecentFilesPayload, RssItemView, RssPayload,
     SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator, SystemIndicatorKind,
-    SystemPayload, TabPayload, UniversalSearchPayload, UserRowView, VideoPlayerItemRow,
-    VideoPlayerPayload, VideoPlayerRootRow, ViewerPayload, VisitHistoryItemPayload,
-    WeatherCityEntry, WeatherForecastDay, WeatherPayload, WeatherSearchHit, WeatherStatusTag,
+    SystemPayload, TabPayload, UniversalSearchPayload, UserRowView, VideoPlayerGroupRow,
+    VideoPlayerItemRow, VideoPlayerPayload, VideoPlayerRootRow, ViewerPayload,
+    VisitHistoryItemPayload, WeatherCityEntry, WeatherForecastDay, WeatherPayload,
+    WeatherSearchHit, WeatherStatusTag,
 };
 pub use workspace::{WorkspaceManager, MAX_WORKSPACES};
 

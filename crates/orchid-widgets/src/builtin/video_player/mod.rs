@@ -20,7 +20,9 @@ use uuid::Uuid;
 use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
-use crate::widget::payloads::{VideoPlayerItemRow, VideoPlayerPayload, VideoPlayerRootRow};
+use crate::widget::payloads::{
+    VideoPlayerGroupRow, VideoPlayerItemRow, VideoPlayerPayload, VideoPlayerRootRow,
+};
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{
@@ -47,6 +49,9 @@ struct VideoHandle {
     bus: Arc<orchid_core::EventBus>,
     scanning: AtomicBool,
     scan_gen: AtomicU64,
+    /// Bumped when Queue should auto-scroll to the current track.
+    scroll_gen: AtomicU64,
+    last_scroll: parking_lot::Mutex<(u8, Option<String>)>,
     /// Last published `position_ms / 1000` so a playing tick without a new
     /// frame / property change does not republish the whole library snapshot.
     last_pos_sec: AtomicU64,
@@ -74,6 +79,21 @@ impl VideoHandle {
         cfg.speed_x100 = (self.player.speed() * 100.0).round() as u32;
     }
 
+    /// Advance [`Self::scroll_gen`] when the Queue tab should re-centre on the current track.
+    fn note_queue_scroll(&self, tab: BrowseTab, path: Option<&str>) -> u64 {
+        let tab_u = tab.as_u8();
+        let mut last = self.last_scroll.lock();
+        let changed = last.0 != tab_u || last.1.as_deref() != path;
+        if changed {
+            last.0 = tab_u;
+            last.1 = path.map(str::to_string);
+            if tab == BrowseTab::Queue {
+                self.scroll_gen.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        self.scroll_gen.load(Ordering::Relaxed)
+    }
+
     fn load_current(&self) {
         let path = {
             let q = self.queue.read();
@@ -91,6 +111,11 @@ impl VideoHandle {
         self.player.load_path(p.as_path());
         self.player.set_volume(f64::from(self.config.read().volume));
         pause_rivals();
+        #[cfg(windows)]
+        {
+            crate::builtin::viewer::smtc_publisher::set_active_video(self.instance_id);
+            self.push_smtc();
+        }
     }
 
     fn restore_current_paused(&self) {
@@ -103,6 +128,42 @@ impl VideoHandle {
         };
         self.load_path(&path);
         self.player.pause();
+    }
+
+    #[cfg(windows)]
+    fn push_smtc(&self) {
+        use crate::builtin::viewer::smtc_publisher::{publish_now_playing, NowPlaying};
+        let title = self.player.title();
+        let title = if title.is_empty() {
+            self.queue
+                .read()
+                .current()
+                .map(|p| {
+                    std::path::Path::new(p)
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(p)
+                        .to_string()
+                })
+                .unwrap_or_default()
+        } else {
+            title
+        };
+        publish_now_playing(
+            self.instance_id,
+            &NowPlaying {
+                available: self.player.available(),
+                title,
+                artist: String::new(),
+                playing: self.player.is_playing(),
+                position_ms: self.player.position_ms(),
+                duration_ms: self.player.duration_ms(),
+                has_cover: false,
+                cover_rgba: Arc::new(Vec::new()),
+                cover_width: 0,
+                cover_height: 0,
+            },
+        );
     }
 }
 
@@ -327,6 +388,11 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             } else {
                 if resuming {
                     pause_rivals();
+                    #[cfg(windows)]
+                    {
+                        crate::builtin::viewer::smtc_publisher::set_active_video(h.instance_id);
+                        h.push_smtc();
+                    }
                 }
                 h.player.play_pause();
                 h.publish();
@@ -394,6 +460,14 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             h.sync_queue_to_config();
             h.publish();
         }
+        "reshuffle" => {
+            if !h.queue.write().reshuffle_remaining() {
+                return;
+            }
+            h.config.write().shuffle = true;
+            h.sync_queue_to_config();
+            h.publish();
+        }
         "repeat" => {
             h.queue.write().cycle_repeat();
             h.config.write().repeat = h.queue.read().repeat;
@@ -432,6 +506,34 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             h.sync_queue_to_config();
             h.publish();
         }
+        "clear-search" => {
+            h.config.write().search_query.clear();
+            h.publish();
+        }
+        "clear-filter" => {
+            h.config.write().browse_filter.clear();
+            h.publish();
+        }
+        "play-search" => {
+            play_search(&h);
+        }
+        "enqueue-search" => {
+            enqueue_search(&h);
+        }
+        "queue-first" => {
+            if h.queue.write().jump_first() {
+                h.load_current();
+            }
+        }
+        "queue-last" => {
+            if h.queue.write().jump_last() {
+                h.load_current();
+            }
+        }
+        "scroll-to-current" => {
+            h.scroll_gen.fetch_add(1, Ordering::Relaxed);
+            h.publish();
+        }
         "tab:0" => {
             h.config.write().browse_tab = BrowseTab::Library;
             h.publish();
@@ -443,6 +545,16 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         cmd if cmd.starts_with("search:") => {
             h.config.write().search_query = cmd["search:".len()..].to_string();
             h.publish();
+        }
+        cmd if cmd.starts_with("open-group:") => {
+            h.config.write().browse_filter = cmd["open-group:".len()..].to_string();
+            h.publish();
+        }
+        cmd if cmd.starts_with("play-group:") => {
+            play_group(&h, &cmd["play-group:".len()..]);
+        }
+        cmd if cmd.starts_with("enqueue-group:") => {
+            enqueue_group(&h, &cmd["enqueue-group:".len()..]);
         }
         cmd if cmd.starts_with("play:") => {
             let path = &cmd["play:".len()..];
@@ -465,6 +577,12 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             }
             h.load_current();
         }
+        cmd if cmd.starts_with("queue-play:") => {
+            let path = &cmd["queue-play:".len()..];
+            if h.queue.write().play_at(path) {
+                h.load_current();
+            }
+        }
         cmd if cmd.starts_with("enqueue:") => {
             let path = &cmd["enqueue:".len()..];
             if path.is_empty() {
@@ -473,6 +591,41 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             if h.queue.write().enqueue_end(path) {
                 h.sync_queue_to_config();
                 h.publish();
+            }
+        }
+        cmd if cmd.starts_with("play-next:") => {
+            let path = &cmd["play-next:".len()..];
+            if path.is_empty() {
+                return;
+            }
+            if h.queue.write().enqueue_next(path) {
+                h.sync_queue_to_config();
+                h.publish();
+            }
+        }
+        cmd if cmd.starts_with("queue-up:") => {
+            let path = &cmd["queue-up:".len()..];
+            if h.queue.write().move_up(path) {
+                h.sync_queue_to_config();
+                h.publish();
+            }
+        }
+        cmd if cmd.starts_with("queue-down:") => {
+            let path = &cmd["queue-down:".len()..];
+            if h.queue.write().move_down(path) {
+                h.sync_queue_to_config();
+                h.publish();
+            }
+        }
+        cmd if cmd.starts_with("queue-move-to:") => {
+            let raw = &cmd["queue-move-to:".len()..];
+            if let Some((idx_s, path)) = raw.split_once('|') {
+                if let Ok(idx) = idx_s.parse::<usize>() {
+                    if h.queue.write().move_to(path, idx) {
+                        h.sync_queue_to_config();
+                        h.publish();
+                    }
+                }
             }
         }
         cmd if cmd.starts_with("remove-queue:") => {
@@ -505,6 +658,88 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
     }
 }
 
+fn play_group(h: &VideoHandle, group_key: &str) {
+    let paths = h.library.read().paths_in_folder(group_key);
+    if paths.is_empty() {
+        return;
+    }
+    let cfg = h.config.read().clone();
+    {
+        let mut q = h.queue.write();
+        q.replace(paths, 0);
+        q.shuffle = cfg.shuffle;
+        q.repeat = cfg.repeat;
+        if q.shuffle {
+            q.rebuild_order();
+        }
+    }
+    {
+        let mut c = h.config.write();
+        c.browse_filter = group_key.to_string();
+    }
+    h.load_current();
+}
+
+fn enqueue_group(h: &VideoHandle, group_key: &str) {
+    let paths = h.library.read().paths_in_folder(group_key);
+    if paths.is_empty() {
+        return;
+    }
+    let mut any = false;
+    {
+        let mut q = h.queue.write();
+        for path in paths {
+            if q.enqueue_end(&path) {
+                any = true;
+            }
+        }
+    }
+    if any {
+        h.sync_queue_to_config();
+        h.publish();
+    }
+}
+
+fn play_search(h: &VideoHandle) {
+    let search = h.config.read().search_query.clone();
+    let paths = h.library.read().paths_matching(&search);
+    if paths.is_empty() {
+        return;
+    }
+    let cfg = h.config.read().clone();
+    {
+        let mut q = h.queue.write();
+        q.replace(paths, 0);
+        q.shuffle = cfg.shuffle;
+        q.repeat = cfg.repeat;
+        if q.shuffle {
+            q.rebuild_order();
+        }
+    }
+    h.load_current();
+}
+
+fn enqueue_search(h: &VideoHandle) {
+    let search = h.config.read().search_query.clone();
+    let paths = h.library.read().paths_matching(&search);
+    if paths.is_empty() {
+        return;
+    }
+    let mut any = false;
+    {
+        let mut q = h.queue.write();
+        for path in paths {
+            if q.enqueue_end(&path) {
+                any = true;
+            }
+        }
+    }
+    if any {
+        h.sync_queue_to_config();
+        h.publish();
+    }
+}
+
 fn format_time(ms: u64) -> String {
     let total = ms / 1000;
     let h = total / 3600;
@@ -517,6 +752,23 @@ fn format_time(ms: u64) -> String {
     }
 }
 
+fn video_row_from_path(lib: &LibraryIndex, path: &str) -> VideoRow {
+    lib.find_by_path(path)
+        .map(library::video_row)
+        .unwrap_or_else(|| {
+            let stem = PathBuf::from(path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.to_string());
+            VideoRow {
+                path: path.to_string(),
+                title: stem,
+                subtitle: path.to_string(),
+                duration_label: String::new(),
+            }
+        })
+}
+
 fn item_rows(rows: &[VideoRow], current: Option<&str>) -> Vec<VideoPlayerItemRow> {
     rows.iter()
         .map(|r| VideoPlayerItemRow {
@@ -527,6 +779,32 @@ fn item_rows(rows: &[VideoRow], current: Option<&str>) -> Vec<VideoPlayerItemRow
             is_current: current == Some(r.path.as_str()),
         })
         .collect()
+}
+
+fn browse_filter_label(filter: &str) -> String {
+    if filter.is_empty() {
+        return String::new();
+    }
+    PathBuf::from(filter)
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| filter.to_string())
+}
+
+/// Videos from the current row onward, plus remaining ms of the playing track.
+fn queue_remaining(q: &PlayQueue, position_ms: u64, duration_ms: u64) -> (u32, u64) {
+    let paths = q.display_paths();
+    let Some(cur) = q.current() else {
+        return (0, 0);
+    };
+    let Some(idx) = paths.iter().position(|p| p == cur) else {
+        return (0, 0);
+    };
+    let count = (paths.len() - idx) as u32;
+    let rem_current = duration_ms.saturating_sub(position_ms);
+    // Library has no per-file durations yet; only count remaining of the current clip.
+    (count, rem_current)
 }
 
 /// Video player widget.
@@ -575,6 +853,8 @@ impl VideoPlayerWidget {
             bus,
             scanning: AtomicBool::new(false),
             scan_gen: AtomicU64::new(0),
+            scroll_gen: AtomicU64::new(0),
+            last_scroll: parking_lot::Mutex::new((0, None)),
             last_pos_sec: AtomicU64::new(u64::MAX),
         });
         VIDEO_LIVE.insert(instance_id, Arc::clone(&handle));
@@ -592,58 +872,30 @@ impl VideoPlayerWidget {
         let lib = self.handle.library.read();
         let q = self.handle.queue.read();
         let current = q.current().map(str::to_string);
+        let display = q.display_paths();
 
-        let browse_rows = if cfg.browse_tab == BrowseTab::Queue {
-            q.paths
+        let (browse_groups, browse_items) = if cfg.browse_tab == BrowseTab::Queue {
+            let search = cfg.search_query.trim().to_lowercase();
+            let items = display
                 .iter()
-                .map(|p| {
-                    lib.find_by_path(p)
-                        .map(library::video_row)
-                        .unwrap_or_else(|| {
-                            let stem = PathBuf::from(p)
-                                .file_stem()
-                                .map(|s| s.to_string_lossy().into_owned())
-                                .unwrap_or_else(|| p.clone());
-                            VideoRow {
-                                path: p.clone(),
-                                title: stem,
-                                subtitle: p.clone(),
-                                duration_label: String::new(),
-                            }
-                        })
-                })
+                .map(|p| video_row_from_path(&lib, p))
                 .filter(|row| {
-                    let search = cfg.search_query.trim().to_lowercase();
                     if search.is_empty() {
                         return true;
                     }
                     row.title.to_lowercase().contains(&search)
                         || row.path.to_lowercase().contains(&search)
                 })
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>();
+            (Vec::new(), items)
         } else {
-            lib.browse_rows(&cfg.search_query)
+            let browse = lib.browse_rows(&cfg.search_query, &cfg.browse_filter, &cfg.library_roots);
+            (browse.groups, browse.items)
         };
 
-        let queue_rows: Vec<VideoRow> = q
-            .paths
+        let queue_rows: Vec<VideoRow> = display
             .iter()
-            .map(|p| {
-                lib.find_by_path(p)
-                    .map(library::video_row)
-                    .unwrap_or_else(|| {
-                        let stem = PathBuf::from(p)
-                            .file_stem()
-                            .map(|s| s.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| p.clone());
-                        VideoRow {
-                            path: p.clone(),
-                            title: stem,
-                            subtitle: p.clone(),
-                            duration_label: String::new(),
-                        }
-                    })
-            })
+            .map(|p| video_row_from_path(&lib, p))
             .collect();
 
         let pos = self.handle.player.position_ms();
@@ -685,8 +937,15 @@ impl VideoPlayerWidget {
             "video-player-empty-queue".into()
         } else if lib.videos.is_empty() && cfg.browse_tab == BrowseTab::Library {
             "video-player-empty-library".into()
-        } else if !cfg.search_query.trim().is_empty() && browse_rows.is_empty() {
-            "video-player-empty-search".into()
+        } else if (!cfg.search_query.trim().is_empty() || !cfg.browse_filter.is_empty())
+            && browse_groups.is_empty()
+            && browse_items.is_empty()
+        {
+            if cfg.search_query.trim().is_empty() {
+                "video-player-empty-folder".into()
+            } else {
+                "video-player-empty-search".into()
+            }
         } else {
             String::new()
         };
@@ -708,15 +967,47 @@ impl VideoPlayerWidget {
             self.handle.player.title()
         };
 
+        let current_track_index = current
+            .as_deref()
+            .and_then(|cur| display.iter().position(|p| p == cur).map(|i| i as i32))
+            .unwrap_or(-1);
+        let scroll_gen = self
+            .handle
+            .note_queue_scroll(cfg.browse_tab, current.as_deref());
+        let (queue_remaining_count, queue_remaining_ms) = queue_remaining(&q, pos, dur);
+        let library_folders_count = {
+            let mut folders = std::collections::BTreeSet::new();
+            for v in &lib.videos {
+                folders.insert(v.folder.as_str());
+            }
+            folders.len() as u32
+        };
+
         VideoPlayerPayload {
             engine_available: self.handle.player.available(),
             browse_tab: cfg.browse_tab.as_u8(),
+            browse_filter: cfg.browse_filter.clone(),
+            browse_filter_label: browse_filter_label(&cfg.browse_filter),
             search_query: cfg.search_query,
             roots,
-            items: item_rows(&browse_rows, current.as_deref()),
+            groups: browse_groups
+                .into_iter()
+                .map(|g| VideoPlayerGroupRow {
+                    key: g.key,
+                    label: g.label,
+                    count: g.count,
+                    is_library_root: g.is_library_root,
+                })
+                .collect(),
+            items: item_rows(&browse_items, current.as_deref()),
             queue: item_rows(&queue_rows, current.as_deref()),
             queue_index: q.index as i32,
             queue_count: q.paths.len() as u32,
+            current_track_index,
+            scroll_gen,
+            queue_remaining_count,
+            queue_remaining_ms,
+            queue_duration_ms: 0,
             has_track: current.is_some(),
             title,
             is_playing: self.handle.player.is_playing(),
@@ -731,6 +1022,7 @@ impl VideoPlayerWidget {
             repeat: q.repeat.as_u8(),
             speed_label: self.handle.player.speed_label(),
             library_count: lib.videos.len() as u32,
+            library_folders_count,
             has_library_roots,
             empty_hint,
             has_video,
@@ -760,6 +1052,10 @@ impl VideoPlayerWidget {
                 let pos_sec = handle.player.position_ms() / 1000;
                 let last_sec = handle.last_pos_sec.swap(pos_sec, Ordering::Relaxed);
                 if dirty || pos_sec != last_sec {
+                    #[cfg(windows)]
+                    if dirty {
+                        handle.push_smtc();
+                    }
                     handle.publish();
                 }
             }
@@ -799,6 +1095,8 @@ impl Widget for VideoPlayerWidget {
     async fn on_close(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
         self.refresh.stop();
         self.handle.sync_queue_to_config();
+        #[cfg(windows)]
+        crate::builtin::viewer::smtc_publisher::clear_active(self.instance_id);
         VIDEO_LIVE.remove(&self.instance_id);
         Ok(())
     }
