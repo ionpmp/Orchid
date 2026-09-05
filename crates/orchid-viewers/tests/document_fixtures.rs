@@ -136,6 +136,12 @@ fn lists_bullet_and_numbered() {
     let plain = doc.plain_text();
     assert!(plain.contains("First bullet item"), "{plain}");
     assert!(plain.contains("First numbered item"), "{plain}");
+    let ids: Vec<_> = paras
+        .iter()
+        .filter(|p| p.list != ListKind::None)
+        .filter_map(|p| p.num_id)
+        .collect();
+    assert!(!ids.is_empty(), "list paragraphs should keep OOXML numId");
 }
 
 #[test]

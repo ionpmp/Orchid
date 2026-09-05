@@ -14,7 +14,8 @@ use crate::document::ooxml::document_xml::{
     write_story_xml, Relationships,
 };
 use crate::document::ooxml::numbering::{
-    assign_orchid_list_ids, document_uses_lists, parse_numbering_xml, write_numbering_xml,
+    assign_orchid_list_ids, document_can_reuse_numbering, document_uses_lists,
+    parse_numbering_xml, retained_numbering_xml, write_numbering_xml,
     NumberingDefs,
 };
 use crate::document::ooxml::styles::{parse_styles_xml, StyleDefaults};
@@ -223,7 +224,13 @@ pub async fn save_document(doc: &Document, output_path: &Path) -> Result<()> {
 fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
     let mut doc = doc.clone();
     let uses_lists = document_uses_lists(&doc);
-    if uses_lists {
+    let retained_numbering = retained_numbering_xml(&doc).map(|b| b.to_vec());
+    let reuse_numbering = retained_numbering.as_ref().is_some_and(|bytes| {
+        parse_numbering_xml(bytes)
+            .ok()
+            .is_some_and(|defs| document_can_reuse_numbering(&doc, &defs))
+    });
+    if uses_lists && !reuse_numbering {
         assign_orchid_list_ids(&mut doc);
     }
     prepare_document_images(&mut doc);
@@ -273,7 +280,11 @@ fn save_document_sync(doc: &Document, output_path: &Path) -> Result<()> {
         written.insert("_rels/.rels".to_string());
 
         if uses_lists {
-            let numbering = write_numbering_xml();
+            let numbering = if reuse_numbering {
+                retained_numbering.expect("reuse implies retained numbering bytes")
+            } else {
+                write_numbering_xml()
+            };
             zip.start_file("word/numbering.xml", opts)
                 .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
             zip.write_all(&numbering)?;
@@ -1651,5 +1662,56 @@ mod tests {
         assert_eq!(loaded.header_first[0].plain_text(), "FirstHeader");
         assert_eq!(loaded.footer_first[0].plain_text(), "FirstFooter");
         assert!(loaded.page_setup.title_page);
+    }
+
+    #[test]
+    fn preserves_retained_numbering_when_num_ids_resolve() {
+        use crate::document::model::{ListKind, Paragraph, Run, RunStyle};
+        let custom = br#"<?xml version="1.0"?>
+        <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:abstractNum w:abstractNumId="9">
+            <w:nsid w:val="DEADBEEF"/>
+            <w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl>
+            <w:lvl w:ilvl="1"><w:numFmt w:val="bullet"/></w:lvl>
+          </w:abstractNum>
+          <w:num w:numId="10"><w:abstractNumId w:val="9"/></w:num>
+        </w:numbering>"#;
+        let doc = Document {
+            blocks: vec![Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "Nested".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                list: ListKind::Bullet,
+                list_level: 1,
+                num_id: Some(10),
+                ..Default::default()
+            })],
+            retained_parts: vec![("word/numbering.xml".into(), custom.to_vec())],
+            ..Default::default()
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("retain-num.docx");
+        save_document_sync(&doc, &path).unwrap();
+        let loaded = open_document(&path).unwrap();
+        let Block::Paragraph(p) = &loaded.blocks[0] else {
+            panic!("p");
+        };
+        assert_eq!(p.num_id, Some(10));
+        assert_eq!(p.list_level, 1);
+        assert_eq!(p.list, ListKind::Bullet);
+        let retained = loaded
+            .retained_parts
+            .iter()
+            .find(|(n, _)| n == "word/numbering.xml")
+            .map(|(_, b)| b.as_slice())
+            .expect("numbering part");
+        let text = String::from_utf8_lossy(retained);
+        assert!(text.contains("DEADBEEF"), "custom numbering lost: {text}");
+        assert!(
+            text.contains("w:numId=\"10\"") || text.contains("numId=\"10\""),
+            "{text}"
+        );
     }
 }

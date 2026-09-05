@@ -76,37 +76,97 @@ pub fn assign_orchid_list_ids(doc: &mut Document) {
     }
 }
 
-/// Minimal `word/numbering.xml` with bullet=`1` and decimal=`2`.
+/// Orchid `word/numbering.xml` with bullet=`1` and decimal=`2`, levels `0..=8`.
 #[must_use]
 pub fn write_numbering_xml() -> Vec<u8> {
-    ORCHID_NUMBERING_XML.as_bytes().to_vec()
+    let mut out = String::from(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n\
+<w:numbering xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">\n\
+  <w:abstractNum w:abstractNumId=\"0\">\n\
+    <w:nsid w:val=\"A1B2C301\"/>\n\
+    <w:multiLevelType w:val=\"hybridMultilevel\"/>\n",
+    );
+    for ilvl in 0u8..=8 {
+        out.push_str(&format!(
+            "    <w:lvl w:ilvl=\"{ilvl}\">\n\
+      <w:start w:val=\"1\"/>\n\
+      <w:numFmt w:val=\"bullet\"/>\n\
+      <w:lvlText w:val=\"\u{2022}\"/>\n\
+      <w:lvlJc w:val=\"left\"/>\n\
+    </w:lvl>\n"
+        ));
+    }
+    out.push_str(
+        "  </w:abstractNum>\n\
+  <w:abstractNum w:abstractNumId=\"1\">\n\
+    <w:nsid w:val=\"A1B2C302\"/>\n\
+    <w:multiLevelType w:val=\"hybridMultilevel\"/>\n",
+    );
+    for ilvl in 0u8..=8 {
+        let n = ilvl + 1;
+        out.push_str(&format!(
+            "    <w:lvl w:ilvl=\"{ilvl}\">\n\
+      <w:start w:val=\"1\"/>\n\
+      <w:numFmt w:val=\"decimal\"/>\n\
+      <w:lvlText w:val=\"%{n}.\"/>\n\
+      <w:lvlJc w:val=\"left\"/>\n\
+    </w:lvl>\n"
+        ));
+    }
+    out.push_str(
+        "  </w:abstractNum>\n\
+  <w:num w:numId=\"1\"><w:abstractNumId w:val=\"0\"/></w:num>\n\
+  <w:num w:numId=\"2\"><w:abstractNumId w:val=\"1\"/></w:num>\n\
+</w:numbering>",
+    );
+    out.into_bytes()
 }
 
-const ORCHID_NUMBERING_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:abstractNum w:abstractNumId="0">
-    <w:nsid w:val="A1B2C301"/>
-    <w:multiLevelType w:val="hybridMultilevel"/>
-    <w:lvl w:ilvl="0">
-      <w:start w:val="1"/>
-      <w:numFmt w:val="bullet"/>
-      <w:lvlText w:val="•"/>
-      <w:lvlJc w:val="left"/>
-    </w:lvl>
-  </w:abstractNum>
-  <w:abstractNum w:abstractNumId="1">
-    <w:nsid w:val="A1B2C302"/>
-    <w:multiLevelType w:val="hybridMultilevel"/>
-    <w:lvl w:ilvl="0">
-      <w:start w:val="1"/>
-      <w:numFmt w:val="decimal"/>
-      <w:lvlText w:val="%1."/>
-      <w:lvlJc w:val="left"/>
-    </w:lvl>
-  </w:abstractNum>
-  <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
-  <w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>
-</w:numbering>"#;
+/// Bytes of retained `word/numbering.xml`, if present.
+#[must_use]
+pub fn retained_numbering_xml(doc: &Document) -> Option<&[u8]> {
+    doc.retained_parts
+        .iter()
+        .find(|(name, _)| name == "word/numbering.xml")
+        .map(|(_, b)| b.as_slice())
+}
+
+/// Whether every list paragraph keeps a `numId` that resolves in `defs`.
+#[must_use]
+pub fn document_can_reuse_numbering(doc: &Document, defs: &NumberingDefs) -> bool {
+    fn para_ok(p: &crate::document::model::Paragraph, defs: &NumberingDefs) -> bool {
+        if p.list == ListKind::None {
+            return true;
+        }
+        match p.num_id {
+            Some(id) if defs.kind_of(id) != ListKind::None => true,
+            _ => false,
+        }
+    }
+    for block in &doc.blocks {
+        match block {
+            Block::Paragraph(p) => {
+                if !para_ok(p, defs) {
+                    return false;
+                }
+            }
+            Block::Table(t) => {
+                for row in &t.rows {
+                    for cell in &row.cells {
+                        for p in &cell.paragraphs {
+                            if !para_ok(p, defs) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    true
+}
+
 
 /// Parse numbering.xml.
 ///
@@ -257,5 +317,41 @@ mod tests {
         let defs = parse_numbering_xml(&write_numbering_xml()).unwrap();
         assert_eq!(defs.kind_of(ORCHID_BULLET_NUM_ID), ListKind::Bullet);
         assert_eq!(defs.kind_of(ORCHID_NUMBERED_NUM_ID), ListKind::Numbered);
+        let xml = String::from_utf8(write_numbering_xml()).unwrap();
+        assert!(xml.contains(r#"w:ilvl="8""#), "expected multilevel abstracts");
+        assert!(xml.contains("%9."), "decimal level 8 lvlText");
+    }
+
+    #[test]
+    fn document_can_reuse_when_num_ids_resolve() {
+        use crate::document::model::{Paragraph, Run, RunStyle};
+        let xml = br#"<?xml version="1.0"?>
+        <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:abstractNum w:abstractNumId="5">
+            <w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl>
+          </w:abstractNum>
+          <w:num w:numId="10"><w:abstractNumId w:val="5"/></w:num>
+        </w:numbering>"#;
+        let defs = parse_numbering_xml(xml).unwrap();
+        let doc = Document {
+            blocks: vec![Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "a".into(),
+                    style: RunStyle::default(),
+                    ..Default::default()
+                }],
+                list: ListKind::Bullet,
+                num_id: Some(10),
+                ..Default::default()
+            })],
+            retained_parts: vec![("word/numbering.xml".into(), xml.to_vec())],
+            ..Default::default()
+        };
+        assert!(document_can_reuse_numbering(&doc, &defs));
+        let mut needs = doc.clone();
+        if let Block::Paragraph(p) = &mut needs.blocks[0] {
+            p.num_id = None;
+        }
+        assert!(!document_can_reuse_numbering(&needs, &defs));
     }
 }
