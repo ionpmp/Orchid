@@ -9,6 +9,8 @@ use orchid_crypto::Identity;
 use uuid::Uuid;
 
 use crate::capability;
+use crate::content_type::{STRUCTURED_CRDT_V1, STRUCTURED_SNAPSHOT_V1};
+use crate::crdt::{encode_crdt_payload, CrdtDocument};
 use crate::crypto_region::prepare_region_body;
 use crate::framing::{pad_to_alignment, Footer, Header, RegionHeader};
 use crate::provenance::{sign_clean_text_provenance, PROVENANCE_CONTENT_TYPE};
@@ -32,10 +34,12 @@ pub struct SealedCreateRequest {
     pub raw_name: Option<String>,
     /// Clean-Text UTF-8 (zstd-compressed on disk).
     pub clean_text: Vec<u8>,
-    /// Structured snapshot bytes (zstd-compressed on disk).
+    /// Structured snapshot bytes (ignored when [`Self::structured_crdt`] is set).
     pub structured: Vec<u8>,
-    /// Optional Structured content-type / schema id.
+    /// Optional Structured content-type / schema id (snapshot path).
     pub structured_content_type: Option<String>,
+    /// When set, encodes a CRDT Structured region (`orchid.structured.crdt.v1`).
+    pub structured_crdt: Option<CrdtDocument>,
     /// When set, private regions are age-encrypted to this identity.
     pub encrypt_with: Option<Identity>,
     /// When true, append a public C2PA Provenance region (signed PNG carrier).
@@ -69,10 +73,22 @@ pub fn build_sealed_bytes(req: &SealedCreateRequest) -> Result<Vec<u8>> {
         None
     };
 
+    let (structured_plain, structured_ctype) = if let Some(doc) = &req.structured_crdt {
+        caps |= capability::CRDT;
+        (encode_crdt_payload(doc)?, STRUCTURED_CRDT_V1.to_string())
+    } else {
+        (
+            req.structured.clone(),
+            req.structured_content_type
+                .clone()
+                .unwrap_or_else(|| STRUCTURED_SNAPSHOT_V1.to_string()),
+        )
+    };
+
     let raw_body = prepare_region_body(&req.raw, CompressionCodec::None, identity)?;
     let clean_body = prepare_region_body(&req.clean_text, CompressionCodec::Zstd, identity)?;
     let structured_body =
-        prepare_region_body(&req.structured, CompressionCodec::Zstd, identity)?;
+        prepare_region_body(&structured_plain, CompressionCodec::Zstd, identity)?;
 
     let mut buf = Vec::new();
     let header = Header::new(file_uuid, created_unix_ms, caps);
@@ -123,10 +139,7 @@ pub fn build_sealed_bytes(req: &SealedCreateRequest) -> Result<Vec<u8>> {
             encryption: structured_body.encryption,
             name: Some("structured".into()),
             ordinal: 0,
-            content_type: req
-                .structured_content_type
-                .clone()
-                .or_else(|| Some("application/octet-stream".into())),
+            content_type: Some(structured_ctype),
         },
     )?;
 
@@ -238,6 +251,7 @@ impl Default for SealedCreateRequest {
             clean_text: Vec::new(),
             structured: Vec::new(),
             structured_content_type: None,
+            structured_crdt: None,
             encrypt_with: None,
             sign_c2pa: false,
         }
@@ -261,6 +275,7 @@ mod tests {
             clean_text: b"hello\n".to_vec(),
             structured: b"{\"v\":1}".to_vec(),
             structured_content_type: Some("application/json".into()),
+            structured_crdt: None,
             encrypt_with: None,
             sign_c2pa: false,
         })

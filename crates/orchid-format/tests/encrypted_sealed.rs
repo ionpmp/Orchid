@@ -23,6 +23,7 @@ fn encrypted_clean_text_roundtrips_with_correct_identity() {
             clean_text: clean.clone(),
             structured: b"{}".to_vec(),
             structured_content_type: None,
+            structured_crdt: None,
             encrypt_with: Some(id.clone()),
             sign_c2pa: false,
         },

@@ -183,6 +183,22 @@ impl SealedFile {
         self.region_plaintext(&entry, identity)
     }
 
+    /// Decode Structured as a CRDT document when `content_type` is CRDT v1.
+    pub fn structured_crdt(&self, identity: Option<&Identity>) -> Result<crate::CrdtDocument> {
+        use crate::content_type::STRUCTURED_CRDT_V1;
+        use crate::crdt::decode_crdt_payload;
+
+        let entry = self.find_region(RegionType::Structured)?;
+        let ctype = entry.content_type().unwrap_or("");
+        if ctype != STRUCTURED_CRDT_V1 {
+            return Err(FormatError::RegionDecode(format!(
+                "structured content_type is {ctype:?}, expected {STRUCTURED_CRDT_V1}"
+            )));
+        }
+        let bytes = self.region_plaintext(&entry, identity)?;
+        decode_crdt_payload(&bytes)
+    }
+
     /// Convenience: Raw plaintext after decrypt.
     pub fn raw(&self, identity: Option<&Identity>) -> Result<Vec<u8>> {
         let entry = self.find_region(RegionType::Raw)?;

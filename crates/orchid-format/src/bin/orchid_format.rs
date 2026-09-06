@@ -108,6 +108,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     clean_text: fs::read(clean_text)?,
                     structured: fs::read(structured)?,
                     structured_content_type: Some("application/octet-stream".into()),
+                    structured_crdt: None,
                     encrypt_with: passphrase.map(Identity::passphrase),
                     sign_c2pa,
                 },

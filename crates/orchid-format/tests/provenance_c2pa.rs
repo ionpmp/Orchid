@@ -22,6 +22,7 @@ fn provenance_payload_accepted_by_c2pa_reader() {
             clean_text: clean,
             structured: b"{}".to_vec(),
             structured_content_type: None,
+            structured_crdt: None,
             encrypt_with: None,
             sign_c2pa: true,
         },
