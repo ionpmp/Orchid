@@ -95,6 +95,30 @@ pub fn select_tab(instance_id: Uuid, index: i32) {
     h.publish();
 }
 
+/// Cycle the active tab by `delta` (wraps).
+pub fn cycle_tab(instance_id: Uuid, delta: i32) {
+    let Some(h) = BROWSER_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut cfg = h.config.write();
+        cfg.cycle_active(delta);
+    }
+    h.publish();
+}
+
+/// Ctrl+1..8 select that tab; Ctrl+9 selects the last tab (`n` is 1-based).
+pub fn select_numbered_tab(instance_id: Uuid, n: i32) {
+    let Some(h) = BROWSER_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut cfg = h.config.write();
+        cfg.select_numbered(n);
+    }
+    h.publish();
+}
+
 /// Apply a settings-dialog mutation to the live config.
 pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut BrowserConfig)) {
     let Some(h) = BROWSER_LIVE.get(&instance_id) else {
@@ -711,5 +735,26 @@ mod tests {
         assert_eq!(cfg.tabs.len(), 2);
         assert_eq!(cfg.tabs[1].url, "https://second.example/");
         BROWSER_LIVE.remove(&id);
+    }
+
+    #[test]
+    fn cycle_and_numbered_tab_selection() {
+        let mut cfg = BrowserConfig::default();
+        cfg.tabs = (0..4)
+            .map(|i| BrowserTab::from_url(&format!("https://t{i}.example/")))
+            .collect();
+        cfg.active_index = 0;
+        cfg.cycle_active(1);
+        assert_eq!(cfg.active_index, 1);
+        cfg.cycle_active(-1);
+        assert_eq!(cfg.active_index, 0);
+        cfg.cycle_active(-1);
+        assert_eq!(cfg.active_index, 3);
+        cfg.select_numbered(2);
+        assert_eq!(cfg.active_index, 1);
+        cfg.select_numbered(8);
+        assert_eq!(cfg.active_index, 1);
+        cfg.select_numbered(9);
+        assert_eq!(cfg.active_index, 3);
     }
 }

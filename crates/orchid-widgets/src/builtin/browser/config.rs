@@ -185,6 +185,30 @@ impl BrowserConfig {
         });
     }
 
+    /// Move the active tab by `delta` (wraps around).
+    pub fn cycle_active(&mut self, delta: i32) {
+        let n = self.tabs.len() as i32;
+        if n <= 0 {
+            return;
+        }
+        self.active_index = (self.active_index as i32 + delta).rem_euclid(n) as u32;
+    }
+
+    /// Ctrl+1..8 select that tab if it exists; Ctrl+9 selects the last tab.
+    pub fn select_numbered(&mut self, n: i32) {
+        if n < 1 || self.tabs.is_empty() {
+            return;
+        }
+        if n >= 9 {
+            self.active_index = (self.tabs.len() - 1) as u32;
+            return;
+        }
+        let idx = (n as usize).saturating_sub(1);
+        if idx < self.tabs.len() {
+            self.active_index = idx as u32;
+        }
+    }
+
     /// Ensure at least one tab, a valid active index, and caps.
     pub fn normalize(&mut self) {
         if self.tabs.is_empty() {
