@@ -6,8 +6,8 @@ design source of truth for implementers. Phase 1 sealed framing ships in
 [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITY.md](SECURITY.md),
 [ROADMAP.md](ROADMAP.md).
 
-Status: **Phase 1–3 implemented** (sealed + linked + age + C2PA Provenance);
-Phases 4–5 remain draft. Version targets below refer to the *format*
+Status: **Phase 1–4 implemented** (sealed + linked + age + C2PA + CRDT Structured);
+Phase 5 remains draft. Version targets below refer to the *format*
 version carried in the file header, not the Orchid application release.
 
 ---
@@ -436,6 +436,13 @@ payload to:
 
 Until Phase 4, Structured `content_type` is
 `orchid.structured.snapshot.v1` and the payload is a single snapshot blob.
+
+**Phase 4 wire (implemented):** magic `ORCT`, version `1`, reserved snapshot
+watermark (`u64`, `0` = none), then an append-only op list. Ops are
+`Insert { id, lamport, after, text }` and `Delete { id, lamport, target }`
+with `OpId = (actor_id, counter)`. Sibling inserts after the same parent
+order by `OpId` for deterministic materialization. Content-type:
+`orchid.structured.crdt.v1`; header capability `CAP_CRDT`.
 
 ---
 

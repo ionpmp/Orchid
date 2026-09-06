@@ -3,9 +3,10 @@
 Native `.orchid` container (`application/vnd.orchid`). Spec:
 [`docs/ORCHID_FORMAT.md`](../../docs/ORCHID_FORMAT.md).
 
-Phase 1–3: sealed + linked framing, FlatBuffers TOC, zstd Clean-Text /
+Phase 1–4: sealed + linked framing, FlatBuffers TOC, zstd Clean-Text /
 Structured, optional per-region age encryption, C2PA Provenance (signed PNG
-carrier), `memmap2` open, and CLI.
+carrier), in-crate RGA text CRDT (`orchid.structured.crdt.v1`), `memmap2`
+open, and CLI.
 
 ## Schema
 
