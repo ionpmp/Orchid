@@ -143,7 +143,7 @@ impl MainWindowController {
         }
     }
 
-    fn refresh_browser(self: &Arc<Self>, inst_id: Uuid) {
+    pub(super) fn refresh_browser(self: &Arc<Self>, inst_id: Uuid) {
         let wm = self.widget_manager.clone();
         let t = Arc::downgrade(self);
         spawn::spawn_local_compat(async move {

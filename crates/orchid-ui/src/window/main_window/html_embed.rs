@@ -75,6 +75,7 @@ impl MainWindowController {
                 u.can_go_back,
                 u.can_go_forward,
                 u.is_loading,
+                u.zoom,
             );
             if let (Some(url), title) = (u.url.as_deref(), u.title.as_deref().unwrap_or("")) {
                 orchid_widgets::builtin::browser::tab_navigated(
@@ -86,6 +87,7 @@ impl MainWindowController {
             }
         }
         self.flush_browser_chrome();
+        self.flush_browser_opens();
     }
 
     pub(super) fn sync_visible_html_webviews(&self) {
@@ -143,6 +145,7 @@ impl MainWindowController {
         can_go_back: bool,
         can_go_forward: bool,
         is_loading: Option<bool>,
+        zoom: Option<f64>,
     ) {
         patch_browser_nav_in_model(
             &self.workspace_widgets,
@@ -151,6 +154,7 @@ impl MainWindowController {
             can_go_back,
             can_go_forward,
             is_loading,
+            zoom,
         );
         patch_browser_nav_in_model(
             &self.workspace_floating_widgets,
@@ -159,6 +163,7 @@ impl MainWindowController {
             can_go_back,
             can_go_forward,
             is_loading,
+            zoom,
         );
     }
 
@@ -197,7 +202,24 @@ impl MainWindowController {
                 BrowserChromeAction::Forward => {
                     self.on_browser_command(&id, &SharedString::from("forward"));
                 }
+                BrowserChromeAction::ZoomIn => {
+                    self.on_browser_command(&id, &SharedString::from("zoom-in"));
+                }
+                BrowserChromeAction::ZoomOut => {
+                    self.on_browser_command(&id, &SharedString::from("zoom-out"));
+                }
+                BrowserChromeAction::ZoomReset => {
+                    self.on_browser_command(&id, &SharedString::from("zoom-reset"));
+                }
             }
+        }
+    }
+
+    fn flush_browser_opens(self: &Arc<Self>) {
+        let opens = self.html_webview.take_open_requests();
+        for ev in opens {
+            orchid_widgets::builtin::browser::new_tab_with_url(ev.instance_id, &ev.url);
+            self.refresh_browser(ev.instance_id);
         }
     }
 
@@ -246,6 +268,7 @@ fn patch_browser_nav_in_model(
     can_go_back: bool,
     can_go_forward: bool,
     is_loading: Option<bool>,
+    zoom: Option<f64>,
 ) {
     let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
         return;
@@ -281,6 +304,9 @@ fn patch_browser_nav_in_model(
         row.browser.can_go_forward = can_go_forward;
         if let Some(loading) = is_loading {
             row.browser.is_loading = loading;
+        }
+        if let Some(zoom) = zoom {
+            row.browser.zoom_percent = (zoom * 100.0).round() as i32;
         }
         v.set_row_data(r, row);
         return;

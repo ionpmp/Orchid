@@ -53,6 +53,7 @@ pub(crate) fn patch_browser_model(
         model.can_go_back = false;
         model.can_go_forward = false;
         model.is_loading = false;
+        model.zoom_percent = 100;
     }
 }
 
@@ -154,6 +155,7 @@ fn base_model(locale: &LocaleManager, p: &BrowserPayload) -> BrowserModel {
         find_close_tip: Default::default(),
         focus_address_gen: 0,
         show_find_gen: 0,
+        zoom_percent: 100,
     };
     apply_chrome_labels(&mut model, locale);
     model

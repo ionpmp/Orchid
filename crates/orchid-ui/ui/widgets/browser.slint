@@ -111,6 +111,18 @@ export component BrowserView inherits Rectangle {
             root.toggle-bookmark();
             return true;
         }
+        if (event.modifiers.control && (event.text == "+" || event.text == "=")) {
+            root.command("zoom-in");
+            return true;
+        }
+        if (event.modifiers.control && (event.text == "-" || event.text == "_")) {
+            root.command("zoom-out");
+            return true;
+        }
+        if (event.modifiers.control && event.text == "0") {
+            root.command("zoom-reset");
+            return true;
+        }
         if (event.text == Key.F5) {
             root.command("reload");
             return true;
@@ -218,6 +230,11 @@ export component BrowserView inherits Rectangle {
 
                                 tab-ta := TouchArea {
                                     clicked => { root.select-tab(i); }
+                                    pointer-event(event) => {
+                                        if (event.kind == PointerEventKind.up && event.button == PointerEventButton.middle) {
+                                            root.close-tab(i);
+                                        }
+                                    }
                                 }
 
                                 HorizontalLayout {
@@ -298,6 +315,11 @@ export component BrowserView inherits Rectangle {
                         label: model.home-label;
                         enabled: model.webview-available;
                         clicked => { root.command("home"); }
+                    }
+                    if model.zoom-percent != 100 : BrowserToolBtn {
+                        label: model.zoom-percent + "%";
+                        enabled: model.webview-available;
+                        clicked => { root.command("zoom-reset"); }
                     }
 
                     Rectangle {

@@ -23,6 +23,7 @@ pub(crate) struct HtmlNavState {
     pub url: Option<String>,
     pub title: Option<String>,
     pub is_loading: Option<bool>,
+    pub zoom: Option<f64>,
 }
 
 /// Keyboard shortcut captured from a focused WebView2 controller.
@@ -38,6 +39,9 @@ pub(crate) enum BrowserChromeAction {
     Home,
     Back,
     Forward,
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
 }
 
 /// One chrome shortcut for the browser widget (UI-thread drain).
@@ -45,6 +49,13 @@ pub(crate) enum BrowserChromeAction {
 pub(crate) struct BrowserChromeEvent {
     pub instance_id: Uuid,
     pub action: BrowserChromeAction,
+}
+
+/// `target=_blank` / `window.open` URL to open as a tab.
+#[derive(Debug, Clone)]
+pub(crate) struct BrowserOpenRequest {
+    pub instance_id: Uuid,
+    pub url: String,
 }
 
 /// Target document for a viewer / browser surface.
@@ -79,6 +90,7 @@ pub(crate) struct HtmlWebViewHost {
     state: Arc<Mutex<HostState>>,
     nav: Arc<Mutex<Vec<HtmlNavState>>>,
     chrome: Arc<Mutex<Vec<BrowserChromeEvent>>>,
+    opens: Arc<Mutex<Vec<BrowserOpenRequest>>>,
 }
 
 #[derive(Default)]
@@ -99,6 +111,7 @@ struct Slot {
     visible: bool,
     applied_visible: bool,
     loading: bool,
+    zoom: f64,
     bounds: OverlayBounds,
     creating: bool,
     browser: bool,
@@ -116,6 +129,7 @@ impl Default for Slot {
             visible: false,
             applied_visible: false,
             loading: false,
+            zoom: 1.0,
             bounds: OverlayBounds::default(),
             creating: false,
             browser: false,
@@ -151,6 +165,7 @@ impl HtmlWebViewHost {
             })),
             nav: Arc::new(Mutex::new(Vec::new())),
             chrome: Arc::new(Mutex::new(Vec::new())),
+            opens: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -169,6 +184,12 @@ impl HtmlWebViewHost {
     /// Drain in-page accelerator shortcuts for the browser widget.
     pub(crate) fn take_chrome_events(&self) -> Vec<BrowserChromeEvent> {
         let mut g = self.chrome.lock();
+        std::mem::take(&mut *g)
+    }
+
+    /// Drain `NewWindowRequested` URLs for the browser widget.
+    pub(crate) fn take_open_requests(&self) -> Vec<BrowserOpenRequest> {
+        let mut g = self.opens.lock();
         std::mem::take(&mut *g)
     }
 
@@ -307,6 +328,10 @@ impl HtmlWebViewHost {
     fn command_key(&self, key: SlotKey, command: &str) {
         #[cfg(windows)]
         {
+            if matches!(command, "zoom-in" | "zoom-out" | "zoom-reset") {
+                self.apply_zoom(key, command);
+                return;
+            }
             let webview = {
                 let mut st = self.state.lock();
                 let Some(slot) = st.slots.get_mut(&key) else {
@@ -330,7 +355,7 @@ impl HtmlWebViewHost {
                 }
             };
             if command == "stop" {
-                push_nav(&self.nav, key, &webview, Some(false));
+                push_nav(&self.nav, key, &webview, Some(false), None);
             }
             if let Err(e) = result {
                 warn!(?e, command, instance = %key.instance, surface = %key.surface, "webview2 command");
@@ -339,6 +364,31 @@ impl HtmlWebViewHost {
         #[cfg(not(windows))]
         {
             let _ = (key, command);
+        }
+    }
+
+    #[cfg(windows)]
+    fn apply_zoom(&self, key: SlotKey, command: &str) {
+        let (controller, webview, zoom) = {
+            let mut st = self.state.lock();
+            let Some(slot) = st.slots.get_mut(&key) else {
+                return;
+            };
+            let next = match command {
+                "zoom-in" => ((slot.zoom * 100.0).round() + 10.0) / 100.0,
+                "zoom-out" => ((slot.zoom * 100.0).round() - 10.0) / 100.0,
+                _ => 1.0,
+            };
+            slot.zoom = next.clamp(0.25, 3.0);
+            (slot.controller.clone(), slot.webview.clone(), slot.zoom)
+        };
+        if let Some(controller) = controller {
+            if let Err(e) = unsafe { controller.SetZoomFactor(zoom) } {
+                warn!(?e, instance = %key.instance, "webview2 SetZoomFactor");
+            }
+        }
+        if let Some(webview) = webview {
+            push_nav(&self.nav, key, &webview, None, Some(zoom));
         }
     }
 
@@ -570,14 +620,22 @@ impl HtmlWebViewHost {
                     attach_location(&host, key, &webview);
                     attach_loading(&host, key, &webview);
                     attach_accel(&host, key, &controller);
+                    attach_new_window(&host, key, &webview);
+                    attach_zoom(&host, key, &controller);
                 }
-                {
+                let zoom = {
                     let mut st = host.state.lock();
                     if let Some(slot) = st.slots.get_mut(&key) {
                         slot.creating = false;
-                        slot.controller = Some(controller);
+                        slot.controller = Some(controller.clone());
                         slot.webview = Some(webview);
+                        slot.zoom
+                    } else {
+                        1.0
                     }
+                };
+                if browser {
+                    let _ = unsafe { controller.SetZoomFactor(zoom) };
                 }
                 host.apply_document(key);
                 host.apply_bounds(key);
@@ -631,7 +689,7 @@ impl HtmlWebViewHost {
     fn apply_bounds(&self, key: SlotKey) {
         use windows::Win32::Foundation::RECT;
 
-        let (controller, webview, bounds, visible, browser, became_visible, loading) = {
+        let (controller, webview, bounds, visible, browser, became_visible, loading, zoom) = {
             let mut st = self.state.lock();
             let Some(slot) = st.slots.get_mut(&key) else {
                 return;
@@ -649,6 +707,7 @@ impl HtmlWebViewHost {
                 slot.browser,
                 became_visible,
                 slot.loading,
+                slot.zoom,
             )
         };
         let rect = RECT {
@@ -665,8 +724,9 @@ impl HtmlWebViewHost {
         }
         let _ = unsafe { controller.NotifyParentWindowPositionChanged() };
         if browser && became_visible {
+            let _ = unsafe { controller.SetZoomFactor(zoom) };
             if let Some(webview) = webview {
-                push_nav(&self.nav, key, &webview, Some(loading));
+                push_nav(&self.nav, key, &webview, Some(loading), Some(zoom));
             }
         }
     }
@@ -698,6 +758,7 @@ fn attach_history(
             url: None,
             title: None,
             is_loading: None,
+            zoom: None,
         });
         Ok(())
     }));
@@ -718,7 +779,7 @@ fn attach_location(
     let nav = host.nav.clone();
     let wv = webview.clone();
     let handler = SourceChangedEventHandler::create(Box::new(move |_, _| {
-        push_nav(&nav, key, &wv, None);
+        push_nav(&nav, key, &wv, None, None);
         Ok(())
     }));
     let mut token = 0_i64;
@@ -729,7 +790,7 @@ fn attach_location(
     let nav = host.nav.clone();
     let wv = webview.clone();
     let handler = DocumentTitleChangedEventHandler::create(Box::new(move |_, _| {
-        push_nav(&nav, key, &wv, None);
+        push_nav(&nav, key, &wv, None, None);
         Ok(())
     }));
     let mut token = 0_i64;
@@ -753,7 +814,7 @@ fn attach_loading(
         if let Some(slot) = state.lock().slots.get_mut(&key) {
             slot.loading = true;
         }
-        push_nav(&nav, key, &wv, Some(true));
+        push_nav(&nav, key, &wv, Some(true), None);
         Ok(())
     }));
     let mut token = 0_i64;
@@ -768,7 +829,7 @@ fn attach_loading(
         if let Some(slot) = state.lock().slots.get_mut(&key) {
             slot.loading = false;
         }
-        push_nav(&nav, key, &wv, Some(false));
+        push_nav(&nav, key, &wv, Some(false), None);
         Ok(())
     }));
     let mut token = 0_i64;
@@ -813,6 +874,9 @@ fn attach_accel(
             (true, false, 0x52) => Some(BrowserChromeAction::Reload),
             (true, false, 0x46) => Some(BrowserChromeAction::Find),
             (true, false, 0x44) => Some(BrowserChromeAction::Bookmark),
+            (true, false, 0xBB) | (true, false, 0x6B) => Some(BrowserChromeAction::ZoomIn),
+            (true, false, 0xBD) | (true, false, 0x6D) => Some(BrowserChromeAction::ZoomOut),
+            (true, false, 0x30) | (true, false, 0x60) => Some(BrowserChromeAction::ZoomReset),
             (false, false, 0x74) => Some(BrowserChromeAction::Reload),
             (false, false, 0x1B) => Some(BrowserChromeAction::Stop),
             (false, true, 0x25) => Some(BrowserChromeAction::Back),
@@ -837,6 +901,69 @@ fn attach_accel(
 }
 
 #[cfg(windows)]
+fn attach_new_window(
+    host: &HtmlWebViewHost,
+    key: SlotKey,
+    webview: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2,
+) {
+    use webview2_com::NewWindowRequestedEventHandler;
+
+    let opens = host.opens.clone();
+    let handler = NewWindowRequestedEventHandler::create(Box::new(move |_, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        let _ = unsafe { args.SetHandled(true) };
+        let mut uri = windows::core::PWSTR::null();
+        let _ = unsafe { args.Uri(&mut uri) };
+        if let Some(url) = pwstr_to_string(uri) {
+            opens.lock().push(BrowserOpenRequest {
+                instance_id: key.instance,
+                url,
+            });
+        }
+        Ok(())
+    }));
+    let mut token = 0_i64;
+    if let Err(e) = unsafe { webview.add_NewWindowRequested(&handler, &mut token) } {
+        debug!(?e, instance = %key.instance, "webview2 NewWindowRequested");
+    }
+}
+
+#[cfg(windows)]
+fn attach_zoom(
+    host: &HtmlWebViewHost,
+    key: SlotKey,
+    controller: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller,
+) {
+    use webview2_com::ZoomFactorChangedEventHandler;
+
+    let nav = host.nav.clone();
+    let state = host.state.clone();
+    let ctl = controller.clone();
+    let handler = ZoomFactorChangedEventHandler::create(Box::new(move |_, _| {
+        let mut zoom = 1.0_f64;
+        let _ = unsafe { ctl.ZoomFactor(&mut zoom) };
+        let webview = {
+            let mut st = state.lock();
+            let Some(slot) = st.slots.get_mut(&key) else {
+                return Ok(());
+            };
+            slot.zoom = zoom;
+            slot.webview.clone()
+        };
+        if let Some(webview) = webview {
+            push_nav(&nav, key, &webview, None, Some(zoom));
+        }
+        Ok(())
+    }));
+    let mut token = 0_i64;
+    if let Err(e) = unsafe { controller.add_ZoomFactorChanged(&handler, &mut token) } {
+        debug!(?e, instance = %key.instance, "webview2 ZoomFactorChanged");
+    }
+}
+
+#[cfg(windows)]
 fn key_down(vk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY) -> bool {
     use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
     unsafe { GetAsyncKeyState(i32::from(vk.0)) as u16 & 0x8000 != 0 }
@@ -848,6 +975,7 @@ fn push_nav(
     key: SlotKey,
     wv: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2,
     is_loading: Option<bool>,
+    zoom: Option<f64>,
 ) {
     let mut can_go_back = windows::core::BOOL::from(false);
     let mut can_go_forward = windows::core::BOOL::from(false);
@@ -865,6 +993,7 @@ fn push_nav(
         url: pwstr_to_string(uri),
         title: pwstr_to_string(title_raw),
         is_loading,
+        zoom,
     });
 }
 
