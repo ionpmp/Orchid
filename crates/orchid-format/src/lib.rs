@@ -11,6 +11,8 @@
 #![allow(clippy::result_large_err)]
 
 mod compress;
+mod content_type;
+mod crdt;
 mod crypto_region;
 mod error;
 mod framing;
@@ -34,6 +36,10 @@ mod writer;
 mod toc_generated;
 
 pub use compress::{compress_zstd, decompress_zstd};
+pub use content_type::{STRUCTURED_CRDT_V1, STRUCTURED_SNAPSHOT_V1};
+pub use crdt::{
+    decode_crdt_payload, encode_crdt_payload, ActorId, CrdtDocument, Op, OpId, CRDT_PAYLOAD_MAGIC,
+};
 pub use crypto_region::{
     decode_region_body, prepare_region_body, PreparedRegionBody, RegionEncryptionSpec,
 };
