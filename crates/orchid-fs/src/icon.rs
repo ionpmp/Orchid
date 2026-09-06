@@ -502,8 +502,7 @@ mod windows_impl {
     /// Convert BGRA DIB pixels to RGBA, repairing missing alpha from mask draws.
     fn bgra_to_rgba(bgra: &[u8]) -> Vec<u8> {
         let mut rgba = Vec::with_capacity(bgra.len());
-        for chunk in bgra.chunks_exact(4) {
-            let (b, g, r, mut a) = (chunk[0], chunk[1], chunk[2], chunk[3]);
+        for &[b, g, r, mut a] in bgra.as_chunks::<4>().0 {
             if a == 0 && (r != 0 || g != 0 || b != 0) {
                 a = 255;
             }
