@@ -37,7 +37,8 @@ pub use model::{
 };
 pub use sample::{create_sample_docx, create_sample_orchid, sample_document};
 pub use orchid_io::{
-    is_orchid_path, looks_like_orchid, open_document_from_orchid, save_document_as_orchid,
+    is_orchid_path, looks_like_orchid, open_document_from_orchid, pick_document_save_path,
+    save_document_as_orchid,
 };
 pub use undo::{EditCommand, RunStylePatch, UndoStack};
 
@@ -5196,6 +5197,17 @@ impl DocumentViewer {
     #[must_use]
     pub fn path_clone(&self) -> Option<orchid_fs::FsPath> {
         self.path.read().clone()
+    }
+
+    /// Change the save target and write (`.orchid` or `.docx` by extension).
+    pub async fn save_as(&mut self, new_path: orchid_fs::FsPath) -> Result<()> {
+        if !new_path.is_local() {
+            return Err(ViewerError::DocumentSave(String::from(
+                "saving remote documents is not supported yet",
+            )));
+        }
+        *self.path.write() = Some(new_path);
+        <Self as Viewer>::save(self).await
     }
 }
 

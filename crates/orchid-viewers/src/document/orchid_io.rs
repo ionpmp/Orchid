@@ -135,6 +135,20 @@ pub fn orchid_extension() -> &'static str {
     ORCHID_EXT
 }
 
+/// Native save dialog for a document (`.orchid` or `.docx` export).
+#[must_use]
+pub fn pick_document_save_path(default_name: &str) -> Option<std::path::PathBuf> {
+    let mut path = rfd::FileDialog::new()
+        .set_file_name(default_name)
+        .add_filter("Orchid document", &["orchid"])
+        .add_filter("Word document", &["docx"])
+        .save_file()?;
+    if path.extension().is_none() {
+        path.set_extension("orchid");
+    }
+    Some(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
