@@ -254,6 +254,8 @@ struct ViewerWidgetInner {
     slide_tick: AtomicU64,
     anim_tick: AtomicU64,
     media_tick: AtomicU64,
+    /// Bumped to cancel in-flight linked `.orchid` document autosave.
+    doc_autosave_gen: AtomicU64,
     /// Side playlist panel visibility (Q toggles).
     playlist_panel_open: AtomicBool,
     /// Last media widget viewport (CSS px) for re-applying blit size on panel toggle.
@@ -369,6 +371,7 @@ impl ViewerWidgetInner {
     async fn open_path(&self, path: orchid_fs::FsPath) -> WidgetResult<()> {
         self.anim_tick.fetch_add(1, Ordering::Relaxed);
         self.media_tick.fetch_add(1, Ordering::Relaxed);
+        self.doc_autosave_gen.fetch_add(1, Ordering::Relaxed);
         self.remember_current_image_view().await;
         let registry = self.deps.registry.clone();
         let highlighter = self.deps.highlighter.clone();
@@ -1081,6 +1084,54 @@ impl ViewerWidgetInner {
                     inner.refresh_snapshot().await;
                 }
             }
+        });
+    }
+
+    /// Debounced save for dirty linked `.orchid` documents (ChunkStore present).
+    fn schedule_doc_autosave(&self) {
+        if self.deps.chunk_store.is_none() {
+            return;
+        }
+        let gen = self.doc_autosave_gen.fetch_add(1, Ordering::Relaxed) + 1;
+        let Some(entry) = VIEWER_LIVE.get(&self.instance_id) else {
+            return;
+        };
+        let inner = Arc::clone(entry.value());
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(2_000)).await;
+            if inner.doc_autosave_gen.load(Ordering::Relaxed) != gen {
+                return;
+            }
+            let save_res = {
+                let mut guard = inner.viewer.lock().await;
+                let Some(v) = guard.as_mut() else {
+                    return;
+                };
+                let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+                    return;
+                };
+                if !doc.is_dirty() {
+                    return;
+                }
+                let Some(path) = doc.path_clone() else {
+                    return;
+                };
+                let Ok(os_path) = path.to_local() else {
+                    return;
+                };
+                if !orchid_viewers::is_orchid_path(std::path::Path::new(&os_path)) {
+                    return;
+                }
+                v.save().await
+            };
+            if let Err(e) = save_res {
+                warn!(error = %e, "linked .orchid autosave failed");
+                return;
+            }
+            if inner.doc_autosave_gen.load(Ordering::Relaxed) != gen {
+                return;
+            }
+            inner.refresh_snapshot().await;
         });
     }
 
@@ -1865,6 +1916,7 @@ impl ViewerWidget {
                 slide_tick: AtomicU64::new(0),
                 anim_tick: AtomicU64::new(0),
                 media_tick: AtomicU64::new(0),
+                doc_autosave_gen: AtomicU64::new(0),
                 playlist_panel_open: AtomicBool::new(orchid_viewers::media_playlist_panel_default()),
                 media_viewport: RwLock::new((0.0, 0.0)),
                 music_child: parking_lot::Mutex::new(None),
@@ -3873,6 +3925,7 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 _ => Ok(()),
             };
             result.map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+            inner.schedule_doc_autosave();
         }
     }
     inner.refresh_snapshot().await;
@@ -3891,6 +3944,7 @@ pub async fn document_push_edit(instance_id: Uuid, text: String) -> WidgetResult
             }
         }
     }
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(())
 }
@@ -3939,6 +3993,7 @@ pub async fn document_replace(
             }
         }
     }
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(())
 }
@@ -3990,6 +4045,7 @@ pub async fn document_comment(instance_id: Uuid, text: String) -> WidgetResult<(
         doc.set_comment_text_at_selection(&text)
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     }
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(())
 }
@@ -4014,6 +4070,7 @@ pub async fn document_link(instance_id: Uuid, url: String) -> WidgetResult<()> {
         };
         result.map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     }
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(())
 }
@@ -4032,6 +4089,7 @@ pub async fn document_header(instance_id: Uuid, text: String) -> WidgetResult<()
         doc.set_header_plain_text(&text)
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     }
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(())
 }
@@ -4050,6 +4108,7 @@ pub async fn document_footer(instance_id: Uuid, text: String) -> WidgetResult<()
         doc.set_footer_plain_text(&text)
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     }
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(())
 }
@@ -4072,6 +4131,7 @@ pub async fn document_header_first(instance_id: Uuid, text: String) -> WidgetRes
         doc.set_header_first_plain_text(&text)
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     }
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(())
 }
@@ -4090,6 +4150,7 @@ pub async fn document_footer_first(instance_id: Uuid, text: String) -> WidgetRes
         doc.set_footer_first_plain_text(&text)
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     }
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(())
 }
@@ -4108,6 +4169,7 @@ pub async fn document_header_even(instance_id: Uuid, text: String) -> WidgetResu
         doc.set_header_even_plain_text(&text)
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     }
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(())
 }
@@ -4126,6 +4188,7 @@ pub async fn document_footer_even(instance_id: Uuid, text: String) -> WidgetResu
         doc.set_footer_even_plain_text(&text)
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     }
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(())
 }
@@ -4283,6 +4346,7 @@ pub async fn document_preview_key(
         };
         result.map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     }
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(())
 }
@@ -4314,6 +4378,7 @@ pub async fn document_preview_cut(instance_id: Uuid) -> WidgetResult<String> {
         doc.preview_cut_selection()
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?
     };
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(text)
 }
@@ -4332,6 +4397,7 @@ pub async fn document_preview_paste(instance_id: Uuid, text: String) -> WidgetRe
         doc.preview_paste_plain(&text)
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     }
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(())
 }
@@ -4355,6 +4421,7 @@ pub async fn document_preview_insert_image(
         doc.preview_insert_image(bytes, width_px, height_px)
             .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
     }
+    inner.schedule_doc_autosave();
     inner.refresh_snapshot().await;
     Ok(())
 }

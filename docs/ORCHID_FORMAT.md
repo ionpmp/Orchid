@@ -612,7 +612,8 @@ the reverse.
    With an app `ChunkStore`, the document editor saves **linked** `.orchid`
    (Raw = DOCX fidelity bytes, Clean-Text = `plain_text`, generation bump);
    without a store it falls back to sealed. New documents still start as
-   sealed `Untitled.orchid` until the first editor save. **Save As…**
+   sealed `Untitled.orchid` until the first editor save. Dirty linked
+   documents autosave after a short debounce. **Save As…**
    exports `.orchid` or `.docx`.
 3. **File manager action: “Wrap as .orchid”** packs selection → Raw +
    derived Clean-Text (+ optional embeddings when Phase 5 lands).
