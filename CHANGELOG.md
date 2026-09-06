@@ -472,6 +472,11 @@ release yet.
 - **Audio / video libraries**: `find_by_path` is a HashMap lookup after scan.
 
 ### Fixed
+- File-manager exclusive click highlights the new row immediately: Slint paints
+  the pressed path before the model patch returns, selection updates stay on
+  the UI stack (including floating frames), and patching no longer remounts the
+  tab when only `is_selected` flags change — that remount left the previous
+  folder lit until Escape forced a full rebuild.
 - Image viewer toolbar: compact geometric icons (not font symbols),
   overflow scroll, a hint strip with the action name on hover, extra
   tools behind **⋯**, and slideshow extras only while a slideshow is

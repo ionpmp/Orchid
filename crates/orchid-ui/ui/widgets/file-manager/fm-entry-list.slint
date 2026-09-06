@@ -44,6 +44,9 @@ export component FmEntryList inherits Rectangle {
     property <string> pressing-path: "";
     property <string> pending-exclusive: "";
     property <string> pending-toggle: "";
+    // Instant exclusive-select paint: entry-clicked patches the model async to
+    // the UI thread's next turn, so without this the previous row stays lit.
+    property <string> exclusive-paint-path: "";
     property <length> press-x: 0px;
     property <length> press-y: 0px;
     property <length> drag-threshold: 6px;
@@ -66,6 +69,10 @@ export component FmEntryList inherits Rectangle {
         root.pressing-path = "";
         root.pending-exclusive = "";
         root.pending-toggle = "";
+    }
+
+    function clear-exclusive-paint() {
+        root.exclusive-paint-path = "";
     }
 
     // Touchpads abort pointer sequences far more often than mice, and an
@@ -139,6 +146,7 @@ export component FmEntryList inherits Rectangle {
         let additive = root.marquee-additive;
         let f = live_f >= 0 ? live_f : root.first-list-hit(root.marquee-y0, root.marquee-y1);
         let l = live_l >= 0 ? live_l : root.last-list-hit(root.marquee-y0, root.marquee-y1);
+        root.clear-exclusive-paint();
         if (dragged && f >= 0 && l >= 0) {
             // Patch is_selected while the live highlight is still painted, so
             // clearing marquee-active does not flash a stale model.
@@ -173,11 +181,14 @@ export component FmEntryList inherits Rectangle {
         return abs >= root.live-first && abs <= root.live-last;
     }
 
-    function row-highlighted(i: int, selected: bool) -> bool {
+    function row-highlighted(i: int, selected: bool, path: string) -> bool {
         if (root.marquee-active) {
             return root.marquee-additive
                 ? (selected || root.row-in-marquee(i))
                 : root.row-in-marquee(i);
+        }
+        if (root.exclusive-paint-path != "") {
+            return path == root.exclusive-paint-path;
         }
         return selected;
     }
@@ -197,6 +208,7 @@ export component FmEntryList inherits Rectangle {
     changed listing-id => {
         list-flick.viewport-y = 0px;
         root.cancel-press();
+        root.clear-exclusive-paint();
         root.press-empty = false;
         root.marquee-active = false;
     }
@@ -235,6 +247,7 @@ export component FmEntryList inherits Rectangle {
                 }
                 if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left
                     && !root.drag-active) {
+                    root.clear-exclusive-paint();
                     root.press-empty = true;
                     root.marquee-active = false;
                     root.marquee-from-entry = false;
@@ -367,10 +380,10 @@ export component FmEntryList inherits Rectangle {
 
             for entry[i] in entries : Rectangle {
                 height: row-height;
-                background: root.row-highlighted(i, entry.is-selected)
+                background: root.row-highlighted(i, entry.is-selected, entry.path)
                     ? #4d82ff44
                     : (row-ta.has-hover ? Theme.surface-raised : transparent);
-                border-width: root.row-highlighted(i, entry.is-selected) || (drag-active && entry.is-dir && entry.path == drag-drop-target) ? 1px : 0px;
+                border-width: root.row-highlighted(i, entry.is-selected, entry.path) || (drag-active && entry.is-dir && entry.path == drag-drop-target) ? 1px : 0px;
                 border-color: Theme.accent-brand;
 
                 HorizontalLayout {
@@ -500,12 +513,15 @@ export component FmEntryList inherits Rectangle {
                         if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
                             root.cancel-press();
                             if (e.modifiers.shift) {
+                                root.clear-exclusive-paint();
                                 root.entry-shift-clicked(entry.path);
                             } else if (e.modifiers.control) {
+                                root.clear-exclusive-paint();
                                 root.pending-toggle = entry.path;
                             } else if (entry.is-selected) {
                                 root.pending-exclusive = entry.path;
                             } else {
+                                root.exclusive-paint-path = entry.path;
                                 root.entry-clicked(entry.path, false);
                             }
                             root.pressing-path = entry.path;
@@ -525,6 +541,7 @@ export component FmEntryList inherits Rectangle {
                                     // selection rubber-bands instead of transferring.
                                     // A touchpad otherwise has no way to start a
                                     // selection without first finding empty space.
+                                    root.clear-exclusive-paint();
                                     root.marquee-y0 = self.absolute-position.y
                                         - root.absolute-position.y
                                         + root.press-y + list-flick.viewport-y;
@@ -565,8 +582,10 @@ export component FmEntryList inherits Rectangle {
                             // row's current entry: the row may have been recycled.
                             if (!root.drag-active && root.pressing-path != "") {
                                 if (root.pending-toggle != "") {
+                                    root.clear-exclusive-paint();
                                     root.entry-clicked(root.pending-toggle, true);
                                 } else if (root.pending-exclusive != "") {
+                                    root.exclusive-paint-path = root.pending-exclusive;
                                     root.entry-clicked(root.pending-exclusive, false);
                                 }
                             }

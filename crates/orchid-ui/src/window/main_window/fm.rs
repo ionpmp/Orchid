@@ -253,32 +253,33 @@ impl MainWindowController {
         else {
             return false;
         };
-        let Some(v) = self
-            .workspace_widgets
-            .as_any()
-            .downcast_ref::<VecModel<crate::slint_generated::WidgetFrameModel>>()
-        else {
-            return false;
-        };
         let needle = inst.to_string();
-        for r in 0..v.row_count() {
-            let Some(mut row) = v.row_data(r) else {
+        for model in [&self.workspace_widgets, &self.workspace_floating_widgets] {
+            let Some(v) = model
+                .as_any()
+                .downcast_ref::<VecModel<crate::slint_generated::WidgetFrameModel>>()
+            else {
                 continue;
             };
-            if row.instance_id.as_str() != needle.as_str() {
-                continue;
+            for r in 0..v.row_count() {
+                let Some(mut row) = v.row_data(r) else {
+                    continue;
+                };
+                if row.instance_id.as_str() != needle.as_str() {
+                    continue;
+                }
+                // Patch nested VecModels in place — do not set_row_data on the
+                // workspace frame (that remounts FileManagerView).
+                return patch_fm_selection(
+                    &mut row.file_manager,
+                    pane,
+                    &selected,
+                    selection_count,
+                    item_count,
+                    selection_bytes,
+                    &self.locale,
+                );
             }
-            // Patch nested VecModels in place — do not set_row_data on the
-            // workspace frame (that remounts FileManagerView).
-            return patch_fm_selection(
-                &mut row.file_manager,
-                pane,
-                &selected,
-                selection_count,
-                item_count,
-                selection_bytes,
-                &self.locale,
-            );
         }
         false
     }
@@ -1767,15 +1768,16 @@ impl MainWindowController {
         } else {
             orchid_widgets::builtin::file_manager::SelectionMode::Single
         };
-        let tw = Arc::downgrade(self);
-        spawn::spawn_local_compat(async move {
-            let _ =
-                orchid_widgets::builtin::file_manager::select_entry(inst, p, &ps_for_select, mode)
-                    .await;
-            if let Some(c) = tw.upgrade() {
-                c.fm_refresh_selection_ui(inst, p);
-            }
-        });
+        // Keep selection on the UI stack (same as marquee): overlapping async
+        // select/refresh tasks reorder and leave the highlight on the previous
+        // entry until something like Escape forces a full paint.
+        if let Err(e) =
+            orchid_widgets::builtin::file_manager::select_entry_sync(inst, p, &ps_for_select, mode)
+        {
+            warn!(?e, "fm select entry");
+        } else {
+            self.fm_refresh_selection_ui(inst, p);
+        }
 
         if ctrl || behavior != orchid_widgets::builtin::file_manager::ClickBehavior::SingleToOpen {
             return;
@@ -1795,19 +1797,16 @@ impl MainWindowController {
         };
         let p = pane.max(0) as u8;
         let ps = path.to_string();
-        let tw = Arc::downgrade(self);
-        spawn::spawn_local_compat(async move {
-            let _ = orchid_widgets::builtin::file_manager::select_entry(
-                inst,
-                p,
-                &ps,
-                orchid_widgets::builtin::file_manager::SelectionMode::Range,
-            )
-            .await;
-            if let Some(c) = tw.upgrade() {
-                c.fm_refresh_selection_ui(inst, p);
-            }
-        });
+        if let Err(e) = orchid_widgets::builtin::file_manager::select_entry_sync(
+            inst,
+            p,
+            &ps,
+            orchid_widgets::builtin::file_manager::SelectionMode::Range,
+        ) {
+            warn!(?e, "fm select range");
+        } else {
+            self.fm_refresh_selection_ui(inst, p);
+        }
     }
     pub(super) fn on_fm_entry_double_clicked(
         self: &Arc<Self>,
@@ -3218,18 +3217,11 @@ impl MainWindowController {
             return;
         };
         let p = pane.max(0) as u8;
-        let tw = Arc::downgrade(self);
-        spawn::spawn_local_compat(async move {
-            if let Err(e) =
-                orchid_widgets::builtin::file_manager::deselect_all_in_pane(inst, p).await
-            {
-                warn!(?e, "fm deselect all");
-                return;
-            }
-            if let Some(c) = tw.upgrade() {
-                c.fm_refresh_selection_ui(inst, p);
-            }
-        });
+        if let Err(e) = orchid_widgets::builtin::file_manager::deselect_all_in_pane_sync(inst, p) {
+            warn!(?e, "fm deselect all");
+            return;
+        }
+        self.fm_refresh_selection_ui(inst, p);
     }
     pub(super) fn on_fm_delete_selected(self: &Arc<Self>, fm_id: &SharedString, pane: i32) {
         let p = pane.max(0) as u8;

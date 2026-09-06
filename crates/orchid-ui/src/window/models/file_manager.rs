@@ -600,8 +600,8 @@ pub(crate) fn patch_fm_selection(
             entries.set_row_data(i, entry);
         }
     }
-    tab.selection_count = selection_count as i32;
-    tab.status_text = {
+    let selection_count_i = selection_count as i32;
+    let status_text: SharedString = {
         let mut text = fm_status_text(
             locale,
             item_count,
@@ -615,7 +615,14 @@ pub(crate) fn patch_fm_selection(
         }
         text.into()
     };
-    tabs.set_row_data(active, tab);
+    // Replacing the active tab remounts FmEntryList/Grid and can leave the
+    // previous row painted until Escape forces a full rebuild. Only push a
+    // new tab row when the chrome (count / status) actually changed.
+    if tab.selection_count != selection_count_i || tab.status_text != status_text {
+        tab.selection_count = selection_count_i;
+        tab.status_text = status_text;
+        tabs.set_row_data(active, tab);
+    }
     true
 }
 

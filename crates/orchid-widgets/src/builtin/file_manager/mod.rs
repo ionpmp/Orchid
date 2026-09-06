@@ -4035,6 +4035,16 @@ pub async fn select_entry(
     path: &str,
     mode: SelectionMode,
 ) -> WidgetResult<()> {
+    select_entry_sync(instance_id, pane, path, mode)
+}
+
+/// Same as [`select_entry`], callable from the UI thread without an async hop.
+pub fn select_entry_sync(
+    instance_id: Uuid,
+    pane: u8,
+    path: &str,
+    mode: SelectionMode,
+) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     let (tab_id, ordered): (Uuid, Vec<String>) = {
         let state = inner.state.lock();
@@ -5164,6 +5174,11 @@ pub async fn select_all_in_pane(instance_id: Uuid, pane: u8) -> WidgetResult<()>
 ///
 /// Selection-only — does not re-list the directory or publish a snapshot.
 pub async fn deselect_all_in_pane(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
+    deselect_all_in_pane_sync(instance_id, pane)
+}
+
+/// Same as [`deselect_all_in_pane`], callable from the UI thread without an async hop.
+pub fn deselect_all_in_pane_sync(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     inner.deselect_all_in_pane(pane);
     Ok(())
