@@ -5,6 +5,7 @@
 //! handles. [`Extractor`] picks one per file.
 
 pub mod docx;
+pub mod orchid;
 pub mod pdf;
 pub mod text;
 
@@ -67,6 +68,12 @@ impl Extractor {
     #[must_use]
     pub fn with_docx(self) -> Self {
         self.with(Arc::new(docx::DocxExtractor))
+    }
+
+    /// Convenience: enable the `.orchid` Clean-Text extractor.
+    #[must_use]
+    pub fn with_orchid(self) -> Self {
+        self.with(Arc::new(orchid::OrchidExtractor))
     }
 
     /// Route `path` to a matching extractor, returning `None` when none

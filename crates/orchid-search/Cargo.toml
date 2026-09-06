@@ -24,13 +24,19 @@ pdfium-render.workspace = true
 memmap2.workspace = true
 quick-xml.workspace = true
 zip.workspace = true
+tempfile.workspace = true
 
 orchid-core.workspace = true
 orchid-storage.workspace = true
 orchid-fs.workspace = true
+orchid-format.workspace = true
+orchid-embed.workspace = true
 futures.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true }
 tempfile.workspace = true
 tracing-subscriber.workspace = true
+orchid-embed.workspace = true
+orchid-format.workspace = true
+orchid-crypto.workspace = true
