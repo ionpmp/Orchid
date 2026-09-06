@@ -545,7 +545,7 @@ impl OrchidApp {
             .map_err(|e| UiError::Slint(format!("encrypted folder engine: {e}")))?;
         let managed_engine = Arc::new(orchid_fs::ManagedFolderEngine::new(
             storage.clone(),
-            chunk_store,
+            chunk_store.clone(),
             deduplicator,
             fs_registry.clone(),
             bus.clone(),
@@ -619,6 +619,7 @@ impl OrchidApp {
             thumbnails,
             search: Some(search_engine.clone()),
             managed: Some(managed_engine),
+            chunk_store: Some(chunk_store.clone()),
             encrypted: Some(encrypted_engine),
             network_mounts: network_mounts.clone(),
             network_bookmarks_file: Some(paths.network_bookmarks_file.clone()),

@@ -1,7 +1,10 @@
-//! Pack arbitrary bytes into a sealed `.orchid` (FM “Wrap as .orchid”).
+//! Pack arbitrary bytes into a `.orchid` (FM “Wrap as .orchid”).
 
 use std::path::Path;
 
+use orchid_crypto::ChunkStore;
+
+use crate::linked::{write_linked_file, LinkedCreateRequest};
 use crate::writer::{write_sealed_file, SealedCreateRequest};
 use crate::Result;
 
@@ -41,6 +44,26 @@ pub fn wrap_as_sealed(req: &WrapAsOrchidRequest) -> Result<()> {
     )
 }
 
+/// Write a linked `.orchid` (payloads in `store`) for library / managed wraps.
+pub async fn wrap_as_linked(req: &WrapAsOrchidRequest, store: &ChunkStore) -> Result<()> {
+    write_linked_file(
+        Path::new(&req.output),
+        store,
+        &LinkedCreateRequest {
+            file_uuid: None,
+            created_unix_ms: None,
+            generation: 1,
+            parent_generation: 0,
+            raw: req.raw.clone(),
+            clean_text: req.clean_text.clone(),
+            structured: b"{}".to_vec(),
+            encrypt_with: None,
+            chunker: orchid_crypto::ChunkerConfig::default(),
+        },
+    )
+    .await
+}
+
 /// Suggest `stem.orchid` beside `source` (keeps multi-dot stems: `a.tar.gz` → `a.tar.gz.orchid`).
 #[must_use]
 pub fn default_wrap_output(source: &Path) -> std::path::PathBuf {
@@ -56,6 +79,12 @@ pub fn default_wrap_output(source: &Path) -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+
+    use orchid_crypto::ChunkStore;
+    use orchid_storage::StateStore;
+
+    use crate::capability;
     use crate::SealedFile;
 
     #[test]
@@ -73,6 +102,37 @@ mod tests {
         let f = SealedFile::open(&out).unwrap();
         assert_eq!(f.raw(None).unwrap(), b"hello raw");
         assert_eq!(f.clean_text(None).unwrap(), b"hello clean");
+    }
+
+    #[tokio::test]
+    async fn wrap_linked_roundtrip_raw_and_clean() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(StateStore::open_in_memory("wrap").unwrap());
+        let store = ChunkStore::new(dir.path().join("chunks"), storage).unwrap();
+        let out = dir.path().join("note.txt.orchid");
+        wrap_as_linked(
+            &WrapAsOrchidRequest {
+                output: out.clone(),
+                raw: b"hello raw".to_vec(),
+                raw_name: Some("note.txt".into()),
+                raw_content_type: Some("text/plain".into()),
+                clean_text: b"hello clean".to_vec(),
+            },
+            &store,
+        )
+        .await
+        .unwrap();
+        let f = SealedFile::open(&out).unwrap();
+        assert!(f.header().capability_flags & capability::LINKED != 0);
+        let raw = crate::linked_region_plaintext(&f, &store, crate::toc::RegionType::Raw, None)
+            .await
+            .unwrap();
+        let clean =
+            crate::linked_region_plaintext(&f, &store, crate::toc::RegionType::CleanText, None)
+                .await
+                .unwrap();
+        assert_eq!(raw, b"hello raw");
+        assert_eq!(clean, b"hello clean");
     }
 
     #[test]

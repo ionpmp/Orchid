@@ -239,6 +239,8 @@ pub struct FileManagerDeps {
     pub search: Option<Arc<orchid_search::SearchEngine>>,
     /// Managed-folder engine (content-addressed backup of on-disk trees).
     pub managed: Option<Arc<orchid_fs::ManagedFolderEngine>>,
+    /// Chunk store for linked `.orchid` wraps inside managed folders.
+    pub chunk_store: Option<Arc<orchid_crypto::ChunkStore>>,
     /// Encrypted-folder engine (age encryption + reveal sessions).
     pub encrypted: Option<Arc<orchid_fs::EncryptedFolderEngine>>,
     /// Configured remote mounts from `config.toml` `[file-manager]`.

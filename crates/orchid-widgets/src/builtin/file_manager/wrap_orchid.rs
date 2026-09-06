@@ -1,8 +1,10 @@
-//! FM “Wrap as .orchid” — pack selection into sealed containers.
+//! FM “Wrap as .orchid” — pack selection into sealed or linked containers.
 
 use std::sync::Arc;
 
-use orchid_format::{default_wrap_output, wrap_as_sealed, WrapAsOrchidRequest, EXTENSION};
+use orchid_format::{
+    default_wrap_output, wrap_as_linked, wrap_as_sealed, WrapAsOrchidRequest, EXTENSION,
+};
 use orchid_fs::FsPath;
 use orchid_search::Extractor;
 
@@ -76,14 +78,28 @@ pub(super) async fn run(
         }
 
         let ctype = mime_guess_from_name(file_name);
-        wrap_as_sealed(&WrapAsOrchidRequest {
+        let req = WrapAsOrchidRequest {
             output: output.clone(),
             raw,
             raw_name: Some(file_name.to_string()),
             raw_content_type: ctype,
             clean_text,
-        })
-        .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        };
+
+        let out_key = FsPath::from_local(&output)
+            .map(|p| p.as_str().to_string())
+            .unwrap_or_else(|_| output.to_string_lossy().into_owned());
+        if let (Some(_), Some(store)) = (
+            inner.managed_root_for_path(&out_key),
+            inner.deps.chunk_store.as_ref(),
+        ) {
+            wrap_as_linked(&req, store.as_ref())
+                .await
+                .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        } else {
+            wrap_as_sealed(&req)
+                .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        }
 
         names.push(
             output

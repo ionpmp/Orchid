@@ -269,6 +269,8 @@ release yet.
   With the app `ChunkStore`, editor saves prefer **linked** `.orchid`
   (generation bump + CAS chunks); open resolves linked Raw/Clean-Text.
   Dirty linked documents autosave after a 2s debounce.
+- FM **Wrap as .orchid** inside a managed folder writes **linked** envelopes
+  when `ChunkStore` is available; elsewhere remains sealed.
 
 #### Built-in widgets
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),

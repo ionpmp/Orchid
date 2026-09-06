@@ -37,6 +37,7 @@ async fn star_action_updates_snapshot_from_tag_manager() {
         thumbnails,
         search: None,
         managed: None,
+        chunk_store: None,
         encrypted: None,
         network_mounts: Arc::new(RwLock::new(Vec::new())),
         network_bookmarks_file: None,

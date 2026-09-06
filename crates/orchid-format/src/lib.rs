@@ -61,7 +61,7 @@ pub use provenance::{
 };
 pub use reader::SealedFile;
 pub use toc_build::{build_toc, TocChunkSpec, TocRegionSpec, TocSpec};
-pub use wrap::{default_wrap_output, wrap_as_sealed, WrapAsOrchidRequest};
+pub use wrap::{default_wrap_output, wrap_as_linked, wrap_as_sealed, WrapAsOrchidRequest};
 pub use writer::{build_sealed_bytes, empty_raw, write_sealed_file, SealedCreateRequest};
 
 /// File extension including the leading dot.

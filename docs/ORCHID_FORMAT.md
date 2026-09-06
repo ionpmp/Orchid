@@ -617,6 +617,8 @@ the reverse.
    exports `.orchid` or `.docx`.
 3. **File manager action: “Wrap as .orchid”** packs selection → Raw +
    derived Clean-Text (+ optional embeddings when Phase 5 lands).
+   Inside a managed folder (with `ChunkStore`) the wrap is **linked**;
+   outside it stays sealed.
 4. **Search** indexes `.orchid` via Clean-Text (live `OrchidExtractor`);
    semantic / hybrid path in Phase 5.
 5. **MIME / extension** registered in the Windows installer when the CLI
