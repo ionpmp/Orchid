@@ -43,6 +43,9 @@ pub(crate) enum BrowserChromeAction {
     ZoomOut,
     ZoomReset,
     ReopenClosed,
+    NextTab,
+    PrevTab,
+    SelectTab(u8),
 }
 
 /// One chrome shortcut for the browser widget (UI-thread drain).
@@ -877,6 +880,10 @@ fn attach_accel(
             (true, false, false, 0x52) => Some(BrowserChromeAction::Reload),
             (true, false, false, 0x46) => Some(BrowserChromeAction::Find),
             (true, false, false, 0x44) => Some(BrowserChromeAction::Bookmark),
+            (true, false, true, 0x09) => Some(BrowserChromeAction::PrevTab),
+            (true, false, false, 0x09) => Some(BrowserChromeAction::NextTab),
+            (true, false, false, 0x22) => Some(BrowserChromeAction::NextTab),
+            (true, false, false, 0x21) => Some(BrowserChromeAction::PrevTab),
             (true, false, _, 0xBB) | (true, false, _, 0x6B) => Some(BrowserChromeAction::ZoomIn),
             (true, false, _, 0xBD) | (true, false, _, 0x6D) => Some(BrowserChromeAction::ZoomOut),
             (true, false, _, 0x30) | (true, false, _, 0x60) => Some(BrowserChromeAction::ZoomReset),
@@ -885,6 +892,12 @@ fn attach_accel(
             (false, true, false, 0x25) => Some(BrowserChromeAction::Back),
             (false, true, false, 0x27) => Some(BrowserChromeAction::Forward),
             (false, true, false, 0x24) => Some(BrowserChromeAction::Home),
+            (true, false, false, vk) if (0x31..=0x39).contains(&vk) => {
+                Some(BrowserChromeAction::SelectTab((vk - 0x30) as u8))
+            }
+            (true, false, false, vk) if (0x61..=0x69).contains(&vk) => {
+                Some(BrowserChromeAction::SelectTab((vk - 0x60) as u8))
+            }
             _ => None,
         };
         let Some(action) = action else {

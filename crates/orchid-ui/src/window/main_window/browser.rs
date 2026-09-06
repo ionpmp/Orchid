@@ -67,6 +67,16 @@ impl MainWindowController {
             self.refresh_browser(inst);
             return;
         }
+        if command.as_str() == "next-tab" {
+            orchid_widgets::builtin::browser::cycle_tab(inst, 1);
+            self.refresh_browser(inst);
+            return;
+        }
+        if command.as_str() == "prev-tab" {
+            orchid_widgets::builtin::browser::cycle_tab(inst, -1);
+            self.refresh_browser(inst);
+            return;
+        }
         let Some(tab_id) = orchid_widgets::builtin::browser::active_tab_id(inst) else {
             return;
         };

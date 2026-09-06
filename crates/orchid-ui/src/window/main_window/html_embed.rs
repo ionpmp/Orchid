@@ -214,6 +214,19 @@ impl MainWindowController {
                 BrowserChromeAction::ReopenClosed => {
                     self.on_browser_command(&id, &SharedString::from("reopen-closed"));
                 }
+                BrowserChromeAction::NextTab => {
+                    self.on_browser_command(&id, &SharedString::from("next-tab"));
+                }
+                BrowserChromeAction::PrevTab => {
+                    self.on_browser_command(&id, &SharedString::from("prev-tab"));
+                }
+                BrowserChromeAction::SelectTab(n) => {
+                    orchid_widgets::builtin::browser::select_numbered_tab(
+                        ev.instance_id,
+                        i32::from(n),
+                    );
+                    self.refresh_browser(ev.instance_id);
+                }
             }
         }
     }
