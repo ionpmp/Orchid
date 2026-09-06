@@ -29,6 +29,14 @@ pub enum ViewerKind {
 /// back to the file extension. Pure — does not touch the filesystem.
 #[must_use]
 pub fn kind_for(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
+    // Native `.orchid` container (document editor envelope or FM wrap).
+    if crate::document::orchid_io::looks_like_orchid(sample)
+        || extension_of(path)
+            .as_deref()
+            .is_some_and(|e| e.eq_ignore_ascii_case("orchid"))
+    {
+        return Some(ViewerKind::Document);
+    }
     // OOXML Office files are ZIP containers — check extension before archive magic
     // so `.docx` does not open as a generic archive browser.
     // TODO: sniff `[Content_Types].xml` inside the zip to distinguish xlsx/pptx.
@@ -61,6 +69,7 @@ pub fn kind_for(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
         return match ext.as_str() {
             "pdf" => Some(ViewerKind::Pdf),
             "docx" | "docm" => Some(ViewerKind::Document),
+            "orchid" => Some(ViewerKind::Document),
             "zip" | "7z" | "tar" | "tgz" | "gz" | "xz" | "txz" => Some(ViewerKind::Archive),
             other if crate::html::is_html_file_extension(other) => Some(ViewerKind::Html),
             other if crate::media::is_media_file_extension(other) => Some(ViewerKind::Media),
@@ -141,6 +150,16 @@ mod tests {
 
     fn path(s: &str) -> orchid_fs::FsPath {
         orchid_fs::FsPath::new(s).unwrap()
+    }
+
+    #[test]
+    fn orchid_extension_and_magic_are_document() {
+        let kind = kind_for(&path("local:/a/b.orchid"), b"").unwrap();
+        assert_eq!(kind, ViewerKind::Document);
+        let mut sample = vec![0u8; 8];
+        sample[0..4].copy_from_slice(b"ORCD");
+        let kind = kind_for(&path("local:/a/b.bin"), &sample).unwrap();
+        assert_eq!(kind, ViewerKind::Document);
     }
 
     #[test]
