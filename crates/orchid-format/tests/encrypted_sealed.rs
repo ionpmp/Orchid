@@ -24,6 +24,7 @@ fn encrypted_clean_text_roundtrips_with_correct_identity() {
             structured: b"{}".to_vec(),
             structured_content_type: None,
             encrypt_with: Some(id.clone()),
+            sign_c2pa: false,
         },
     )
     .unwrap();

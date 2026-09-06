@@ -19,7 +19,7 @@ members = [
     "crates/orchid-i18n",
     "crates/orchid-ui",
     "crates/orchid-app",
-    "crates/orchid-format",
+    "crates/orchid-format", ".git/c2pa-probe",
 ]
 
 [workspace.package]
@@ -211,6 +211,8 @@ memmap2 = "0.9"
 flatbuffers = "25"
 zstd = "0.13"
 clap = { version = "4", features = ["derive"] }
+# C2PA content credentials (Phase 3). Prefer rust_native_crypto on Windows.
+c2pa = { version = "0.90", default-features = false, features = ["rust_native_crypto"] }
 
 # Document / OOXML (DOCX) viewer-editor
 quick-xml = "0.42"

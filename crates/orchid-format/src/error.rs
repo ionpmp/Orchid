@@ -51,4 +51,8 @@ pub enum FormatError {
     /// Feature not implemented on this code path.
     #[error("unsupported: {0}")]
     Unsupported(&'static str),
+
+    /// C2PA sign / verify failure.
+    #[error("C2PA error: {0}")]
+    C2pa(String),
 }

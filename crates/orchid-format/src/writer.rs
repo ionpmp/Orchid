@@ -11,7 +11,8 @@ use uuid::Uuid;
 use crate::capability;
 use crate::crypto_region::prepare_region_body;
 use crate::framing::{pad_to_alignment, Footer, Header, RegionHeader};
-use crate::region_type::{CLEAN_TEXT, RAW, STRUCTURED};
+use crate::provenance::{sign_clean_text_provenance, PROVENANCE_CONTENT_TYPE};
+use crate::region_type::{CLEAN_TEXT, PROVENANCE, RAW, STRUCTURED};
 use crate::toc::{CompressionCodec, RegionType, StorageMode};
 use crate::toc_build::{build_toc, TocRegionSpec, TocSpec};
 use crate::{Result, FOOTER_SIZE, HEADER_SIZE};
@@ -37,6 +38,8 @@ pub struct SealedCreateRequest {
     pub structured_content_type: Option<String>,
     /// When set, private regions are age-encrypted to this identity.
     pub encrypt_with: Option<Identity>,
+    /// When true, append a public C2PA Provenance region (signed PNG carrier).
+    pub sign_c2pa: bool,
 }
 
 /// Write a sealed `.orchid` to `path`.
@@ -56,6 +59,15 @@ pub fn build_sealed_bytes(req: &SealedCreateRequest) -> Result<Vec<u8>> {
     if identity.is_some() {
         caps |= capability::ENCRYPTED;
     }
+    let provenance = if req.sign_c2pa {
+        caps |= capability::C2PA;
+        Some(sign_clean_text_provenance(
+            &req.clean_text,
+            "Orchid document",
+        )?)
+    } else {
+        None
+    };
 
     let raw_body = prepare_region_body(&req.raw, CompressionCodec::None, identity)?;
     let clean_body = prepare_region_body(&req.clean_text, CompressionCodec::Zstd, identity)?;
@@ -117,6 +129,25 @@ pub fn build_sealed_bytes(req: &SealedCreateRequest) -> Result<Vec<u8>> {
                 .or_else(|| Some("application/octet-stream".into())),
         },
     )?;
+
+    if let Some(prov) = &provenance {
+        // Public Provenance: never age-encrypted; uncompressed PNG carrier.
+        append_region(
+            &mut buf,
+            &mut toc_regions,
+            RegionWrite {
+                type_id: PROVENANCE,
+                fb_type: RegionType::Provenance,
+                payload: &prov.carrier_png,
+                compression: CompressionCodec::None,
+                payload_blake3: hash_bytes(&prov.carrier_png),
+                encryption: None,
+                name: Some("provenance".into()),
+                ordinal: 0,
+                content_type: Some(PROVENANCE_CONTENT_TYPE.into()),
+            },
+        )?;
+    }
 
     pad_to_alignment(&mut buf);
     let toc_start = buf.len() as u64;
@@ -208,6 +239,7 @@ impl Default for SealedCreateRequest {
             structured: Vec::new(),
             structured_content_type: None,
             encrypt_with: None,
+            sign_c2pa: false,
         }
     }
 }
@@ -230,6 +262,7 @@ mod tests {
             structured: b"{\"v\":1}".to_vec(),
             structured_content_type: Some("application/json".into()),
             encrypt_with: None,
+            sign_c2pa: false,
         })
         .unwrap();
         assert!(bytes.len() > 4096 + FOOTER_SIZE);

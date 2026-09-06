@@ -26,6 +26,7 @@ fn sealed_clean_text_roundtrip_bit_identical() {
             structured: structured.clone(),
             structured_content_type: Some("application/vnd.orchid.structured+json".into()),
             encrypt_with: None,
+            sign_c2pa: false,
         },
     )
     .unwrap();

@@ -1,4 +1,4 @@
-//! Phase 1–2 CLI: create and inspect sealed `.orchid` files.
+//! Phase 1–3 CLI: create and inspect sealed `.orchid` files.
 
 use std::fs;
 use std::path::PathBuf;
@@ -6,7 +6,10 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use orchid_crypto::Identity;
-use orchid_format::{write_sealed_file, SealedCreateRequest, SealedFile, EXTENSION, MIME_TYPE};
+use orchid_format::{
+    is_c2pa_accepted, verify_provenance_carrier, write_sealed_file, SealedCreateRequest,
+    SealedFile, EXTENSION, MIME_TYPE,
+};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -41,6 +44,9 @@ enum Commands {
         /// Encrypt all regions to this passphrase (age).
         #[arg(long)]
         passphrase: Option<String>,
+        /// Attach a public C2PA Provenance region (signed PNG carrier).
+        #[arg(long, default_value_t = false)]
+        sign_c2pa: bool,
     },
     /// Open a sealed .orchid and print header / TOC / Clean-Text summary.
     Read {
@@ -58,6 +64,12 @@ enum Commands {
         /// Also write Raw plaintext to this path.
         #[arg(long)]
         dump_raw: Option<PathBuf>,
+        /// Write Provenance carrier PNG to this path.
+        #[arg(long)]
+        dump_provenance: Option<PathBuf>,
+        /// Run the c2pa Reader on the Provenance carrier.
+        #[arg(long, default_value_t = false)]
+        verify_c2pa: bool,
     },
 }
 
@@ -78,6 +90,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             raw,
             raw_content_type,
             passphrase,
+            sign_c2pa,
         } => {
             let output = ensure_extension(output);
             let raw_bytes = match raw {
@@ -96,6 +109,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     structured: fs::read(structured)?,
                     structured_content_type: Some("application/octet-stream".into()),
                     encrypt_with: passphrase.map(Identity::passphrase),
+                    sign_c2pa,
                 },
             )?;
             println!("wrote {} ({MIME_TYPE})", output.display());
@@ -106,6 +120,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             dump_clean_text,
             dump_structured,
             dump_raw,
+            dump_provenance,
+            verify_c2pa,
         } => {
             let file = SealedFile::open(&path)?;
             let identity = passphrase.map(Identity::passphrase);
@@ -151,6 +167,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             if let Some(out) = dump_raw {
                 fs::write(out, file.raw(id_ref)?)?;
+            }
+            if dump_provenance.is_some() || verify_c2pa {
+                let carrier = file.provenance_carrier()?;
+                if let Some(out) = dump_provenance {
+                    fs::write(&out, &carrier)?;
+                    println!("wrote provenance carrier {}", out.display());
+                }
+                if verify_c2pa {
+                    let state = verify_provenance_carrier(&carrier)?;
+                    println!(
+                        "c2pa_validation={state:?} accepted={}",
+                        is_c2pa_accepted(state)
+                    );
+                }
             }
         }
     }

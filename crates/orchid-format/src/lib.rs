@@ -15,6 +15,7 @@ mod crypto_region;
 mod error;
 mod framing;
 mod linked;
+mod provenance;
 mod reader;
 mod toc_build;
 mod writer;
@@ -43,6 +44,10 @@ pub use framing::{
 pub use linked::{
     build_linked_bytes, linked_region_plaintext, linked_to_sealed, sealed_to_linked,
     write_linked_file, LinkedCreateRequest,
+};
+pub use provenance::{
+    is_c2pa_accepted, sign_clean_text_provenance, verify_provenance_carrier, SignedProvenance,
+    CLEAN_TEXT_ASSERTION, PROVENANCE_CONTENT_TYPE,
 };
 pub use reader::SealedFile;
 pub use toc_build::{build_toc, TocChunkSpec, TocRegionSpec, TocSpec};

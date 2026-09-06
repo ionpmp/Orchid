@@ -18,9 +18,11 @@ default = ["cli"]
 cli = ["dep:clap"]
 
 [dependencies]
+c2pa.workspace = true
 clap = { workspace = true, optional = true }
 flatbuffers.workspace = true
 memmap2.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true }
 tracing.workspace = true

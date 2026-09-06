@@ -188,6 +188,12 @@ impl SealedFile {
         let entry = self.find_region(RegionType::Raw)?;
         self.region_plaintext(&entry, identity)
     }
+
+    /// Public Provenance carrier bytes (C2PA-signed PNG), if present.
+    pub fn provenance_carrier(&self) -> Result<Vec<u8>> {
+        let entry = self.find_region(RegionType::Provenance)?;
+        self.region_plaintext(&entry, None)
+    }
 }
 
 fn encryption_from_toc(enc: crate::toc::EncryptionInfo<'_>) -> RegionEncryptionSpec {
