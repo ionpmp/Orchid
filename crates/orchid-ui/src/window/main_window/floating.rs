@@ -255,7 +255,7 @@ impl MainWindowController {
         }
     }
 
-    /// Create a sample `.docx` under [`Self::documents_dir`] and open it docked on the canvas.
+    /// Create a sample `.orchid` under [`Self::documents_dir`] and open it docked on the canvas.
     pub(super) fn spawn_open_document_editor(self: &Arc<Self>, placement: AddWidgetPlacement) {
         let ctrl = Arc::downgrade(self);
         let documents_dir = self.documents_dir.clone();
