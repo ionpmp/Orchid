@@ -89,6 +89,18 @@ pub async fn create_sample_docx(path: &Path) -> Result<()> {
     save_document(&sample_document(), path).await
 }
 
+/// Write [`sample_document`] as a sealed `.orchid` (DOCX Raw + Clean-Text).
+///
+/// # Errors
+///
+/// Propagates sealed-write / OOXML failures.
+pub async fn create_sample_orchid(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    crate::document::orchid_io::save_document_as_orchid(&sample_document(), path).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,5 +119,16 @@ mod tests {
             doc.blocks.iter().find(|b| matches!(b, Block::Table(_))),
             Some(Block::Table(t)) if t.rows.len() == 2 && t.rows[0].cells.len() == 2
         ));
+    }
+
+    #[tokio::test]
+    async fn sample_orchid_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sample.orchid");
+        create_sample_orchid(&path).await.unwrap();
+        let doc = crate::document::orchid_io::open_document_from_orchid(&path)
+            .await
+            .unwrap();
+        assert!(doc.plain_text().contains("Sample document"));
     }
 }

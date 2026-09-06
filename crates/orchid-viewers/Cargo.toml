@@ -72,6 +72,7 @@ hex.workspace = true
 orchid-core.workspace = true
 orchid-storage.workspace = true
 orchid-fs.workspace = true
+orchid-format.workspace = true
 
 [target.'cfg(windows)'.dependencies.windows]
 workspace = true

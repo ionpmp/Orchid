@@ -4,6 +4,7 @@ pub mod cursor;
 pub mod layout;
 pub mod model;
 pub mod ooxml;
+pub mod orchid_io;
 pub mod sample;
 pub mod table_edit;
 pub mod undo;
@@ -34,7 +35,10 @@ pub use model::{
     OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, SectionBreakType, Table, TableCell,
     TableRow, VMerge,
 };
-pub use sample::{create_sample_docx, sample_document};
+pub use sample::{create_sample_docx, create_sample_orchid, sample_document};
+pub use orchid_io::{
+    is_orchid_path, looks_like_orchid, open_document_from_orchid, save_document_as_orchid,
+};
 pub use undo::{EditCommand, RunStylePatch, UndoStack};
 
 /// Soft ceiling for DOCX payloads accepted by the viewer (128 MiB).
@@ -4811,7 +4815,16 @@ impl Viewer for DocumentViewer {
             let tmp =
                 std::env::temp_dir().join(format!("orchid-docx-{}.docx", uuid::Uuid::new_v4()));
             tokio::fs::write(&tmp, &bytes).await?;
-            let doc = Document::from_docx(&tmp).await?;
+            let doc = if orchid_io::looks_like_orchid(&bytes) {
+                let orchid_tmp = std::env::temp_dir()
+                    .join(format!("orchid-open-{}.orchid", uuid::Uuid::new_v4()));
+                tokio::fs::write(&orchid_tmp, &bytes).await?;
+                let opened = orchid_io::open_document_from_orchid(&orchid_tmp).await?;
+                let _ = tokio::fs::remove_file(&orchid_tmp).await;
+                opened
+            } else {
+                Document::from_docx(&tmp).await?
+            };
             let _ = tokio::fs::remove_file(&tmp).await;
             *self.document.write() = Some(doc);
             *self.path.write() = Some(path);
@@ -4835,7 +4848,11 @@ impl Viewer for DocumentViewer {
             });
         }
 
-        let doc = Document::from_docx(Path::new(&os_path)).await?;
+        let doc = if orchid_io::is_orchid_path(Path::new(&os_path)) {
+            orchid_io::open_document_from_orchid(Path::new(&os_path)).await?
+        } else {
+            Document::from_docx(Path::new(&os_path)).await?
+        };
         *self.document.write() = Some(doc);
         *self.path.write() = Some(path);
         *self.registry.write() = Some(registry);
@@ -5145,7 +5162,11 @@ impl Viewer for DocumentViewer {
             .read()
             .clone()
             .ok_or(ViewerError::DocumentNotOpen)?;
-        ooxml::container::save_document(&doc, Path::new(&os_path)).await?;
+        if orchid_io::is_orchid_path(Path::new(&os_path)) {
+            orchid_io::save_document_as_orchid(&doc, Path::new(&os_path)).await?;
+        } else {
+            ooxml::container::save_document(&doc, Path::new(&os_path)).await?;
+        }
         self.undo.lock().mark_clean();
         Ok(())
     }

@@ -6906,6 +6906,7 @@ dependencies = [
  "md-5",
  "memmap2",
  "orchid-core",
+ "orchid-format",
  "orchid-fs",
  "orchid-storage",
  "parking_lot",

@@ -31,8 +31,9 @@ pub use document::ooxml::core_props::{
     unpack_office_props, write_office_core_props, OfficeCoreProps,
 };
 pub use document::{
-    create_sample_docx, sample_document, Alignment, Block, CellImage, Document, DocumentViewer,
-    EditCommand, ListKind, UndoStack as DocumentUndoStack,
+    create_sample_docx, create_sample_orchid, is_orchid_path, looks_like_orchid,
+    open_document_from_orchid, sample_document, save_document_as_orchid, Alignment, Block,
+    CellImage, Document, DocumentViewer, EditCommand, ListKind, UndoStack as DocumentUndoStack,
 };
 pub use error::{Result, ViewerError};
 pub use html::{is_html_file_extension, HtmlViewer};
