@@ -1323,14 +1323,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "c2pa_probe"
-version = "0.1.0"
-dependencies = [
- "c2pa",
- "serde_json",
-]
-
-[[package]]
 name = "calendrical_calculations"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6685,6 +6677,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "orchid-embed"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "thiserror 2.0.20",
+ "tracing",
+]
+
+[[package]]
 name = "orchid-format"
 version = "0.1.0"
 dependencies = [
@@ -6778,6 +6779,9 @@ dependencies = [
  "futures",
  "memmap2",
  "orchid-core",
+ "orchid-crypto",
+ "orchid-embed",
+ "orchid-format",
  "orchid-fs",
  "orchid-storage",
  "parking_lot",

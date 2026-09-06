@@ -19,7 +19,8 @@ members = [
     "crates/orchid-i18n",
     "crates/orchid-ui",
     "crates/orchid-app",
-    "crates/orchid-format", ".git/c2pa-probe",
+    "crates/orchid-format",
+    "crates/orchid-embed",
 ]
 
 [workspace.package]
@@ -213,6 +214,9 @@ zstd = "0.13"
 clap = { version = "4", features = ["derive"] }
 # C2PA content credentials (Phase 3). Prefer rust_native_crypto on Windows.
 c2pa = { version = "0.90", default-features = false, features = ["rust_native_crypto"] }
+
+# Sentence embeddings (Phase 5). ORT is optional behind orchid-embed features.
+orchid-embed = { path = "crates/orchid-embed", version = "0.1.0" }
 
 # Document / OOXML (DOCX) viewer-editor
 quick-xml = "0.42"

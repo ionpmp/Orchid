@@ -1,0 +1,21 @@
+[package]
+name = "orchid-embed"
+description = "Sentence embedding backends for Orchid (stub for CI; optional ORT)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+# Future: enable ONNX Runtime + bundled quantized model (like pdfium.dll).
+ort = []
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
