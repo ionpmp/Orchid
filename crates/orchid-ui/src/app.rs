@@ -339,6 +339,9 @@ impl OrchidApp {
             .register(orchid_widgets::builtin::notes::descriptor())
             .map_err(|e| UiError::Slint(format!("register notes: {e}")))?;
         widget_registry
+            .register(orchid_widgets::builtin::browser::descriptor())
+            .map_err(|e| UiError::Slint(format!("register browser: {e}")))?;
+        widget_registry
             .register(orchid_widgets::builtin::calendar::descriptor())
             .map_err(|e| UiError::Slint(format!("register calendar: {e}")))?;
         widget_registry

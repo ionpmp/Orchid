@@ -152,6 +152,13 @@ export component WorkspaceView inherits Rectangle {
     callback notes-zoom(string, int);
     callback notes-clear(string);
     callback notes-find(string, string, bool);
+    callback browser-select-tab(string, int);
+    callback browser-new-tab(string);
+    callback browser-close-tab(string, int);
+    callback browser-navigate(string, string);
+    callback browser-command(string, string);
+    callback browser-open-external(string);
+    callback browser-embed-bounds(string, length, length, length, length, bool);
     callback calendar-select-date(string, string);
     callback calendar-activate-day(string, string);
     callback calendar-shift-month(string, int);
@@ -567,6 +574,13 @@ export component WorkspaceView inherits Rectangle {
                     notes-zoom(id, d) => { root.notes-zoom(id, d); }
                     notes-clear(id) => { root.notes-clear(id); }
                     notes-find(id, q, fwd) => { root.notes-find(id, q, fwd); }
+                    browser-select-tab(id, i) => { root.browser-select-tab(id, i); }
+                    browser-new-tab(id) => { root.browser-new-tab(id); }
+                    browser-close-tab(id, i) => { root.browser-close-tab(id, i); }
+                    browser-navigate(id, u) => { root.browser-navigate(id, u); }
+                    browser-command(id, c) => { root.browser-command(id, c); }
+                    browser-open-external(id) => { root.browser-open-external(id); }
+                    browser-embed-bounds(id, x, y, w, h, vis) => { root.browser-embed-bounds(id, x, y, w, h, vis); }
                     calendar-select-date(id, d) => { root.calendar-select-date(id, d); }
                     calendar-activate-day(id, d) => { root.calendar-activate-day(id, d); }
                     calendar-shift-month(id, delta) => { root.calendar-shift-month(id, delta); }
@@ -806,6 +820,13 @@ export component WorkspaceView inherits Rectangle {
             viewer-open-external(id) => { root.viewer-open-external(id); }
             viewer-html-command(id, c) => { root.viewer-html-command(id, c); }
             viewer-html-embed-bounds(id, x, y, w, h, vis) => { root.viewer-html-embed-bounds(id, x, y, w, h, vis); }
+            browser-select-tab(id, i) => { root.browser-select-tab(id, i); }
+            browser-new-tab(id) => { root.browser-new-tab(id); }
+            browser-close-tab(id, i) => { root.browser-close-tab(id, i); }
+            browser-navigate(id, u) => { root.browser-navigate(id, u); }
+            browser-command(id, c) => { root.browser-command(id, c); }
+            browser-open-external(id) => { root.browser-open-external(id); }
+            browser-embed-bounds(id, x, y, w, h, vis) => { root.browser-embed-bounds(id, x, y, w, h, vis); }
             viewer-media-command(id, c) => { root.viewer-media-command(id, c); }
             viewer-media-seek-frac(id, f) => { root.viewer-media-seek-frac(id, f); }
             viewer-document-action(id, a) => { root.viewer-document-action(id, a); }

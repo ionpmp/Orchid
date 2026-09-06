@@ -130,7 +130,7 @@ Last synced with `main` as of **2026-07-30**. Narrative release notes:
   - [ ] Smart albums by criteria — saved queries (tag / person / date / GPS / rating / type) as virtual folders
 - [ ] Graphical resource monitor with history
 - [~] Extended notification system — in-app list with Clear all, per-item dismiss, a 50-item soft cap, and redb-backed persistence across sessions; startup tip + bridged FM/password/config/viewer action failures (incl. PDF/archive/viewport + FM rename/delete/drop/context); OS toasts deferred
-- [ ] Built-in browser (WebView2) — HTML viewer now hosts WebView2 for local files; a catalog browser with address bar / tabs is still pending
+- [x] Built-in browser (WebView2) — catalog widget with address bar, tabs, and an embedded WebView2 overlay (HTML viewer still hosts local files separately)
 - [ ] Lua scripting (mlua)
 - [ ] Theme and widget marketplace
 

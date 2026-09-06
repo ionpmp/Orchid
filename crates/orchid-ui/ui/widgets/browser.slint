@@ -1,0 +1,278 @@
+import { Theme } from "../theme_global.slint";
+import { BrowserModel } from "../workspace/defs.slint";
+
+component BrowserToolBtn inherits Rectangle {
+    in property <string> label;
+    in property <string> tip;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    width: max(28px, label-txt.preferred-width + 12px);
+    height: 26px;
+    border-radius: Theme.radius-md;
+    background: !root.enabled ? transparent :
+        ta.has-hover ? Theme.surface-raised : transparent;
+    opacity: root.enabled ? 1.0 : 0.45;
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+
+    label-txt := Text {
+        width: 100%;
+        height: 100%;
+        text: root.label;
+        color: !root.enabled ? Theme.text-tertiary : Theme.text-secondary;
+        font-size: Theme.font-size-sm;
+        font-weight: Theme.weight-medium;
+        font-family: Theme.font-family-sans;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    if ta.has-hover && tip != "" : Rectangle {
+        x: (parent.width - tip-box.preferred-width - 12px) / 2;
+        y: -tip-box.preferred-height - 8px;
+        width: tip-box.preferred-width + 12px;
+        height: tip-box.preferred-height + 6px;
+        background: Theme.surface-raised;
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.border-default;
+        z: 50;
+        tip-box := Text {
+            x: 6px; y: 3px;
+            text: root.tip;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+        }
+    }
+}
+
+export component BrowserView inherits Rectangle {
+    in property <BrowserModel> model;
+
+    callback select-tab(int);
+    callback new-tab();
+    callback close-tab(int);
+    callback navigate(string);
+    callback command(string);
+    callback open-external();
+    callback embed-bounds(length, length, length, length, bool);
+
+    background: transparent;
+
+    property <string> draft-url: model.url;
+    property <int> synced-active: model.active-index;
+    property <string> synced-url: model.url;
+
+    function fire-embed() {
+        if (model.webview-available && host.width > 8px && host.height > 8px) {
+            root.embed-bounds(host.absolute-position.x, host.absolute-position.y, host.width, host.height, true);
+        } else {
+            root.embed-bounds(0, 0, 0, 0, false);
+        }
+    }
+
+    changed model => {
+        if model.active-index != root.synced-active {
+            root.draft-url = model.url;
+            root.synced-active = model.active-index;
+            root.synced-url = model.url;
+        } else if model.url != root.synced-url && root.draft-url == root.synced-url {
+            root.draft-url = model.url;
+            root.synced-url = model.url;
+        } else if root.draft-url == model.url {
+            root.synced-url = model.url;
+        }
+        root.fire-embed();
+    }
+
+    VerticalLayout {
+        spacing: 0;
+
+        Rectangle {
+            height: 32px;
+            background: Theme.surface-base;
+
+            HorizontalLayout {
+                padding-left: 6px;
+                padding-right: 6px;
+                spacing: 2px;
+                alignment: start;
+
+                Flickable {
+                    vertical-stretch: 0;
+                    viewport-height: self.height;
+                    horizontal-stretch: 1;
+
+                    HorizontalLayout {
+                        spacing: 2px;
+                        alignment: start;
+
+                        for tab[i] in model.tabs : Rectangle {
+                            width: max(72px, min(160px, tab-label.preferred-width + (tab.is-active ? 36px : 20px)));
+                            height: 26px;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: Theme.radius-md;
+                            background: tab.is-active ? Theme.surface-raised
+                                : tab-ta.has-hover ? Theme.surface-raised : transparent;
+                            border-width: tab.is-active ? 1px : 0;
+                            border-color: Theme.border-default;
+
+                            tab-ta := TouchArea {
+                                clicked => { root.select-tab(i); }
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 4px;
+                                spacing: 2px;
+
+                                tab-label := Text {
+                                    text: tab.title == "" ? model.untitled-label : tab.title;
+                                    color: tab.is-active ? Theme.text-primary : Theme.text-secondary;
+                                    font-size: Theme.font-size-sm;
+                                    font-weight: tab.is-active ? Theme.weight-semibold : Theme.weight-regular;
+                                    font-family: Theme.font-family-sans;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                    horizontal-stretch: 1;
+                                }
+
+                                if tab.is-active || tab-ta.has-hover : Rectangle {
+                                    width: 18px;
+                                    height: 18px;
+                                    y: (parent.height - self.height) / 2;
+                                    border-radius: Theme.radius-md;
+                                    background: close-ta.has-hover ? Theme.surface-base : transparent;
+                                    close-ta := TouchArea {
+                                        clicked => { root.close-tab(i); }
+                                    }
+                                    Text {
+                                        width: 100%; height: 100%;
+                                        text: "×";
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                BrowserToolBtn {
+                    label: "+";
+                    tip: model.new-tab-tip;
+                    clicked => { root.new-tab(); }
+                }
+            }
+        }
+
+        Rectangle { height: 1px; background: Theme.border-default; }
+
+        Rectangle {
+            height: 36px;
+            background: Theme.surface-base;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+                alignment: start;
+
+                BrowserToolBtn {
+                    label: model.back-label;
+                    enabled: model.webview-available && model.can-go-back;
+                    clicked => { root.command("back"); }
+                }
+                BrowserToolBtn {
+                    label: model.forward-label;
+                    enabled: model.webview-available && model.can-go-forward;
+                    clicked => { root.command("forward"); }
+                }
+                BrowserToolBtn {
+                    label: model.reload-label;
+                    enabled: model.webview-available;
+                    clicked => { root.command("reload"); }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 28px;
+                    y: (parent.height - self.height) / 2;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border-default;
+
+                    if root.draft-url == "" : Text {
+                        x: 8px;
+                        width: parent.width - 16px;
+                        height: 100%;
+                        text: model.address-placeholder;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        font-family: Theme.font-family-sans;
+                        vertical-alignment: center;
+                    }
+
+                    address := TextInput {
+                        x: 8px;
+                        width: parent.width - 16px;
+                        height: 100%;
+                        text: root.draft-url;
+                        edited => { root.draft-url = self.text; }
+                        accepted => { root.navigate(root.draft-url); }
+                        single-line: true;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        font-family: Theme.font-family-sans;
+                        vertical-alignment: center;
+                    }
+                }
+
+                BrowserToolBtn {
+                    label: model.go-label;
+                    enabled: true;
+                    clicked => { root.navigate(root.draft-url); }
+                }
+                BrowserToolBtn {
+                    label: model.open-label;
+                    clicked => { root.open-external(); }
+                }
+            }
+        }
+
+        if !model.webview-available : Text {
+            height: 20px;
+            text: model.unavailable-label;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+        }
+
+        embed-slot := Rectangle {
+            vertical-stretch: 1;
+            background: Theme.surface-base;
+            clip: true;
+
+            host := Rectangle {
+                width: parent.width;
+                height: parent.height;
+                visible: model.webview-available;
+                changed width => { root.fire-embed(); }
+                changed height => { root.fire-embed(); }
+                changed absolute-position => { root.fire-embed(); }
+                changed visible => { root.fire-embed(); }
+                property <length> ax: self.absolute-position.x;
+                property <length> ay: self.absolute-position.y;
+                changed ax => { root.fire-embed(); }
+                changed ay => { root.fire-embed(); }
+            }
+        }
+    }
+}

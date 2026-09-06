@@ -29,6 +29,7 @@ component CatalogCard inherits Rectangle {
             type_id == "media-viewer" ? "MV" :
             type_id == "password" || type_id == "password-manager" ? "*" :
             type_id == "viewer" ? "Vi" :
+            type_id == "browser" ? "Br" :
             type_id == "document-editor" ? "D" :
             type_id == "file-manager" ? "#" :
             type_id == "processes" ? "P" :
@@ -375,6 +376,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
+                            type-id: "browser"; glyph: "Br"; label: Strings.dock-widget-browser;
+                            description: Strings.widget-browser-desc;
+                            card-visible: WidgetCatalog.show-browser;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
                             type-id: "document-editor"; glyph: "D"; label: Strings.dock-widget-document-editor;
                             description: Strings.widget-document-editor-desc;
                             card-visible: WidgetCatalog.show-document-editor;
@@ -532,6 +539,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
+                            type-id: "browser"; glyph: "Br"; label: Strings.dock-widget-browser;
+                            description: Strings.widget-browser-desc;
+                            card-visible: WidgetCatalog.show-browser;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
                             type-id: "document-editor"; glyph: "D"; label: Strings.dock-widget-document-editor;
                             description: Strings.widget-document-editor-desc;
                             card-visible: WidgetCatalog.show-document-editor;
@@ -592,6 +605,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             type-id: "viewer"; glyph: "V"; label: Strings.dock-widget-viewer;
                             description: Strings.widget-viewer-desc;
                             card-visible: WidgetCatalog.show-viewer;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "browser"; glyph: "Br"; label: Strings.dock-widget-browser;
+                            description: Strings.widget-browser-desc;
+                            card-visible: WidgetCatalog.show-browser;
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {

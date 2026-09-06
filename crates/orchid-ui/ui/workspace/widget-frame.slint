@@ -13,6 +13,7 @@ import { SystemView } from "../widgets/system.slint";
 import { ProcessesView } from "../widgets/processes.slint";
 import { CalculatorView } from "../widgets/calculator.slint";
 import { NotesView } from "../widgets/notes.slint";
+import { BrowserView } from "../widgets/browser.slint";
 import { CalendarView } from "../widgets/calendar.slint";
 import { RssView } from "../widgets/rss.slint";
 import { RecentFilesView } from "../widgets/recent_files.slint";
@@ -188,6 +189,15 @@ export component WidgetFrame inherits Rectangle {
     callback notes-zoom(string, int);
     callback notes-clear(string);
     callback notes-find(string, string, bool);
+
+    // Browser
+    callback browser-select-tab(string, int);
+    callback browser-new-tab(string);
+    callback browser-close-tab(string, int);
+    callback browser-navigate(string, string);
+    callback browser-command(string, string);
+    callback browser-open-external(string);
+    callback browser-embed-bounds(string, length, length, length, length, bool);
 
     // Calendar
     callback calendar-select-date(string, string);
@@ -956,6 +966,19 @@ export component WidgetFrame inherits Rectangle {
                     zoom(d) => { root.notes-zoom(root.model.instance-id, d); }
                     clear-note => { root.notes-clear(root.model.instance-id); }
                     find-request(q, fwd) => { root.notes-find(root.model.instance-id, q, fwd); }
+                }
+
+                if model.type-id == "browser" : BrowserView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.browser;
+                    select-tab(i) => { root.browser-select-tab(root.model.instance-id, i); }
+                    new-tab => { root.browser-new-tab(root.model.instance-id); }
+                    close-tab(i) => { root.browser-close-tab(root.model.instance-id, i); }
+                    navigate(u) => { root.browser-navigate(root.model.instance-id, u); }
+                    command(c) => { root.browser-command(root.model.instance-id, c); }
+                    open-external => { root.browser-open-external(root.model.instance-id); }
+                    embed-bounds(x, y, w, h, vis) => { root.browser-embed-bounds(root.model.instance-id, x, y, w, h, vis); }
                 }
 
                 if model.type-id == "calendar" : CalendarView {

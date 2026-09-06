@@ -48,12 +48,13 @@ Helper (requires 7-Zip):
 python scripts/fetch_mpv.py
 ```
 
-**WebView2 (HTML preview)**
+**WebView2 (HTML preview and Browser widget)**
 
-The HTML viewer hosts an embedded WebView2 overlay. Windows 10/11 typically
-already have the [Evergreen WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
-If it is missing, Orchid shows the HTML source and **Open in browser** still
-works. No extra DLL is bundled.
+The HTML viewer and the catalog **Browser** widget host an embedded WebView2
+overlay. Windows 10/11 typically already have the
+[Evergreen WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
+If it is missing, the HTML viewer shows source plus **Open in browser**, and the
+Browser widget shows an unavailable hint. No extra DLL is bundled.
 
 ## Cloning
 

@@ -1254,6 +1254,64 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_browser_select_tab({
+            let t = t.clone();
+            move |id, index| {
+                if let Some(c) = t.upgrade() {
+                    c.on_browser_select_tab(&id, index);
+                }
+            }
+        });
+        self.window.on_browser_new_tab({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_browser_new_tab(&id);
+                }
+            }
+        });
+        self.window.on_browser_close_tab({
+            let t = t.clone();
+            move |id, index| {
+                if let Some(c) = t.upgrade() {
+                    c.on_browser_close_tab(&id, index);
+                }
+            }
+        });
+        self.window.on_browser_navigate({
+            let t = t.clone();
+            move |id, url| {
+                if let Some(c) = t.upgrade() {
+                    c.on_browser_navigate(&id, &url);
+                }
+            }
+        });
+        self.window.on_browser_command({
+            let t = t.clone();
+            move |id, cmd| {
+                if let Some(c) = t.upgrade() {
+                    c.on_browser_command(&id, &cmd);
+                }
+            }
+        });
+        self.window.on_browser_open_external({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_browser_open_external(&id);
+                }
+            }
+        });
+        self.window.on_browser_embed_bounds({
+            let t = t.clone();
+            move |id, x, y, w, h, vis| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        c.on_browser_embed_bounds(inst, x, y, w, h, vis);
+                    }
+                }
+            }
+        });
 
         self.window.on_calendar_select_date({
             let t = t.clone();

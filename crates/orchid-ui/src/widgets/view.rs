@@ -103,6 +103,7 @@ impl SlintPayload {
                 Self::Text(vec![p.expression.clone(), p.display.clone()])
             }
             WidgetPayload::Notes(p) => Self::Text(vec![p.title.clone(), p.body.clone()]),
+            WidgetPayload::Browser(p) => Self::Text(vec![p.title.clone(), p.url.clone()]),
             WidgetPayload::Calendar(p) => Self::Text(
                 p.events
                     .iter()

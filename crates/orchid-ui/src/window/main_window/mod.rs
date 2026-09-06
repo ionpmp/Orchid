@@ -58,6 +58,7 @@ use crate::terminal_raster;
 use crate::theme::ThemeManager;
 use crate::widgets::terminal::TerminalWidgetDeps;
 
+mod browser;
 mod calculator;
 mod calendar;
 mod canvas;
@@ -659,6 +660,7 @@ impl MainWindowController {
         g.set_dock_widget_video_player(mgr.tr("dock-widget-video-player").into());
         g.set_dock_widget_password(mgr.tr("dock-widget-password").into());
         g.set_dock_widget_viewer(mgr.tr("dock-widget-viewer").into());
+        g.set_dock_widget_browser(mgr.tr("dock-widget-browser").into());
         g.set_dock_widget_document_editor(mgr.tr("dock-widget-document-editor").into());
         g.set_dock_widget_fm(mgr.tr("dock-widget-fm").into());
         g.set_widget_terminal_desc(mgr.tr("widget-terminal-desc").into());
@@ -680,6 +682,7 @@ impl MainWindowController {
         g.set_widget_video_player_desc(mgr.tr("widget-video-player-desc").into());
         g.set_widget_password_desc(mgr.tr("widget-password-desc").into());
         g.set_widget_viewer_desc(mgr.tr("widget-viewer-desc").into());
+        g.set_widget_browser_desc(mgr.tr("widget-browser-desc").into());
         g.set_widget_document_editor_desc(mgr.tr("widget-document-editor-desc").into());
         g.set_widget_fm_desc(mgr.tr("widget-fm-desc").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());

@@ -620,6 +620,32 @@ export struct NotesModel {
     tip-clear: string,
 }
 
+export struct BrowserTabEntry {
+    id: string,
+    title: string,
+    url: string,
+    is-active: bool,
+}
+
+export struct BrowserModel {
+    tabs: [BrowserTabEntry],
+    active-index: int,
+    url: string,
+    title: string,
+    can-go-back: bool,
+    can-go-forward: bool,
+    webview-available: bool,
+    untitled-label: string,
+    address-placeholder: string,
+    back-label: string,
+    forward-label: string,
+    reload-label: string,
+    go-label: string,
+    new-tab-tip: string,
+    unavailable-label: string,
+    open-label: string,
+}
+
 export struct CalendarDayEntry {
     date-key: string,
     day: int,
@@ -2192,6 +2218,7 @@ export struct WidgetFrameModel {
     password: PasswordModel,
     viewer: ViewerModel,
     file-manager: FileManagerModel,
+    browser: BrowserModel,
     close-confirm: WidgetCloseConfirmDialog,
     settings-dialog: WidgetSettingsDialog,
 }

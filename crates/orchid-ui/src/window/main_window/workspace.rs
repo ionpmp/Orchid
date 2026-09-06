@@ -14,25 +14,26 @@ use orchid_widgets::{PlacedWidget, SharedInstance, WidgetPayload};
 
 use crate::error::{Result, UiError};
 use crate::slint_generated::{
-    AppState, AudioPlayerModel, CalculatorModel, CalendarModel, ClockModel, FileManagerModel,
-    JyotishModel, MediaModel, MoonModel, NotesModel, PasswordModel, ProcessesModel,
-    RecentFilesModel, RssModel, SearchModel, SystemModel, TerminalCellModel, TerminalPaneModel,
-    VideoPlayerModel, ViewerModel, WeatherModel, WidgetFrameModel, WorkspaceModel,
-    WorkspaceSummary,
+    AppState, AudioPlayerModel, BrowserModel, CalculatorModel, CalendarModel, ClockModel,
+    FileManagerModel, JyotishModel, MediaModel, MoonModel, NotesModel, PasswordModel,
+    ProcessesModel, RecentFilesModel, RssModel, SearchModel, SystemModel, TerminalCellModel,
+    TerminalPaneModel, VideoPlayerModel, ViewerModel, WeatherModel, WidgetFrameModel,
+    WorkspaceModel, WorkspaceSummary,
 };
 use crate::window::models::{
-    blank_terminal, build_audio_player_model, build_calculator_model, build_calendar_model,
-    build_clock_model, build_file_manager_model, build_jyotish_model, build_media_model,
-    build_moon_model, build_notes_model, build_password_model, build_processes_model,
-    build_recent_files_model, build_rss_model, build_search_model, build_system_model,
-    build_terminal_divider_models, build_terminal_tab_models, build_video_player_model,
-    build_viewer_model, build_weather_model, default_terminal_divider_models,
-    default_terminal_pane_models, default_terminal_tab_models, empty_audio_player_model,
-    empty_calculator_model, empty_calendar_model, empty_clock_model, empty_file_manager_model,
-    empty_fm_overlays, empty_jyotish_model, empty_media_model, empty_moon_model, empty_notes_model,
-    empty_password_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model,
-    empty_rss_model, empty_search_model, empty_system_model, empty_terminal_cells,
-    empty_video_player_model, empty_viewer_model, empty_weather_model, patch_audio_player_model,
+    blank_terminal, build_audio_player_model, build_browser_model, build_calculator_model,
+    build_calendar_model, build_clock_model, build_file_manager_model, build_jyotish_model,
+    build_media_model, build_moon_model, build_notes_model, build_password_model,
+    build_processes_model, build_recent_files_model, build_rss_model, build_search_model,
+    build_system_model, build_terminal_divider_models, build_terminal_tab_models,
+    build_video_player_model, build_viewer_model, build_weather_model,
+    default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
+    empty_audio_player_model, empty_browser_model, empty_calculator_model, empty_calendar_model,
+    empty_clock_model, empty_file_manager_model, empty_fm_overlays, empty_jyotish_model,
+    empty_media_model, empty_moon_model, empty_notes_model, empty_password_model,
+    empty_processes_confirm, empty_processes_model, empty_recent_files_model, empty_rss_model,
+    empty_search_model, empty_system_model, empty_terminal_cells, empty_video_player_model,
+    empty_viewer_model, empty_weather_model, patch_audio_player_model, patch_browser_model,
     patch_calculator_model, patch_calendar_model, patch_clock_model, patch_file_manager_model,
     patch_jyotish_model, patch_media_model, patch_moon_model, patch_notes_model,
     patch_password_model, patch_processes_model, patch_recent_files_model, patch_rss_model,
@@ -730,6 +731,10 @@ impl MainWindowController {
                     patch_notes_model(&mut row.notes, p, &self.locale);
                     true
                 }
+                (orchid_widgets::builtin::browser::TYPE_ID, WidgetPayload::Browser(p)) => {
+                    patch_browser_model(&mut row.browser, p, &self.locale);
+                    true
+                }
                 (orchid_widgets::builtin::calendar::TYPE_ID, WidgetPayload::Calendar(p)) => {
                     patch_calendar_model(&mut row.calendar, p, &self.locale);
                     true
@@ -773,6 +778,9 @@ impl MainWindowController {
             row.group_id = group_id;
             row.group_tabs = group_tabs;
             v.set_row_data(r, row);
+            if type_id == orchid_widgets::builtin::browser::TYPE_ID {
+                super::html_embed::sync_browser_from_cache(self, id);
+            }
             return true;
         }
         false
@@ -815,6 +823,7 @@ impl MainWindowController {
             viewer_model,
             recent_files_model,
             file_manager_model,
+            browser_model,
         ) = if let Some(ws) = cached.as_deref() {
             let tstr: SharedString = ws.title.clone().into();
             match &ws.payload {
@@ -848,6 +857,7 @@ impl MainWindowController {
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
                         empty_file_manager_model(&self.locale),
+                        empty_browser_model(&self.locale),
                     )
                 }
                 WidgetPayload::Weather(w) => (
@@ -877,6 +887,7 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
                 WidgetPayload::Moon(m) => (
                     tstr,
@@ -905,6 +916,7 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
                 WidgetPayload::Jyotish(j) => (
                     tstr,
@@ -933,6 +945,7 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
                 WidgetPayload::Clock(c) => (
                     tstr,
@@ -961,6 +974,7 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
                 WidgetPayload::SystemIndicators(s) => (
                     tstr,
@@ -989,6 +1003,7 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
                 WidgetPayload::Processes(p) => {
                     let (ctx_vis, ctx_x, ctx_y) = self
@@ -1030,6 +1045,7 @@ impl MainWindowController {
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
                         empty_file_manager_model(&self.locale),
+                        empty_browser_model(&self.locale),
                     )
                 }
                 WidgetPayload::Calculator(p) => (
@@ -1059,6 +1075,7 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
                 WidgetPayload::Notes(p) => (
                     tstr,
@@ -1087,6 +1104,36 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
+                ),
+                WidgetPayload::Browser(p) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empty_weather_model(&self.locale),
+                    empty_moon_model(&self.locale),
+                    empty_jyotish_model(&self.locale),
+                    empty_clock_model(&self.locale),
+                    empty_system_model(&self.locale),
+                    empty_processes_model(&self.locale),
+                    empty_calculator_model(&self.locale),
+                    empty_notes_model(&self.locale),
+                    empty_calendar_model(&self.locale),
+                    empty_rss_model(&self.locale),
+                    empty_search_model(&self.locale),
+                    empty_media_model(&self.locale),
+                    empty_audio_player_model(&self.locale),
+                    empty_video_player_model(&self.locale),
+                    empty_password_model(&self.locale),
+                    empty_viewer_model(&self.locale),
+                    empty_recent_files_model(&self.locale),
+                    empty_file_manager_model(&self.locale),
+                    build_browser_model(p, &self.locale),
                 ),
                 WidgetPayload::Calendar(p) => (
                     tstr,
@@ -1115,6 +1162,7 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
                 WidgetPayload::RssFeed(r) => (
                     tstr,
@@ -1143,6 +1191,7 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
                 WidgetPayload::UniversalSearch(s) => {
                     let selected = self
@@ -1182,6 +1231,7 @@ impl MainWindowController {
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
                         empty_file_manager_model(&self.locale),
+                        empty_browser_model(&self.locale),
                     )
                 }
                 WidgetPayload::MediaPlayer(m) => (
@@ -1211,6 +1261,7 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
                 WidgetPayload::AudioPlayer(a) => (
                     tstr,
@@ -1239,6 +1290,7 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
                 WidgetPayload::VideoPlayer(v) => (
                     tstr,
@@ -1267,6 +1319,7 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
                 WidgetPayload::PasswordManager(p) => {
                     let toast = self.password_toasts.read().get(&pl.instance_id).cloned();
@@ -1323,6 +1376,7 @@ impl MainWindowController {
                         empty_viewer_model(&self.locale),
                         empty_recent_files_model(&self.locale),
                         empty_file_manager_model(&self.locale),
+                        empty_browser_model(&self.locale),
                     )
                 }
                 WidgetPayload::Viewer(v) => (
@@ -1352,6 +1406,7 @@ impl MainWindowController {
                     build_viewer_model(v, &self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
                 WidgetPayload::RecentFiles(r) => (
                     tstr,
@@ -1380,6 +1435,7 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     build_recent_files_model(r, &self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
                 WidgetPayload::FileManager(fm) => {
                     let overlays = self
@@ -1422,6 +1478,7 @@ impl MainWindowController {
                             false,
                             &self.fm_viewport.lock(),
                         ),
+                        empty_browser_model(&self.locale),
                     )
                 }
                 _ => (
@@ -1451,6 +1508,7 @@ impl MainWindowController {
                     empty_viewer_model(&self.locale),
                     empty_recent_files_model(&self.locale),
                     empty_file_manager_model(&self.locale),
+                    empty_browser_model(&self.locale),
                 ),
             }
         } else {
@@ -1564,6 +1622,7 @@ impl MainWindowController {
             viewer: viewer_model,
             recent_files: recent_files_model,
             file_manager: file_manager_model,
+            browser: browser_model,
             close_confirm,
             settings_dialog,
         }
@@ -1820,6 +1879,7 @@ pub(crate) fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> Sh
         "media-viewer" => locale.tr("dock-widget-media-viewer").into(),
         "password-manager" | "password" => locale.tr("dock-widget-password").into(),
         "viewer" => locale.tr("dock-widget-viewer").into(),
+        "browser" => locale.tr("dock-widget-browser").into(),
         "document-editor" => locale.tr("dock-widget-document-editor").into(),
         "file-manager" => locale.tr("dock-widget-fm").into(),
         _ => locale.tr("widget-title-terminal").into(),
@@ -1877,6 +1937,7 @@ fn default_frame_data_extended(
     ViewerModel,
     RecentFilesModel,
     FileManagerModel,
+    BrowserModel,
 ) {
     (
         fallback_widget_title(locale, type_id),
@@ -1905,5 +1966,6 @@ fn default_frame_data_extended(
         empty_viewer_model(locale),
         empty_recent_files_model(locale),
         empty_file_manager_model(locale),
+        empty_browser_model(locale),
     )
 }

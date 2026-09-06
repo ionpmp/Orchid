@@ -225,6 +225,7 @@ pub(super) fn is_known_widget_type(type_id: &str) -> bool {
             | "video-player"
             | "password-manager"
             | "viewer"
+            | "browser"
             | "document-editor"
             | "file-manager"
     )
@@ -250,6 +251,7 @@ fn apply_catalog_row_visibility(g: &WidgetCatalog, visible_ids: &std::collection
     g.set_show_video_player(visible_ids.contains("video-player"));
     g.set_show_password(visible_ids.contains("password"));
     g.set_show_viewer(visible_ids.contains("viewer"));
+    g.set_show_browser(visible_ids.contains("browser"));
     g.set_show_document_editor(visible_ids.contains("document-editor"));
     g.set_show_file_manager(visible_ids.contains("file-manager"));
 }
@@ -289,6 +291,7 @@ pub(super) fn dock_widget_description(locale: &LocaleManager, type_id: &str) -> 
         "video-player" => "widget-video-player-desc",
         "password" => "widget-password-desc",
         "viewer" => "widget-viewer-desc",
+        "browser" => "widget-browser-desc",
         "document-editor" => "widget-document-editor-desc",
         "file-manager" => "widget-fm-desc",
         _ => return SharedString::new(),
@@ -411,6 +414,12 @@ pub(super) fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             label: locale.tr("dock-widget-viewer").into(),
             description: dock_widget_description(locale, "viewer"),
             icon: "viewer".into(),
+        },
+        DockWidgetType {
+            type_id: "browser".into(),
+            label: locale.tr("dock-widget-browser").into(),
+            description: dock_widget_description(locale, "browser"),
+            icon: "browser".into(),
         },
         DockWidgetType {
             type_id: "document-editor".into(),
