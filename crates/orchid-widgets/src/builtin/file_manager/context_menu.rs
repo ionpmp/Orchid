@@ -526,6 +526,12 @@ pub fn build_for_selection(
             has_selection,
         ));
     }
+    items.push(item(
+        "fs.wrap-orchid",
+        "fm-action-wrap-orchid",
+        "action-new-file",
+        has_selection && inputs.can_create && !inputs.in_archive,
+    ));
     items.last_mut().unwrap().separator_after = true;
 
     if inputs.all_managed {
@@ -1821,6 +1827,32 @@ mod tests {
         let redo = menu.iter().find(|i| i.id == "fs.redo").unwrap();
         assert!(undo.enabled);
         assert!(redo.enabled);
+    }
+
+    #[test]
+    fn wrap_orchid_enabled_when_can_create() {
+        let sel = vec![entry("a.txt", FsEntryKind::File, false)];
+        let menu = build_for_selection(
+            &sel,
+            ContextMenuInputs {
+                can_create: true,
+                selection_count: 1,
+                ..Default::default()
+            },
+        );
+        let wrap = menu.iter().find(|i| i.id == "fs.wrap-orchid").unwrap();
+        assert!(wrap.enabled);
+        let menu_arc = build_for_selection(
+            &sel,
+            ContextMenuInputs {
+                can_create: true,
+                in_archive: true,
+                selection_count: 1,
+                ..Default::default()
+            },
+        );
+        let wrap_arc = menu_arc.iter().find(|i| i.id == "fs.wrap-orchid").unwrap();
+        assert!(!wrap_arc.enabled);
     }
 
     #[test]

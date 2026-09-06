@@ -10,6 +10,7 @@ mod image_batch;
 mod image_edit;
 mod image_print;
 mod image_share;
+mod wrap_orchid;
 pub(crate) use image_share::{copy_loaded, paste_loaded};
 mod meta_edit;
 pub mod navigation;
@@ -4825,6 +4826,9 @@ pub async fn run_action_with_opts(
                 paths: target_paths,
                 purpose: PassphrasePurpose::Encrypt,
             });
+        }
+        "fs.wrap-orchid" => {
+            return wrap_orchid::run(&inner, &target_paths).await;
         }
         "fs.add-to-managed" => {
             inner.add_selection_to_managed(&target_paths).await?;

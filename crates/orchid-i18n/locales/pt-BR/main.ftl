@@ -1,4 +1,4 @@
-﻿# Orchid Brazilian Portuguese (pt-BR) message catalog.
+# Orchid Brazilian Portuguese (pt-BR) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -64,6 +64,20 @@ widget-password-desc = Acessar seu banco de dados de senhas
 
 widget-viewer-name = Visualizador
 widget-viewer-desc = Ver imagens, documentos, arquivos de cÃ³digo e compactados
+
+widget-browser-name = Navegador
+widget-browser-desc = Abas, barra de endereço e visualização web embutida
+
+browser-untitled = Nova aba
+browser-back = Voltar
+browser-forward = Avançar
+browser-reload = Recarregar
+browser-go = Ir
+browser-new-tab = Nova aba
+browser-address-placeholder = Pesquisar ou inserir endereço
+browser-unavailable = O runtime do Microsoft Edge WebView2 não está instalado.
+browser-open-external = Abrir no navegador
+
 
 widget-document-editor-name = Document Editor
 widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
@@ -1409,6 +1423,12 @@ fm-action-select-readonly = Selecionar somente leitura
 fm-action-star = Favoritar
 fm-action-unstar = Remover favorito
 fm-action-encrypt = Criptografar
+fm-action-wrap-orchid = Wrap as .orchid
+fm-wrap-orchid-title = Wrap as .orchid
+fm-wrap-orchid-done = Created { $name }
+fm-wrap-orchid-done-many = Created { $count } .orchid files
+fm-wrap-orchid-too-large = File is too large to wrap (limit 256 MiB)
+fm-wrap-orchid-exists = A .orchid file already exists for this name
 fm-action-reveal = Revelar temporariamente
 fm-action-decrypt = Descriptografar
 fm-action-add-tag = Adicionar tagâ€¦
@@ -1771,6 +1791,7 @@ dock-widget-media-viewer = Media Player
 dock-widget-video-player = Video Player
 dock-widget-password = Senhas
 dock-widget-viewer = Visualizador
+dock-widget-browser = Navegador
 dock-widget-document-editor = Document
 dock-widget-fm = Arquivos
 

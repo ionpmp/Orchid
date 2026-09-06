@@ -42,6 +42,7 @@ orchid-i18n.workspace = true
 orchid-storage.workspace = true
 orchid-crypto.workspace = true
 orchid-search.workspace = true
+orchid-format.workspace = true
 orchid-fs.workspace = true
 orchid-viewers.workspace = true
 image.workspace = true

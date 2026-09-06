@@ -1,4 +1,4 @@
-﻿# Orchid Japanese (ja-JP) message catalog.
+# Orchid Japanese (ja-JP) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -64,6 +64,20 @@ widget-password-desc = パスワードデータベースにアクセス
 
 widget-viewer-name = ビューア
 widget-viewer-desc = 画像、ドキュメント、ソースファイル、アーカイブを表示
+
+widget-browser-name = ブラウザ
+widget-browser-desc = タブ、アドレスバー、埋め込みウェブビュー
+
+browser-untitled = 新しいタブ
+browser-back = 戻る
+browser-forward = 進む
+browser-reload = 再読み込み
+browser-go = 移動
+browser-new-tab = 新しいタブ
+browser-address-placeholder = 検索またはアドレスを入力
+browser-unavailable = Microsoft Edge WebView2 ランタイムがインストールされていません。
+browser-open-external = ブラウザで開く
+
 
 widget-document-editor-name = Document Editor
 widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
@@ -1408,6 +1422,12 @@ fm-action-select-readonly = 読み取り専用を選択
 fm-action-star = スター
 fm-action-unstar = スターを解除
 fm-action-encrypt = 暗号化
+fm-action-wrap-orchid = Wrap as .orchid
+fm-wrap-orchid-title = Wrap as .orchid
+fm-wrap-orchid-done = Created { $name }
+fm-wrap-orchid-done-many = Created { $count } .orchid files
+fm-wrap-orchid-too-large = File is too large to wrap (limit 256 MiB)
+fm-wrap-orchid-exists = A .orchid file already exists for this name
 fm-action-reveal = 一時的に表示
 fm-action-decrypt = 復号
 fm-action-add-tag = タグを追加…
@@ -1770,6 +1790,7 @@ dock-widget-media-viewer = メディアプレーヤー
 dock-widget-video-player = Video Player
 dock-widget-password = パスワード
 dock-widget-viewer = ビューア
+dock-widget-browser = ブラウザ
 dock-widget-document-editor = Document
 dock-widget-fm = ファイル
 

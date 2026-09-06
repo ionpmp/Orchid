@@ -1,4 +1,4 @@
-﻿# Orchid Arabic (ar-SA) message catalog.
+# Orchid Arabic (ar-SA) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -64,6 +64,20 @@ widget-password-desc = الوصول إلى قاعدة بيانات كلمات ا
 
 widget-viewer-name = العارض
 widget-viewer-desc = عرض الصور والمستندات وملفات المصدر والأرشيفات
+
+widget-browser-name = المتصفح
+widget-browser-desc = علامات تبويب وشريط عنوان وعرض ويب مضمّن
+
+browser-untitled = تبويب جديد
+browser-back = رجوع
+browser-forward = أمام
+browser-reload = إعادة تحميل
+browser-go = انتقال
+browser-new-tab = تبويب جديد
+browser-address-placeholder = ابحث أو أدخل عنوانًا
+browser-unavailable = لم يتم تثبيت وقت تشغيل Microsoft Edge WebView2.
+browser-open-external = فتح في المتصفح
+
 
 widget-document-editor-name = Document Editor
 widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
@@ -1410,6 +1424,12 @@ fm-action-select-readonly = تحديد للقراءة فقط
 fm-action-star = تمييز بنجمة
 fm-action-unstar = إزالة النجمة
 fm-action-encrypt = تشفير
+fm-action-wrap-orchid = Wrap as .orchid
+fm-wrap-orchid-title = Wrap as .orchid
+fm-wrap-orchid-done = Created { $name }
+fm-wrap-orchid-done-many = Created { $count } .orchid files
+fm-wrap-orchid-too-large = File is too large to wrap (limit 256 MiB)
+fm-wrap-orchid-exists = A .orchid file already exists for this name
 fm-action-reveal = إظهار مؤقتًا
 fm-action-decrypt = فك التشفير
 fm-action-add-tag = إضافة وسم…
@@ -1772,6 +1792,7 @@ dock-widget-media-viewer = مشغل الوسائط
 dock-widget-video-player = Video Player
 dock-widget-password = كلمات المرور
 dock-widget-viewer = العارض
+dock-widget-browser = المتصفح
 dock-widget-document-editor = Document
 dock-widget-fm = الملفات
 

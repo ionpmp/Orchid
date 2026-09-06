@@ -1,4 +1,4 @@
-﻿# Orchid Russian (ru-RU) message catalog.
+# Orchid Russian (ru-RU) message catalog.
 
 # ---- Widget registry metadata ----
 widget-terminal-name = Терминал
@@ -59,6 +59,20 @@ widget-password-desc = Доступ к базе паролей
 
 widget-viewer-name = Просмотрщик
 widget-viewer-desc = Просмотр изображений, документов, кода и архивов
+
+widget-browser-name = Браузер
+widget-browser-desc = Вкладки, адресная строка и встроенный веб-просмотр
+
+browser-untitled = Новая вкладка
+browser-back = Назад
+browser-forward = Вперёд
+browser-reload = Обновить
+browser-go = Перейти
+browser-new-tab = Новая вкладка
+browser-address-placeholder = Поиск или адрес
+browser-unavailable = Среда выполнения Microsoft Edge WebView2 не установлена.
+browser-open-external = Открыть в браузере
+
 
 widget-document-editor-name = Document Editor
 widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
@@ -1397,6 +1411,12 @@ fm-action-select-readonly = Выделить только для чтения
 fm-action-star = В избранное
 fm-action-unstar = Убрать из избранного
 fm-action-encrypt = Зашифровать
+fm-action-wrap-orchid = Упаковать в .orchid
+fm-wrap-orchid-title = Упаковать в .orchid
+fm-wrap-orchid-done = Создан { $name }
+fm-wrap-orchid-done-many = Создано файлов .orchid: { $count }
+fm-wrap-orchid-too-large = Файл слишком большой для упаковки (лимит 256 МиБ)
+fm-wrap-orchid-exists = Файл .orchid с таким именем уже существует
 fm-action-reveal = Временно открыть
 fm-action-decrypt = Расшифровать
 fm-action-add-tag = Добавить тег…
@@ -1774,6 +1794,7 @@ dock-widget-media-viewer = Медиаплеер
 dock-widget-video-player = Видеоплеер
 dock-widget-password = Пароли
 dock-widget-viewer = Просмотрщик
+dock-widget-browser = Браузер
 dock-widget-document-editor = Document
 dock-widget-fm = Файлы
 

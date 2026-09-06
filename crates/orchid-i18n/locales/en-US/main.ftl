@@ -192,6 +192,20 @@ widget-password-desc = Access your password database
 widget-viewer-name = Viewer
 widget-viewer-desc = View images, documents, source files, and archives
 
+widget-browser-name = Browser
+widget-browser-desc = Tabs, address bar, and an embedded web view
+
+# ---- Browser ----
+browser-untitled = New tab
+browser-back = Back
+browser-forward = Forward
+browser-reload = Reload
+browser-go = Go
+browser-new-tab = New tab
+browser-address-placeholder = Search or enter address
+browser-unavailable = Microsoft Edge WebView2 Runtime is not installed.
+browser-open-external = Open in browser
+
 widget-document-editor-name = Document Editor
 widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
 
@@ -1712,6 +1726,12 @@ fm-action-select-readonly = Select read-only
 fm-action-star = Star
 fm-action-unstar = Unstar
 fm-action-encrypt = Encrypt
+fm-action-wrap-orchid = Wrap as .orchid
+fm-wrap-orchid-title = Wrap as .orchid
+fm-wrap-orchid-done = Created { $name }
+fm-wrap-orchid-done-many = Created { $count } .orchid files
+fm-wrap-orchid-too-large = File is too large to wrap (limit 256 MiB)
+fm-wrap-orchid-exists = A .orchid file already exists for this name
 fm-action-reveal = Reveal temporarily
 fm-action-decrypt = Decrypt
 fm-action-add-tag = Add tag…
@@ -2096,6 +2116,7 @@ dock-widget-media-viewer = Media Player
 dock-widget-video-player = Video Player
 dock-widget-password = Passwords
 dock-widget-viewer = Viewer
+dock-widget-browser = Browser
 dock-widget-document-editor = Document
 dock-widget-fm = Files
 

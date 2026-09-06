@@ -1,4 +1,4 @@
-﻿# Orchid Korean (ko-KR) message catalog.
+# Orchid Korean (ko-KR) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -64,6 +64,20 @@ widget-password-desc = 비밀번호 데이터베이스에 액세스
 
 widget-viewer-name = 뷰어
 widget-viewer-desc = 이미지, 문서, 소스 파일 및 아카이브 보기
+
+widget-browser-name = 브라우저
+widget-browser-desc = 탭, 주소 표시줄, 내장 웹 보기
+
+browser-untitled = 새 탭
+browser-back = 뒤로
+browser-forward = 앞으로
+browser-reload = 새로 고침
+browser-go = 이동
+browser-new-tab = 새 탭
+browser-address-placeholder = 검색 또는 주소 입력
+browser-unavailable = Microsoft Edge WebView2 런타임이 설치되어 있지 않습니다.
+browser-open-external = 브라우저에서 열기
+
 
 widget-document-editor-name = Document Editor
 widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
@@ -1409,6 +1423,12 @@ fm-action-select-readonly = 읽기 전용 선택
 fm-action-star = 즐겨찾기
 fm-action-unstar = 즐겨찾기 해제
 fm-action-encrypt = 암호화
+fm-action-wrap-orchid = Wrap as .orchid
+fm-wrap-orchid-title = Wrap as .orchid
+fm-wrap-orchid-done = Created { $name }
+fm-wrap-orchid-done-many = Created { $count } .orchid files
+fm-wrap-orchid-too-large = File is too large to wrap (limit 256 MiB)
+fm-wrap-orchid-exists = A .orchid file already exists for this name
 fm-action-reveal = 임시로 표시
 fm-action-decrypt = 복호화
 fm-action-add-tag = 태그 추가…
@@ -1771,6 +1791,7 @@ dock-widget-media-viewer = 미디어 플레이어
 dock-widget-video-player = Video Player
 dock-widget-password = 비밀번호
 dock-widget-viewer = 뷰어
+dock-widget-browser = 브라우저
 dock-widget-document-editor = Document
 dock-widget-fm = 파일
 

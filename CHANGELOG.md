@@ -85,6 +85,10 @@ release yet.
   universal search (files + commands + settings).
 
 #### Viewers
+- **Browser widget:** catalog **Browser** with an address bar, tabs, Back /
+  Forward / Reload, and an embedded WebView2 overlay. Empty input opens a blank
+  page; a host name navigates with HTTPS; anything else searches DuckDuckGo.
+  Missing WebView2 Runtime shows a hint plus Open in the system browser.
 - **HTML viewer:** embedded WebView2 preview (back / forward / reload,
   source toggle) for local `html`/`htm`/`xhtml` files; falls back to the
   source pane plus Open in the system browser when the WebView2 Runtime
@@ -252,7 +256,9 @@ release yet.
   `--sign-c2pa` / `--verify-c2pa`) — see [`docs/ORCHID_FORMAT.md`](docs/ORCHID_FORMAT.md).
 - Phase 5 hybrid search: `crates/orchid-embed` (`StubEmbedder` for CI; ORT
   feature reserved), `orchid-search` ANN + RRF fusion with Tantivy BM25 and
-  `.orchid` Clean-Text extractor (semantic hit when BM25 misses).
+  `.orchid` Clean-Text extractor (semantic hit when BM25 misses). Live indexer
+  enables `with_orchid()`; FM **Wrap as .orchid** packs selection into sealed
+  containers (`wrap_as_sealed`).
 
 #### Built-in widgets
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),

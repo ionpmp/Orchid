@@ -1,4 +1,4 @@
-﻿# Orchid Simplified Chinese (zh-CN) message catalog.
+# Orchid Simplified Chinese (zh-CN) message catalog.
 #
 # Consumed by the upcoming `orchid-i18n::LocaleManager`. Until that lands,
 # the built-in widgets fall back to the English strings baked into their
@@ -64,6 +64,20 @@ widget-password-desc = 访问您的密码数据库
 
 widget-viewer-name = 查看器
 widget-viewer-desc = 查看图片、文档、源文件和压缩包
+
+widget-browser-name = 浏览器
+widget-browser-desc = 标签页、地址栏和内嵌网页视图
+
+browser-untitled = 新标签页
+browser-back = 后退
+browser-forward = 前进
+browser-reload = 刷新
+browser-go = 转到
+browser-new-tab = 新标签页
+browser-address-placeholder = 搜索或输入地址
+browser-unavailable = 未安装 Microsoft Edge WebView2 运行时。
+browser-open-external = 在浏览器中打开
+
 
 widget-document-editor-name = Document Editor
 widget-document-editor-desc = Create and edit a DOCX document with rich text and tables
@@ -1409,6 +1423,12 @@ fm-action-select-readonly = 选择只读项
 fm-action-star = 加星标
 fm-action-unstar = 取消星标
 fm-action-encrypt = 加密
+fm-action-wrap-orchid = Wrap as .orchid
+fm-wrap-orchid-title = Wrap as .orchid
+fm-wrap-orchid-done = Created { $name }
+fm-wrap-orchid-done-many = Created { $count } .orchid files
+fm-wrap-orchid-too-large = File is too large to wrap (limit 256 MiB)
+fm-wrap-orchid-exists = A .orchid file already exists for this name
 fm-action-reveal = 临时显示
 fm-action-decrypt = 解密
 fm-action-add-tag = 添加标签…
@@ -1771,6 +1791,7 @@ dock-widget-media-viewer = 媒体播放器
 dock-widget-video-player = Video Player
 dock-widget-password = 密码
 dock-widget-viewer = 查看器
+dock-widget-browser = 浏览器
 dock-widget-document-editor = Document
 dock-widget-fm = 文件
 
