@@ -720,10 +720,17 @@ fn browser_payload_eq(a: &BrowserPayload, b: &BrowserPayload) -> bool {
     a.active_index == b.active_index
         && a.url == b.url
         && a.title == b.title
+        && a.homepage == b.homepage
+        && a.is_bookmarked == b.is_bookmarked
         && a.tabs.len() == b.tabs.len()
         && a.tabs.iter().zip(b.tabs.iter()).all(|(x, y)| {
             x.id == y.id && x.title == y.title && x.url == y.url && x.is_active == y.is_active
         })
+        && a.bookmarks.len() == b.bookmarks.len()
+        && a.bookmarks
+            .iter()
+            .zip(b.bookmarks.iter())
+            .all(|(x, y)| x.title == y.title && x.url == y.url)
 }
 
 fn notes_payload_eq(a: &NotesPayload, b: &NotesPayload) -> bool {

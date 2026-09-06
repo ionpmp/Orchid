@@ -6,8 +6,13 @@ use bincode_reloaded::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::widget::config as state_codec;
+
 /// Maximum number of tabs kept in one browser instance.
 pub const MAX_TABS: usize = 16;
+
+/// Maximum number of bookmarks kept in one browser instance.
+pub const MAX_BOOKMARKS: usize = 50;
 
 /// One browser tab.
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
@@ -20,12 +25,36 @@ pub struct BrowserTab {
 impl BrowserTab {
     #[must_use]
     pub fn blank() -> Self {
+        Self::from_url("about:blank")
+    }
+
+    #[must_use]
+    pub fn from_url(url: &str) -> Self {
+        let url = url.trim();
         Self {
             id: Uuid::new_v4().to_string(),
-            url: "about:blank".to_string(),
+            url: if url.is_empty() {
+                "about:blank".to_string()
+            } else {
+                url.to_string()
+            },
             title: String::new(),
         }
     }
+}
+
+/// One saved bookmark.
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
+pub struct BrowserBookmark {
+    pub title: String,
+    pub url: String,
+}
+
+/// Tabs + index as persisted by the first Browser widget revision.
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+struct BrowserConfigV0 {
+    tabs: Vec<BrowserTab>,
+    active_index: u32,
 }
 
 /// Persisted browser widget state.
@@ -33,6 +62,10 @@ impl BrowserTab {
 pub struct BrowserConfig {
     pub tabs: Vec<BrowserTab>,
     pub active_index: u32,
+    #[serde(default)]
+    pub homepage: String,
+    #[serde(default)]
+    pub bookmarks: Vec<BrowserBookmark>,
 }
 
 impl Default for BrowserConfig {
@@ -40,25 +73,97 @@ impl Default for BrowserConfig {
         Self {
             tabs: vec![BrowserTab::blank()],
             active_index: 0,
+            homepage: String::new(),
+            bookmarks: Vec::new(),
         }
     }
 }
 
 impl BrowserConfig {
-    /// Ensure at least one tab, a valid active index, and a tab cap.
+    /// Decode widget state, accepting the original tabs-only layout.
+    #[must_use]
+    pub fn decode_state(bytes: &[u8]) -> Self {
+        if let Ok(cfg) = state_codec::restore_state::<Self>(bytes) {
+            return cfg;
+        }
+        if let Ok(v0) = state_codec::restore_state::<BrowserConfigV0>(bytes) {
+            return Self {
+                tabs: v0.tabs,
+                active_index: v0.active_index,
+                homepage: String::new(),
+                bookmarks: Vec::new(),
+            };
+        }
+        Self::default()
+    }
+
+    /// URL opened by New tab / last-tab reset / Home (empty homepage → blank).
+    #[must_use]
+    pub fn new_tab_url(&self) -> String {
+        let home = self.homepage.trim();
+        if home.is_empty() {
+            "about:blank".to_string()
+        } else {
+            home.to_string()
+        }
+    }
+
+    /// Whether the active tab's URL is in the bookmark list.
+    #[must_use]
+    pub fn active_is_bookmarked(&self) -> bool {
+        let url = self.active_tab().url.trim();
+        bookmarkable(url) && self.bookmarks.iter().any(|b| b.url == url)
+    }
+
+    /// Star / unstar the active tab. No-ops for blank pages.
+    pub fn toggle_active_bookmark(&mut self) {
+        let tab = self.active_tab().clone();
+        let url = tab.url.trim();
+        if !bookmarkable(url) {
+            return;
+        }
+        if let Some(i) = self.bookmarks.iter().position(|b| b.url == url) {
+            self.bookmarks.remove(i);
+            return;
+        }
+        if self.bookmarks.len() >= MAX_BOOKMARKS {
+            self.bookmarks.remove(0);
+        }
+        let title = if tab.title.trim().is_empty() {
+            url.to_string()
+        } else {
+            tab.title.clone()
+        };
+        self.bookmarks.push(BrowserBookmark {
+            title,
+            url: url.to_string(),
+        });
+    }
+
+    /// Ensure at least one tab, a valid active index, and caps.
     pub fn normalize(&mut self) {
         if self.tabs.is_empty() {
-            self.tabs.push(BrowserTab::blank());
+            self.tabs.push(BrowserTab::from_url(&self.new_tab_url()));
         }
         if self.tabs.len() > MAX_TABS {
             self.tabs.truncate(MAX_TABS);
         }
+        if self.bookmarks.len() > MAX_BOOKMARKS {
+            self.bookmarks.truncate(MAX_BOOKMARKS);
+        }
+        self.homepage = self.homepage.trim().to_string();
+        self.bookmarks.retain(|b| bookmarkable(b.url.trim()));
         for tab in &mut self.tabs {
             if tab.id.trim().is_empty() {
                 tab.id = Uuid::new_v4().to_string();
             }
             if tab.url.trim().is_empty() {
                 tab.url = "about:blank".to_string();
+            }
+        }
+        for bm in &mut self.bookmarks {
+            if bm.title.trim().is_empty() {
+                bm.title = bm.url.clone();
             }
         }
         let max = (self.tabs.len().saturating_sub(1)) as u32;
@@ -79,4 +184,8 @@ impl BrowserConfig {
         let idx = self.active_index as usize;
         &mut self.tabs[idx]
     }
+}
+
+fn bookmarkable(url: &str) -> bool {
+    !url.is_empty() && url != "about:blank"
 }

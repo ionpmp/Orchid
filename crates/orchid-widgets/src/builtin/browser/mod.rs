@@ -12,14 +12,14 @@ use uuid::Uuid;
 use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
-use crate::widget::payloads::{BrowserPayload, BrowserTabRow};
+use crate::widget::payloads::{BrowserBookmarkRow, BrowserPayload, BrowserTabRow};
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{
     Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
 };
 use orchid_storage::{LifecycleState, WidgetSize};
 
-pub use config::{BrowserConfig, BrowserTab, MAX_TABS};
+pub use config::{BrowserBookmark, BrowserConfig, BrowserTab, MAX_BOOKMARKS, MAX_TABS};
 
 /// Stable type id.
 pub const TYPE_ID: &str = "browser";
@@ -94,7 +94,29 @@ pub fn select_tab(instance_id: Uuid, index: i32) {
     h.publish();
 }
 
-/// Create a new blank tab and focus it.
+/// Apply a settings-dialog mutation to the live config.
+pub fn update_config(instance_id: Uuid, mutate: impl FnOnce(&mut BrowserConfig)) {
+    let Some(h) = BROWSER_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut cfg = h.config.write();
+        mutate(&mut cfg);
+        cfg.normalize();
+    }
+    h.publish();
+}
+
+/// Navigate the active tab to the configured homepage (or `about:blank`).
+pub fn go_home(instance_id: Uuid) {
+    let Some(h) = BROWSER_LIVE.get(&instance_id) else {
+        return;
+    };
+    let url = h.config.read().new_tab_url();
+    navigate(instance_id, &url);
+}
+
+/// Create a new tab (homepage, or blank) and focus it.
 pub fn new_tab(instance_id: Uuid) {
     let Some(h) = BROWSER_LIVE.get(&instance_id) else {
         return;
@@ -104,7 +126,8 @@ pub fn new_tab(instance_id: Uuid) {
         if cfg.tabs.len() >= MAX_TABS {
             return;
         }
-        cfg.tabs.push(BrowserTab::blank());
+        let url = cfg.new_tab_url();
+        cfg.tabs.push(BrowserTab::from_url(&url));
         cfg.active_index = (cfg.tabs.len() - 1) as u32;
     }
     h.publish();
@@ -123,7 +146,8 @@ pub fn close_tab(instance_id: Uuid, index: i32) {
         let idx = index as usize;
         if cfg.tabs.len() <= 1 || idx >= cfg.tabs.len() {
             if cfg.tabs.len() == 1 {
-                cfg.tabs[0] = BrowserTab::blank();
+                let url = cfg.new_tab_url();
+                cfg.tabs[0] = BrowserTab::from_url(&url);
                 cfg.active_index = 0;
             }
         } else {
@@ -168,6 +192,54 @@ pub fn tab_navigated(instance_id: Uuid, tab_id: &str, url: &str, title: &str) {
     if changed {
         h.publish();
     }
+}
+
+/// Star or unstar the active tab.
+pub fn toggle_bookmark(instance_id: Uuid) {
+    let Some(h) = BROWSER_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut cfg = h.config.write();
+        cfg.toggle_active_bookmark();
+    }
+    h.publish();
+}
+
+/// Open a bookmark in the active tab.
+pub fn open_bookmark(instance_id: Uuid, index: i32) {
+    if index < 0 {
+        return;
+    }
+    let Some(h) = BROWSER_LIVE.get(&instance_id) else {
+        return;
+    };
+    let url = {
+        let cfg = h.config.read();
+        cfg.bookmarks.get(index as usize).map(|b| b.url.clone())
+    };
+    let Some(url) = url else {
+        return;
+    };
+    navigate(instance_id, &url);
+}
+
+/// Remove a bookmark by index.
+pub fn remove_bookmark(instance_id: Uuid, index: i32) {
+    if index < 0 {
+        return;
+    }
+    let Some(h) = BROWSER_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut cfg = h.config.write();
+        let idx = index as usize;
+        if idx < cfg.bookmarks.len() {
+            cfg.bookmarks.remove(idx);
+        }
+    }
+    h.publish();
 }
 
 /// Turn an address-bar string into a URL WebView2 can navigate to.
@@ -313,6 +385,16 @@ impl BrowserWidget {
             active_index: cfg.active_index as i32,
             url: active.url.clone(),
             title: active.title.clone(),
+            homepage: cfg.homepage.clone(),
+            bookmarks: cfg
+                .bookmarks
+                .iter()
+                .map(|b| BrowserBookmarkRow {
+                    title: b.title.clone(),
+                    url: b.url.clone(),
+                })
+                .collect(),
+            is_bookmarked: cfg.active_is_bookmarked(),
         }
     }
 }
@@ -374,7 +456,7 @@ impl Widget for BrowserWidget {
     }
 
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
-        let mut cfg: BrowserConfig = state_codec::restore_state(bytes).unwrap_or_default();
+        let mut cfg = BrowserConfig::decode_state(bytes);
         cfg.normalize();
         *self.handle.config.write() = cfg;
         Ok(())
@@ -388,7 +470,7 @@ impl Widget for BrowserWidget {
             preferred_size: Some(WidgetSize::Large),
             allows_grouping: true,
             keeps_state_when_unloaded: true,
-            has_settings_panel: false,
+            has_settings_panel: true,
         }
     }
 }
@@ -398,7 +480,7 @@ impl Widget for BrowserWidget {
 pub fn descriptor() -> WidgetDescriptor {
     let factory: WidgetFactory = Arc::new(|ctx: WidgetContext, state_bytes| {
         let mut cfg = match state_bytes {
-            Some(bytes) => state_codec::restore_state::<BrowserConfig>(bytes).unwrap_or_default(),
+            Some(bytes) => BrowserConfig::decode_state(bytes),
             None => BrowserConfig::default(),
         };
         cfg.normalize();
@@ -482,9 +564,55 @@ mod tests {
         let mut cfg = BrowserConfig {
             tabs: (0..20).map(|_| BrowserTab::blank()).collect(),
             active_index: 99,
+            ..BrowserConfig::default()
         };
         cfg.normalize();
         assert_eq!(cfg.tabs.len(), MAX_TABS);
         assert_eq!(cfg.active_index, (MAX_TABS - 1) as u32);
+    }
+
+    #[test]
+    fn new_tab_url_uses_homepage() {
+        let mut cfg = BrowserConfig::default();
+        assert_eq!(cfg.new_tab_url(), "about:blank");
+        cfg.homepage = "https://example.com/".to_string();
+        assert_eq!(cfg.new_tab_url(), "https://example.com/");
+    }
+
+    #[test]
+    fn toggle_bookmark_skips_blank() {
+        let mut cfg = BrowserConfig::default();
+        cfg.toggle_active_bookmark();
+        assert!(cfg.bookmarks.is_empty());
+        cfg.tabs[0].url = "https://example.com/".to_string();
+        cfg.tabs[0].title = "Example".to_string();
+        cfg.toggle_active_bookmark();
+        assert_eq!(cfg.bookmarks.len(), 1);
+        assert!(cfg.active_is_bookmarked());
+        cfg.toggle_active_bookmark();
+        assert!(cfg.bookmarks.is_empty());
+    }
+
+    #[test]
+    fn decode_state_accepts_v0() {
+        #[derive(serde::Serialize)]
+        struct V0 {
+            tabs: Vec<BrowserTab>,
+            active_index: u32,
+        }
+        let v0 = V0 {
+            tabs: vec![BrowserTab {
+                id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa".to_string(),
+                url: "https://example.com/".to_string(),
+                title: "Example".to_string(),
+            }],
+            active_index: 0,
+        };
+        let bytes = state_codec::save_state(&v0).expect("encode v0");
+        let cfg = BrowserConfig::decode_state(&bytes);
+        assert_eq!(cfg.tabs.len(), 1);
+        assert_eq!(cfg.tabs[0].url, "https://example.com/");
+        assert!(cfg.homepage.is_empty());
+        assert!(cfg.bookmarks.is_empty());
     }
 }
