@@ -6,8 +6,8 @@ design source of truth for implementers. Phase 1 sealed framing ships in
 [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITY.md](SECURITY.md),
 [ROADMAP.md](ROADMAP.md).
 
-Status: **Phase 1–2 implemented** (sealed + linked + per-region age);
-Phases 3–5 remain draft. Version targets below refer to the *format*
+Status: **Phase 1–3 implemented** (sealed + linked + age + C2PA Provenance);
+Phases 4–5 remain draft. Version targets below refer to the *format*
 version carried in the file header, not the Orchid application release.
 
 ---

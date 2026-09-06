@@ -140,7 +140,7 @@ AI-native container (magic `ORCD`) for documents and media wrappers. Spec first;
 
 - [x] Phase 1 — Framing: self-describing regions + FlatBuffers TOC + Raw/Clean-Text/Structured (snapshot) + mmap + zstd; sealed mode only (`crates/orchid-format`, CLI `create`/`read`)
 - [x] Phase 2 — Per-region `age` encryption + linked mode (`ChunkStore`) + CAS generation history (`write_linked_file` / `sealed_to_linked` / `linked_to_sealed`; Version-history stub)
-- [ ] Phase 3 — C2PA provenance region (`c2pa` crate)
+- [x] Phase 3 — C2PA provenance region (`c2pa` crate; signed PNG carrier in Provenance; Reader validates extracted payload)
 - [ ] Phase 4 — CRDT structured region (multi-writer human + AI agent)
 - [ ] Phase 5 — Local embeddings (`ort`) + hierarchical vectors + ANN hybrid search with Tantivy
 
