@@ -10,6 +10,7 @@
 //! the per-widget descriptor builders directly.
 
 pub mod audio_player;
+pub mod browser;
 pub mod calculator;
 pub mod calendar;
 pub mod clock;
@@ -50,6 +51,7 @@ pub fn register_core(registry: &WidgetRegistry, http: reqwest::Client) -> Result
     registry.register(processes::descriptor())?;
     registry.register(calculator::descriptor())?;
     registry.register(notes::descriptor())?;
+    registry.register(browser::descriptor())?;
     registry.register(calendar::descriptor())?;
     registry.register(rss::descriptor(http))?;
     registry.register(search::descriptor_stub())?;
@@ -81,6 +83,7 @@ pub fn register_all(
     registry.register(processes::descriptor())?;
     registry.register(calculator::descriptor())?;
     registry.register(notes::descriptor())?;
+    registry.register(browser::descriptor())?;
     registry.register(calendar::descriptor())?;
     registry.register(rss::descriptor(http))?;
     registry.register(search::descriptor(search_aggregator))?;

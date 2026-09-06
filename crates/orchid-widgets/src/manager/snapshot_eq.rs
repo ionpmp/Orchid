@@ -1,10 +1,10 @@
 //! Render-equality helpers for [`super::snapshot_renders_unchanged`].
 
 use crate::widget::payloads::{
-    AudioPlayerPayload, CalculatorPayload, CalendarPayload, ClockPayload, EntryPayload,
-    FileManagerPayload, JyotishAntarRow, JyotishDayChip, JyotishFactorRow, JyotishMonthCell,
-    JyotishMonthSummary, JyotishPayload, JyotishYearSummary, MediaPlayerPayload, MoonPayload,
-    NotesPayload, PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload,
+    AudioPlayerPayload, BrowserPayload, CalculatorPayload, CalendarPayload, ClockPayload,
+    EntryPayload, FileManagerPayload, JyotishAntarRow, JyotishDayChip, JyotishFactorRow,
+    JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishYearSummary, MediaPlayerPayload,
+    MoonPayload, NotesPayload, PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload,
     ProcessRowView, ProcessesPayload, RecentFilesPayload, RssItemView, RssPayload,
     SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator, SystemPayload,
     UniversalSearchPayload, UserRowView, VideoPlayerPayload, ViewerPayload, WeatherForecastDay,
@@ -32,6 +32,7 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
         (WidgetPayload::Processes(a), WidgetPayload::Processes(b)) => processes_payload_eq(a, b),
         (WidgetPayload::Calculator(a), WidgetPayload::Calculator(b)) => calculator_payload_eq(a, b),
         (WidgetPayload::Notes(a), WidgetPayload::Notes(b)) => notes_payload_eq(a, b),
+        (WidgetPayload::Browser(a), WidgetPayload::Browser(b)) => browser_payload_eq(a, b),
         (WidgetPayload::Calendar(a), WidgetPayload::Calendar(b)) => calendar_payload_eq(a, b),
         (WidgetPayload::RssFeed(a), WidgetPayload::RssFeed(b)) => rss_payload_eq(a, b),
         (WidgetPayload::UniversalSearch(a), WidgetPayload::UniversalSearch(b)) => {
@@ -713,6 +714,16 @@ fn calculator_payload_eq(a: &CalculatorPayload, b: &CalculatorPayload) -> bool {
         && a.error_key == b.error_key
         && a.show_history == b.show_history
         && a.history == b.history
+}
+
+fn browser_payload_eq(a: &BrowserPayload, b: &BrowserPayload) -> bool {
+    a.active_index == b.active_index
+        && a.url == b.url
+        && a.title == b.title
+        && a.tabs.len() == b.tabs.len()
+        && a.tabs.iter().zip(b.tabs.iter()).all(|(x, y)| {
+            x.id == y.id && x.title == y.title && x.url == y.url && x.is_active == y.is_active
+        })
 }
 
 fn notes_payload_eq(a: &NotesPayload, b: &NotesPayload) -> bool {

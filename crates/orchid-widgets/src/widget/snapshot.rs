@@ -64,6 +64,8 @@ pub enum WidgetPayload {
     Calculator(crate::widget::payloads::CalculatorPayload),
     /// Tabbed notes / scratchpad.
     Notes(crate::widget::payloads::NotesPayload),
+    /// Built-in browser (address bar + tabs).
+    Browser(crate::widget::payloads::BrowserPayload),
     /// Local calendar / agenda.
     Calendar(crate::widget::payloads::CalendarPayload),
     /// RSS feed widget.

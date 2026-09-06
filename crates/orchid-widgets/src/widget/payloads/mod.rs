@@ -6,6 +6,7 @@
 //! the UI renderer.
 
 pub mod audio_player;
+pub mod browser;
 pub mod calculator;
 pub mod calendar;
 pub mod clock;
@@ -28,6 +29,7 @@ pub use audio_player::{
     AudioPlayerGroupRow, AudioPlayerLyricRow, AudioPlayerPayload, AudioPlayerPlaylistRow,
     AudioPlayerRootRow, AudioPlayerTrackRow,
 };
+pub use browser::{BrowserPayload, BrowserTabRow};
 pub use calculator::{CalcHistoryRow, CalculatorPayload};
 pub use calendar::{CalendarDayCell, CalendarEventRow, CalendarPayload, CalendarUpcomingRow};
 pub use clock::{ClockCityView, ClockPayload, ClockSearchHit};

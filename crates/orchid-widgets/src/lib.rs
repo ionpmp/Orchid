@@ -38,11 +38,11 @@ pub use widget::{PeriodicRefresh, Widget, WidgetCapabilities, WidgetContext};
 pub use builtin::{register_all, register_core};
 pub use widget::payloads::{
     AudioPlayerGroupRow, AudioPlayerPayload, AudioPlayerPlaylistRow, AudioPlayerRootRow,
-    AudioPlayerTrackRow, CalcHistoryRow, CalculatorPayload, CalendarDayCell, CalendarEventRow,
-    CalendarPayload, CalendarUpcomingRow, ClockCityView, ClockPayload, ClockSearchHit,
-    EntryPayload, FileManagerPayload, FmViewMode, IndicatorStatus, JyotishAntarRow,
-    JyotishCityEntry, JyotishDashaNow, JyotishDayChip, JyotishFactorRow, JyotishMonthCell,
-    JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishProfileCalCell,
+    AudioPlayerTrackRow, BrowserPayload, BrowserTabRow, CalcHistoryRow, CalculatorPayload,
+    CalendarDayCell, CalendarEventRow, CalendarPayload, CalendarUpcomingRow, ClockCityView,
+    ClockPayload, ClockSearchHit, EntryPayload, FileManagerPayload, FmViewMode, IndicatorStatus,
+    JyotishAntarRow, JyotishCityEntry, JyotishDashaNow, JyotishDayChip, JyotishFactorRow,
+    JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishProfileCalCell,
     JyotishProfileEntry, JyotishRectifyView, JyotishSearchHit, JyotishYearSummary,
     ManagedFolderSidebarPayload, MediaPlayerPayload, MoonPayload, NetworkMountPayload,
     NotesPayload, NotesTabRow, PanePayload, PasswordEntryDetailView, PasswordEntryView,
