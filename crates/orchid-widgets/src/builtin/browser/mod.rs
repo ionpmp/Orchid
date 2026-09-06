@@ -133,6 +133,19 @@ pub fn new_tab(instance_id: Uuid) {
     h.publish();
 }
 
+/// Open `url` in a new tab (target=_blank / window.open).
+pub fn new_tab_with_url(instance_id: Uuid, url: &str) {
+    let Some(h) = BROWSER_LIVE.get(&instance_id) else {
+        return;
+    };
+    let url = normalize_navigate_url(url);
+    {
+        let mut cfg = h.config.write();
+        cfg.open_in_new_tab(&url);
+    }
+    h.publish();
+}
+
 /// Close a tab by index. Keeps at least one tab.
 pub fn close_tab(instance_id: Uuid, index: i32) {
     if index < 0 {
@@ -614,5 +627,21 @@ mod tests {
         assert_eq!(cfg.tabs[0].url, "https://example.com/");
         assert!(cfg.homepage.is_empty());
         assert!(cfg.bookmarks.is_empty());
+    }
+
+    #[test]
+    fn open_in_new_tab_appends_until_cap() {
+        let mut cfg = BrowserConfig::default();
+        cfg.open_in_new_tab("https://example.com/a");
+        assert_eq!(cfg.tabs.len(), 2);
+        assert_eq!(cfg.tabs[1].url, "https://example.com/a");
+        assert_eq!(cfg.active_index, 1);
+        cfg.tabs = (0..MAX_TABS)
+            .map(|_| BrowserTab::from_url("https://kept.example/"))
+            .collect();
+        cfg.active_index = 0;
+        cfg.open_in_new_tab("https://overflow.example/");
+        assert_eq!(cfg.tabs.len(), MAX_TABS);
+        assert_eq!(cfg.tabs[0].url, "https://overflow.example/");
     }
 }

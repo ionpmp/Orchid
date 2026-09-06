@@ -108,6 +108,24 @@ impl BrowserConfig {
         }
     }
 
+    /// Open `url` in a new tab (or the active tab if the cap is reached).
+    pub fn open_in_new_tab(&mut self, url: &str) {
+        let url = url.trim();
+        let url = if url.is_empty() {
+            "about:blank".to_string()
+        } else {
+            url.to_string()
+        };
+        if self.tabs.len() >= MAX_TABS {
+            let tab = self.active_tab_mut();
+            tab.url = url;
+            tab.title.clear();
+            return;
+        }
+        self.tabs.push(BrowserTab::from_url(&url));
+        self.active_index = (self.tabs.len() - 1) as u32;
+    }
+
     /// Whether the active tab's URL is in the bookmark list.
     #[must_use]
     pub fn active_is_bookmarked(&self) -> bool {
