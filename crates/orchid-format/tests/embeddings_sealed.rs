@@ -1,7 +1,7 @@
 //! Embedding region round-trip + CAP_EMBEDDINGS.
 
 use orchid_format::{
-    document_embedding, write_sealed_file, SealedCreateRequest, SealedFile, capability,
+    capability, document_embedding, write_sealed_file, SealedCreateRequest, SealedFile,
 };
 
 #[test]

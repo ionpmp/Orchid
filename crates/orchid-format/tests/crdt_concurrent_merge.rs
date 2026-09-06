@@ -1,7 +1,7 @@
 //! Phase 4 DONE: concurrent two-client CRDT merge is deterministic.
 
 use orchid_format::{
-    write_sealed_file, ActorId, CrdtDocument, SealedCreateRequest, SealedFile, capability,
+    capability, write_sealed_file, ActorId, CrdtDocument, SealedCreateRequest, SealedFile,
 };
 
 const HUMAN: ActorId = 1;

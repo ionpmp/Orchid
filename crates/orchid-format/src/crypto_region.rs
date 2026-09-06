@@ -85,9 +85,7 @@ pub fn decode_region_body(
         } else {
             let identity = identity.ok_or(FormatError::IdentityRequired)?;
             let decryptor = Decryptor::new(identity.clone());
-            let plain_compressed = decryptor
-                .decrypt_bytes(stored)
-                .map_err(FormatError::from)?;
+            let plain_compressed = decryptor.decrypt_bytes(stored).map_err(FormatError::from)?;
             plain_compressed.as_slice().to_vec()
         }
     } else {
@@ -141,14 +139,8 @@ mod tests {
         assert_eq!(codec, CompressionCodec::Zstd);
         assert!(enc.is_some());
         assert_ne!(stored, plain);
-        let back = decode_region_body(
-            &stored,
-            codec,
-            Some(payload_hash),
-            enc.as_ref(),
-            Some(&id),
-        )
-        .unwrap();
+        let back = decode_region_body(&stored, codec, Some(payload_hash), enc.as_ref(), Some(&id))
+            .unwrap();
         assert_eq!(back, plain);
     }
 

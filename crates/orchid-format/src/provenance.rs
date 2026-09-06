@@ -45,8 +45,8 @@ pub fn sign_clean_text_provenance(clean_text: &[u8], title: &str) -> Result<Sign
     let clean_text_blake3 = hash_bytes(clean_text);
     let blake3_hex = orchid_crypto::content::hex(&clean_text_blake3);
 
-    let signer = EphemeralSigner::new("orchid.format")
-        .map_err(|e| FormatError::C2pa(e.to_string()))?;
+    let signer =
+        EphemeralSigner::new("orchid.format").map_err(|e| FormatError::C2pa(e.to_string()))?;
     let context = Context::new().with_signer(signer);
     let mut builder = Builder::from_context(context)
         .with_definition(json!({ "title": title }))

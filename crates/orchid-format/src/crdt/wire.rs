@@ -78,7 +78,11 @@ fn encode_op(buf: &mut Vec<u8>, op: &Op) {
             buf.extend_from_slice(&(raw.len() as u32).to_le_bytes());
             buf.extend_from_slice(raw);
         }
-        Op::Delete { id, lamport, target } => {
+        Op::Delete {
+            id,
+            lamport,
+            target,
+        } => {
             buf.push(2);
             encode_opid(buf, *id);
             buf.extend_from_slice(&lamport.to_le_bytes());
@@ -103,7 +107,9 @@ fn decode_op(bytes: &[u8], mut off: usize) -> Result<(Op, usize)> {
     match tag {
         1 => {
             if off >= bytes.len() {
-                return Err(FormatError::RegionDecode("CRDT after flag truncated".into()));
+                return Err(FormatError::RegionDecode(
+                    "CRDT after flag truncated".into(),
+                ));
             }
             let flag = bytes[off];
             off += 1;
@@ -139,7 +145,14 @@ fn decode_op(bytes: &[u8], mut off: usize) -> Result<(Op, usize)> {
         2 => {
             let target;
             (target, off) = decode_opid(bytes, off)?;
-            Ok((Op::Delete { id, lamport, target }, off))
+            Ok((
+                Op::Delete {
+                    id,
+                    lamport,
+                    target,
+                },
+                off,
+            ))
         }
         other => Err(FormatError::RegionDecode(format!(
             "unknown CRDT op tag {other}"

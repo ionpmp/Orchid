@@ -132,10 +132,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let toc = file.toc()?;
             println!("path: {}", path.display());
             println!("mime: {MIME_TYPE}");
-            println!(
-                "version: {}.{}",
-                header.version_major, header.version_minor
-            );
+            println!("version: {}.{}", header.version_major, header.version_minor);
             println!("file_uuid: {}", hex_uuid(&header.file_uuid));
             println!("created_unix_ms: {}", header.created_unix_ms);
             println!("capability_flags: {:#x}", header.capability_flags);

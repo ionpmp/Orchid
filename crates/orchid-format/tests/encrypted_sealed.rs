@@ -1,9 +1,7 @@
 //! Phase 2: sealed encrypted regions round-trip with age Identity.
 
-use orchid_format::{
-    write_sealed_file, FormatError, SealedCreateRequest, SealedFile, capability,
-};
 use orchid_crypto::Identity;
+use orchid_format::{capability, write_sealed_file, FormatError, SealedCreateRequest, SealedFile};
 
 #[test]
 fn encrypted_clean_text_roundtrips_with_correct_identity() {

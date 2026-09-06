@@ -128,9 +128,7 @@ impl SealedFile {
                 let mut hash = [0u8; 32];
                 hash.copy_from_slice(expected.bytes());
                 if hash_bytes(payload) != hash {
-                    return Err(FormatError::RegionDecode(
-                        "payload BLAKE3 mismatch".into(),
-                    ));
+                    return Err(FormatError::RegionDecode("payload BLAKE3 mismatch".into()));
                 }
             }
         }
@@ -206,10 +204,7 @@ impl SealedFile {
     }
 
     /// Decode the Embedding region when present.
-    pub fn embeddings(
-        &self,
-        identity: Option<&Identity>,
-    ) -> Result<crate::EmbeddingPayload> {
+    pub fn embeddings(&self, identity: Option<&Identity>) -> Result<crate::EmbeddingPayload> {
         let entry = self.find_region(RegionType::Embedding)?;
         let bytes = self.region_plaintext(&entry, identity)?;
         crate::EmbeddingPayload::decode(&bytes)

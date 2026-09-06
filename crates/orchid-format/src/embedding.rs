@@ -90,14 +90,21 @@ impl EmbeddingPayload {
     /// Encode to region plaintext bytes.
     pub fn encode(&self) -> Result<Vec<u8>> {
         if self.dims == 0 {
-            return Err(FormatError::RegionDecode("embedding dims must be > 0".into()));
+            return Err(FormatError::RegionDecode(
+                "embedding dims must be > 0".into(),
+            ));
         }
         let model_bytes = self.model_id.as_bytes();
         if model_bytes.len() > u16::MAX as usize {
             return Err(FormatError::RegionDecode("model_id too long".into()));
         }
         let mut out = Vec::with_capacity(
-            4 + 2 + 2 + model_bytes.len() + 2 + 4 + self.records.len() * (1 + 8 + 8 + 4 + 4 * self.dims as usize),
+            4 + 2
+                + 2
+                + model_bytes.len()
+                + 2
+                + 4
+                + self.records.len() * (1 + 8 + 8 + 4 + 4 * self.dims as usize),
         );
         out.extend_from_slice(EMBEDDING_MAGIC);
         out.extend_from_slice(&EMBEDDING_WIRE_VERSION.to_le_bytes());
@@ -159,7 +166,9 @@ impl EmbeddingPayload {
             .map_err(|e| FormatError::RegionDecode(format!("model_id utf8: {e}")))?;
         let dims = u16::from_le_bytes(take(&mut cur, 2)?.try_into().unwrap());
         if dims == 0 {
-            return Err(FormatError::RegionDecode("embedding dims must be > 0".into()));
+            return Err(FormatError::RegionDecode(
+                "embedding dims must be > 0".into(),
+            ));
         }
         let nrec = u32::from_le_bytes(take(&mut cur, 4)?.try_into().unwrap()) as usize;
         let mut records = Vec::with_capacity(nrec);

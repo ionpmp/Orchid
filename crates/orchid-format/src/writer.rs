@@ -96,8 +96,7 @@ pub fn build_sealed_bytes(req: &SealedCreateRequest) -> Result<Vec<u8>> {
 
     let raw_body = prepare_region_body(&req.raw, CompressionCodec::None, identity)?;
     let clean_body = prepare_region_body(&req.clean_text, CompressionCodec::Zstd, identity)?;
-    let structured_body =
-        prepare_region_body(&structured_plain, CompressionCodec::Zstd, identity)?;
+    let structured_body = prepare_region_body(&structured_plain, CompressionCodec::Zstd, identity)?;
 
     let mut buf = Vec::new();
     let header = Header::new(file_uuid, created_unix_ms, caps);

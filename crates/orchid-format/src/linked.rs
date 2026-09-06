@@ -9,9 +9,7 @@ use orchid_crypto::{ChunkStore, Chunker, ChunkerConfig, Identity};
 use uuid::Uuid;
 
 use crate::capability;
-use crate::crypto_region::{
-    decode_region_body, prepare_region_body, RegionEncryptionSpec,
-};
+use crate::crypto_region::{decode_region_body, prepare_region_body, RegionEncryptionSpec};
 use crate::framing::{pad_to_alignment, Footer, Header, RegionHeader};
 use crate::reader::SealedFile;
 use crate::region_type::{CLEAN_TEXT, RAW, STRUCTURED, VERSION_HISTORY};
@@ -71,10 +69,7 @@ pub async fn write_linked_file(
 }
 
 /// Build a linked `.orchid` image; region payloads are chunked into `store`.
-pub async fn build_linked_bytes(
-    store: &ChunkStore,
-    req: &LinkedCreateRequest,
-) -> Result<Vec<u8>> {
+pub async fn build_linked_bytes(store: &ChunkStore, req: &LinkedCreateRequest) -> Result<Vec<u8>> {
     let file_uuid = req.file_uuid.unwrap_or_else(|| *Uuid::new_v4().as_bytes());
     let created_unix_ms = req.created_unix_ms.unwrap_or_else(now_unix_ms);
     let identity = req.encrypt_with.as_ref();
@@ -123,10 +118,7 @@ pub async fn build_linked_bytes(
         }
         pad_to_alignment(&mut buf);
         let offset = buf.len() as u64;
-        let rh = RegionHeader {
-            type_id,
-            length: 0,
-        };
+        let rh = RegionHeader { type_id, length: 0 };
         buf.extend_from_slice(&rh.encode());
         toc_regions.push(TocRegionSpec {
             type_: fb_type,
@@ -278,8 +270,7 @@ pub async fn linked_to_sealed(
     let linked = SealedFile::open(linked_path)?;
     let header = linked.header().clone();
     let raw = linked_region_plaintext(&linked, store, RegionType::Raw, identity).await?;
-    let clean =
-        linked_region_plaintext(&linked, store, RegionType::CleanText, identity).await?;
+    let clean = linked_region_plaintext(&linked, store, RegionType::CleanText, identity).await?;
     let structured =
         linked_region_plaintext(&linked, store, RegionType::Structured, identity).await?;
     crate::writer::write_sealed_file(
@@ -326,19 +317,16 @@ async fn put_chunks(
     Ok(out)
 }
 
-async fn gather_chunks(
-    store: &ChunkStore,
-    entry: &crate::toc::RegionEntry<'_>,
-) -> Result<Vec<u8>> {
+async fn gather_chunks(store: &ChunkStore, entry: &crate::toc::RegionEntry<'_>) -> Result<Vec<u8>> {
     let chunks = entry
         .chunks()
         .ok_or_else(|| FormatError::InvalidToc("linked region missing chunks".into()))?;
     let mut buf = Vec::new();
     for i in 0..chunks.len() {
         let c = chunks.get(i);
-        let blake = c.blake3().ok_or_else(|| {
-            FormatError::InvalidToc("chunk missing blake3".into())
-        })?;
+        let blake = c
+            .blake3()
+            .ok_or_else(|| FormatError::InvalidToc("chunk missing blake3".into()))?;
         if blake.len() != 32 {
             return Err(FormatError::InvalidToc("chunk blake3 len != 32".into()));
         }

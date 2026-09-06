@@ -5,7 +5,7 @@ use std::sync::Arc;
 use orchid_crypto::{ChunkStore, ChunkerConfig, Identity};
 use orchid_format::toc::RegionType;
 use orchid_format::{
-    linked_region_plaintext, write_linked_file, LinkedCreateRequest, SealedFile, capability,
+    capability, linked_region_plaintext, write_linked_file, LinkedCreateRequest, SealedFile,
 };
 
 fn tiny_chunker() -> ChunkerConfig {

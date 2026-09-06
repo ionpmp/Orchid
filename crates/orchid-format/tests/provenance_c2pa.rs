@@ -1,8 +1,8 @@
 //! Phase 3: Provenance C2PA carrier validates via third-party Reader.
 
 use orchid_format::{
-    is_c2pa_accepted, verify_provenance_carrier, write_sealed_file, SealedCreateRequest,
-    SealedFile, capability,
+    capability, is_c2pa_accepted, verify_provenance_carrier, write_sealed_file,
+    SealedCreateRequest, SealedFile,
 };
 
 #[test]

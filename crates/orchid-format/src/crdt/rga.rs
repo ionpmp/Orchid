@@ -113,7 +113,12 @@ impl CrdtDocument {
     }
 
     /// Insert `text` after `after` (`None` = beginning) as `actor`.
-    pub fn local_insert(&mut self, actor: ActorId, after: Option<OpId>, text: impl Into<String>) -> OpId {
+    pub fn local_insert(
+        &mut self,
+        actor: ActorId,
+        after: Option<OpId>,
+        text: impl Into<String>,
+    ) -> OpId {
         let id = self.next_id(actor);
         let lamport = self.bump_lamport(0);
         let op = Op::Insert {
@@ -130,7 +135,11 @@ impl CrdtDocument {
     pub fn local_delete(&mut self, actor: ActorId, target: OpId) -> OpId {
         let id = self.next_id(actor);
         let lamport = self.bump_lamport(0);
-        let op = Op::Delete { id, lamport, target };
+        let op = Op::Delete {
+            id,
+            lamport,
+            target,
+        };
         self.apply_op(op);
         id
     }
