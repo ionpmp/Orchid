@@ -471,7 +471,7 @@ impl OrchidApp {
         // roots, and seed the index with a bounded bootstrap crawl.
         let index_scheduler =
             Arc::new(orchid_search::IndexScheduler::new(search_engine.clone(), 2));
-        let mut index_extractor = orchid_search::Extractor::new();
+        let mut index_extractor = orchid_search::Extractor::new().with_orchid();
         if config.read().search.extract_pdf {
             index_extractor = index_extractor.with_pdf().with_docx();
         }
