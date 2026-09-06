@@ -609,9 +609,11 @@ the reverse.
    to read/write OOXML for interoperability. No user is forced off Word.
 2. **`.orchid` becomes native save** for the Orchid document editor (and
    for FM wrap). Autosave and library storage prefer linked `.orchid`.
-   The document editor saves sealed files (Raw = DOCX fidelity bytes,
-   Clean-Text = `plain_text`); new documents default to `Untitled.orchid`.
-   **Save As…** exports `.orchid` or `.docx`.
+   With an app `ChunkStore`, the document editor saves **linked** `.orchid`
+   (Raw = DOCX fidelity bytes, Clean-Text = `plain_text`, generation bump);
+   without a store it falls back to sealed. New documents still start as
+   sealed `Untitled.orchid` until the first editor save. **Save As…**
+   exports `.orchid` or `.docx`.
 3. **File manager action: “Wrap as .orchid”** packs selection → Raw +
    derived Clean-Text (+ optional embeddings when Phase 5 lands).
 4. **Search** indexes `.orchid` via Clean-Text (live `OrchidExtractor`);

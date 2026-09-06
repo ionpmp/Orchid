@@ -216,6 +216,8 @@ pub struct ViewerDeps {
     pub highlighter: Arc<SyntaxHighlighter>,
     /// Shared disk-backed thumbnail cache (same root as the file manager).
     pub thumbnails: Option<Arc<ThumbnailService>>,
+    /// Content-addressed store for linked `.orchid` document I/O.
+    pub chunk_store: Option<Arc<orchid_crypto::ChunkStore>>,
 }
 
 impl std::fmt::Debug for ViewerDeps {
@@ -390,6 +392,14 @@ impl ViewerWidgetInner {
                 return Ok(());
             }
         };
+        if let Some(store) = self.deps.chunk_store.clone() {
+            if let Some(doc) = viewer
+                .as_any_mut()
+                .downcast_mut::<orchid_viewers::DocumentViewer>()
+            {
+                doc.set_chunk_store(store);
+            }
+        }
         if is_image_path(&path) {
             let preloaded = self.image_preload.write().take(path.as_str());
             if let Some(loaded) = preloaded {

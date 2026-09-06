@@ -36,7 +36,8 @@ pub use model::{
     TableRow, VMerge,
 };
 pub use orchid_io::{
-    is_orchid_path, looks_like_orchid, open_document_from_orchid, pick_document_save_path,
+    is_orchid_path, looks_like_orchid, open_document_from_orchid,
+    open_document_from_orchid_with_store, pick_document_save_path, save_document_as_linked_orchid,
     save_document_as_orchid,
 };
 pub use sample::{create_sample_docx, create_sample_orchid, sample_document};
@@ -104,6 +105,12 @@ pub struct DocumentViewer {
     preview_zoom: Mutex<f32>,
     /// Preview pointer is over an external hyperlink.
     link_hover: Mutex<bool>,
+    /// App `ChunkStore` for linked `.orchid` open/save (None → sealed only).
+    chunk_store: Option<Arc<orchid_crypto::ChunkStore>>,
+    /// Last known `.orchid` file UUID (preserved across linked generation bumps).
+    orchid_file_uuid: Mutex<Option<[u8; 16]>>,
+    /// Last known TOC generation for the open `.orchid`.
+    orchid_generation: Mutex<u64>,
 }
 
 /// Result of [`DocumentViewer::preview_pointer`].
@@ -169,7 +176,27 @@ impl DocumentViewer {
             find_scroll_y_px: Mutex::new(-1),
             preview_zoom: Mutex::new(1.0),
             link_hover: Mutex::new(false),
+            chunk_store: None,
+            orchid_file_uuid: Mutex::new(None),
+            orchid_generation: Mutex::new(0),
         }
+    }
+
+    /// Inject the content-addressed store used for linked `.orchid` I/O.
+    pub fn set_chunk_store(&mut self, store: Arc<orchid_crypto::ChunkStore>) {
+        self.chunk_store = Some(store);
+    }
+
+    fn remember_orchid_identity(&self, path: &Path) {
+        if let Ok((uuid, gen)) = orchid_io::orchid_identity(path) {
+            *self.orchid_file_uuid.lock() = Some(uuid);
+            *self.orchid_generation.lock() = gen;
+        }
+    }
+
+    fn clear_orchid_identity(&self) {
+        *self.orchid_file_uuid.lock() = None;
+        *self.orchid_generation.lock() = 0;
     }
 
     /// Find the next / previous match in plain text.
@@ -4820,10 +4847,16 @@ impl Viewer for DocumentViewer {
                 let orchid_tmp = std::env::temp_dir()
                     .join(format!("orchid-open-{}.orchid", uuid::Uuid::new_v4()));
                 tokio::fs::write(&orchid_tmp, &bytes).await?;
-                let opened = orchid_io::open_document_from_orchid(&orchid_tmp).await?;
+                let opened = orchid_io::open_document_from_orchid_with_store(
+                    &orchid_tmp,
+                    self.chunk_store.as_deref(),
+                )
+                .await?;
+                self.remember_orchid_identity(&orchid_tmp);
                 let _ = tokio::fs::remove_file(&orchid_tmp).await;
                 opened
             } else {
+                self.clear_orchid_identity();
                 Document::from_docx(&tmp).await?
             };
             let _ = tokio::fs::remove_file(&tmp).await;
@@ -4849,10 +4882,16 @@ impl Viewer for DocumentViewer {
             });
         }
 
-        let doc = if orchid_io::is_orchid_path(Path::new(&os_path)) {
-            orchid_io::open_document_from_orchid(Path::new(&os_path)).await?
+        let os = Path::new(&os_path);
+        let doc = if orchid_io::is_orchid_path(os) {
+            let opened =
+                orchid_io::open_document_from_orchid_with_store(os, self.chunk_store.as_deref())
+                    .await?;
+            self.remember_orchid_identity(os);
+            opened
         } else {
-            Document::from_docx(Path::new(&os_path)).await?
+            self.clear_orchid_identity();
+            Document::from_docx(os).await?
         };
         *self.document.write() = Some(doc);
         *self.path.write() = Some(path);
@@ -4869,6 +4908,7 @@ impl Viewer for DocumentViewer {
     }
 
     async fn close(&mut self) -> Result<()> {
+        self.clear_orchid_identity();
         *self.document.write() = None;
         *self.path.write() = None;
         *self.registry.write() = None;
@@ -5163,10 +5203,29 @@ impl Viewer for DocumentViewer {
             .read()
             .clone()
             .ok_or(ViewerError::DocumentNotOpen)?;
-        if orchid_io::is_orchid_path(Path::new(&os_path)) {
-            orchid_io::save_document_as_orchid(&doc, Path::new(&os_path)).await?;
+        let os = Path::new(&os_path);
+        if orchid_io::is_orchid_path(os) {
+            if let Some(store) = self.chunk_store.as_ref() {
+                let parent = *self.orchid_generation.lock();
+                let next = parent.saturating_add(1).max(1);
+                let uuid = *self.orchid_file_uuid.lock();
+                orchid_io::save_document_as_linked_orchid(
+                    &doc,
+                    os,
+                    store.as_ref(),
+                    uuid,
+                    next,
+                    parent,
+                )
+                .await?;
+                self.remember_orchid_identity(os);
+            } else {
+                orchid_io::save_document_as_orchid(&doc, os).await?;
+                self.remember_orchid_identity(os);
+            }
         } else {
-            ooxml::container::save_document(&doc, Path::new(&os_path)).await?;
+            self.clear_orchid_identity();
+            ooxml::container::save_document(&doc, os).await?;
         }
         self.undo.lock().mark_clean();
         Ok(())

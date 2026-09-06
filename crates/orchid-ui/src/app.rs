@@ -458,12 +458,17 @@ impl OrchidApp {
             orchid_viewers::ThumbnailService::new(paths.cache_dir.join("thumbnails"))
                 .map_err(|e| UiError::Slint(format!("thumbnail service: {e}")))?,
         );
+        let chunk_store = Arc::new(
+            orchid_crypto::ChunkStore::new(paths.chunks_dir.clone(), storage.clone())
+                .map_err(|e| UiError::Slint(format!("chunk store: {e}")))?,
+        );
         widget_registry
             .register(orchid_widgets::builtin::viewer::descriptor(
                 orchid_widgets::builtin::viewer::ViewerDeps {
                     registry: fs_registry.clone(),
                     highlighter: syntax_highlighter,
                     thumbnails: Some(thumbnails.clone()),
+                    chunk_store: Some(chunk_store.clone()),
                 },
             ))
             .map_err(|e| UiError::Slint(format!("register viewer: {e}")))?;
@@ -511,10 +516,6 @@ impl OrchidApp {
             started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
 
-        let chunk_store = Arc::new(
-            orchid_crypto::ChunkStore::new(paths.chunks_dir.clone(), storage.clone())
-                .map_err(|e| UiError::Slint(format!("chunk store: {e}")))?,
-        );
         let deduplicator = Arc::new(orchid_crypto::Deduplicator::new(
             chunk_store.clone(),
             orchid_crypto::ChunkerConfig::default(),

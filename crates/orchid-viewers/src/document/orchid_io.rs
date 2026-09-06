@@ -3,9 +3,12 @@
 use std::io::Write;
 use std::path::Path;
 
+use orchid_crypto::ChunkStore;
 use orchid_format::{
-    write_sealed_file, SealedCreateRequest, SealedFile, EXTENSION as ORCHID_EXT, FILE_MAGIC,
+    capability, linked_region_plaintext, write_linked_file, write_sealed_file, LinkedCreateRequest,
+    SealedCreateRequest, SealedFile, EXTENSION as ORCHID_EXT, FILE_MAGIC,
 };
+use orchid_format::toc::RegionType;
 
 use crate::document::model::{Block, Document, Paragraph, Run};
 use crate::document::ooxml::container::{open_document, save_document};
@@ -61,6 +64,81 @@ pub async fn save_document_as_orchid(doc: &Document, output_path: &Path) -> Resu
     )
     .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     Ok(())
+}
+
+/// Open a `.orchid`: sealed inline, or linked via `store` when `CAP_LINKED`.
+pub async fn open_document_from_orchid_with_store(
+    path: &Path,
+    store: Option<&ChunkStore>,
+) -> Result<Document> {
+    let path_buf = path.to_path_buf();
+    let linked = {
+        let file =
+            SealedFile::open(&path_buf).map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+        file.header().capability_flags & capability::LINKED != 0
+    };
+    if linked {
+        let store = store.ok_or_else(|| {
+            ViewerError::DocumentSave(
+                "linked .orchid requires the content-addressed chunk store".into(),
+            )
+        })?;
+        let file =
+            SealedFile::open(&path_buf).map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+        let raw = linked_region_plaintext(&file, store, RegionType::Raw, None)
+            .await
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+        if looks_like_zip(&raw) {
+            return document_from_docx_bytes(&raw);
+        }
+        let clean = linked_region_plaintext(&file, store, RegionType::CleanText, None)
+            .await
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+        return Ok(document_from_plain_utf8(&clean));
+    }
+    open_document_from_orchid(path).await
+}
+
+/// Write a linked `.orchid` (DOCX Raw + Clean-Text chunks in `store`).
+pub async fn save_document_as_linked_orchid(
+    doc: &Document,
+    output_path: &Path,
+    store: &ChunkStore,
+    file_uuid: Option<[u8; 16]>,
+    generation: u64,
+    parent_generation: u64,
+) -> Result<()> {
+    let raw = document_to_docx_bytes(doc).await?;
+    let clean_text = doc.plain_text().into_bytes();
+    write_linked_file(
+        output_path,
+        store,
+        &LinkedCreateRequest {
+            file_uuid,
+            created_unix_ms: None,
+            generation: generation.max(1),
+            parent_generation,
+            raw,
+            clean_text,
+            structured: b"{}".to_vec(),
+            encrypt_with: None,
+            chunker: orchid_crypto::ChunkerConfig::default(),
+        },
+    )
+    .await
+    .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    Ok(())
+}
+
+/// Read header UUID + TOC generation for linked save bumps.
+pub fn orchid_identity(path: &Path) -> Result<([u8; 16], u64)> {
+    let file = SealedFile::open(path).map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    let uuid = file.header().file_uuid;
+    let gen = file
+        .toc()
+        .map(|t| t.generation())
+        .unwrap_or(1);
+    Ok((uuid, gen))
 }
 
 /// Open a sealed `.orchid`: prefer Raw DOCX, else Clean-Text as paragraphs.
@@ -158,6 +236,31 @@ mod tests {
         assert!(looks_like_orchid(&std::fs::read(&path).unwrap()[..4]));
         let back = open_document_from_orchid(&path).await.unwrap();
         assert_eq!(back.plain_text(), expected);
+    }
+
+    #[tokio::test]
+    async fn linked_orchid_roundtrip_preserves_plain_text() {
+        use std::sync::Arc;
+
+        use orchid_crypto::ChunkStore;
+        use orchid_storage::StateStore;
+
+        let td = tempfile::tempdir().unwrap();
+        let storage = Arc::new(StateStore::open_in_memory("t").unwrap());
+        let store = ChunkStore::new(td.path().join("chunks"), storage).unwrap();
+        let path = td.path().join("linked.orchid");
+        let doc = sample_document();
+        let expected = doc.plain_text();
+        save_document_as_linked_orchid(&doc, &path, &store, Some([0xAB; 16]), 1, 0)
+            .await
+            .unwrap();
+        let back = open_document_from_orchid_with_store(&path, Some(&store))
+            .await
+            .unwrap();
+        assert_eq!(back.plain_text(), expected);
+        let (uuid, gen) = orchid_identity(&path).unwrap();
+        assert_eq!(uuid, [0xAB; 16]);
+        assert_eq!(gen, 1);
     }
 
     #[test]

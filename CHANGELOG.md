@@ -264,6 +264,8 @@ release yet.
   Clean-Text=`plain_text`; catalog **Document** creates `Untitled.orchid`;
   `.docx` export path unchanged when the open path ends in `.docx`.
   **Save As…** (toolbar / Ctrl+Shift+S) picks `.orchid` or `.docx`.
+  With the app `ChunkStore`, editor saves prefer **linked** `.orchid`
+  (generation bump + CAS chunks); open resolves linked Raw/Clean-Text.
 
 #### Built-in widgets
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),
