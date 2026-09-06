@@ -19,7 +19,7 @@ use crate::{
 };
 use orchid_storage::{LifecycleState, WidgetSize};
 
-pub use config::{BrowserBookmark, BrowserConfig, BrowserTab, MAX_BOOKMARKS, MAX_TABS};
+pub use config::{BrowserBookmark, BrowserConfig, BrowserTab, MAX_BOOKMARKS, MAX_CLOSED, MAX_TABS};
 
 /// Stable type id.
 pub const TYPE_ID: &str = "browser";
@@ -29,6 +29,7 @@ static BROWSER_LIVE: LazyLock<DashMap<Uuid, Arc<BrowserHandle>>> = LazyLock::new
 struct BrowserHandle {
     instance_id: Uuid,
     config: Arc<RwLock<BrowserConfig>>,
+    closed: RwLock<Vec<BrowserTab>>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -154,24 +155,52 @@ pub fn close_tab(instance_id: Uuid, index: i32) {
     let Some(h) = BROWSER_LIVE.get(&instance_id) else {
         return;
     };
-    {
+    let previous = {
         let mut cfg = h.config.write();
         let idx = index as usize;
-        if cfg.tabs.len() <= 1 || idx >= cfg.tabs.len() {
+        let previous = if cfg.tabs.len() <= 1 || idx >= cfg.tabs.len() {
             if cfg.tabs.len() == 1 {
+                let previous = cfg.tabs[0].clone();
                 let url = cfg.new_tab_url();
                 cfg.tabs[0] = BrowserTab::from_url(&url);
                 cfg.active_index = 0;
+                Some(previous)
+            } else {
+                None
             }
         } else {
-            cfg.tabs.remove(idx);
+            let previous = cfg.tabs.remove(idx);
             if cfg.active_index as usize >= cfg.tabs.len() {
                 cfg.active_index = (cfg.tabs.len() - 1) as u32;
             } else if (cfg.active_index as usize) > idx {
                 cfg.active_index = cfg.active_index.saturating_sub(1);
             }
-        }
+            Some(previous)
+        };
         cfg.normalize();
+        previous
+    };
+    if let Some(tab) = previous {
+        BrowserConfig::remember_closed(&mut h.closed.write(), tab);
+    }
+    h.publish();
+}
+
+/// Reopen the last closed tab (Ctrl+Shift+T).
+pub fn reopen_closed_tab(instance_id: Uuid) {
+    let Some(h) = BROWSER_LIVE.get(&instance_id) else {
+        return;
+    };
+    let Some(tab) = h.closed.write().pop() else {
+        return;
+    };
+    let restored = {
+        let mut cfg = h.config.write();
+        cfg.restore_tab(tab.clone())
+    };
+    if !restored {
+        BrowserConfig::remember_closed(&mut h.closed.write(), tab);
+        return;
     }
     h.publish();
 }
@@ -370,6 +399,7 @@ impl BrowserWidget {
         let handle = Arc::new(BrowserHandle {
             instance_id,
             config: Arc::new(RwLock::new(config)),
+            closed: RwLock::new(Vec::new()),
             bus,
         });
         BROWSER_LIVE.insert(instance_id, Arc::clone(&handle));
@@ -643,5 +673,43 @@ mod tests {
         cfg.open_in_new_tab("https://overflow.example/");
         assert_eq!(cfg.tabs.len(), MAX_TABS);
         assert_eq!(cfg.tabs[0].url, "https://overflow.example/");
+    }
+
+    #[test]
+    fn remember_closed_skips_blank_and_caps() {
+        let mut stack = Vec::new();
+        BrowserConfig::remember_closed(&mut stack, BrowserTab::blank());
+        assert!(stack.is_empty());
+        for i in 0..(MAX_CLOSED + 3) {
+            BrowserConfig::remember_closed(
+                &mut stack,
+                BrowserTab::from_url(&format!("https://n{i}.example/")),
+            );
+        }
+        assert_eq!(stack.len(), MAX_CLOSED);
+        assert_eq!(stack[0].url, "https://n3.example/");
+    }
+
+    #[test]
+    fn close_then_reopen_restores_url() {
+        let bus = Arc::new(orchid_core::EventBus::new(
+            orchid_core::EventBusConfig::default(),
+        ));
+        let id = Uuid::new_v4();
+        let mut cfg = BrowserConfig::default();
+        cfg.tabs[0].url = "https://first.example/".to_string();
+        cfg.tabs
+            .push(BrowserTab::from_url("https://second.example/"));
+        cfg.active_index = 1;
+        let _w = BrowserWidget::new(id, cfg, bus);
+        close_tab(id, 1);
+        let cfg = current_config(id).expect("live");
+        assert_eq!(cfg.tabs.len(), 1);
+        assert_eq!(cfg.tabs[0].url, "https://first.example/");
+        reopen_closed_tab(id);
+        let cfg = current_config(id).expect("live");
+        assert_eq!(cfg.tabs.len(), 2);
+        assert_eq!(cfg.tabs[1].url, "https://second.example/");
+        BROWSER_LIVE.remove(&id);
     }
 }

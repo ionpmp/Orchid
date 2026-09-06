@@ -14,6 +14,9 @@ pub const MAX_TABS: usize = 16;
 /// Maximum number of bookmarks kept in one browser instance.
 pub const MAX_BOOKMARKS: usize = 50;
 
+/// Session-only recently-closed stack (Ctrl+Shift+T).
+pub const MAX_CLOSED: usize = 10;
+
 /// One browser tab.
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct BrowserTab {
@@ -124,6 +127,30 @@ impl BrowserConfig {
         }
         self.tabs.push(BrowserTab::from_url(&url));
         self.active_index = (self.tabs.len() - 1) as u32;
+    }
+
+    /// Restore a closed tab with a fresh id. No-op at the tab cap.
+    pub fn restore_tab(&mut self, tab: BrowserTab) -> bool {
+        if self.tabs.len() >= MAX_TABS {
+            return false;
+        }
+        let mut next = BrowserTab::from_url(&tab.url);
+        next.title = tab.title;
+        self.tabs.push(next);
+        self.active_index = (self.tabs.len() - 1) as u32;
+        true
+    }
+
+    /// Remember `tab` for Ctrl+Shift+T. Skips blank pages.
+    pub fn remember_closed(stack: &mut Vec<BrowserTab>, tab: BrowserTab) {
+        let url = tab.url.trim();
+        if url.is_empty() || url.eq_ignore_ascii_case("about:blank") {
+            return;
+        }
+        stack.push(tab);
+        if stack.len() > MAX_CLOSED {
+            stack.remove(0);
+        }
     }
 
     /// Whether the active tab's URL is in the bookmark list.
