@@ -51,5 +51,23 @@ if (Test-Path $installIcon) {
 }
 $shortcut.Save()
 
+# Associate .orchid with Orchid (per-user HKCU; no admin required).
+$progId = "Orchid.orchid"
+$mime = "application/vnd.orchid"
+$iconPath = if (Test-Path $installIcon) { $installIcon } else { $installExe }
+$classes = "HKCU:\Software\Classes"
+New-Item -Path "$classes\.orchid" -Force | Out-Null
+Set-ItemProperty -Path "$classes\.orchid" -Name "(default)" -Value $progId
+Set-ItemProperty -Path "$classes\.orchid" -Name "Content Type" -Value $mime
+New-Item -Path "$classes\$progId" -Force | Out-Null
+Set-ItemProperty -Path "$classes\$progId" -Name "(default)" -Value "Orchid Document"
+New-Item -Path "$classes\$progId\DefaultIcon" -Force | Out-Null
+Set-ItemProperty -Path "$classes\$progId\DefaultIcon" -Name "(default)" -Value "`"$iconPath`",0"
+New-Item -Path "$classes\$progId\shell\open\command" -Force | Out-Null
+Set-ItemProperty -Path "$classes\$progId\shell\open\command" -Name "(default)" -Value "`"$installExe`" `"%1`""
+New-Item -Path "$classes\Applications\$exeName\SupportedTypes" -Force | Out-Null
+Set-ItemProperty -Path "$classes\Applications\$exeName\SupportedTypes" -Name ".orchid" -Value ""
+
 Write-Host "Installed: $installExe"
 Write-Host "Shortcut:  $shortcutPath"
+Write-Host "Associated .orchid ($mime) with Orchid"
