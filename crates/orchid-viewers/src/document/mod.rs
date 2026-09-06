@@ -35,11 +35,11 @@ pub use model::{
     OpaqueXmlNode, PageSetup, Paragraph, Run, RunStyle, SectionBreakType, Table, TableCell,
     TableRow, VMerge,
 };
-pub use sample::{create_sample_docx, create_sample_orchid, sample_document};
 pub use orchid_io::{
     is_orchid_path, looks_like_orchid, open_document_from_orchid, pick_document_save_path,
     save_document_as_orchid,
 };
+pub use sample::{create_sample_docx, create_sample_orchid, sample_document};
 pub use undo::{EditCommand, RunStylePatch, UndoStack};
 
 /// Soft ceiling for DOCX payloads accepted by the viewer (128 MiB).

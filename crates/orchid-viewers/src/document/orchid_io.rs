@@ -31,10 +31,7 @@ pub fn looks_like_orchid(sample: &[u8]) -> bool {
 
 /// Serialize `doc` to OOXML ZIP bytes (temp file + read).
 pub async fn document_to_docx_bytes(doc: &Document) -> Result<Vec<u8>> {
-    let tmp = std::env::temp_dir().join(format!(
-        "orchid-docx-save-{}.docx",
-        uuid::Uuid::new_v4()
-    ));
+    let tmp = std::env::temp_dir().join(format!("orchid-docx-save-{}.docx", uuid::Uuid::new_v4()));
     save_document(doc, &tmp).await?;
     let bytes = tokio::fs::read(&tmp).await?;
     let _ = tokio::fs::remove_file(&tmp).await;
@@ -89,10 +86,7 @@ fn open_document_from_orchid_sync(path: &Path) -> Result<Document> {
 }
 
 fn document_from_docx_bytes(bytes: &[u8]) -> Result<Document> {
-    let tmp = std::env::temp_dir().join(format!(
-        "orchid-docx-open-{}.docx",
-        uuid::Uuid::new_v4()
-    ));
+    let tmp = std::env::temp_dir().join(format!("orchid-docx-open-{}.docx", uuid::Uuid::new_v4()));
     {
         let mut f = std::fs::File::create(&tmp)?;
         f.write_all(bytes)?;
