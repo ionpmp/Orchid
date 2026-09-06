@@ -83,7 +83,7 @@ mod wire;
 mod workspace;
 
 pub use workspace::build_empty_workspace_model;
-pub(super) use workspace::next_untitled_docx_path;
+pub(super) use workspace::{next_untitled_document_path, next_untitled_docx_path};
 
 use canvas::ResizeInteraction;
 

@@ -609,10 +609,12 @@ the reverse.
    to read/write OOXML for interoperability. No user is forced off Word.
 2. **`.orchid` becomes native save** for the Orchid document editor (and
    for FM wrap). Autosave and library storage prefer linked `.orchid`.
+   The document editor saves sealed files (Raw = DOCX fidelity bytes,
+   Clean-Text = `plain_text`); new documents default to `Untitled.orchid`.
 3. **File manager action: “Wrap as .orchid”** packs selection → Raw +
    derived Clean-Text (+ optional embeddings when Phase 5 lands).
-4. **Search** indexes `.orchid` via Clean-Text immediately in Phase 1;
-   semantic path in Phase 5.
+4. **Search** indexes `.orchid` via Clean-Text (live `OrchidExtractor`);
+   semantic / hybrid path in Phase 5.
 5. **MIME / extension** registered in the Windows installer when the CLI
    and editor open path are stable.
 

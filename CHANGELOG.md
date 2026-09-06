@@ -259,6 +259,9 @@ release yet.
   `.orchid` Clean-Text extractor (semantic hit when BM25 misses). Live indexer
   enables `with_orchid()`; FM **Wrap as .orchid** packs selection into sealed
   containers (`wrap_as_sealed`).
+- Document editor native `.orchid` save/open: sealed envelope with Raw=DOCX +
+  Clean-Text=`plain_text`; catalog **Document** creates `Untitled.orchid`;
+  `.docx` export path unchanged when the open path ends in `.docx`.
 
 #### Built-in widgets
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),

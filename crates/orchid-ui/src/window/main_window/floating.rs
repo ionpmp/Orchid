@@ -265,8 +265,8 @@ impl MainWindowController {
                 return;
             }
             let path = super::next_untitled_docx_path(&documents_dir);
-            if let Err(e) = orchid_viewers::create_sample_docx(&path).await {
-                warn!(?e, path = %path.display(), "document editor: write sample docx");
+            if let Err(e) = orchid_viewers::create_sample_orchid(&path).await {
+                warn!(?e, path = %path.display(), "document editor: write sample orchid");
                 return;
             }
             let fs_path = match orchid_fs::FsPath::from_local(&path) {

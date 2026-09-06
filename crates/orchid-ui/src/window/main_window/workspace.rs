@@ -1886,25 +1886,31 @@ pub(crate) fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> Sh
     }
 }
 
-pub(crate) fn next_untitled_docx_path(dir: &std::path::Path) -> std::path::PathBuf {
-    let first = dir.join("Untitled.docx");
+pub(crate) fn next_untitled_document_path(dir: &std::path::Path) -> std::path::PathBuf {
+    let first = dir.join("Untitled.orchid");
     if !first.exists() {
         return first;
     }
     for n in 2..10_000 {
-        let candidate = dir.join(format!("Untitled-{n}.docx"));
+        let candidate = dir.join(format!("Untitled-{n}.orchid"));
         if !candidate.exists() {
             return candidate;
         }
     }
     dir.join(format!(
-        "Untitled-{}.docx",
+        "Untitled-{}.orchid",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis())
             .unwrap_or(0)
     ))
 }
+
+
+pub(crate) fn next_untitled_docx_path(dir: &std::path::Path) -> std::path::PathBuf {
+    next_untitled_document_path(dir)
+}
+
 
 #[allow(clippy::type_complexity)]
 fn default_frame_data_extended(
