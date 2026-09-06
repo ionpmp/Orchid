@@ -62,6 +62,11 @@ impl MainWindowController {
             self.refresh_browser(inst);
             return;
         }
+        if command.as_str() == "reopen-closed" {
+            orchid_widgets::builtin::browser::reopen_closed_tab(inst);
+            self.refresh_browser(inst);
+            return;
+        }
         let Some(tab_id) = orchid_widgets::builtin::browser::active_tab_id(inst) else {
             return;
         };

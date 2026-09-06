@@ -211,6 +211,9 @@ impl MainWindowController {
                 BrowserChromeAction::ZoomReset => {
                     self.on_browser_command(&id, &SharedString::from("zoom-reset"));
                 }
+                BrowserChromeAction::ReopenClosed => {
+                    self.on_browser_command(&id, &SharedString::from("reopen-closed"));
+                }
             }
         }
     }

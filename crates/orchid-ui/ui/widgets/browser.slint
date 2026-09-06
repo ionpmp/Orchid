@@ -85,6 +85,10 @@ export component BrowserView inherits Rectangle {
     }
 
     function chrome-handled(event: KeyEvent) -> bool {
+        if (event.modifiers.control && event.modifiers.shift && (event.text == "t" || event.text == "T")) {
+            root.command("reopen-closed");
+            return true;
+        }
         if (event.modifiers.control && (event.text == "t" || event.text == "T")) {
             root.new-tab();
             return true;

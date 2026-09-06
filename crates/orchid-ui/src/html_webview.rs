@@ -42,6 +42,7 @@ pub(crate) enum BrowserChromeAction {
     ZoomIn,
     ZoomOut,
     ZoomReset,
+    ReopenClosed,
 }
 
 /// One chrome shortcut for the browser widget (UI-thread drain).
@@ -849,7 +850,7 @@ fn attach_accel(
         COREWEBVIEW2_KEY_EVENT_KIND, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN,
         COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
     };
-    use windows::Win32::UI::Input::KeyboardAndMouse::{VK_CONTROL, VK_MENU};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{VK_CONTROL, VK_MENU, VK_SHIFT};
 
     let chrome = host.chrome.clone();
     let handler = AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
@@ -867,21 +868,23 @@ fn attach_accel(
         let _ = unsafe { args.VirtualKey(&mut vk) };
         let ctrl = key_down(VK_CONTROL);
         let alt = key_down(VK_MENU);
-        let action = match (ctrl, alt, vk) {
-            (true, false, 0x54) => Some(BrowserChromeAction::NewTab),
-            (true, false, 0x57) => Some(BrowserChromeAction::CloseTab),
-            (true, false, 0x4C) => Some(BrowserChromeAction::FocusAddress),
-            (true, false, 0x52) => Some(BrowserChromeAction::Reload),
-            (true, false, 0x46) => Some(BrowserChromeAction::Find),
-            (true, false, 0x44) => Some(BrowserChromeAction::Bookmark),
-            (true, false, 0xBB) | (true, false, 0x6B) => Some(BrowserChromeAction::ZoomIn),
-            (true, false, 0xBD) | (true, false, 0x6D) => Some(BrowserChromeAction::ZoomOut),
-            (true, false, 0x30) | (true, false, 0x60) => Some(BrowserChromeAction::ZoomReset),
-            (false, false, 0x74) => Some(BrowserChromeAction::Reload),
-            (false, false, 0x1B) => Some(BrowserChromeAction::Stop),
-            (false, true, 0x25) => Some(BrowserChromeAction::Back),
-            (false, true, 0x27) => Some(BrowserChromeAction::Forward),
-            (false, true, 0x24) => Some(BrowserChromeAction::Home),
+        let shift = key_down(VK_SHIFT);
+        let action = match (ctrl, alt, shift, vk) {
+            (true, false, true, 0x54) => Some(BrowserChromeAction::ReopenClosed),
+            (true, false, false, 0x54) => Some(BrowserChromeAction::NewTab),
+            (true, false, false, 0x57) => Some(BrowserChromeAction::CloseTab),
+            (true, false, false, 0x4C) => Some(BrowserChromeAction::FocusAddress),
+            (true, false, false, 0x52) => Some(BrowserChromeAction::Reload),
+            (true, false, false, 0x46) => Some(BrowserChromeAction::Find),
+            (true, false, false, 0x44) => Some(BrowserChromeAction::Bookmark),
+            (true, false, _, 0xBB) | (true, false, _, 0x6B) => Some(BrowserChromeAction::ZoomIn),
+            (true, false, _, 0xBD) | (true, false, _, 0x6D) => Some(BrowserChromeAction::ZoomOut),
+            (true, false, _, 0x30) | (true, false, _, 0x60) => Some(BrowserChromeAction::ZoomReset),
+            (false, false, false, 0x74) => Some(BrowserChromeAction::Reload),
+            (false, false, false, 0x1B) => Some(BrowserChromeAction::Stop),
+            (false, true, false, 0x25) => Some(BrowserChromeAction::Back),
+            (false, true, false, 0x27) => Some(BrowserChromeAction::Forward),
+            (false, true, false, 0x24) => Some(BrowserChromeAction::Home),
             _ => None,
         };
         let Some(action) = action else {
