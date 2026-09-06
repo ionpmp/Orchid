@@ -6972,6 +6972,7 @@ dependencies = [
  "opener",
  "orchid-core",
  "orchid-crypto",
+ "orchid-format",
  "orchid-fs",
  "orchid-i18n",
  "orchid-search",
