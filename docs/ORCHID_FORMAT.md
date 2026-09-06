@@ -611,6 +611,7 @@ the reverse.
    for FM wrap). Autosave and library storage prefer linked `.orchid`.
    The document editor saves sealed files (Raw = DOCX fidelity bytes,
    Clean-Text = `plain_text`); new documents default to `Untitled.orchid`.
+   **Save As…** exports `.orchid` or `.docx`.
 3. **File manager action: “Wrap as .orchid”** packs selection → Raw +
    derived Clean-Text (+ optional embeddings when Phase 5 lands).
 4. **Search** indexes `.orchid` via Clean-Text (live `OrchidExtractor`);
