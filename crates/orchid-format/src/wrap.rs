@@ -4,6 +4,7 @@ use std::path::Path;
 
 use orchid_crypto::ChunkStore;
 
+use crate::embedding::EmbeddingPayload;
 use crate::linked::{write_linked_file, LinkedCreateRequest};
 use crate::writer::{write_sealed_file, SealedCreateRequest};
 use crate::Result;
@@ -21,6 +22,8 @@ pub struct WrapAsOrchidRequest {
     pub raw_content_type: Option<String>,
     /// UTF-8 Clean-Text for search (may be empty).
     pub clean_text: Vec<u8>,
+    /// Optional hierarchical Embedding region for hybrid search.
+    pub embeddings: Option<EmbeddingPayload>,
 }
 
 /// Write a sealed `.orchid` with Raw + Clean-Text + empty Structured snapshot.
@@ -39,7 +42,7 @@ pub fn wrap_as_sealed(req: &WrapAsOrchidRequest) -> Result<()> {
             structured_crdt: None,
             encrypt_with: None,
             sign_c2pa: false,
-            embeddings: None,
+            embeddings: req.embeddings.clone(),
         },
     )
 }
@@ -57,6 +60,7 @@ pub async fn wrap_as_linked(req: &WrapAsOrchidRequest, store: &ChunkStore) -> Re
             raw: req.raw.clone(),
             clean_text: req.clean_text.clone(),
             structured: b"{}".to_vec(),
+            embeddings: req.embeddings.clone(),
             encrypt_with: None,
             chunker: orchid_crypto::ChunkerConfig::default(),
         },
@@ -85,6 +89,7 @@ mod tests {
     use orchid_storage::StateStore;
 
     use crate::capability;
+    use crate::document_embedding;
     use crate::SealedFile;
 
     #[test]
@@ -97,11 +102,31 @@ mod tests {
             raw_name: Some("note.txt".into()),
             raw_content_type: Some("text/plain".into()),
             clean_text: b"hello clean".to_vec(),
+            embeddings: None,
         })
         .unwrap();
         let f = SealedFile::open(&out).unwrap();
         assert_eq!(f.raw(None).unwrap(), b"hello raw");
         assert_eq!(f.clean_text(None).unwrap(), b"hello clean");
+    }
+
+    #[test]
+    fn wrap_sealed_with_embeddings_sets_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("emb.txt.orchid");
+        let emb = document_embedding("orchid.stub.synonym.v1", 5, 1, vec![0.1; 4]);
+        wrap_as_sealed(&WrapAsOrchidRequest {
+            output: out.clone(),
+            raw: b"raw".to_vec(),
+            raw_name: Some("emb.txt".into()),
+            raw_content_type: Some("text/plain".into()),
+            clean_text: b"hello".to_vec(),
+            embeddings: Some(emb.clone()),
+        })
+        .unwrap();
+        let f = SealedFile::open(&out).unwrap();
+        assert!(f.header().capability_flags & capability::EMBEDDINGS != 0);
+        assert_eq!(f.embeddings(None).unwrap(), emb);
     }
 
     #[tokio::test]
@@ -117,6 +142,7 @@ mod tests {
                 raw_name: Some("note.txt".into()),
                 raw_content_type: Some("text/plain".into()),
                 clean_text: b"hello clean".to_vec(),
+                embeddings: None,
             },
             &store,
         )

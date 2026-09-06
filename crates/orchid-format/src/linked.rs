@@ -10,9 +10,10 @@ use uuid::Uuid;
 
 use crate::capability;
 use crate::crypto_region::{decode_region_body, prepare_region_body, RegionEncryptionSpec};
+use crate::embedding::{EmbeddingPayload, EMBEDDING_HIER_F32_V1};
 use crate::framing::{pad_to_alignment, Footer, Header, RegionHeader};
 use crate::reader::SealedFile;
-use crate::region_type::{CLEAN_TEXT, RAW, STRUCTURED, VERSION_HISTORY};
+use crate::region_type::{CLEAN_TEXT, EMBEDDING, RAW, STRUCTURED, VERSION_HISTORY};
 use crate::toc::{CompressionCodec, RegionType, StorageMode};
 use crate::toc_build::{build_toc, TocChunkSpec, TocRegionSpec, TocSpec};
 use crate::{FormatError, Result, FOOTER_SIZE, HEADER_SIZE};
@@ -34,6 +35,8 @@ pub struct LinkedCreateRequest {
     pub clean_text: Vec<u8>,
     /// Structured snapshot.
     pub structured: Vec<u8>,
+    /// Optional hierarchical Embedding region (sets [`capability::EMBEDDINGS`]).
+    pub embeddings: Option<EmbeddingPayload>,
     /// Optional age identity for private regions.
     pub encrypt_with: Option<Identity>,
     /// Chunker tunables (tests may use smaller sizes).
@@ -50,6 +53,7 @@ impl Default for LinkedCreateRequest {
             raw: Vec::new(),
             clean_text: Vec::new(),
             structured: Vec::new(),
+            embeddings: None,
             encrypt_with: None,
             chunker: ChunkerConfig::default(),
         }
@@ -78,13 +82,21 @@ pub async fn build_linked_bytes(store: &ChunkStore, req: &LinkedCreateRequest) -
         caps |= capability::ENCRYPTED;
     }
 
-    let prepared = [
+    let mut prepared: Vec<(
+        u16,
+        RegionType,
+        crate::crypto_region::PreparedRegionBody,
+        Option<String>,
+        u32,
+        Option<String>,
+    )> = vec![
         (
             RAW,
             RegionType::Raw,
             prepare_region_body(&req.raw, CompressionCodec::None, identity)?,
             None,
             0u32,
+            None,
         ),
         (
             CLEAN_TEXT,
@@ -92,6 +104,7 @@ pub async fn build_linked_bytes(store: &ChunkStore, req: &LinkedCreateRequest) -
             prepare_region_body(&req.clean_text, CompressionCodec::Zstd, identity)?,
             Some("clean-text".into()),
             0,
+            None,
         ),
         (
             STRUCTURED,
@@ -99,8 +112,21 @@ pub async fn build_linked_bytes(store: &ChunkStore, req: &LinkedCreateRequest) -
             prepare_region_body(&req.structured, CompressionCodec::Zstd, identity)?,
             Some("structured".into()),
             0,
+            None,
         ),
     ];
+    if let Some(emb) = &req.embeddings {
+        caps |= capability::EMBEDDINGS;
+        let plain = emb.encode()?;
+        prepared.push((
+            EMBEDDING,
+            RegionType::Embedding,
+            prepare_region_body(&plain, CompressionCodec::None, identity)?,
+            Some("embeddings".into()),
+            0,
+            Some(EMBEDDING_HIER_F32_V1.into()),
+        ));
+    }
 
     let chunker = Chunker::new(req.chunker);
     let mut buf = Vec::new();
@@ -111,7 +137,7 @@ pub async fn build_linked_bytes(store: &ChunkStore, req: &LinkedCreateRequest) -
     let mut toc_regions = Vec::new();
     let mut all_chunk_hashes: Vec<[u8; 32]> = Vec::new();
 
-    for (type_id, fb_type, body, name, ordinal) in prepared {
+    for (type_id, fb_type, body, name, ordinal, content_type) in prepared {
         let chunks = put_chunks(store, &chunker, &body.stored).await?;
         for c in &chunks {
             all_chunk_hashes.push(c.blake3);
@@ -130,7 +156,7 @@ pub async fn build_linked_bytes(store: &ChunkStore, req: &LinkedCreateRequest) -
             storage: StorageMode::Linked,
             chunks,
             encryption: body.encryption,
-            content_type: None,
+            content_type,
             payload_blake3: body.payload_blake3,
         });
     }
@@ -246,6 +272,7 @@ pub async fn sealed_to_linked(
     let raw = sealed.raw(identity)?;
     let clean = sealed.clean_text(identity)?;
     let structured = sealed.structured(identity)?;
+    let embeddings = sealed.embeddings(identity).ok();
     let req = LinkedCreateRequest {
         file_uuid: Some(header.file_uuid),
         created_unix_ms: Some(header.created_unix_ms),
@@ -254,6 +281,7 @@ pub async fn sealed_to_linked(
         raw,
         clean_text: clean,
         structured,
+        embeddings,
         encrypt_with: identity.cloned(),
         chunker,
     };
@@ -273,6 +301,12 @@ pub async fn linked_to_sealed(
     let clean = linked_region_plaintext(&linked, store, RegionType::CleanText, identity).await?;
     let structured =
         linked_region_plaintext(&linked, store, RegionType::Structured, identity).await?;
+    let embeddings = match linked_region_plaintext(&linked, store, RegionType::Embedding, identity)
+        .await
+    {
+        Ok(bytes) => crate::EmbeddingPayload::decode(&bytes).ok(),
+        Err(_) => None,
+    };
     crate::writer::write_sealed_file(
         sealed_path,
         &crate::writer::SealedCreateRequest {
@@ -287,7 +321,7 @@ pub async fn linked_to_sealed(
             structured_crdt: None,
             encrypt_with: identity.cloned(),
             sign_c2pa: false,
-            embeddings: None,
+            embeddings,
         },
     )
 }
