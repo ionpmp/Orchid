@@ -72,6 +72,18 @@ browser-new-tab = Новая вкладка
 browser-address-placeholder = Поиск или адрес
 browser-unavailable = Среда выполнения Microsoft Edge WebView2 не установлена.
 browser-open-external = Открыть в браузере
+browser-home = Домой
+browser-stop = Стоп
+browser-bookmark = Закладка
+browser-bookmarks = Закладки
+browser-bookmark-remove = Удалить закладку
+browser-find = Найти
+browser-find-placeholder = Найти на странице…
+browser-find-prev = Назад
+browser-find-next = Далее
+browser-find-close = Закрыть
+browser-bookmarks-empty = Пока нет закладок
+browser-settings-homepage = Домашняя страница
 
 
 widget-document-editor-name = Document Editor

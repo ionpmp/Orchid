@@ -77,6 +77,18 @@ browser-new-tab = 新しいタブ
 browser-address-placeholder = 検索またはアドレスを入力
 browser-unavailable = Microsoft Edge WebView2 ランタイムがインストールされていません。
 browser-open-external = ブラウザで開く
+browser-home = ホーム
+browser-stop = 停止
+browser-bookmark = ブックマーク
+browser-bookmarks = ブックマーク
+browser-bookmark-remove = ブックマークを削除
+browser-find = 検索
+browser-find-placeholder = ページ内を検索…
+browser-find-prev = 前へ
+browser-find-next = 次へ
+browser-find-close = 閉じる
+browser-bookmarks-empty = ブックマークはまだありません
+browser-settings-homepage = ホームページ
 
 
 widget-document-editor-name = Document Editor

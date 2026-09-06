@@ -1906,11 +1906,9 @@ pub(crate) fn next_untitled_document_path(dir: &std::path::Path) -> std::path::P
     ))
 }
 
-
 pub(crate) fn next_untitled_docx_path(dir: &std::path::Path) -> std::path::PathBuf {
     next_untitled_document_path(dir)
 }
-
 
 #[allow(clippy::type_complexity)]
 fn default_frame_data_extended(

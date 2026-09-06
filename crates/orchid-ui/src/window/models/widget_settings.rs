@@ -102,6 +102,7 @@ pub(crate) fn widget_has_settings(type_id: &str) -> bool {
             | "calendar"
             | "rss"
             | "file-manager"
+            | "browser"
     )
 }
 
@@ -145,6 +146,9 @@ pub(crate) fn build_widget_settings_fields(
             .unwrap_or_default(),
         "file-manager" => orchid_widgets::builtin::file_manager::current_config(instance_id)
             .map(|cfg| fm_fields(&cfg, locale))
+            .unwrap_or_default(),
+        "browser" => orchid_widgets::builtin::browser::current_config(instance_id)
+            .map(|cfg| browser_fields(&cfg, locale))
             .unwrap_or_default(),
         _ => vec![],
     }
@@ -325,6 +329,21 @@ fn notes_fields(
         "font_size",
         "notes-settings-font-size",
         cfg.font_size.to_string(),
+    );
+    rows
+}
+
+fn browser_fields(
+    cfg: &orchid_widgets::builtin::browser::BrowserConfig,
+    locale: &LocaleManager,
+) -> Vec<SettingsFieldRow> {
+    let mut rows = Vec::new();
+    push_text(
+        &mut rows,
+        locale,
+        "homepage",
+        "browser-settings-homepage",
+        cfg.homepage.clone(),
     );
     rows
 }
@@ -634,6 +653,7 @@ pub(crate) async fn apply_widget_setting(type_id: &str, instance_id: Uuid, key: 
         "file-manager" => {
             let _ = apply_fm(instance_id, key, value).await;
         }
+        "browser" => apply_browser(instance_id, key, value),
         _ => {}
     }
 }
@@ -918,6 +938,19 @@ fn apply_notes(instance_id: Uuid, key: &str, value: &str) {
             }
         }
         _ => {}
+    });
+}
+
+fn apply_browser(instance_id: Uuid, key: &str, value: &str) {
+    orchid_widgets::builtin::browser::update_config(instance_id, |cfg| {
+        if key == "homepage" {
+            let t = value.trim();
+            cfg.homepage = if t.is_empty() {
+                String::new()
+            } else {
+                orchid_widgets::builtin::browser::normalize_navigate_url(t)
+            };
+        }
     });
 }
 fn apply_calendar(instance_id: Uuid, key: &str, value: &str) {

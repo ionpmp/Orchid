@@ -197,6 +197,10 @@ export component WidgetFrame inherits Rectangle {
     callback browser-navigate(string, string);
     callback browser-command(string, string);
     callback browser-open-external(string);
+    callback browser-find(string, string, bool);
+    callback browser-toggle-bookmark(string);
+    callback browser-open-bookmark(string, int);
+    callback browser-remove-bookmark(string, int);
     callback browser-embed-bounds(string, length, length, length, length, bool);
 
     // Calendar
@@ -978,6 +982,10 @@ export component WidgetFrame inherits Rectangle {
                     navigate(u) => { root.browser-navigate(root.model.instance-id, u); }
                     command(c) => { root.browser-command(root.model.instance-id, c); }
                     open-external => { root.browser-open-external(root.model.instance-id); }
+                    find(q, fwd) => { root.browser-find(root.model.instance-id, q, fwd); }
+                    toggle-bookmark => { root.browser-toggle-bookmark(root.model.instance-id); }
+                    open-bookmark(i) => { root.browser-open-bookmark(root.model.instance-id, i); }
+                    remove-bookmark(i) => { root.browser-remove-bookmark(root.model.instance-id, i); }
                     embed-bounds(x, y, w, h, vis) => { root.browser-embed-bounds(root.model.instance-id, x, y, w, h, vis); }
                 }
 

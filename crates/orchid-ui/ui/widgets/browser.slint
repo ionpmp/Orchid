@@ -59,6 +59,10 @@ export component BrowserView inherits Rectangle {
     callback navigate(string);
     callback command(string);
     callback open-external();
+    callback find(string, bool);
+    callback toggle-bookmark();
+    callback open-bookmark(int);
+    callback remove-bookmark(int);
     callback embed-bounds(length, length, length, length, bool);
 
     background: transparent;
@@ -66,6 +70,11 @@ export component BrowserView inherits Rectangle {
     property <string> draft-url: model.url;
     property <int> synced-active: model.active-index;
     property <string> synced-url: model.url;
+    property <int> last-focus-gen: 0;
+    property <int> last-find-gen: 0;
+    property <bool> find-open: false;
+    property <bool> bookmarks-open: false;
+    property <string> find-query: "";
 
     function fire-embed() {
         if (model.webview-available && host.width > 8px && host.height > 8px) {
@@ -73,6 +82,66 @@ export component BrowserView inherits Rectangle {
         } else {
             root.embed-bounds(0, 0, 0, 0, false);
         }
+    }
+
+    function chrome-handled(event: KeyEvent) -> bool {
+        if (event.modifiers.control && (event.text == "t" || event.text == "T")) {
+            root.new-tab();
+            return true;
+        }
+        if (event.modifiers.control && (event.text == "w" || event.text == "W")) {
+            root.close-tab(model.active-index);
+            return true;
+        }
+        if (event.modifiers.control && (event.text == "l" || event.text == "L")) {
+            address.focus();
+            address.select-all();
+            return true;
+        }
+        if (event.modifiers.control && (event.text == "r" || event.text == "R")) {
+            root.command(model.is-loading ? "stop" : "reload");
+            return true;
+        }
+        if (event.modifiers.control && (event.text == "f" || event.text == "F")) {
+            root.find-open = true;
+            find-input.focus();
+            return true;
+        }
+        if (event.modifiers.control && (event.text == "d" || event.text == "D")) {
+            root.toggle-bookmark();
+            return true;
+        }
+        if (event.text == Key.F5) {
+            root.command("reload");
+            return true;
+        }
+        if (event.modifiers.alt && event.text == Key.LeftArrow) {
+            root.command("back");
+            return true;
+        }
+        if (event.modifiers.alt && event.text == Key.RightArrow) {
+            root.command("forward");
+            return true;
+        }
+        if (event.modifiers.alt && event.text == Key.Home) {
+            root.command("home");
+            return true;
+        }
+        if (event.text == Key.Escape) {
+            if (root.find-open) {
+                root.find-open = false;
+                return true;
+            }
+            if (root.bookmarks-open) {
+                root.bookmarks-open = false;
+                return true;
+            }
+            if (model.is-loading) {
+                root.command("stop");
+                return true;
+            }
+        }
+        return false;
     }
 
     changed model => {
@@ -86,69 +155,367 @@ export component BrowserView inherits Rectangle {
         } else if root.draft-url == model.url {
             root.synced-url = model.url;
         }
+        if model.focus-address-gen != root.last-focus-gen {
+            let bump = model.focus-address-gen > root.last-focus-gen;
+            root.last-focus-gen = model.focus-address-gen;
+            if bump {
+                address.focus();
+                address.select-all();
+            }
+        }
+        if model.show-find-gen != root.last-find-gen {
+            let bump = model.show-find-gen > root.last-find-gen;
+            root.last-find-gen = model.show-find-gen;
+            if bump {
+                root.find-open = true;
+                find-input.focus();
+            }
+        }
         root.fire-embed();
     }
 
-    VerticalLayout {
-        spacing: 0;
+    chrome := FocusScope {
+        width: 100%;
+        height: 100%;
+        key-pressed(event) => {
+            if (root.chrome-handled(event)) {
+                return accept;
+            }
+            return reject;
+        }
 
-        Rectangle {
-            height: 32px;
-            background: Theme.surface-base;
+        VerticalLayout {
+            spacing: 0;
 
-            HorizontalLayout {
-                padding-left: 6px;
-                padding-right: 6px;
-                spacing: 2px;
-                alignment: start;
+            Rectangle {
+                height: 32px;
+                background: Theme.surface-base;
+
+                HorizontalLayout {
+                    padding-left: 6px;
+                    padding-right: 6px;
+                    spacing: 2px;
+                    alignment: start;
+
+                    Flickable {
+                        vertical-stretch: 0;
+                        viewport-height: self.height;
+                        horizontal-stretch: 1;
+
+                        HorizontalLayout {
+                            spacing: 2px;
+                            alignment: start;
+
+                            for tab[i] in model.tabs : Rectangle {
+                                width: max(72px, min(160px, tab-label.preferred-width + (tab.is-active ? 36px : 20px)));
+                                height: 26px;
+                                y: (parent.height - self.height) / 2;
+                                border-radius: Theme.radius-md;
+                                background: tab.is-active ? Theme.surface-raised
+                                    : tab-ta.has-hover ? Theme.surface-raised : transparent;
+                                border-width: tab.is-active ? 1px : 0;
+                                border-color: Theme.border-default;
+
+                                tab-ta := TouchArea {
+                                    clicked => { root.select-tab(i); }
+                                }
+
+                                HorizontalLayout {
+                                    padding-left: 8px;
+                                    padding-right: 4px;
+                                    spacing: 2px;
+
+                                    tab-label := Text {
+                                        text: tab.title == "" ? model.untitled-label : tab.title;
+                                        color: tab.is-active ? Theme.text-primary : Theme.text-secondary;
+                                        font-size: Theme.font-size-sm;
+                                        font-weight: tab.is-active ? Theme.weight-semibold : Theme.weight-regular;
+                                        font-family: Theme.font-family-sans;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                        horizontal-stretch: 1;
+                                    }
+
+                                    if tab.is-active || tab-ta.has-hover : Rectangle {
+                                        width: 18px;
+                                        height: 18px;
+                                        y: (parent.height - self.height) / 2;
+                                        border-radius: Theme.radius-md;
+                                        background: close-ta.has-hover ? Theme.surface-base : transparent;
+                                        close-ta := TouchArea {
+                                            clicked => { root.close-tab(i); }
+                                        }
+                                        Text {
+                                            width: 100%; height: 100%;
+                                            text: "×";
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    BrowserToolBtn {
+                        label: "+";
+                        tip: model.new-tab-tip;
+                        clicked => { root.new-tab(); }
+                    }
+                }
+            }
+
+            Rectangle { height: 1px; background: Theme.border-default; }
+
+            Rectangle {
+                height: 36px;
+                background: Theme.surface-base;
+
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 6px;
+                    alignment: start;
+
+                    BrowserToolBtn {
+                        label: model.back-label;
+                        enabled: model.webview-available && model.can-go-back;
+                        clicked => { root.command("back"); }
+                    }
+                    BrowserToolBtn {
+                        label: model.forward-label;
+                        enabled: model.webview-available && model.can-go-forward;
+                        clicked => { root.command("forward"); }
+                    }
+                    BrowserToolBtn {
+                        label: model.is-loading ? model.stop-label : model.reload-label;
+                        enabled: model.webview-available;
+                        clicked => { root.command(model.is-loading ? "stop" : "reload"); }
+                    }
+                    BrowserToolBtn {
+                        label: model.home-label;
+                        enabled: model.webview-available;
+                        clicked => { root.command("home"); }
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: 28px;
+                        y: (parent.height - self.height) / 2;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+
+                        if root.draft-url == "" : Text {
+                            x: 8px;
+                            width: parent.width - 16px;
+                            height: 100%;
+                            text: model.address-placeholder;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            font-family: Theme.font-family-sans;
+                            vertical-alignment: center;
+                        }
+
+                        address := TextInput {
+                            x: 8px;
+                            width: parent.width - 16px;
+                            height: 100%;
+                            text: root.draft-url;
+                            edited => { root.draft-url = self.text; }
+                            accepted => { root.navigate(root.draft-url); }
+                            single-line: true;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            font-family: Theme.font-family-sans;
+                            vertical-alignment: center;
+                            key-pressed(event) => {
+                                if (event.modifiers.control && (event.text == "l" || event.text == "L")) {
+                                    self.select-all();
+                                    return accept;
+                                }
+                                if (root.chrome-handled(event)) {
+                                    return accept;
+                                }
+                                return reject;
+                            }
+                        }
+                    }
+
+                    BrowserToolBtn {
+                        label: model.is-bookmarked ? "★" : "☆";
+                        tip: model.bookmark-tip;
+                        enabled: model.url != "" && model.url != "about:blank";
+                        clicked => { root.toggle-bookmark(); }
+                    }
+                    BrowserToolBtn {
+                        label: model.go-label;
+                        enabled: true;
+                        clicked => { root.navigate(root.draft-url); }
+                    }
+                    BrowserToolBtn {
+                        label: model.bookmarks-label;
+                        clicked => { root.bookmarks-open = !root.bookmarks-open; }
+                    }
+                    BrowserToolBtn {
+                        label: model.find-label;
+                        enabled: model.webview-available;
+                        clicked => {
+                            root.find-open = true;
+                            find-input.focus();
+                        }
+                    }
+                    BrowserToolBtn {
+                        label: model.open-label;
+                        clicked => { root.open-external(); }
+                    }
+                }
+            }
+
+            Rectangle {
+                height: root.find-open ? 32px : 0;
+                clip: true;
+                background: Theme.surface-base;
+                visible: root.find-open;
+
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 6px;
+                    alignment: center;
+
+                    Text {
+                        text: model.find-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: 26px;
+                        background: Theme.surface-raised;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border-default;
+
+                        if find-input.text == "" : Text {
+                            x: 8px;
+                            width: parent.width - 16px;
+                            height: 100%;
+                            text: model.find-placeholder;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+
+                        find-input := TextInput {
+                            x: 8px;
+                            width: parent.width - 16px;
+                            height: 100%;
+                            text <=> root.find-query;
+                            single-line: true;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            font-family: Theme.font-family-sans;
+                            vertical-alignment: center;
+                            key-pressed(event) => {
+                                if (event.text == Key.Return) {
+                                    root.find(root.find-query, !event.modifiers.shift);
+                                    return accept;
+                                }
+                                if (event.text == Key.Escape) {
+                                    root.find-open = false;
+                                    return accept;
+                                }
+                                if (root.chrome-handled(event)) {
+                                    return accept;
+                                }
+                                return reject;
+                            }
+                        }
+                    }
+
+                    BrowserToolBtn {
+                        label: "↑";
+                        tip: model.find-prev-tip;
+                        clicked => { root.find(root.find-query, false); }
+                    }
+                    BrowserToolBtn {
+                        label: "↓";
+                        tip: model.find-next-tip;
+                        clicked => { root.find(root.find-query, true); }
+                    }
+                    BrowserToolBtn {
+                        label: "×";
+                        tip: model.find-close-tip;
+                        clicked => { root.find-open = false; }
+                    }
+                }
+            }
+
+            if root.find-open : Rectangle { height: 1px; background: Theme.border-default; }
+
+            Rectangle {
+                height: root.bookmarks-open ? 88px : 0;
+                clip: true;
+                background: Theme.surface-base;
+                visible: root.bookmarks-open;
+
+                if model.bookmarks.length == 0 : Text {
+                    x: 12px;
+                    width: parent.width - 24px;
+                    height: 100%;
+                    text: model.bookmarks-empty;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
 
                 Flickable {
-                    vertical-stretch: 0;
-                    viewport-height: self.height;
-                    horizontal-stretch: 1;
+                    width: 100%;
+                    height: 100%;
+                    viewport-width: parent.width;
 
-                    HorizontalLayout {
+                    VerticalLayout {
+                        padding: 6px;
                         spacing: 2px;
-                        alignment: start;
 
-                        for tab[i] in model.tabs : Rectangle {
-                            width: max(72px, min(160px, tab-label.preferred-width + (tab.is-active ? 36px : 20px)));
-                            height: 26px;
-                            y: (parent.height - self.height) / 2;
+                        for bm[i] in model.bookmarks : Rectangle {
+                            height: 24px;
                             border-radius: Theme.radius-md;
-                            background: tab.is-active ? Theme.surface-raised
-                                : tab-ta.has-hover ? Theme.surface-raised : transparent;
-                            border-width: tab.is-active ? 1px : 0;
-                            border-color: Theme.border-default;
+                            background: bm-ta.has-hover ? Theme.surface-raised : transparent;
 
-                            tab-ta := TouchArea {
-                                clicked => { root.select-tab(i); }
+                            bm-ta := TouchArea {
+                                clicked => { root.open-bookmark(i); }
                             }
 
                             HorizontalLayout {
                                 padding-left: 8px;
                                 padding-right: 4px;
-                                spacing: 2px;
+                                spacing: 4px;
 
-                                tab-label := Text {
-                                    text: tab.title == "" ? model.untitled-label : tab.title;
-                                    color: tab.is-active ? Theme.text-primary : Theme.text-secondary;
+                                Text {
+                                    text: bm.title == "" ? bm.url : bm.title;
+                                    color: Theme.text-primary;
                                     font-size: Theme.font-size-sm;
-                                    font-weight: tab.is-active ? Theme.weight-semibold : Theme.weight-regular;
                                     font-family: Theme.font-family-sans;
                                     vertical-alignment: center;
                                     overflow: elide;
                                     horizontal-stretch: 1;
                                 }
 
-                                if tab.is-active || tab-ta.has-hover : Rectangle {
+                                Rectangle {
                                     width: 18px;
                                     height: 18px;
                                     y: (parent.height - self.height) / 2;
                                     border-radius: Theme.radius-md;
-                                    background: close-ta.has-hover ? Theme.surface-base : transparent;
-                                    close-ta := TouchArea {
-                                        clicked => { root.close-tab(i); }
+                                    background: rm-ta.has-hover ? Theme.surface-base : transparent;
+                                    rm-ta := TouchArea {
+                                        clicked => { root.remove-bookmark(i); }
                                     }
                                     Text {
                                         width: 100%; height: 100%;
@@ -163,115 +530,36 @@ export component BrowserView inherits Rectangle {
                         }
                     }
                 }
-
-                BrowserToolBtn {
-                    label: "+";
-                    tip: model.new-tab-tip;
-                    clicked => { root.new-tab(); }
-                }
             }
-        }
 
-        Rectangle { height: 1px; background: Theme.border-default; }
+            if root.bookmarks-open : Rectangle { height: 1px; background: Theme.border-default; }
 
-        Rectangle {
-            height: 36px;
-            background: Theme.surface-base;
-
-            HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 6px;
-                alignment: start;
-
-                BrowserToolBtn {
-                    label: model.back-label;
-                    enabled: model.webview-available && model.can-go-back;
-                    clicked => { root.command("back"); }
-                }
-                BrowserToolBtn {
-                    label: model.forward-label;
-                    enabled: model.webview-available && model.can-go-forward;
-                    clicked => { root.command("forward"); }
-                }
-                BrowserToolBtn {
-                    label: model.reload-label;
-                    enabled: model.webview-available;
-                    clicked => { root.command("reload"); }
-                }
-
-                Rectangle {
-                    horizontal-stretch: 1;
-                    height: 28px;
-                    y: (parent.height - self.height) / 2;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-
-                    if root.draft-url == "" : Text {
-                        x: 8px;
-                        width: parent.width - 16px;
-                        height: 100%;
-                        text: model.address-placeholder;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        font-family: Theme.font-family-sans;
-                        vertical-alignment: center;
-                    }
-
-                    address := TextInput {
-                        x: 8px;
-                        width: parent.width - 16px;
-                        height: 100%;
-                        text: root.draft-url;
-                        edited => { root.draft-url = self.text; }
-                        accepted => { root.navigate(root.draft-url); }
-                        single-line: true;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        font-family: Theme.font-family-sans;
-                        vertical-alignment: center;
-                    }
-                }
-
-                BrowserToolBtn {
-                    label: model.go-label;
-                    enabled: true;
-                    clicked => { root.navigate(root.draft-url); }
-                }
-                BrowserToolBtn {
-                    label: model.open-label;
-                    clicked => { root.open-external(); }
-                }
+            if !model.webview-available : Text {
+                height: 20px;
+                text: model.unavailable-label;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
             }
-        }
 
-        if !model.webview-available : Text {
-            height: 20px;
-            text: model.unavailable-label;
-            color: Theme.text-tertiary;
-            font-size: Theme.font-size-sm;
-            vertical-alignment: center;
-        }
+            embed-slot := Rectangle {
+                vertical-stretch: 1;
+                background: Theme.surface-base;
+                clip: true;
 
-        embed-slot := Rectangle {
-            vertical-stretch: 1;
-            background: Theme.surface-base;
-            clip: true;
-
-            host := Rectangle {
-                width: parent.width;
-                height: parent.height;
-                visible: model.webview-available;
-                changed width => { root.fire-embed(); }
-                changed height => { root.fire-embed(); }
-                changed absolute-position => { root.fire-embed(); }
-                changed visible => { root.fire-embed(); }
-                property <length> ax: self.absolute-position.x;
-                property <length> ay: self.absolute-position.y;
-                changed ax => { root.fire-embed(); }
-                changed ay => { root.fire-embed(); }
+                host := Rectangle {
+                    width: parent.width;
+                    height: parent.height;
+                    visible: model.webview-available;
+                    changed width => { root.fire-embed(); }
+                    changed height => { root.fire-embed(); }
+                    changed absolute-position => { root.fire-embed(); }
+                    changed visible => { root.fire-embed(); }
+                    property <length> ax: self.absolute-position.x;
+                    property <length> ay: self.absolute-position.y;
+                    changed ax => { root.fire-embed(); }
+                    changed ay => { root.fire-embed(); }
+                }
             }
         }
     }

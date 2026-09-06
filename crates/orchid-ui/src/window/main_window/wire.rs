@@ -1302,6 +1302,38 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_browser_find({
+            let t = t.clone();
+            move |id, query, forward| {
+                if let Some(c) = t.upgrade() {
+                    c.on_browser_find(&id, &query, forward);
+                }
+            }
+        });
+        self.window.on_browser_toggle_bookmark({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_browser_toggle_bookmark(&id);
+                }
+            }
+        });
+        self.window.on_browser_open_bookmark({
+            let t = t.clone();
+            move |id, index| {
+                if let Some(c) = t.upgrade() {
+                    c.on_browser_open_bookmark(&id, index);
+                }
+            }
+        });
+        self.window.on_browser_remove_bookmark({
+            let t = t.clone();
+            move |id, index| {
+                if let Some(c) = t.upgrade() {
+                    c.on_browser_remove_bookmark(&id, index);
+                }
+            }
+        });
         self.window.on_browser_embed_bounds({
             let t = t.clone();
             move |id, x, y, w, h, vis| {

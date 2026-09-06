@@ -22,6 +22,29 @@ pub(crate) struct HtmlNavState {
     pub can_go_forward: bool,
     pub url: Option<String>,
     pub title: Option<String>,
+    pub is_loading: Option<bool>,
+}
+
+/// Keyboard shortcut captured from a focused WebView2 controller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BrowserChromeAction {
+    NewTab,
+    CloseTab,
+    FocusAddress,
+    Reload,
+    Stop,
+    Find,
+    Bookmark,
+    Home,
+    Back,
+    Forward,
+}
+
+/// One chrome shortcut for the browser widget (UI-thread drain).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BrowserChromeEvent {
+    pub instance_id: Uuid,
+    pub action: BrowserChromeAction,
 }
 
 /// Target document for a viewer / browser surface.
@@ -55,6 +78,7 @@ impl SlotKey {
 pub(crate) struct HtmlWebViewHost {
     state: Arc<Mutex<HostState>>,
     nav: Arc<Mutex<Vec<HtmlNavState>>>,
+    chrome: Arc<Mutex<Vec<BrowserChromeEvent>>>,
 }
 
 #[derive(Default)]
@@ -73,6 +97,8 @@ struct Slot {
     document: HtmlDocument,
     last_applied: HtmlDocument,
     visible: bool,
+    applied_visible: bool,
+    loading: bool,
     bounds: OverlayBounds,
     creating: bool,
     browser: bool,
@@ -88,6 +114,8 @@ impl Default for Slot {
             document: HtmlDocument::None,
             last_applied: HtmlDocument::None,
             visible: false,
+            applied_visible: false,
+            loading: false,
             bounds: OverlayBounds::default(),
             creating: false,
             browser: false,
@@ -122,6 +150,7 @@ impl HtmlWebViewHost {
                 ..HostState::default()
             })),
             nav: Arc::new(Mutex::new(Vec::new())),
+            chrome: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -134,6 +163,12 @@ impl HtmlWebViewHost {
     /// Drain history-changed updates for the Slint chrome.
     pub(crate) fn take_nav_updates(&self) -> Vec<HtmlNavState> {
         let mut g = self.nav.lock();
+        std::mem::take(&mut *g)
+    }
+
+    /// Drain in-page accelerator shortcuts for the browser widget.
+    pub(crate) fn take_chrome_events(&self) -> Vec<BrowserChromeEvent> {
+        let mut g = self.chrome.lock();
         std::mem::take(&mut *g)
     }
 
@@ -232,12 +267,55 @@ impl HtmlWebViewHost {
         self.command_key(SlotKey { instance, surface }, command);
     }
 
+    /// Find in the current page via `window.find` (WebView2 0.39 has no Find API).
+    pub(crate) fn find_in_page(&self, instance: Uuid, surface: Uuid, query: &str, forward: bool) {
+        let query = query.trim();
+        if query.is_empty() {
+            return;
+        }
+        #[cfg(windows)]
+        {
+            use webview2_com::ExecuteScriptCompletedHandler;
+            use windows::core::HSTRING;
+
+            let webview = {
+                let st = self.state.lock();
+                st.slots
+                    .get(&SlotKey { instance, surface })
+                    .and_then(|s| s.webview.clone())
+            };
+            let Some(webview) = webview else {
+                return;
+            };
+            let literal = serde_json::to_string(query).unwrap_or_else(|_| "\"\"".to_string());
+            let backwards = if forward { "false" } else { "true" };
+            let js = format!(
+                "(function(){{ try {{ window.find({literal}, false, {backwards}, true, false, true, false); }} catch (e) {{}} }})()"
+            );
+            let handler = ExecuteScriptCompletedHandler::create(Box::new(|_, _| Ok(())));
+            if let Err(e) = unsafe { webview.ExecuteScript(&HSTRING::from(js.as_str()), &handler) }
+            {
+                warn!(?e, instance = %instance, "webview2 find");
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (instance, surface, query, forward);
+        }
+    }
+
     fn command_key(&self, key: SlotKey, command: &str) {
         #[cfg(windows)]
         {
             let webview = {
-                let st = self.state.lock();
-                st.slots.get(&key).and_then(|s| s.webview.clone())
+                let mut st = self.state.lock();
+                let Some(slot) = st.slots.get_mut(&key) else {
+                    return;
+                };
+                if command == "stop" {
+                    slot.loading = false;
+                }
+                slot.webview.clone()
             };
             let Some(webview) = webview else {
                 return;
@@ -247,9 +325,13 @@ impl HtmlWebViewHost {
                     "back" => webview.GoBack(),
                     "forward" => webview.GoForward(),
                     "reload" => webview.Reload(),
+                    "stop" => webview.Stop(),
                     _ => return,
                 }
             };
+            if command == "stop" {
+                push_nav(&self.nav, key, &webview, Some(false));
+            }
             if let Err(e) = result {
                 warn!(?e, command, instance = %key.instance, surface = %key.surface, "webview2 command");
             }
@@ -486,6 +568,8 @@ impl HtmlWebViewHost {
                 attach_history(&host, key, &webview);
                 if browser {
                     attach_location(&host, key, &webview);
+                    attach_loading(&host, key, &webview);
+                    attach_accel(&host, key, &controller);
                 }
                 {
                     let mut st = host.state.lock();
@@ -547,15 +631,25 @@ impl HtmlWebViewHost {
     fn apply_bounds(&self, key: SlotKey) {
         use windows::Win32::Foundation::RECT;
 
-        let (controller, bounds, visible) = {
-            let st = self.state.lock();
-            let Some(slot) = st.slots.get(&key) else {
+        let (controller, webview, bounds, visible, browser, became_visible, loading) = {
+            let mut st = self.state.lock();
+            let Some(slot) = st.slots.get_mut(&key) else {
                 return;
             };
             let Some(controller) = slot.controller.clone() else {
                 return;
             };
-            (controller, slot.bounds, slot.visible)
+            let became_visible = slot.visible && !slot.applied_visible;
+            slot.applied_visible = slot.visible;
+            (
+                controller,
+                slot.webview.clone(),
+                slot.bounds,
+                slot.visible,
+                slot.browser,
+                became_visible,
+                slot.loading,
+            )
         };
         let rect = RECT {
             left: bounds.x,
@@ -570,6 +664,11 @@ impl HtmlWebViewHost {
             debug!(?e, instance = %key.instance, "webview2 SetIsVisible");
         }
         let _ = unsafe { controller.NotifyParentWindowPositionChanged() };
+        if browser && became_visible {
+            if let Some(webview) = webview {
+                push_nav(&self.nav, key, &webview, Some(loading));
+            }
+        }
     }
 
     #[cfg(not(windows))]
@@ -598,6 +697,7 @@ fn attach_history(
             can_go_forward: can_go_forward.as_bool(),
             url: None,
             title: None,
+            is_loading: None,
         });
         Ok(())
     }));
@@ -618,7 +718,7 @@ fn attach_location(
     let nav = host.nav.clone();
     let wv = webview.clone();
     let handler = SourceChangedEventHandler::create(Box::new(move |_, _| {
-        push_location(&nav, key, &wv);
+        push_nav(&nav, key, &wv, None);
         Ok(())
     }));
     let mut token = 0_i64;
@@ -629,7 +729,7 @@ fn attach_location(
     let nav = host.nav.clone();
     let wv = webview.clone();
     let handler = DocumentTitleChangedEventHandler::create(Box::new(move |_, _| {
-        push_location(&nav, key, &wv);
+        push_nav(&nav, key, &wv, None);
         Ok(())
     }));
     let mut token = 0_i64;
@@ -639,13 +739,116 @@ fn attach_location(
 }
 
 #[cfg(windows)]
-fn push_location(
+fn attach_loading(
+    host: &HtmlWebViewHost,
+    key: SlotKey,
+    webview: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2,
+) {
+    use webview2_com::{NavigationCompletedEventHandler, NavigationStartingEventHandler};
+
+    let nav = host.nav.clone();
+    let state = host.state.clone();
+    let wv = webview.clone();
+    let handler = NavigationStartingEventHandler::create(Box::new(move |_, _| {
+        if let Some(slot) = state.lock().slots.get_mut(&key) {
+            slot.loading = true;
+        }
+        push_nav(&nav, key, &wv, Some(true));
+        Ok(())
+    }));
+    let mut token = 0_i64;
+    if let Err(e) = unsafe { webview.add_NavigationStarting(&handler, &mut token) } {
+        debug!(?e, instance = %key.instance, "webview2 NavigationStarting");
+    }
+
+    let nav = host.nav.clone();
+    let state = host.state.clone();
+    let wv = webview.clone();
+    let handler = NavigationCompletedEventHandler::create(Box::new(move |_, _| {
+        if let Some(slot) = state.lock().slots.get_mut(&key) {
+            slot.loading = false;
+        }
+        push_nav(&nav, key, &wv, Some(false));
+        Ok(())
+    }));
+    let mut token = 0_i64;
+    if let Err(e) = unsafe { webview.add_NavigationCompleted(&handler, &mut token) } {
+        debug!(?e, instance = %key.instance, "webview2 NavigationCompleted");
+    }
+}
+
+#[cfg(windows)]
+fn attach_accel(
+    host: &HtmlWebViewHost,
+    key: SlotKey,
+    controller: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller,
+) {
+    use webview2_com::AcceleratorKeyPressedEventHandler;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_KEY_EVENT_KIND, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN,
+        COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
+    };
+    use windows::Win32::UI::Input::KeyboardAndMouse::{VK_CONTROL, VK_MENU};
+
+    let chrome = host.chrome.clone();
+    let handler = AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        let mut kind = COREWEBVIEW2_KEY_EVENT_KIND(0);
+        let _ = unsafe { args.KeyEventKind(&mut kind) };
+        if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
+            && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
+        {
+            return Ok(());
+        }
+        let mut vk = 0u32;
+        let _ = unsafe { args.VirtualKey(&mut vk) };
+        let ctrl = key_down(VK_CONTROL);
+        let alt = key_down(VK_MENU);
+        let action = match (ctrl, alt, vk) {
+            (true, false, 0x54) => Some(BrowserChromeAction::NewTab),
+            (true, false, 0x57) => Some(BrowserChromeAction::CloseTab),
+            (true, false, 0x4C) => Some(BrowserChromeAction::FocusAddress),
+            (true, false, 0x52) => Some(BrowserChromeAction::Reload),
+            (true, false, 0x46) => Some(BrowserChromeAction::Find),
+            (true, false, 0x44) => Some(BrowserChromeAction::Bookmark),
+            (false, false, 0x74) => Some(BrowserChromeAction::Reload),
+            (false, false, 0x1B) => Some(BrowserChromeAction::Stop),
+            (false, true, 0x25) => Some(BrowserChromeAction::Back),
+            (false, true, 0x27) => Some(BrowserChromeAction::Forward),
+            (false, true, 0x24) => Some(BrowserChromeAction::Home),
+            _ => None,
+        };
+        let Some(action) = action else {
+            return Ok(());
+        };
+        let _ = unsafe { args.SetHandled(true) };
+        chrome.lock().push(BrowserChromeEvent {
+            instance_id: key.instance,
+            action,
+        });
+        Ok(())
+    }));
+    let mut token = 0_i64;
+    if let Err(e) = unsafe { controller.add_AcceleratorKeyPressed(&handler, &mut token) } {
+        debug!(?e, instance = %key.instance, "webview2 AcceleratorKeyPressed");
+    }
+}
+
+#[cfg(windows)]
+fn key_down(vk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY) -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+    unsafe { GetAsyncKeyState(i32::from(vk.0)) as u16 & 0x8000 != 0 }
+}
+
+#[cfg(windows)]
+fn push_nav(
     nav: &Arc<Mutex<Vec<HtmlNavState>>>,
     key: SlotKey,
     wv: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2,
+    is_loading: Option<bool>,
 ) {
-    use windows::Win32::System::Com::CoTaskMemFree;
-
     let mut can_go_back = windows::core::BOOL::from(false);
     let mut can_go_forward = windows::core::BOOL::from(false);
     let _ = unsafe { wv.CanGoBack(&mut can_go_back) };
@@ -661,6 +864,7 @@ fn push_location(
         can_go_forward: can_go_forward.as_bool(),
         url: pwstr_to_string(uri),
         title: pwstr_to_string(title_raw),
+        is_loading,
     });
 }
 

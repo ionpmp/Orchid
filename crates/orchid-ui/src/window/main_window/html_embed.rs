@@ -62,17 +62,20 @@ impl MainWindowController {
         self.html_webview.set_document(id, document);
     }
 
-    pub(super) fn flush_html_webview_nav(&self) {
+    pub(super) fn flush_html_webview_nav(self: &Arc<Self>) {
         let updates = self.html_webview.take_nav_updates();
-        if updates.is_empty() {
-            return;
-        }
         for u in updates {
             if u.surface_id.is_nil() {
                 self.patch_html_nav(u.instance_id, u.can_go_back, u.can_go_forward);
                 continue;
             }
-            self.patch_browser_nav(u.instance_id, u.surface_id, u.can_go_back, u.can_go_forward);
+            self.patch_browser_nav(
+                u.instance_id,
+                u.surface_id,
+                u.can_go_back,
+                u.can_go_forward,
+                u.is_loading,
+            );
             if let (Some(url), title) = (u.url.as_deref(), u.title.as_deref().unwrap_or("")) {
                 orchid_widgets::builtin::browser::tab_navigated(
                     u.instance_id,
@@ -82,6 +85,7 @@ impl MainWindowController {
                 );
             }
         }
+        self.flush_browser_chrome();
     }
 
     pub(super) fn sync_visible_html_webviews(&self) {
@@ -132,13 +136,21 @@ impl MainWindowController {
         }
     }
 
-    fn patch_browser_nav(&self, id: Uuid, surface: Uuid, can_go_back: bool, can_go_forward: bool) {
+    fn patch_browser_nav(
+        &self,
+        id: Uuid,
+        surface: Uuid,
+        can_go_back: bool,
+        can_go_forward: bool,
+        is_loading: Option<bool>,
+    ) {
         patch_browser_nav_in_model(
             &self.workspace_widgets,
             id,
             surface,
             can_go_back,
             can_go_forward,
+            is_loading,
         );
         patch_browser_nav_in_model(
             &self.workspace_floating_widgets,
@@ -146,7 +158,47 @@ impl MainWindowController {
             surface,
             can_go_back,
             can_go_forward,
+            is_loading,
         );
+    }
+
+    fn flush_browser_chrome(self: &Arc<Self>) {
+        use crate::html_webview::BrowserChromeAction;
+        use slint::SharedString;
+
+        let events = self.html_webview.take_chrome_events();
+        for ev in events {
+            let id = SharedString::from(ev.instance_id.to_string());
+            match ev.action {
+                BrowserChromeAction::NewTab => self.on_browser_new_tab(&id),
+                BrowserChromeAction::CloseTab => {
+                    let idx = orchid_widgets::builtin::browser::current_config(ev.instance_id)
+                        .map(|c| c.active_index as i32)
+                        .unwrap_or(0);
+                    self.on_browser_close_tab(&id, idx);
+                }
+                BrowserChromeAction::FocusAddress => {
+                    self.bump_browser_focus_address(ev.instance_id)
+                }
+                BrowserChromeAction::Reload => {
+                    self.on_browser_command(&id, &SharedString::from("reload"));
+                }
+                BrowserChromeAction::Stop => {
+                    self.on_browser_command(&id, &SharedString::from("stop"));
+                }
+                BrowserChromeAction::Find => self.bump_browser_show_find(ev.instance_id),
+                BrowserChromeAction::Bookmark => self.on_browser_toggle_bookmark(&id),
+                BrowserChromeAction::Home => {
+                    self.on_browser_command(&id, &SharedString::from("home"));
+                }
+                BrowserChromeAction::Back => {
+                    self.on_browser_command(&id, &SharedString::from("back"));
+                }
+                BrowserChromeAction::Forward => {
+                    self.on_browser_command(&id, &SharedString::from("forward"));
+                }
+            }
+        }
     }
 
     fn patch_html_nav(&self, id: Uuid, can_go_back: bool, can_go_forward: bool) {
@@ -193,6 +245,7 @@ fn patch_browser_nav_in_model(
     surface: Uuid,
     can_go_back: bool,
     can_go_forward: bool,
+    is_loading: Option<bool>,
 ) {
     let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
         return;
@@ -226,6 +279,9 @@ fn patch_browser_nav_in_model(
         }
         row.browser.can_go_back = can_go_back;
         row.browser.can_go_forward = can_go_forward;
+        if let Some(loading) = is_loading {
+            row.browser.is_loading = loading;
+        }
         v.set_row_data(r, row);
         return;
     }

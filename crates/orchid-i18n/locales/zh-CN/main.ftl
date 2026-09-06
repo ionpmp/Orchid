@@ -77,6 +77,18 @@ browser-new-tab = 新标签页
 browser-address-placeholder = 搜索或输入地址
 browser-unavailable = 未安装 Microsoft Edge WebView2 运行时。
 browser-open-external = 在浏览器中打开
+browser-home = 主页
+browser-stop = 停止
+browser-bookmark = 书签
+browser-bookmarks = 书签
+browser-bookmark-remove = 删除书签
+browser-find = 查找
+browser-find-placeholder = 在页面中查找…
+browser-find-prev = 上一个
+browser-find-next = 下一个
+browser-find-close = 关闭
+browser-bookmarks-empty = 暂无书签
+browser-settings-homepage = 主页
 
 
 widget-document-editor-name = Document Editor

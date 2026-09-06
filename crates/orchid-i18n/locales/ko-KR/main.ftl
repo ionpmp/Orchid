@@ -77,6 +77,18 @@ browser-new-tab = 새 탭
 browser-address-placeholder = 검색 또는 주소 입력
 browser-unavailable = Microsoft Edge WebView2 런타임이 설치되어 있지 않습니다.
 browser-open-external = 브라우저에서 열기
+browser-home = 홈
+browser-stop = 중지
+browser-bookmark = 북마크
+browser-bookmarks = 북마크
+browser-bookmark-remove = 북마크 삭제
+browser-find = 찾기
+browser-find-placeholder = 페이지에서 찾기…
+browser-find-prev = 이전
+browser-find-next = 다음
+browser-find-close = 닫기
+browser-bookmarks-empty = 북마크가 없습니다
+browser-settings-homepage = 홈페이지
 
 
 widget-document-editor-name = Document Editor

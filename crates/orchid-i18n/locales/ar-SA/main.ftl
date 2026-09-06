@@ -77,6 +77,18 @@ browser-new-tab = تبويب جديد
 browser-address-placeholder = ابحث أو أدخل عنوانًا
 browser-unavailable = لم يتم تثبيت وقت تشغيل Microsoft Edge WebView2.
 browser-open-external = فتح في المتصفح
+browser-home = الصفحة الرئيسية
+browser-stop = إيقاف
+browser-bookmark = إشارة مرجعية
+browser-bookmarks = الإشارات المرجعية
+browser-bookmark-remove = إزالة الإشارة
+browser-find = بحث
+browser-find-placeholder = البحث في الصفحة…
+browser-find-prev = السابق
+browser-find-next = التالي
+browser-find-close = إغلاق
+browser-bookmarks-empty = لا توجد إشارات مرجعية بعد
+browser-settings-homepage = الصفحة الرئيسية
 
 
 widget-document-editor-name = Document Editor

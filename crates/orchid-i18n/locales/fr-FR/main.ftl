@@ -77,6 +77,18 @@ browser-new-tab = Nouvel onglet
 browser-address-placeholder = Rechercher ou saisir une adresse
 browser-unavailable = Le runtime Microsoft Edge WebView2 n’est pas installé.
 browser-open-external = Ouvrir dans le navigateur
+browser-home = Accueil
+browser-stop = Arrêter
+browser-bookmark = Signet
+browser-bookmarks = Signets
+browser-bookmark-remove = Retirer le signet
+browser-find = Rechercher
+browser-find-placeholder = Rechercher dans la page…
+browser-find-prev = Précédent
+browser-find-next = Suivant
+browser-find-close = Fermer
+browser-bookmarks-empty = Aucun signet pour le moment
+browser-settings-homepage = Page d’accueil
 
 
 widget-document-editor-name = Document Editor

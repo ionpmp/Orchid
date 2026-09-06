@@ -158,6 +158,10 @@ export component WorkspaceView inherits Rectangle {
     callback browser-navigate(string, string);
     callback browser-command(string, string);
     callback browser-open-external(string);
+    callback browser-find(string, string, bool);
+    callback browser-toggle-bookmark(string);
+    callback browser-open-bookmark(string, int);
+    callback browser-remove-bookmark(string, int);
     callback browser-embed-bounds(string, length, length, length, length, bool);
     callback calendar-select-date(string, string);
     callback calendar-activate-day(string, string);
@@ -580,6 +584,10 @@ export component WorkspaceView inherits Rectangle {
                     browser-navigate(id, u) => { root.browser-navigate(id, u); }
                     browser-command(id, c) => { root.browser-command(id, c); }
                     browser-open-external(id) => { root.browser-open-external(id); }
+                    browser-find(id, q, fwd) => { root.browser-find(id, q, fwd); }
+                    browser-toggle-bookmark(id) => { root.browser-toggle-bookmark(id); }
+                    browser-open-bookmark(id, i) => { root.browser-open-bookmark(id, i); }
+                    browser-remove-bookmark(id, i) => { root.browser-remove-bookmark(id, i); }
                     browser-embed-bounds(id, x, y, w, h, vis) => { root.browser-embed-bounds(id, x, y, w, h, vis); }
                     calendar-select-date(id, d) => { root.calendar-select-date(id, d); }
                     calendar-activate-day(id, d) => { root.calendar-activate-day(id, d); }
@@ -826,6 +834,10 @@ export component WorkspaceView inherits Rectangle {
             browser-navigate(id, u) => { root.browser-navigate(id, u); }
             browser-command(id, c) => { root.browser-command(id, c); }
             browser-open-external(id) => { root.browser-open-external(id); }
+            browser-find(id, q, fwd) => { root.browser-find(id, q, fwd); }
+            browser-toggle-bookmark(id) => { root.browser-toggle-bookmark(id); }
+            browser-open-bookmark(id, i) => { root.browser-open-bookmark(id, i); }
+            browser-remove-bookmark(id, i) => { root.browser-remove-bookmark(id, i); }
             browser-embed-bounds(id, x, y, w, h, vis) => { root.browser-embed-bounds(id, x, y, w, h, vis); }
             viewer-media-command(id, c) => { root.viewer-media-command(id, c); }
             viewer-media-seek-frac(id, f) => { root.viewer-media-seek-frac(id, f); }
