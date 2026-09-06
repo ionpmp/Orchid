@@ -13,11 +13,12 @@
 │  ├─ orchid-storage — redb state + TOML config       │
 │  ├─ orchid-fs — local + rclone network providers    │
 │  ├─ orchid-crypto — age, KDBX4, BLAKE3 chunks       │
-│  ├─ orchid-search — Tantivy + FS indexer            │
+│  ├─ orchid-search — Tantivy + ANN hybrid + FS indexer │
 │  ├─ orchid-viewers — image/PDF/text/archive/DOCX    │
 │  ├─ orchid-terminal — PTY + vte emulator            │
 │  ├─ orchid-widgets — framework + builtins           │
-│  ├─ orchid-format — native `.orchid` sealed container (Phase 1) │
+│  ├─ orchid-embed — sentence embedders (stub / ORT)  │
+│  ├─ orchid-format — native `.orchid` container      │
 │  ├─ orchid-i18n — Fluent catalogues (11 locales)    │
 │  └─ orchid-ui / orchid-app — composition + window   │
 ├─────────────────────────────────────────────────────┤
@@ -52,11 +53,12 @@ orchid/
 │   ├── orchid-storage/          # redb wrapper, config, state
 │   ├── orchid-crypto/           # age, KDBX, content addressing
 │   ├── orchid-fs/               # local FS, network providers, chunking
-│   ├── orchid-search/           # Tantivy
+│   ├── orchid-search/           # Tantivy + ANN hybrid
 │   ├── orchid-terminal/         # PTY + custom vte emulation
 │   ├── orchid-viewers/          # PDF, images, text, archives, DOCX editor
 │   ├── orchid-widgets/          # widget infrastructure + built-in widgets
-│   ├── orchid-format/           # native .orchid sealed container (Phase 1)
+│   ├── orchid-embed/            # sentence embeddings (stub; ORT optional)
+│   ├── orchid-format/           # native .orchid container (Phases 1–5)
 │   ├── orchid-i18n/             # localization (Fluent, 11 locales)
 │   ├── orchid-ui/               # Slint UI layer + window manager
 │   └── orchid-app/              # main binary, wires everything together
@@ -65,7 +67,8 @@ orchid/
 ```
 
 See also: [CHANGELOG.md](../CHANGELOG.md), [ROADMAP.md](ROADMAP.md),
-[ORCHID_FORMAT.md](ORCHID_FORMAT.md) (Phase 1 sealed framing in `orchid-format`).
+[ORCHID_FORMAT.md](ORCHID_FORMAT.md) (Phases 1–5 in `orchid-format` +
+`orchid-embed` / hybrid search).
 
 ## Network FS note
 

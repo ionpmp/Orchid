@@ -6,9 +6,11 @@ design source of truth for implementers. Phase 1 sealed framing ships in
 [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITY.md](SECURITY.md),
 [ROADMAP.md](ROADMAP.md).
 
-Status: **Phase 1–4 implemented** (sealed + linked + age + C2PA + CRDT Structured);
-Phase 5 remains draft. Version targets below refer to the *format*
-version carried in the file header, not the Orchid application release.
+Status: **Phase 1–5 implemented** (sealed + linked + age + C2PA + CRDT Structured +
+Embedding region + stub hybrid search); ORT-bundled sentence model remains an
+optional follow-up behind `orchid-embed`’s `ort` feature. Version targets below
+refer to the *format* version carried in the file header, not the Orchid
+application release.
 
 ---
 
@@ -682,8 +684,16 @@ identical materialized document hash).
 - ANN (`instant-distance` or `hnsw_rs`) fused with Tantivy BM25 in
   `orchid-search`
 
+**Status (implemented, stub embedder):** Embedding wire (`OREM` /
+`orchid.embedding.hier.f32.v1`) in `orchid-format`; `orchid-embed` ships
+[`StubEmbedder`](../crates/orchid-embed) for CI (synonym-aware bag-of-concepts);
+`orchid-search` adds brute-force [`AnnIndex`](../crates/orchid-search), RRF
+hybrid fusion, and a `.orchid` Clean-Text extractor. ORT + HNSW remain
+optional upgrades when a quantized model asset is bundled.
+
 **DONE:** A semantic query finds a relevant `.orchid` document that a pure
-BM25 query misses on the same corpus.
+BM25 query misses on the same corpus
+(`crates/orchid-search/tests/hybrid_orchid.rs`).
 
 ---
 
