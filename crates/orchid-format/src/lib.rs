@@ -14,6 +14,7 @@ mod compress;
 mod content_type;
 mod crdt;
 mod crypto_region;
+mod embedding;
 mod error;
 mod framing;
 mod linked;
@@ -39,6 +40,10 @@ pub use compress::{compress_zstd, decompress_zstd};
 pub use content_type::{STRUCTURED_CRDT_V1, STRUCTURED_SNAPSHOT_V1};
 pub use crdt::{
     decode_crdt_payload, encode_crdt_payload, ActorId, CrdtDocument, Op, OpId, CRDT_PAYLOAD_MAGIC,
+};
+pub use embedding::{
+    document_embedding, EmbeddingLevel, EmbeddingPayload, EmbeddingRecord, EMBEDDING_HIER_F32_V1,
+    EMBEDDING_MAGIC, EMBEDDING_WIRE_VERSION,
 };
 pub use crypto_region::{
     decode_region_body, prepare_region_body, PreparedRegionBody, RegionEncryptionSpec,

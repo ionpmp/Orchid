@@ -296,6 +296,7 @@ pub async fn linked_to_sealed(
             structured_crdt: None,
             encrypt_with: identity.cloned(),
             sign_c2pa: false,
+            embeddings: None,
         },
     )
 }

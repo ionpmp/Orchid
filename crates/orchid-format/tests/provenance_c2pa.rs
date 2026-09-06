@@ -25,6 +25,7 @@ fn provenance_payload_accepted_by_c2pa_reader() {
             structured_crdt: None,
             encrypt_with: None,
             sign_c2pa: true,
+            embeddings: None,
         },
     )
     .unwrap();

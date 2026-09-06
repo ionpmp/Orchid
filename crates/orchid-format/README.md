@@ -3,9 +3,10 @@
 Native `.orchid` container (`application/vnd.orchid`). Spec:
 [`docs/ORCHID_FORMAT.md`](../../docs/ORCHID_FORMAT.md).
 
-Phase 1–4: sealed + linked framing, FlatBuffers TOC, zstd Clean-Text /
+Phase 1–5: sealed + linked framing, FlatBuffers TOC, zstd Clean-Text /
 Structured, optional per-region age encryption, C2PA Provenance (signed PNG
-carrier), in-crate RGA text CRDT (`orchid.structured.crdt.v1`), `memmap2`
+carrier), in-crate RGA text CRDT (`orchid.structured.crdt.v1`), hierarchical
+Embedding region (`OREM` / `orchid.embedding.hier.f32.v1`), `memmap2`
 open, and CLI.
 
 ## Schema
@@ -33,4 +34,5 @@ cargo run -p orchid-format -- read sample.orchid \
 
 Library: `write_sealed_file` / `write_linked_file` / `SealedFile::open` /
 `linked_region_plaintext` / `sealed_to_linked` / `linked_to_sealed` /
-`sign_clean_text_provenance` / `verify_provenance_carrier`.
+`sign_clean_text_provenance` / `verify_provenance_carrier` /
+`embeddings` / `document_embedding`.

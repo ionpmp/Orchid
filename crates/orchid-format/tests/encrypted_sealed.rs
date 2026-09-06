@@ -26,6 +26,7 @@ fn encrypted_clean_text_roundtrips_with_correct_identity() {
             structured_crdt: None,
             encrypt_with: Some(id.clone()),
             sign_c2pa: false,
+            embeddings: None,
         },
     )
     .unwrap();

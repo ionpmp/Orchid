@@ -111,6 +111,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     structured_crdt: None,
                     encrypt_with: passphrase.map(Identity::passphrase),
                     sign_c2pa,
+                    embeddings: None,
                 },
             )?;
             println!("wrote {} ({MIME_TYPE})", output.display());

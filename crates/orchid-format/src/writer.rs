@@ -12,9 +12,10 @@ use crate::capability;
 use crate::content_type::{STRUCTURED_CRDT_V1, STRUCTURED_SNAPSHOT_V1};
 use crate::crdt::{encode_crdt_payload, CrdtDocument};
 use crate::crypto_region::prepare_region_body;
+use crate::embedding::{EmbeddingPayload, EMBEDDING_HIER_F32_V1};
 use crate::framing::{pad_to_alignment, Footer, Header, RegionHeader};
 use crate::provenance::{sign_clean_text_provenance, PROVENANCE_CONTENT_TYPE};
-use crate::region_type::{CLEAN_TEXT, PROVENANCE, RAW, STRUCTURED};
+use crate::region_type::{CLEAN_TEXT, EMBEDDING, PROVENANCE, RAW, STRUCTURED};
 use crate::toc::{CompressionCodec, RegionType, StorageMode};
 use crate::toc_build::{build_toc, TocRegionSpec, TocSpec};
 use crate::{Result, FOOTER_SIZE, HEADER_SIZE};
@@ -44,6 +45,8 @@ pub struct SealedCreateRequest {
     pub encrypt_with: Option<Identity>,
     /// When true, append a public C2PA Provenance region (signed PNG carrier).
     pub sign_c2pa: bool,
+    /// Optional hierarchical Embedding region (sets [`capability::EMBEDDINGS`]).
+    pub embeddings: Option<EmbeddingPayload>,
 }
 
 /// Write a sealed `.orchid` to `path`.
@@ -69,6 +72,12 @@ pub fn build_sealed_bytes(req: &SealedCreateRequest) -> Result<Vec<u8>> {
             &req.clean_text,
             "Orchid document",
         )?)
+    } else {
+        None
+    };
+    let embedding_plain = if let Some(emb) = &req.embeddings {
+        caps |= capability::EMBEDDINGS;
+        Some(emb.encode()?)
     } else {
         None
     };
@@ -142,6 +151,26 @@ pub fn build_sealed_bytes(req: &SealedCreateRequest) -> Result<Vec<u8>> {
             content_type: Some(structured_ctype),
         },
     )?;
+
+    if let Some(emb_bytes) = &embedding_plain {
+        // Embeddings: uncompressed (vectors already dense); may be encrypted.
+        let emb_body = prepare_region_body(emb_bytes, CompressionCodec::None, identity)?;
+        append_region(
+            &mut buf,
+            &mut toc_regions,
+            RegionWrite {
+                type_id: EMBEDDING,
+                fb_type: RegionType::Embedding,
+                payload: &emb_body.stored,
+                compression: emb_body.compression,
+                payload_blake3: emb_body.payload_blake3,
+                encryption: emb_body.encryption,
+                name: Some("embeddings".into()),
+                ordinal: 0,
+                content_type: Some(EMBEDDING_HIER_F32_V1.into()),
+            },
+        )?;
+    }
 
     if let Some(prov) = &provenance {
         // Public Provenance: never age-encrypted; uncompressed PNG carrier.
@@ -254,6 +283,7 @@ impl Default for SealedCreateRequest {
             structured_crdt: None,
             encrypt_with: None,
             sign_c2pa: false,
+            embeddings: None,
         }
     }
 }
@@ -278,6 +308,7 @@ mod tests {
             structured_crdt: None,
             encrypt_with: None,
             sign_c2pa: false,
+            embeddings: None,
         })
         .unwrap();
         assert!(bytes.len() > 4096 + FOOTER_SIZE);

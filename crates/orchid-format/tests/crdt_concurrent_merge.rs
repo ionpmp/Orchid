@@ -64,6 +64,7 @@ fn sealed_crdt_roundtrip_preserves_hash() {
             structured_crdt: Some(doc.clone()),
             encrypt_with: None,
             sign_c2pa: false,
+            embeddings: None,
         },
     )
     .unwrap();

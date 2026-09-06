@@ -205,6 +205,16 @@ impl SealedFile {
         self.region_plaintext(&entry, identity)
     }
 
+    /// Decode the Embedding region when present.
+    pub fn embeddings(
+        &self,
+        identity: Option<&Identity>,
+    ) -> Result<crate::EmbeddingPayload> {
+        let entry = self.find_region(RegionType::Embedding)?;
+        let bytes = self.region_plaintext(&entry, identity)?;
+        crate::EmbeddingPayload::decode(&bytes)
+    }
+
     /// Public Provenance carrier bytes (C2PA-signed PNG), if present.
     pub fn provenance_carrier(&self) -> Result<Vec<u8>> {
         let entry = self.find_region(RegionType::Provenance)?;

@@ -28,6 +28,7 @@ fn sealed_clean_text_roundtrip_bit_identical() {
             structured_crdt: None,
             encrypt_with: None,
             sign_c2pa: false,
+            embeddings: None,
         },
     )
     .unwrap();
