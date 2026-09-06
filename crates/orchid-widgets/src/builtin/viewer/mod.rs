@@ -3714,6 +3714,40 @@ pub async fn document_action(instance_id: Uuid, action: String) -> WidgetResult<
                 .await
                 .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
         }
+        "save-as" => {
+            let default_name = {
+                let guard = inner.viewer.lock().await;
+                let v = guard
+                    .as_ref()
+                    .ok_or_else(|| WidgetError::InvalidStateForOperation("no viewer".into()))?;
+                let Some(doc) = v.as_any().downcast_ref::<DocumentViewer>() else {
+                    return Ok(());
+                };
+                doc.path_clone()
+                    .and_then(|p| {
+                        std::path::Path::new(p.as_str())
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .map(str::to_owned)
+                    })
+                    .unwrap_or_else(|| "Untitled.orchid".into())
+            };
+            let Some(os_path) = orchid_viewers::pick_document_save_path(&default_name) else {
+                return Ok(());
+            };
+            let fs_path = orchid_fs::FsPath::from_local(&os_path)
+                .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+            let mut guard = inner.viewer.lock().await;
+            let v = guard
+                .as_mut()
+                .ok_or_else(|| WidgetError::InvalidStateForOperation("no viewer".into()))?;
+            let Some(doc) = v.as_any_mut().downcast_mut::<DocumentViewer>() else {
+                return Ok(());
+            };
+            doc.save_as(fs_path)
+                .await
+                .map_err(|e| WidgetError::InvalidStateForOperation(e.to_string()))?;
+        }
         other => {
             let guard = inner.viewer.lock().await;
             let v = guard
@@ -4129,6 +4163,9 @@ pub async fn document_preview_key(
 ) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
     if ctrl && matches!(key.as_str(), "s" | "S") {
+        if shift {
+            return document_action(instance_id, "save-as".into()).await;
+        }
         return document_action(instance_id, "save".into()).await;
     }
     if ctrl && matches!(key.as_str(), "p" | "P") {
