@@ -616,13 +616,14 @@ the reverse.
    documents autosave after a short debounce. **Save As…**
    exports `.orchid` or `.docx`.
 3. **File manager action: “Wrap as .orchid”** packs selection → Raw +
-   derived Clean-Text (+ optional embeddings when Phase 5 lands).
-   Inside a managed folder (with `ChunkStore`) the wrap is **linked**;
-   outside it stays sealed.
+   derived Clean-Text (+ StubEmbedder Embedding region when Clean-Text is
+   non-empty). Inside a managed folder (with `ChunkStore`) the wrap is
+   **linked**; outside it stays sealed.
 4. **Search** indexes `.orchid` via Clean-Text (live `OrchidExtractor`);
    semantic / hybrid path in Phase 5.
 5. **MIME / extension** registered in the Windows installer when the CLI
-   and editor open path are stable.
+   and editor open path are stable. `scripts/install-desktop.ps1` associates
+   `.orchid` → `application/vnd.orchid` with `orchid.exe` under HKCU.
 
 Migration tip: keep the original DOCX as a Raw region named
 `original.docx` on first import so users can re-export bit-identical

@@ -9,7 +9,9 @@
 
 mod stub;
 
-pub use stub::StubEmbedder;
+pub use stub::{StubEmbedder, STUB_DIMS, STUB_MODEL_ID};
+
+use orchid_format::{document_embedding, EmbeddingPayload};
 
 /// Errors from embedding backends.
 #[derive(Debug, thiserror::Error)]
@@ -37,6 +39,22 @@ pub trait Embedder: Send + Sync {
     fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
         texts.iter().map(|t| self.embed(t)).collect()
     }
+}
+
+/// Build a document-level [`EmbeddingPayload`] with [`StubEmbedder`], or `None` for blank text.
+pub fn stub_embedding_payload(clean_text: &str) -> Result<Option<EmbeddingPayload>> {
+    if clean_text.trim().is_empty() {
+        return Ok(None);
+    }
+    let emb = StubEmbedder::new();
+    let vector = emb.embed(clean_text)?;
+    let tokens = clean_text.split_whitespace().count() as u32;
+    Ok(Some(document_embedding(
+        emb.model_id(),
+        clean_text.len() as u64,
+        tokens.max(1),
+        vector,
+    )))
 }
 
 /// Cosine similarity for L2-normalised vectors (≈ dot product).

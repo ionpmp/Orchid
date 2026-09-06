@@ -273,6 +273,10 @@ release yet.
   Dirty linked documents autosave after a 2s debounce.
 - FM **Wrap as .orchid** inside a managed folder writes **linked** envelopes
   when `ChunkStore` is available; elsewhere remains sealed.
+  Wrap and document `.orchid` saves attach a StubEmbedder Embedding region
+  when Clean-Text is non-empty (linked writer supports `CAP_EMBEDDINGS`).
+- Desktop install script associates `.orchid` /
+  `application/vnd.orchid` with `orchid.exe` (per-user HKCU).
 
 #### Built-in widgets
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),

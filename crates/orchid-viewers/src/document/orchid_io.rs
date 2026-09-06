@@ -45,6 +45,7 @@ pub async fn document_to_docx_bytes(doc: &Document) -> Result<Vec<u8>> {
 pub async fn save_document_as_orchid(doc: &Document, output_path: &Path) -> Result<()> {
     let raw = document_to_docx_bytes(doc).await?;
     let clean_text = doc.plain_text().into_bytes();
+    let embeddings = stub_embeddings_for_clean(&clean_text);
     write_sealed_file(
         output_path,
         &SealedCreateRequest {
@@ -59,7 +60,7 @@ pub async fn save_document_as_orchid(doc: &Document, output_path: &Path) -> Resu
             structured_crdt: None,
             encrypt_with: None,
             sign_c2pa: false,
-            embeddings: None,
+            embeddings,
         },
     )
     .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
@@ -110,6 +111,7 @@ pub async fn save_document_as_linked_orchid(
 ) -> Result<()> {
     let raw = document_to_docx_bytes(doc).await?;
     let clean_text = doc.plain_text().into_bytes();
+    let embeddings = stub_embeddings_for_clean(&clean_text);
     write_linked_file(
         output_path,
         store,
@@ -121,6 +123,7 @@ pub async fn save_document_as_linked_orchid(
             raw,
             clean_text,
             structured: b"{}".to_vec(),
+            embeddings,
             encrypt_with: None,
             chunker: orchid_crypto::ChunkerConfig::default(),
         },
@@ -128,6 +131,13 @@ pub async fn save_document_as_linked_orchid(
     .await
     .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     Ok(())
+}
+
+fn stub_embeddings_for_clean(clean_text: &[u8]) -> Option<orchid_format::EmbeddingPayload> {
+    let text = String::from_utf8_lossy(clean_text);
+    orchid_embed::stub_embedding_payload(&text)
+        .ok()
+        .flatten()
 }
 
 /// Read header UUID + TOC generation for linked save bumps.

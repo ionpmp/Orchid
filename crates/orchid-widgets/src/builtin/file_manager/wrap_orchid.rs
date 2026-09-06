@@ -78,12 +78,18 @@ pub(super) async fn run(
         }
 
         let ctype = mime_guess_from_name(file_name);
+        let embeddings = orchid_embed::stub_embedding_payload(
+            &String::from_utf8_lossy(&clean_text),
+        )
+        .ok()
+        .flatten();
         let req = WrapAsOrchidRequest {
             output: output.clone(),
             raw,
             raw_name: Some(file_name.to_string()),
             raw_content_type: ctype,
             clean_text,
+            embeddings,
         };
 
         let out_key = FsPath::from_local(&output)

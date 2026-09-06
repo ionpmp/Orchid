@@ -6680,6 +6680,7 @@ dependencies = [
 name = "orchid-embed"
 version = "0.1.0"
 dependencies = [
+ "orchid-format",
  "tempfile",
  "thiserror 2.0.20",
  "tracing",
@@ -6907,6 +6908,7 @@ dependencies = [
  "memmap2",
  "orchid-core",
  "orchid-crypto",
+ "orchid-embed",
  "orchid-format",
  "orchid-fs",
  "orchid-storage",
@@ -6974,6 +6976,7 @@ dependencies = [
  "opener",
  "orchid-core",
  "orchid-crypto",
+ "orchid-embed",
  "orchid-format",
  "orchid-fs",
  "orchid-i18n",

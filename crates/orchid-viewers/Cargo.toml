@@ -74,6 +74,7 @@ orchid-storage.workspace = true
 orchid-fs.workspace = true
 orchid-format.workspace = true
 orchid-crypto.workspace = true
+orchid-embed.workspace = true
 
 [target.'cfg(windows)'.dependencies.windows]
 workspace = true
