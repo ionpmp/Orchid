@@ -21,6 +21,7 @@ mod linked;
 mod provenance;
 mod reader;
 mod toc_build;
+mod wrap;
 mod writer;
 
 #[allow(dead_code)]
@@ -41,17 +42,15 @@ pub use content_type::{STRUCTURED_CRDT_V1, STRUCTURED_SNAPSHOT_V1};
 pub use crdt::{
     decode_crdt_payload, encode_crdt_payload, ActorId, CrdtDocument, Op, OpId, CRDT_PAYLOAD_MAGIC,
 };
+pub use crypto_region::{
+    decode_region_body, prepare_region_body, PreparedRegionBody, RegionEncryptionSpec,
+};
 pub use embedding::{
     document_embedding, EmbeddingLevel, EmbeddingPayload, EmbeddingRecord, EMBEDDING_HIER_F32_V1,
     EMBEDDING_MAGIC, EMBEDDING_WIRE_VERSION,
 };
-pub use crypto_region::{
-    decode_region_body, prepare_region_body, PreparedRegionBody, RegionEncryptionSpec,
-};
 pub use error::{FormatError, Result};
-pub use framing::{
-    align_up, pad_len, pad_to_alignment, Footer, Header, RegionHeader,
-};
+pub use framing::{align_up, pad_len, pad_to_alignment, Footer, Header, RegionHeader};
 pub use linked::{
     build_linked_bytes, linked_region_plaintext, linked_to_sealed, sealed_to_linked,
     write_linked_file, LinkedCreateRequest,
@@ -62,6 +61,7 @@ pub use provenance::{
 };
 pub use reader::SealedFile;
 pub use toc_build::{build_toc, TocChunkSpec, TocRegionSpec, TocSpec};
+pub use wrap::{default_wrap_output, wrap_as_sealed, WrapAsOrchidRequest};
 pub use writer::{build_sealed_bytes, empty_raw, write_sealed_file, SealedCreateRequest};
 
 /// File extension including the leading dot.

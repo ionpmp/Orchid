@@ -35,4 +35,4 @@ cargo run -p orchid-format -- read sample.orchid \
 Library: `write_sealed_file` / `write_linked_file` / `SealedFile::open` /
 `linked_region_plaintext` / `sealed_to_linked` / `linked_to_sealed` /
 `sign_clean_text_provenance` / `verify_provenance_carrier` /
-`embeddings` / `document_embedding`.
+`embeddings` / `document_embedding` / `wrap_as_sealed`.
