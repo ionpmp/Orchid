@@ -799,6 +799,7 @@ viewer-html-unavailable = Среда WebView2 не установлена; по�
 viewer-document-info = Документ · { $words } слов · { $chars } символов · { $comments } коммент. · { $blocks } блоков · { $warnings } неподдерж. элементов
 
 viewer-document-save = Сохранить
+viewer-document-save-as = Сохранить как…
 viewer-document-print = Печать
 viewer-document-undo = Отменить
 viewer-document-redo = Повторить
@@ -916,6 +917,7 @@ viewer-document-tip-font-family-prev = Previous font
 viewer-document-tip-font-family-next = Next font
 viewer-document-tip-toggle-source = Toggle Preview / Source
 viewer-document-tip-save = Save (Ctrl+S)
+viewer-document-tip-save-as = Сохранить как (Ctrl+Shift+S)
 viewer-document-tip-print = Print (Ctrl+P)
 viewer-document-tip-zoom-in = Zoom in (Ctrl+wheel)
 viewer-document-tip-zoom-out = Zoom out (Ctrl+wheel)

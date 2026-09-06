@@ -809,6 +809,7 @@ viewer-html-unavailable = WebView2-Runtime fehlt; Quelltext wird angezeigt. Seit
 viewer-document-info = Dokument · { $words } Wörter · { $chars } Zeichen · { $comments } Kommentare · { $blocks } Blöcke · { $warnings } nicht unterstützte Features
 
 viewer-document-save = Speichern
+viewer-document-save-as = Save As…
 viewer-document-print = Drucken
 viewer-document-undo = Rückgängig
 viewer-document-redo = Wiederholen
@@ -926,6 +927,7 @@ viewer-document-tip-font-family-prev = Previous font
 viewer-document-tip-font-family-next = Next font
 viewer-document-tip-toggle-source = Toggle Preview / Source
 viewer-document-tip-save = Save (Ctrl+S)
+viewer-document-tip-save-as = Save As (Ctrl+Shift+S)
 viewer-document-tip-print = Print (Ctrl+P)
 viewer-document-tip-zoom-in = Zoom in (Ctrl+wheel)
 viewer-document-tip-zoom-out = Zoom out (Ctrl+wheel)

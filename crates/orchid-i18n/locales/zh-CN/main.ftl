@@ -809,6 +809,7 @@ viewer-html-unavailable = 未安装 WebView2 运行时，正在显示源码。�
 viewer-document-info = 文档 · { $words } 词 · { $chars } 字符 · { $comments } 条批注 · { $blocks } 个块 · { $warnings } 个不支持的功能
 
 viewer-document-save = 保存
+viewer-document-save-as = Save As…
 viewer-document-print = 打印
 viewer-document-undo = 撤销
 viewer-document-redo = 重做
@@ -926,6 +927,7 @@ viewer-document-tip-font-family-prev = Previous font
 viewer-document-tip-font-family-next = Next font
 viewer-document-tip-toggle-source = Toggle Preview / Source
 viewer-document-tip-save = Save (Ctrl+S)
+viewer-document-tip-save-as = Save As (Ctrl+Shift+S)
 viewer-document-tip-print = Print (Ctrl+P)
 viewer-document-tip-zoom-in = Zoom in (Ctrl+wheel)
 viewer-document-tip-zoom-out = Zoom out (Ctrl+wheel)

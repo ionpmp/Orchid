@@ -627,23 +627,44 @@ export struct BrowserTabEntry {
     is-active: bool,
 }
 
+export struct BrowserBookmarkEntry {
+    title: string,
+    url: string,
+}
+
 export struct BrowserModel {
     tabs: [BrowserTabEntry],
+    bookmarks: [BrowserBookmarkEntry],
     active-index: int,
     url: string,
     title: string,
     can-go-back: bool,
     can-go-forward: bool,
+    is-loading: bool,
+    is-bookmarked: bool,
     webview-available: bool,
     untitled-label: string,
     address-placeholder: string,
     back-label: string,
     forward-label: string,
     reload-label: string,
+    stop-label: string,
+    home-label: string,
     go-label: string,
     new-tab-tip: string,
     unavailable-label: string,
     open-label: string,
+    bookmark-tip: string,
+    bookmarks-label: string,
+    bookmark-remove-tip: string,
+    bookmarks-empty: string,
+    find-label: string,
+    find-placeholder: string,
+    find-prev-tip: string,
+    find-next-tip: string,
+    find-close-tip: string,
+    focus-address-gen: int,
+    show-find-gen: int,
 }
 
 export struct CalendarDayEntry {
@@ -1520,6 +1541,7 @@ export struct ViewerDocumentModel {
     /// Device pixels per CSS pixel in `preview-image` (`2` = HiDPI supersample).
     preview-render-scale: int,
     save-label: string,
+    save-as-label: string,
     print-label: string,
     undo-label: string,
     redo-label: string,
@@ -1638,6 +1660,7 @@ export struct ViewerDocumentModel {
     tip-font-family-next: string,
     tip-toggle-source: string,
     tip-save: string,
+    tip-save-as: string,
     tip-print: string,
     /// External hyperlink URL at the caret (empty when none).
     link-url: string,

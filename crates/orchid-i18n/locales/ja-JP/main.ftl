@@ -809,6 +809,7 @@ viewer-html-unavailable = WebView2 ランタイムがありません。ソース
 viewer-document-info = 文書 · { $words } 語 · { $chars } 文字 · { $comments } コメント · { $blocks } ブロック · 未対応 { $warnings }
 
 viewer-document-save = 保存
+viewer-document-save-as = Save As…
 viewer-document-print = 印刷
 viewer-document-undo = 元に戻す
 viewer-document-redo = やり直し
@@ -926,6 +927,7 @@ viewer-document-tip-font-family-prev = Previous font
 viewer-document-tip-font-family-next = Next font
 viewer-document-tip-toggle-source = Toggle Preview / Source
 viewer-document-tip-save = Save (Ctrl+S)
+viewer-document-tip-save-as = Save As (Ctrl+Shift+S)
 viewer-document-tip-print = Print (Ctrl+P)
 viewer-document-tip-zoom-in = Zoom in (Ctrl+wheel)
 viewer-document-tip-zoom-out = Zoom out (Ctrl+wheel)

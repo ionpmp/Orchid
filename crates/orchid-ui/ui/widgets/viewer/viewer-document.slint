@@ -143,6 +143,27 @@ export component ViewerDocumentView inherits Rectangle {
                 }
 
                 Rectangle {
+                    width: max(64px, save-as-label.preferred-width + 12px);
+                    height: 28px;
+                    background: save-as-ta.has-hover ? Theme.surface-raised : transparent;
+                    border-radius: Theme.radius-md;
+                    y: (parent.height - self.height) / 2;
+                    save-as-ta := TouchArea { clicked => { root.action("save-as"); } }
+                    save-as-label := Text {
+                        text: model.save-as-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    DocHoverTip {
+                        tip: model.tip-save-as;
+                        show: save-as-ta.has-hover;
+                        below: false;
+                    }
+                }
+
+                Rectangle {
                     width: max(52px, print-btn-label.preferred-width + 12px);
                     height: 28px;
                     background: tool-bg(false, print-ta.has-hover);
@@ -3236,6 +3257,14 @@ export component ViewerDocumentView inherits Rectangle {
                                 && (event.text == "s" || event.text == "S"))
                             {
                                 root.action("save");
+                                return accept;
+                            }
+                            if (event.modifiers.control
+                                && event.modifiers.shift
+                                && !event.modifiers.alt
+                                && (event.text == "s" || event.text == "S"))
+                            {
+                                root.action("save-as");
                                 return accept;
                             }
                             if (event.modifiers.control

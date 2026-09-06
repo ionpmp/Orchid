@@ -809,6 +809,7 @@ viewer-html-unavailable = Runtime do WebView2 ausente; mostrando o código. Abra
 viewer-document-info = Documento · { $words } palavras · { $chars } caracteres · { $comments } comentários · { $blocks } blocos · { $warnings } recursos não suportados
 
 viewer-document-save = Salvar
+viewer-document-save-as = Save As…
 viewer-document-print = Imprimir
 viewer-document-undo = Desfazer
 viewer-document-redo = Refazer
@@ -926,6 +927,7 @@ viewer-document-tip-font-family-prev = Previous font
 viewer-document-tip-font-family-next = Next font
 viewer-document-tip-toggle-source = Toggle Preview / Source
 viewer-document-tip-save = Save (Ctrl+S)
+viewer-document-tip-save-as = Save As (Ctrl+Shift+S)
 viewer-document-tip-print = Print (Ctrl+P)
 viewer-document-tip-zoom-in = Zoom in (Ctrl+wheel)
 viewer-document-tip-zoom-out = Zoom out (Ctrl+wheel)

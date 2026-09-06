@@ -809,6 +809,7 @@ viewer-html-unavailable = WebView2 런타임이 없어 소스를 표시합니다
 viewer-document-info = 문서 · { $words }단어 · { $chars }자 · { $comments }댓글 · { $blocks }개 블록 · 미지원 { $warnings }
 
 viewer-document-save = 저장
+viewer-document-save-as = Save As…
 viewer-document-print = 인쇄
 viewer-document-undo = 실행 취소
 viewer-document-redo = 다시 실행
@@ -926,6 +927,7 @@ viewer-document-tip-font-family-prev = Previous font
 viewer-document-tip-font-family-next = Next font
 viewer-document-tip-toggle-source = Toggle Preview / Source
 viewer-document-tip-save = Save (Ctrl+S)
+viewer-document-tip-save-as = Save As (Ctrl+Shift+S)
 viewer-document-tip-print = Print (Ctrl+P)
 viewer-document-tip-zoom-in = Zoom in (Ctrl+wheel)
 viewer-document-tip-zoom-out = Zoom out (Ctrl+wheel)

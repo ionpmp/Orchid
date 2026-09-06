@@ -810,6 +810,7 @@ viewer-html-unavailable = وقت تشغيل WebView2 غير مثبت؛ يُعر�
 viewer-document-info = مستند · { $words } كلمة · { $chars } حرف · { $comments } تعليقات · { $blocks } كتل · { $warnings } ميزات غير مدعومة
 
 viewer-document-save = حفظ
+viewer-document-save-as = Save As…
 viewer-document-print = طباعة
 viewer-document-undo = تراجع
 viewer-document-redo = إعادة
@@ -927,6 +928,7 @@ viewer-document-tip-font-family-prev = Previous font
 viewer-document-tip-font-family-next = Next font
 viewer-document-tip-toggle-source = Toggle Preview / Source
 viewer-document-tip-save = Save (Ctrl+S)
+viewer-document-tip-save-as = Save As (Ctrl+Shift+S)
 viewer-document-tip-print = Print (Ctrl+P)
 viewer-document-tip-zoom-in = Zoom in (Ctrl+wheel)
 viewer-document-tip-zoom-out = Zoom out (Ctrl+wheel)

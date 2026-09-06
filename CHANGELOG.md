@@ -262,6 +262,7 @@ release yet.
 - Document editor native `.orchid` save/open: sealed envelope with Raw=DOCX +
   Clean-Text=`plain_text`; catalog **Document** creates `Untitled.orchid`;
   `.docx` export path unchanged when the open path ends in `.docx`.
+  **Save As…** (toolbar / Ctrl+Shift+S) picks `.orchid` or `.docx`.
 
 #### Built-in widgets
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),
