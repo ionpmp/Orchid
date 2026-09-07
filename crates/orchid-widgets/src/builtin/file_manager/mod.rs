@@ -343,6 +343,8 @@ struct FileManagerInner {
     dir_watch_subs: parking_lot::Mutex<Vec<orchid_core::SubscriptionHandle>>,
     /// Generation counter for coalescing external refresh tasks.
     external_refresh_gen: AtomicU64,
+    /// Generation counter for coalescing decoration (icon/thumb) snapshot publishes.
+    decoration_publish_gen: AtomicU64,
     /// Folder visit counts for the history dropdown.
     visit_log: parking_lot::Mutex<VisitLog>,
     /// Runtime find / duplicate / large-file result sets (`virtual:search/<id>`).
@@ -383,13 +385,47 @@ const THUMBNAIL_CACHE_CAP: usize = 256;
 ///
 /// Downscaling stays sharp, upscaling does not, and the drawn size is in
 /// logical pixels that the display scale multiplies again: rows draw 20pt,
-/// which is already 30px at 150%, and icon tiles draw roughly 60pt.
+/// which is already 30px at 150%, and icon tiles draw roughly 60–100pt.
 fn shell_icon_size_for_mode(mode: ViewMode) -> orchid_fs::ShellIconSize {
     match mode {
-        ViewMode::Gallery | ViewMode::Icons => orchid_fs::ShellIconSize::Jumbo,
+        // Gallery tiles are large; jumbo sources stay sharp after crop.
+        ViewMode::Gallery => orchid_fs::ShellIconSize::Jumbo,
+        // Icons view draws ~60–100 logical px — ExtraLarge (48) is enough and
+        // avoids the COM/DIB cost of 256px for every visible tile.
+        ViewMode::Icons => orchid_fs::ShellIconSize::ExtraLarge,
         // Rows draw ~20 logical px; at 200% DPI that is 40 physical, so 48px
         // sources stay sharp where 32px would upscale.
         ViewMode::List | ViewMode::Details => orchid_fs::ShellIconSize::ExtraLarge,
+    }
+}
+
+/// Max edge length stored in the shell-icon cache for a view mode.
+///
+/// Slint scales on every paint; keeping decoded RGBA near the drawn size cuts
+/// both cache pressure and hover/scroll frame cost.
+fn shell_icon_display_px(mode: ViewMode) -> u32 {
+    match mode {
+        ViewMode::Gallery => 192,
+        ViewMode::Icons => 96,
+        ViewMode::List | ViewMode::Details => 40,
+    }
+}
+
+fn downscale_shell_icon(icon: orchid_fs::ShellIcon, max_edge: u32) -> orchid_fs::ShellIcon {
+    if max_edge == 0 || (icon.width <= max_edge && icon.height <= max_edge) {
+        return icon;
+    }
+    let Some(img) = image::RgbaImage::from_raw(icon.width, icon.height, (*icon.rgba).clone()) else {
+        return icon;
+    };
+    let resized = image::DynamicImage::ImageRgba8(img)
+        .resize(max_edge, max_edge, image::imageops::FilterType::Triangle)
+        .into_rgba8();
+    let (w, h) = resized.dimensions();
+    orchid_fs::ShellIcon {
+        rgba: Arc::new(resized.into_raw()),
+        width: w,
+        height: h,
     }
 }
 
@@ -507,6 +543,7 @@ impl FileManagerWidget {
                 watch_paths: RwLock::new(HashMap::new()),
                 dir_watch_subs: parking_lot::Mutex::new(Vec::new()),
                 external_refresh_gen: AtomicU64::new(0),
+                decoration_publish_gen: AtomicU64::new(0),
                 visit_log: parking_lot::Mutex::new(VisitLog::from_entries(persisted.path_visits)),
                 search_sessions: RwLock::new(HashMap::new()),
                 undo: parking_lot::Mutex::new(undo::FsUndoStack::default()),
@@ -781,6 +818,23 @@ impl FileManagerInner {
                 instance_id: self.instance_id,
             },
         );
+    }
+
+    /// Coalesce icon/thumb snapshot publishes so scroll/hover are not fighting
+    /// a frame rebuild on every batch of shell icons.
+    fn schedule_decoration_publish(self: &Arc<Self>) {
+        let gen = self
+            .decoration_publish_gen
+            .fetch_add(1, Ordering::Relaxed)
+            .wrapping_add(1);
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(64)).await;
+            if this.decoration_publish_gen.load(Ordering::Relaxed) != gen {
+                return;
+            }
+            this.publish_refresh();
+        });
     }
 
     fn reset_pane_viewport(&self, pane: u8) {
@@ -1770,7 +1824,7 @@ impl FileManagerInner {
         });
     }
 
-    async fn decorate_view(&self, tab: &TabState) {
+    async fn decorate_view(self: &Arc<Self>, tab: &TabState) {
         let Some(entries) = self.entries_by_tab.read().get(&tab.id).cloned() else {
             return;
         };
@@ -1825,6 +1879,7 @@ impl FileManagerInner {
         &self,
         pending: &[(String, orchid_fs::FsPath, bool)],
         size: orchid_fs::ShellIconSize,
+        display_px: u32,
     ) -> bool {
         const BATCH: usize = 24;
         let mut any_hit = false;
@@ -1836,6 +1891,7 @@ impl FileManagerInner {
                 async move {
                     let icon = tokio::task::spawn_blocking(move || {
                         orchid_fs::shell_icon(&path, is_dir, size)
+                            .map(|icon| downscale_shell_icon(icon, display_px))
                     })
                     .await
                     .ok()
@@ -1869,21 +1925,28 @@ impl FileManagerInner {
         any_hit
     }
 
-    async fn ensure_shell_icons(&self, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
+    async fn ensure_shell_icons(self: &Arc<Self>, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
         let size = shell_icon_size_for_mode(tab.view_mode);
+        let display_px = shell_icon_display_px(tab.view_mode);
         let (first, end) = self.visible_entry_range(tab, entries.len());
         let visible = self.collect_missing_shell_icons(entries, first..end, size);
-        if !visible.is_empty() && self.extract_shell_icon_batch(&visible, size).await {
+        if !visible.is_empty() && self.extract_shell_icon_batch(&visible, size, display_px).await {
+            // First visible batch paints immediately; further decoration churn
+            // is coalesced so hover/scroll are not fighting every icon tick.
             self.publish_refresh();
         }
         let prefetch_end = (end + 48).min(entries.len());
         let extra = self.collect_missing_shell_icons(entries, end..prefetch_end, size);
-        if !extra.is_empty() && self.extract_shell_icon_batch(&extra, size).await {
-            self.publish_refresh();
+        if !extra.is_empty() && self.extract_shell_icon_batch(&extra, size, display_px).await {
+            self.schedule_decoration_publish();
         }
     }
 
-    async fn probe_encrypted_directories(&self, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
+    async fn probe_encrypted_directories(
+        self: &Arc<Self>,
+        tab: &TabState,
+        entries: &[orchid_fs::FsEntry],
+    ) {
         let (first, end) = self.visible_entry_range(tab, entries.len());
         let mut hits = Vec::new();
         for e in entries.get(first..end).into_iter().flatten() {
@@ -1912,10 +1975,10 @@ impl FileManagerInner {
                 }
             }
         }
-        self.publish_refresh();
+        self.schedule_decoration_publish();
     }
 
-    async fn ensure_thumbnails(&self, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
+    async fn ensure_thumbnails(self: &Arc<Self>, tab: &TabState, entries: &[orchid_fs::FsEntry]) {
         let mode_cfg = config_for_mode(tab.view_mode, 1.0);
         if !mode_cfg.show_thumbnails {
             return;
@@ -1949,10 +2012,9 @@ impl FileManagerInner {
 
         const CONCURRENCY: usize = 4;
         let mut any_thumb = false;
-        let mut published = false;
+        let mut published_once = false;
         let chunks = pending.chunks(CONCURRENCY).collect::<Vec<_>>();
-        let chunk_count = chunks.len();
-        for (i, chunk) in chunks.into_iter().enumerate() {
+        for chunk in chunks {
             let futs = chunk.iter().map(|(path_key, path, key)| {
                 let path_key = path_key.clone();
                 let path = path.clone();
@@ -1990,6 +2052,7 @@ impl FileManagerInner {
                 }
             });
             let results = futures::future::join_all(futs).await;
+            let mut chunk_hit = false;
             {
                 let mut cache = self.thumbnail_rgba.write();
                 let mut order = self.thumbnail_order.write();
@@ -2001,16 +2064,21 @@ impl FileManagerInner {
                         thumb,
                         THUMBNAIL_CACHE_CAP,
                     );
+                    chunk_hit = true;
                     any_thumb = true;
                 }
             }
-            if any_thumb && !published && i + 1 < chunk_count {
-                self.publish_refresh();
-                published = true;
+            if chunk_hit {
+                if !published_once {
+                    self.publish_refresh();
+                    published_once = true;
+                } else {
+                    self.schedule_decoration_publish();
+                }
             }
         }
         if any_thumb {
-            self.publish_refresh();
+            self.schedule_decoration_publish();
         }
     }
 

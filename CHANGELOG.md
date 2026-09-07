@@ -295,6 +295,9 @@ release yet.
   C2PA verify status when Provenance is present.
 - Sealed document saves and FM sealed wraps sign a C2PA Provenance carrier over
   Clean-Text by default (ephemeral signer).
+- Encrypted `.orchid` documents prompt for a passphrase on open; the unlock
+  identity is retained so Save / autosave re-encrypts instead of stripping
+  protection.
 
 #### Built-in widgets
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),
@@ -494,6 +497,10 @@ release yet.
 - **Audio / video libraries**: `find_by_path` is a HashMap lookup after scan.
 
 ### Fixed
+- File-manager hover no longer dirties every row's Image/Text tree: a single
+  overlay strip tracks the hovered index, decoration snapshot publishes are
+  coalesced (prefetch/thumbs), Icons view uses ExtraLarge instead of Jumbo,
+  and shell icons are downscaled to display size before caching.
 - File-manager exclusive click highlights the new row immediately: Slint paints
   the pressed path before the model patch returns, selection updates stay on
   the UI stack (including floating frames), and patching no longer remounts the
