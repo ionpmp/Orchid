@@ -21,6 +21,9 @@ export component FmEntryGrid inherits Rectangle {
     // Instant exclusive-select paint: entry-clicked patches the model async to
     // the UI thread's next turn, so without this the previous tile stays lit.
     property <string> exclusive-paint-path: "";
+    // Single hover tile — toggling per-tile has-hover used to dirty Image/Text
+    // trees and made even mouse-over feel laggy.
+    property <int> hover-local: -1;
     property <length> press-x: 0px;
     property <length> press-y: 0px;
     property <length> drag-threshold: 6px;
@@ -73,6 +76,10 @@ export component FmEntryGrid inherits Rectangle {
 
     function clear-exclusive-paint() {
         root.exclusive-paint-path = "";
+    }
+
+    function clear-hover() {
+        root.hover-local = -1;
     }
 
     // Touchpads abort pointer sequences far more often than mice, and an
@@ -255,16 +262,19 @@ export component FmEntryGrid inherits Rectangle {
 
     changed tile-count => {
         root.cancel-press();
+        root.clear-hover();
     }
 
     changed first-index => {
         root.cancel-press();
+        root.clear-hover();
     }
 
     changed listing-id => {
         grid-flick.viewport-y = 0px;
         root.cancel-press();
         root.clear-exclusive-paint();
+        root.clear-hover();
         root.press-empty = false;
         root.marquee-active = false;
     }
@@ -347,6 +357,15 @@ export component FmEntryGrid inherits Rectangle {
             }
         }
 
+        if root.hover-local >= 0 && !root.marquee-active : Rectangle {
+            x: tile-spacing + (mod(first-index + root.hover-local, columns) * (tile-size + tile-spacing));
+            y: tile-spacing + (floor((first-index + root.hover-local) / columns) * (tile-height + tile-spacing));
+            width: tile-size;
+            height: tile-height;
+            background: Theme.surface-raised;
+            border-radius: Theme.radius-md;
+        }
+
         for entry[i] in entries : Rectangle {
             x: tile-spacing + (mod(first-index + i, columns) * (tile-size + tile-spacing));
             y: tile-spacing + (floor((first-index + i) / columns) * (tile-height + tile-spacing));
@@ -354,7 +373,7 @@ export component FmEntryGrid inherits Rectangle {
             height: tile-height;
             background: root.tile-highlighted(i, entry.is-selected, entry.path)
                 ? #4d82ff44
-                : (tile-ta.has-hover ? Theme.surface-raised : transparent);
+                : transparent;
             border-radius: Theme.radius-md;
             border-width: root.tile-highlighted(i, entry.is-selected, entry.path) || (drag-active && entry.is-dir && entry.path == drag-drop-target) ? 2px : 0px;
             border-color: Theme.accent-brand;
@@ -441,6 +460,13 @@ export component FmEntryGrid inherits Rectangle {
                 width: 100%;
                 height: 100%;
                 enabled: !(rename.active && entry.path == rename.path);
+                changed has-hover => {
+                    if (self.has-hover) {
+                        root.hover-local = i;
+                    } else if (root.hover-local == i) {
+                        root.hover-local = -1;
+                    }
+                }
                 double-clicked => {
                     root.cancel-press();
                     root.entry-double-clicked(entry.path, entry.is-dir);

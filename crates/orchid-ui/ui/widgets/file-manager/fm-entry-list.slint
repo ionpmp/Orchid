@@ -47,6 +47,9 @@ export component FmEntryList inherits Rectangle {
     // Instant exclusive-select paint: entry-clicked patches the model async to
     // the UI thread's next turn, so without this the previous row stays lit.
     property <string> exclusive-paint-path: "";
+    // Single hover strip — toggling per-row has-hover used to dirty Image/Text
+    // trees and made even mouse-over feel laggy.
+    property <int> hover-local: -1;
     property <length> press-x: 0px;
     property <length> press-y: 0px;
     property <length> drag-threshold: 6px;
@@ -73,6 +76,10 @@ export component FmEntryList inherits Rectangle {
 
     function clear-exclusive-paint() {
         root.exclusive-paint-path = "";
+    }
+
+    function clear-hover() {
+        root.hover-local = -1;
     }
 
     // Touchpads abort pointer sequences far more often than mice, and an
@@ -199,16 +206,19 @@ export component FmEntryList inherits Rectangle {
 
     changed row-count => {
         root.cancel-press();
+        root.clear-hover();
     }
 
     changed virtual-pad-top => {
         root.cancel-press();
+        root.clear-hover();
     }
 
     changed listing-id => {
         list-flick.viewport-y = 0px;
         root.cancel-press();
         root.clear-exclusive-paint();
+        root.clear-hover();
         root.press-empty = false;
         root.marquee-active = false;
     }
@@ -284,6 +294,15 @@ export component FmEntryList inherits Rectangle {
                     root.abort-gesture();
                 }
             }
+        }
+
+        // Drawn under the row stack so selection fill still wins; only the
+        // strip property changes on mouse-over, not each row's Image/Text tree.
+        if root.hover-local >= 0 && !root.marquee-active : Rectangle {
+            y: header-height + virtual-pad-top + root.hover-local * row-height;
+            width: parent.width;
+            height: row-height;
+            background: Theme.surface-raised;
         }
 
         list-stack := VerticalLayout {
@@ -382,7 +401,7 @@ export component FmEntryList inherits Rectangle {
                 height: row-height;
                 background: root.row-highlighted(i, entry.is-selected, entry.path)
                     ? #4d82ff44
-                    : (row-ta.has-hover ? Theme.surface-raised : transparent);
+                    : transparent;
                 border-width: root.row-highlighted(i, entry.is-selected, entry.path) || (drag-active && entry.is-dir && entry.path == drag-drop-target) ? 1px : 0px;
                 border-color: Theme.accent-brand;
 
@@ -505,6 +524,13 @@ export component FmEntryList inherits Rectangle {
                     width: 100%;
                     height: 100%;
                     enabled: !(rename.active && entry.path == rename.path);
+                    changed has-hover => {
+                        if (self.has-hover) {
+                            root.hover-local = i;
+                        } else if (root.hover-local == i) {
+                            root.hover-local = -1;
+                        }
+                    }
                     double-clicked => {
                         root.cancel-press();
                         root.entry-double-clicked(entry.path, entry.is-dir);
