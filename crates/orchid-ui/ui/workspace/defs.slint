@@ -1888,6 +1888,17 @@ export struct ViewerStatusModel {
     icon: string,
 }
 
+export struct FmPassphraseState {
+    active: bool,
+    proposed-passphrase: string,
+    title: string,
+    hint: string,
+    ok-label: string,
+    cancel-label: string,
+    biometric-available: bool,
+    biometric-label: string,
+}
+
 export struct ViewerModel {
     kind: int,
     status: ViewerStatusModel,
@@ -1899,6 +1910,7 @@ export struct ViewerModel {
     document: ViewerDocumentModel,
     media: ViewerMediaModel,
     html: ViewerHtmlModel,
+    passphrase: FmPassphraseState,
 }
 
 export struct FmTagChip {
@@ -2089,17 +2101,6 @@ export struct FmTagState {
     title: string,
     ok-label: string,
     cancel-label: string,
-}
-
-export struct FmPassphraseState {
-    active: bool,
-    proposed-passphrase: string,
-    title: string,
-    hint: string,
-    ok-label: string,
-    cancel-label: string,
-    biometric-available: bool,
-    biometric-label: string,
 }
 
 export struct FmManagedPolicyRow {

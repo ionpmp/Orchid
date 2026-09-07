@@ -1,6 +1,7 @@
 import { Theme } from "../../theme_global.slint";
 import { Strings } from "../../strings_global.slint";
-import { ViewerModel } from "../../workspace/defs.slint";
+import { ViewerModel, FmPassphraseState } from "../../workspace/defs.slint";
+import { FmPassphraseDialog } from "../file-manager/fm-passphrase-dialog.slint";
 import { ViewerImageView } from "viewer-image.slint";
 import { ViewerPdfView } from "viewer-pdf.slint";
 import { ViewerTextView } from "viewer-text.slint";
@@ -52,9 +53,13 @@ export component ViewerView inherits Rectangle {
     callback text-set-encoding(string);
     callback text-find-request(string, bool, bool, bool);
     callback text-replace-request(string, string, bool, bool, bool);
+
     callback open-external();
     callback html-command(string);
     callback html-embed-bounds(length, length, length, length, bool);
+
+    callback media-command(string);
+    callback media-seek-frac(float);
 
     callback document-action(string);
     callback document-text-edited(string);
@@ -73,8 +78,8 @@ export component ViewerView inherits Rectangle {
     callback document-header-even-request(string);
     callback document-footer-even-request(string);
 
-    callback media-command(string);
-    callback media-seek-frac(float);
+    callback passphrase-commit(string);
+    callback passphrase-cancel();
 
     background: transparent;
 
@@ -213,5 +218,14 @@ export component ViewerView inherits Rectangle {
         open-browser => { root.open-external(); }
         html-command(c) => { root.html-command(c); }
         embed-bounds(x, y, w, h, vis) => { root.html-embed-bounds(x, y, w, h, vis); }
+    }
+
+    if model.passphrase.active : FmPassphraseDialog {
+        width: parent.width;
+        height: parent.height;
+        state: root.model.passphrase;
+        commit(pw) => { root.passphrase-commit(pw); }
+        cancel => { root.passphrase-cancel(); }
+        biometric => { }
     }
 }

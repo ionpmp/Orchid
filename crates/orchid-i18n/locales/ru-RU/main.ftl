@@ -822,6 +822,10 @@ viewer-document-orchid-gen = gen { $generation }
 viewer-document-orchid-linked = linked
 viewer-document-orchid-c2pa-ok = C2PA ok
 viewer-document-orchid-c2pa-bad = C2PA failed
+viewer-document-passphrase-title = Разблокировать документ
+viewer-document-passphrase-hint = Введите парольную фразу для этого зашифрованного файла .orchid.
+viewer-document-passphrase-ok = Разблокировать
+viewer-document-passphrase-required = Этот файл .orchid зашифрован. Введите парольную фразу, чтобы открыть его.
 
 viewer-document-save = Сохранить
 viewer-document-save-as = Сохранить как…

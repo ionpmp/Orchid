@@ -36,9 +36,10 @@ pub use model::{
     TableRow, VMerge,
 };
 pub use orchid_io::{
-    is_docx_raw_meta, is_orchid_path, looks_like_orchid, materialize_orchid_raw_temp,
-    open_document_from_orchid, open_document_from_orchid_with_store, peek_orchid_raw_meta,
-    pick_document_save_path, save_document_as_linked_orchid, save_document_as_orchid,
+    is_docx_raw_meta, is_orchid_identity_error, is_orchid_path, looks_like_orchid,
+    materialize_orchid_raw_temp, open_document_from_orchid, open_document_from_orchid_with_store,
+    peek_orchid_raw_meta, pick_document_save_path, save_document_as_linked_orchid,
+    save_document_as_orchid,
 };
 pub use sample::{
     create_sample_docx, create_sample_orchid, create_sample_orchid_with_store, sample_document,
@@ -117,6 +118,8 @@ pub struct DocumentViewer {
     orchid_linked: Mutex<bool>,
     /// C2PA verify when Provenance is present (`None` = no C2PA region).
     orchid_c2pa_ok: Mutex<Option<bool>>,
+    /// Age identity used to decrypt (and re-encrypt on save) a private `.orchid`.
+    orchid_decrypt: Mutex<Option<orchid_crypto::Identity>>,
     /// When true, next `.orchid` sealed save names Raw `original.docx` (DOCX import).
     prefer_original_docx_name: Mutex<bool>,
 }
@@ -189,6 +192,7 @@ impl DocumentViewer {
             orchid_generation: Mutex::new(0),
             orchid_linked: Mutex::new(false),
             orchid_c2pa_ok: Mutex::new(None),
+            orchid_decrypt: Mutex::new(None),
             prefer_original_docx_name: Mutex::new(false),
         }
     }
@@ -196,6 +200,15 @@ impl DocumentViewer {
     /// Inject the content-addressed store used for linked `.orchid` I/O.
     pub fn set_chunk_store(&mut self, store: Arc<orchid_crypto::ChunkStore>) {
         self.chunk_store = Some(store);
+    }
+
+    /// Set the age identity for opening/saving an encrypted `.orchid`.
+    pub fn set_decrypt_identity(&self, identity: Option<orchid_crypto::Identity>) {
+        *self.orchid_decrypt.lock() = identity;
+    }
+
+    fn decrypt_identity(&self) -> Option<orchid_crypto::Identity> {
+        self.orchid_decrypt.lock().clone()
     }
 
     fn remember_orchid_identity(&self, path: &Path) {
@@ -212,6 +225,7 @@ impl DocumentViewer {
         *self.orchid_generation.lock() = 0;
         *self.orchid_linked.lock() = false;
         *self.orchid_c2pa_ok.lock() = None;
+        *self.orchid_decrypt.lock() = None;
     }
 
     fn set_prefer_original_docx_name(&self, prefer: bool) {
@@ -4874,9 +4888,11 @@ impl Viewer for DocumentViewer {
                 let orchid_tmp = std::env::temp_dir()
                     .join(format!("orchid-open-{}.orchid", uuid::Uuid::new_v4()));
                 tokio::fs::write(&orchid_tmp, &bytes).await?;
+                let id = self.decrypt_identity();
                 let opened = orchid_io::open_document_from_orchid_with_store(
                     &orchid_tmp,
                     self.chunk_store.as_deref(),
+                    id.as_ref(),
                 )
                 .await?;
                 self.remember_orchid_identity(&orchid_tmp);
@@ -4913,9 +4929,13 @@ impl Viewer for DocumentViewer {
 
         let os = Path::new(&os_path);
         let doc = if orchid_io::is_orchid_path(os) {
-            let opened =
-                orchid_io::open_document_from_orchid_with_store(os, self.chunk_store.as_deref())
-                    .await?;
+            let id = self.decrypt_identity();
+            let opened = orchid_io::open_document_from_orchid_with_store(
+                os,
+                self.chunk_store.as_deref(),
+                id.as_ref(),
+            )
+            .await?;
             self.remember_orchid_identity(os);
             self.set_prefer_original_docx_name(false);
             opened
@@ -5243,6 +5263,7 @@ impl Viewer for DocumentViewer {
             .ok_or(ViewerError::DocumentNotOpen)?;
         let os = Path::new(&os_path);
         if orchid_io::is_orchid_path(os) {
+            let encrypt = self.decrypt_identity();
             if let Some(store) = self.chunk_store.as_ref() {
                 let parent = *self.orchid_generation.lock();
                 let next = parent.saturating_add(1).max(1);
@@ -5254,13 +5275,15 @@ impl Viewer for DocumentViewer {
                     uuid,
                     next,
                     parent,
+                    encrypt.as_ref(),
                 )
                 .await?;
                 self.remember_orchid_identity(os);
                 self.set_prefer_original_docx_name(false);
             } else {
                 let raw_name = self.take_orchid_raw_name();
-                orchid_io::save_document_as_orchid_named(&doc, os, raw_name).await?;
+                orchid_io::save_document_as_orchid_named(&doc, os, raw_name, encrypt.as_ref())
+                    .await?;
                 self.remember_orchid_identity(os);
                 self.set_prefer_original_docx_name(false);
             }

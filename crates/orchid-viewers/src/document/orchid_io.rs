@@ -3,7 +3,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use orchid_crypto::ChunkStore;
+use orchid_crypto::{ChunkStore, Identity};
 use orchid_format::toc::RegionType;
 use orchid_format::{
     capability, linked_region_plaintext, write_linked_file, write_sealed_file, LinkedCreateRequest,
@@ -42,8 +42,12 @@ pub async fn document_to_docx_bytes(doc: &Document) -> Result<Vec<u8>> {
 }
 
 /// Write a sealed `.orchid` with Raw=DOCX, Clean-Text=`plain_text`.
-pub async fn save_document_as_orchid(doc: &Document, output_path: &Path) -> Result<()> {
-    save_document_as_orchid_named(doc, output_path, "document.docx").await
+pub async fn save_document_as_orchid(
+    doc: &Document,
+    output_path: &Path,
+    encrypt_with: Option<&Identity>,
+) -> Result<()> {
+    save_document_as_orchid_named(doc, output_path, "document.docx", encrypt_with).await
 }
 
 /// Like [`save_document_as_orchid`], with an explicit Raw TOC `name`.
@@ -54,6 +58,7 @@ pub async fn save_document_as_orchid_named(
     doc: &Document,
     output_path: &Path,
     raw_name: &str,
+    encrypt_with: Option<&Identity>,
 ) -> Result<()> {
     let raw = document_to_docx_bytes(doc).await?;
     let clean_text = doc.plain_text().into_bytes();
@@ -70,7 +75,7 @@ pub async fn save_document_as_orchid_named(
             structured: b"{}".to_vec(),
             structured_content_type: Some("application/json".into()),
             structured_crdt: None,
-            encrypt_with: None,
+            encrypt_with: encrypt_with.cloned(),
             sign_c2pa: true,
             embeddings,
         },
@@ -83,6 +88,7 @@ pub async fn save_document_as_orchid_named(
 pub async fn open_document_from_orchid_with_store(
     path: &Path,
     store: Option<&ChunkStore>,
+    identity: Option<&Identity>,
 ) -> Result<Document> {
     let path_buf = path.to_path_buf();
     let linked = {
@@ -98,18 +104,18 @@ pub async fn open_document_from_orchid_with_store(
         })?;
         let file =
             SealedFile::open(&path_buf).map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-        let raw = linked_region_plaintext(&file, store, RegionType::Raw, None)
+        let raw = linked_region_plaintext(&file, store, RegionType::Raw, identity)
             .await
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
         if looks_like_zip(&raw) {
             return document_from_docx_bytes(&raw);
         }
-        let clean = linked_region_plaintext(&file, store, RegionType::CleanText, None)
+        let clean = linked_region_plaintext(&file, store, RegionType::CleanText, identity)
             .await
             .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
         return Ok(document_from_plain_utf8(&clean));
     }
-    open_document_from_orchid(path).await
+    open_document_from_orchid(path, identity).await
 }
 
 /// Write a linked `.orchid` (DOCX Raw + Clean-Text chunks in `store`).
@@ -120,6 +126,7 @@ pub async fn save_document_as_linked_orchid(
     file_uuid: Option<[u8; 16]>,
     generation: u64,
     parent_generation: u64,
+    encrypt_with: Option<&Identity>,
 ) -> Result<()> {
     let raw = document_to_docx_bytes(doc).await?;
     let clean_text = doc.plain_text().into_bytes();
@@ -138,7 +145,7 @@ pub async fn save_document_as_linked_orchid(
             clean_text,
             structured: b"{}".to_vec(),
             embeddings,
-            encrypt_with: None,
+            encrypt_with: encrypt_with.cloned(),
             chunker: orchid_crypto::ChunkerConfig::default(),
         },
     )
@@ -197,25 +204,40 @@ pub fn orchid_open_meta(path: &Path) -> Result<OrchidOpenMeta> {
 }
 
 /// Open a sealed `.orchid`: prefer Raw DOCX, else Clean-Text as paragraphs.
-pub async fn open_document_from_orchid(path: &Path) -> Result<Document> {
+pub async fn open_document_from_orchid(
+    path: &Path,
+    identity: Option<&Identity>,
+) -> Result<Document> {
     let path = path.to_path_buf();
-    tokio::task::spawn_blocking(move || open_document_from_orchid_sync(&path))
+    let identity = identity.cloned();
+    tokio::task::spawn_blocking(move || open_document_from_orchid_sync(&path, identity.as_ref()))
         .await
         .map_err(|e| ViewerError::DocumentSave(format!("join: {e}")))?
 }
 
-fn open_document_from_orchid_sync(path: &Path) -> Result<Document> {
+fn open_document_from_orchid_sync(path: &Path, identity: Option<&Identity>) -> Result<Document> {
     let file = SealedFile::open(path).map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     let raw = file
-        .raw(None)
+        .raw(identity)
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     if looks_like_zip(&raw) {
         return document_from_docx_bytes(&raw);
     }
     let clean = file
-        .clean_text(None)
+        .clean_text(identity)
         .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     Ok(document_from_plain_utf8(&clean))
+}
+
+/// True when the error string indicates a missing or wrong age identity.
+#[must_use]
+pub fn is_orchid_identity_error(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("identity required")
+        || lower.contains("invalid passphrase")
+        || lower.contains("passphrase required")
+        || lower.contains("decryption failed")
+        || lower.contains("age decryption")
 }
 
 fn document_from_docx_bytes(bytes: &[u8]) -> Result<Document> {
@@ -365,9 +387,9 @@ mod tests {
         let path = dir.path().join("sample.orchid");
         let doc = sample_document();
         let expected = doc.plain_text();
-        save_document_as_orchid(&doc, &path).await.unwrap();
+        save_document_as_orchid(&doc, &path, None).await.unwrap();
         assert!(looks_like_orchid(&std::fs::read(&path).unwrap()[..4]));
-        let back = open_document_from_orchid(&path).await.unwrap();
+        let back = open_document_from_orchid(&path, None).await.unwrap();
         assert_eq!(back.plain_text(), expected);
     }
 
@@ -384,10 +406,10 @@ mod tests {
         let path = td.path().join("linked.orchid");
         let doc = sample_document();
         let expected = doc.plain_text();
-        save_document_as_linked_orchid(&doc, &path, &store, Some([0xAB; 16]), 1, 0)
+        save_document_as_linked_orchid(&doc, &path, &store, Some([0xAB; 16]), 1, 0, None)
             .await
             .unwrap();
-        let back = open_document_from_orchid_with_store(&path, Some(&store))
+        let back = open_document_from_orchid_with_store(&path, Some(&store), None)
             .await
             .unwrap();
         assert_eq!(back.plain_text(), expected);
@@ -401,7 +423,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("imported.orchid");
         let doc = sample_document();
-        save_document_as_orchid_named(&doc, &path, "original.docx")
+        save_document_as_orchid_named(&doc, &path, "original.docx", None)
             .await
             .unwrap();
         let file = SealedFile::open(&path).unwrap();
@@ -420,7 +442,7 @@ mod tests {
         let storage = Arc::new(StateStore::open_in_memory("t").unwrap());
         let store = ChunkStore::new(td.path().join("chunks"), storage).unwrap();
         let path = td.path().join("linked.orchid");
-        save_document_as_linked_orchid(&sample_document(), &path, &store, None, 1, 0)
+        save_document_as_linked_orchid(&sample_document(), &path, &store, None, 1, 0, None)
             .await
             .unwrap();
         let file = SealedFile::open(&path).unwrap();
@@ -433,13 +455,38 @@ mod tests {
     async fn sealed_save_signs_c2pa_and_meta_reports_ok() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("signed.orchid");
-        save_document_as_orchid(&sample_document(), &path)
+        save_document_as_orchid(&sample_document(), &path, None)
             .await
             .unwrap();
         let meta = orchid_open_meta(&path).unwrap();
         assert!(!meta.linked);
         assert_eq!(meta.generation, 1);
         assert_eq!(meta.c2pa_ok, Some(true));
+    }
+
+    #[tokio::test]
+    async fn sealed_encrypted_roundtrip_needs_passphrase() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("secret.orchid");
+        let id = Identity::passphrase("correct horse battery");
+        let doc = sample_document();
+        let expected = doc.plain_text();
+        save_document_as_orchid(&doc, &path, Some(&id)).await.unwrap();
+        let err = open_document_from_orchid(&path, None).await.unwrap_err();
+        assert!(
+            is_orchid_identity_error(&err.to_string()),
+            "missing identity: {err}"
+        );
+        let wrong = Identity::passphrase("wrong");
+        let err = open_document_from_orchid(&path, Some(&wrong))
+            .await
+            .unwrap_err();
+        assert!(
+            is_orchid_identity_error(&err.to_string()),
+            "wrong passphrase: {err}"
+        );
+        let back = open_document_from_orchid(&path, Some(&id)).await.unwrap();
+        assert_eq!(back.plain_text(), expected);
     }
 
     #[test]

@@ -6,11 +6,13 @@ use std::sync::Arc;
 
 use super::super::errors::viewer_localized_error;
 use crate::slint_generated::{
-    ViewerArchiveEntry, ViewerArchiveModel, ViewerCalDay, ViewerDocumentModel, ViewerEmptyModel,
-    ViewerHtmlModel, ViewerImageModel, ViewerImageThumb, ViewerMapPin, ViewerMediaChapterItem,
-    ViewerMediaModel, ViewerMediaPlaylistItem, ViewerModel, ViewerPdfModel, ViewerPdfOutlineRow,
-    ViewerPdfOverlay, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment, ViewerTextModel,
+    FmPassphraseState, ViewerArchiveEntry, ViewerArchiveModel, ViewerCalDay, ViewerDocumentModel,
+    ViewerEmptyModel, ViewerHtmlModel, ViewerImageModel, ViewerImageThumb, ViewerMapPin,
+    ViewerMediaChapterItem, ViewerMediaModel, ViewerMediaPlaylistItem, ViewerModel,
+    ViewerPdfModel, ViewerPdfOutlineRow, ViewerPdfOverlay, ViewerStatusModel, ViewerSyntaxLine,
+    ViewerSyntaxSegment, ViewerTextModel,
 };
+use super::file_manager::empty_passphrase_state;
 
 /// Reuse Slint images when the underlying RGBA `Arc` is unchanged (pan/zoom).
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -1037,6 +1039,7 @@ pub(crate) fn empty_viewer_model(locale: &LocaleManager) -> ViewerModel {
         document: empty_viewer_document_model(locale),
         media: empty_viewer_media_model(locale),
         html: empty_viewer_html_model(locale),
+        passphrase: empty_passphrase_state(),
     }
 }
 
@@ -1045,6 +1048,25 @@ pub(crate) fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> V
     use orchid_viewers::ViewerSnapshot as Vs;
 
     let mut model = empty_viewer_model(locale);
+    if p.passphrase_prompt {
+        let err_hint = if p.passphrase_error.is_empty() {
+            locale.tr("viewer-document-passphrase-hint")
+        } else if p.passphrase_error == "fm-passphrase-invalid" {
+            locale.tr("fm-passphrase-invalid")
+        } else {
+            viewer_localized_error(locale, &p.passphrase_error)
+        };
+        model.passphrase = FmPassphraseState {
+            active: true,
+            proposed_passphrase: SharedString::new(),
+            title: locale.tr("viewer-document-passphrase-title").into(),
+            hint: err_hint.into(),
+            ok_label: locale.tr("viewer-document-passphrase-ok").into(),
+            cancel_label: locale.tr("fm-rename-cancel").into(),
+            biometric_available: false,
+            biometric_label: SharedString::new(),
+        };
+    }
 
     match &p.snapshot {
         Vs::Loading { path_display } if path_display.is_empty() => {

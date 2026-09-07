@@ -62,6 +62,9 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
 }
 
 fn viewer_payload_eq(a: &ViewerPayload, b: &ViewerPayload) -> bool {
+    if a.passphrase_prompt != b.passphrase_prompt || a.passphrase_error != b.passphrase_error {
+        return false;
+    }
     use orchid_viewers::ViewerSnapshot as Vs;
     match (&a.snapshot, &b.snapshot) {
         (Vs::Loading { path_display: pa }, Vs::Loading { path_display: pb }) => pa == pb,
@@ -1141,6 +1144,8 @@ mod tests {
                     can_undo: false,
                     can_redo: false,
                 }),
+                passphrase_prompt: false,
+                passphrase_error: String::new(),
             })
         };
         let a = make("old");

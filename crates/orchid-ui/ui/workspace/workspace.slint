@@ -259,6 +259,8 @@ export component WorkspaceView inherits Rectangle {
     callback viewer-document-footer-first-request(string, string);
     callback viewer-document-header-even-request(string, string);
     callback viewer-document-footer-even-request(string, string);
+    callback viewer-passphrase-commit(string, string);
+    callback viewer-passphrase-cancel(string);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-toggle-dual-pane(string);
@@ -686,6 +688,8 @@ export component WorkspaceView inherits Rectangle {
                     viewer-document-footer-first-request(id, text) => { root.viewer-document-footer-first-request(id, text); }
                     viewer-document-header-even-request(id, text) => { root.viewer-document-header-even-request(id, text); }
                     viewer-document-footer-even-request(id, text) => { root.viewer-document-footer-even-request(id, text); }
+                    viewer-passphrase-commit(id, pw) => { root.viewer-passphrase-commit(id, pw); }
+                    viewer-passphrase-cancel(id) => { root.viewer-passphrase-cancel(id); }
 
                     fm-sidebar-clicked(fm_id, id) => { root.fm-sidebar-clicked(fm_id, id); }
                     fm-pane-clicked(fm_id, p) => { root.fm-pane-clicked(fm_id, p); }
@@ -857,6 +861,8 @@ export component WorkspaceView inherits Rectangle {
             viewer-document-footer-first-request(id, text) => { root.viewer-document-footer-first-request(id, text); }
             viewer-document-header-even-request(id, text) => { root.viewer-document-header-even-request(id, text); }
             viewer-document-footer-even-request(id, text) => { root.viewer-document-footer-even-request(id, text); }
+            viewer-passphrase-commit(id, pw) => { root.viewer-passphrase-commit(id, pw); }
+            viewer-passphrase-cancel(id) => { root.viewer-passphrase-cancel(id); }
         }
 
         for w[i] in root.workspace.floating-widgets: Rectangle {

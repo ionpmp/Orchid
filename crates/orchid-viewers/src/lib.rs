@@ -32,9 +32,10 @@ pub use document::ooxml::core_props::{
 };
 pub use document::{
     create_sample_docx, create_sample_orchid, create_sample_orchid_with_store, is_docx_raw_meta,
-    is_orchid_path, looks_like_orchid, materialize_orchid_raw_temp, open_document_from_orchid,
-    open_document_from_orchid_with_store, peek_orchid_raw_meta, pick_document_save_path,
-    sample_document, save_document_as_linked_orchid, save_document_as_orchid, Alignment, Block,
+    is_orchid_identity_error, is_orchid_path, looks_like_orchid, materialize_orchid_raw_temp,
+    open_document_from_orchid, open_document_from_orchid_with_store, peek_orchid_raw_meta,
+    pick_document_save_path, sample_document, save_document_as_linked_orchid, save_document_as_orchid,
+    Alignment, Block,
     CellImage, Document, DocumentViewer, EditCommand, ListKind, UndoStack as DocumentUndoStack,
 };
 pub use error::{Result, ViewerError};

@@ -2880,6 +2880,36 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_viewer_passphrase_commit({
+            let t = t.clone();
+            move |id, pw| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let tw = Arc::downgrade(&c);
+                        let pw = pw.to_string();
+                        viewer_spawn!(
+                            tw,
+                            inst,
+                            orchid_widgets::builtin::viewer::commit_orchid_passphrase(inst, pw)
+                        );
+                    }
+                }
+            }
+        });
+        self.window.on_viewer_passphrase_cancel({
+            let t = t.clone();
+            move |id| {
+                if let Some(_c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        if let Err(e) =
+                            orchid_widgets::builtin::viewer::cancel_orchid_passphrase(inst)
+                        {
+                            warn!(?e, "viewer passphrase cancel");
+                        }
+                    }
+                }
+            }
+        });
         self.window.on_viewer_document_preview_key({
             let t = t.clone();
             move |id, key, ctrl, shift| {

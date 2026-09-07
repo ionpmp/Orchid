@@ -305,6 +305,8 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-document-footer-first-request(string, string);
     callback viewer-document-header-even-request(string, string);
     callback viewer-document-footer-even-request(string, string);
+    callback viewer-passphrase-commit(string, string);
+    callback viewer-passphrase-cancel(string);
 
     callback fm-sidebar-clicked(string, string);
     callback fm-pane-clicked(string, int);
@@ -1157,6 +1159,8 @@ export component WidgetFrame inherits Rectangle {
                         document-footer-first-request(text) => { root.viewer-document-footer-first-request(root.model.instance-id, text); }
                         document-header-even-request(text) => { root.viewer-document-header-even-request(root.model.instance-id, text); }
                         document-footer-even-request(text) => { root.viewer-document-footer-even-request(root.model.instance-id, text); }
+                        passphrase-commit(pw) => { root.viewer-passphrase-commit(root.model.instance-id, pw); }
+                        passphrase-cancel => { root.viewer-passphrase-cancel(root.model.instance-id); }
                     }
                 }
 

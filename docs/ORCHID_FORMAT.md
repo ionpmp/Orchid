@@ -616,7 +616,9 @@ the reverse.
    sealed). Dirty linked documents autosave after a short debounce.
    **Save As…** exports `.orchid` or `.docx`. Sealed document saves and sealed
    FM wraps sign a C2PA Provenance carrier by default; the document info strip
-   shows generation, linked/sealed, and C2PA verify status.
+   shows generation, linked/sealed, and C2PA verify status. Opening an encrypted
+   `.orchid` prompts for a passphrase; Save keeps the same identity so private
+   regions stay encrypted.
 3. **File manager action: “Wrap as .orchid”** packs selection → Raw +
    derived Clean-Text (+ StubEmbedder Embedding region when Clean-Text is
    non-empty). Inside a managed folder (with `ChunkStore`) the wrap is

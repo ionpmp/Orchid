@@ -115,11 +115,11 @@ pub async fn create_sample_orchid_with_store(
     match store {
         Some(store) => {
             crate::document::orchid_io::save_document_as_linked_orchid(
-                &doc, path, store, None, 1, 0,
+                &doc, path, store, None, 1, 0, None,
             )
             .await
         }
-        None => crate::document::orchid_io::save_document_as_orchid(&doc, path).await,
+        None => crate::document::orchid_io::save_document_as_orchid(&doc, path, None).await,
     }
 }
 
@@ -148,7 +148,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("sample.orchid");
         create_sample_orchid(&path).await.unwrap();
-        let doc = crate::document::orchid_io::open_document_from_orchid(&path)
+        let doc = crate::document::orchid_io::open_document_from_orchid(&path, None)
             .await
             .unwrap();
         assert!(doc.plain_text().contains("Sample document"));
@@ -174,6 +174,7 @@ mod tests {
         let doc = crate::document::orchid_io::open_document_from_orchid_with_store(
             &path,
             Some(&store),
+            None,
         )
         .await
         .unwrap();

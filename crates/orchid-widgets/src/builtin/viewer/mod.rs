@@ -238,6 +238,12 @@ struct ViewerWidgetInner {
     pending_path: RwLock<Option<orchid_fs::FsPath>>,
     /// After the next successful open, switch a text viewer into edit mode.
     pending_edit: AtomicBool,
+    /// User path waiting for an `.orchid` passphrase unlock.
+    pending_orchid_unlock: parking_lot::Mutex<Option<orchid_fs::FsPath>>,
+    /// Passphrase to apply on the next document open (consumed once).
+    pending_decrypt_passphrase: parking_lot::Mutex<Option<String>>,
+    /// Error string for the unlock dialog (`""` when idle / first prompt).
+    orchid_passphrase_error: parking_lot::Mutex<String>,
     /// Floating overlay bounds when undocked from the canvas grid.
     floating: RwLock<Option<crate::layout::PixelBounds>>,
     /// Image folder playlist (next/prev, loop, recent).
@@ -394,6 +400,11 @@ impl ViewerWidgetInner {
         self.doc_autosave_gen.fetch_add(1, Ordering::Relaxed);
         self.remember_current_image_view().await;
         self.drop_unwrap_temp();
+        let apply_passphrase = self.pending_decrypt_passphrase.lock().take();
+        if apply_passphrase.is_none() {
+            *self.pending_orchid_unlock.lock() = None;
+            *self.orchid_passphrase_error.lock() = String::new();
+        }
         let registry = self.deps.registry.clone();
         let highlighter = self.deps.highlighter.clone();
         *self.snapshot.write() = Some(ViewerSnapshot::Loading {
@@ -435,6 +446,14 @@ impl ViewerWidgetInner {
                 doc.set_chunk_store(store);
             }
         }
+        if let Some(pw) = apply_passphrase {
+            if let Some(doc) = viewer
+                .as_any_mut()
+                .downcast_mut::<orchid_viewers::DocumentViewer>()
+            {
+                doc.set_decrypt_identity(Some(orchid_crypto::Identity::passphrase(pw)));
+            }
+        }
         if is_image_path(&open_path) {
             let preloaded = self.image_preload.write().take(path.as_str());
             if let Some(loaded) = preloaded {
@@ -452,11 +471,39 @@ impl ViewerWidgetInner {
                 return Ok(());
             }
         } else if let Err(e) = viewer.open(open_path.clone(), registry).await {
-            warn!(error = %e, "viewer open failed");
+            let msg = e.to_string();
+            let orchid_doc = open_path
+                .to_local()
+                .ok()
+                .is_some_and(|p| orchid_viewers::is_orchid_path(std::path::Path::new(&p)))
+                || path
+                    .to_local()
+                    .ok()
+                    .is_some_and(|p| orchid_viewers::is_orchid_path(std::path::Path::new(&p)));
+            if orchid_doc && orchid_viewers::is_orchid_identity_error(&msg) {
+                warn!(error = %msg, "encrypted .orchid needs passphrase");
+                self.drop_unwrap_temp();
+                *self.viewer.lock().await = None;
+                *self.pending_orchid_unlock.lock() = Some(path.clone());
+                *self.orchid_passphrase_error.lock() = if msg.to_ascii_lowercase().contains("invalid")
+                    || msg.to_ascii_lowercase().contains("decryption failed")
+                {
+                    "fm-passphrase-invalid".into()
+                } else {
+                    String::new()
+                };
+                *self.snapshot.write() = Some(ViewerSnapshot::Error {
+                    path_display: path.as_str().to_string(),
+                    message: "viewer-document-passphrase-required".into(),
+                });
+                self.publish_refresh();
+                return Ok(());
+            }
+            warn!(error = %msg, "viewer open failed");
             self.drop_unwrap_temp();
             *self.snapshot.write() = Some(ViewerSnapshot::Error {
                 path_display: path.as_str().to_string(),
-                message: e.to_string(),
+                message: msg,
             });
             self.publish_refresh();
             return Ok(());
@@ -498,8 +545,28 @@ impl ViewerWidgetInner {
             smtc_publisher::clear_active(self.instance_id);
         }
         self.overlay_image_nav();
+        *self.pending_orchid_unlock.lock() = None;
+        *self.orchid_passphrase_error.lock() = String::new();
         self.publish_refresh();
         Ok(())
+    }
+
+    async fn commit_orchid_passphrase(&self, passphrase: &str) -> WidgetResult<()> {
+        let path = self
+            .pending_orchid_unlock
+            .lock()
+            .clone()
+            .ok_or_else(|| WidgetError::InvalidStateForOperation("no pending orchid unlock".into()))?;
+        *self.pending_decrypt_passphrase.lock() = Some(passphrase.to_string());
+        *self.orchid_passphrase_error.lock() = String::new();
+        self.open_path(path).await
+    }
+
+    fn cancel_orchid_passphrase(&self) {
+        *self.pending_orchid_unlock.lock() = None;
+        *self.pending_decrypt_passphrase.lock() = None;
+        *self.orchid_passphrase_error.lock() = String::new();
+        self.publish_refresh();
     }
 
     fn overlay_image_nav(&self) {
@@ -1948,6 +2015,9 @@ impl ViewerWidget {
                 unwrap_temp: parking_lot::Mutex::new(None),
                 pending_path: RwLock::new(None),
                 pending_edit: AtomicBool::new(false),
+                pending_orchid_unlock: parking_lot::Mutex::new(None),
+                pending_decrypt_passphrase: parking_lot::Mutex::new(None),
+                orchid_passphrase_error: parking_lot::Mutex::new(String::new()),
                 floating: RwLock::new(None),
                 image_nav: RwLock::new(image_nav::ImageFolderNav::default()),
                 media_nav: RwLock::new(media_nav::MediaFolderNav::default()),
@@ -1998,6 +2068,16 @@ impl ViewerWidget {
     /// Open a path on this widget instance.
     pub async fn open_path(&self, path: orchid_fs::FsPath) -> WidgetResult<()> {
         self.inner.open_path(path).await
+    }
+
+    /// Retry opening a pending encrypted `.orchid` with `passphrase`.
+    pub async fn commit_orchid_passphrase(&self, passphrase: &str) -> WidgetResult<()> {
+        self.inner.commit_orchid_passphrase(passphrase).await
+    }
+
+    /// Dismiss the encrypted `.orchid` unlock dialog.
+    pub fn cancel_orchid_passphrase(&self) {
+        self.inner.cancel_orchid_passphrase();
     }
 
     /// Current file path when known.
@@ -2066,6 +2146,30 @@ pub async fn open_path(instance_id: Uuid, path: orchid_fs::FsPath) -> WidgetResu
         .map(|e| Arc::clone(e.value()))
         .ok_or_else(|| WidgetError::InvalidStateForOperation("viewer widget not live".into()))?;
     inner.open_path(path).await
+}
+
+/// Unlock a pending encrypted `.orchid` on `instance_id`.
+pub async fn commit_orchid_passphrase(
+    instance_id: Uuid,
+    passphrase: impl AsRef<str>,
+) -> WidgetResult<()> {
+    let inner = VIEWER_LIVE
+        .get(&instance_id)
+        .map(|e| Arc::clone(e.value()))
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("viewer widget not live".into()))?;
+    inner
+        .commit_orchid_passphrase(passphrase.as_ref())
+        .await
+}
+
+/// Cancel the encrypted `.orchid` unlock dialog on `instance_id`.
+pub fn cancel_orchid_passphrase(instance_id: Uuid) -> WidgetResult<()> {
+    let inner = VIEWER_LIVE
+        .get(&instance_id)
+        .map(|e| Arc::clone(e.value()))
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("viewer widget not live".into()))?;
+    inner.cancel_orchid_passphrase();
+    Ok(())
 }
 
 /// Open `path` and enter text-edit mode when the file is a text document.
@@ -4565,6 +4669,8 @@ impl Widget for ViewerWidget {
                     Some(&self.inner.media_nav.read()),
                     self.inner.playlist_panel_open.load(Ordering::Relaxed),
                 ),
+                passphrase_prompt: self.inner.pending_orchid_unlock.lock().is_some(),
+                passphrase_error: self.inner.orchid_passphrase_error.lock().clone(),
             }),
         })
     }
