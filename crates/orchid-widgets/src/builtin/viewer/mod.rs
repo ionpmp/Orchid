@@ -232,6 +232,8 @@ struct ViewerWidgetInner {
     viewer: Mutex<Option<Box<dyn Viewer>>>,
     snapshot: RwLock<Option<ViewerSnapshot>>,
     path: RwLock<Option<orchid_fs::FsPath>>,
+    /// Temp file from `.orchid` Raw unwrap; removed on close / next open.
+    unwrap_temp: parking_lot::Mutex<Option<std::path::PathBuf>>,
     /// Path restored from persistence; opened in `on_create`.
     pending_path: RwLock<Option<orchid_fs::FsPath>>,
     /// After the next successful open, switch a text viewer into edit mode.
@@ -326,6 +328,24 @@ impl ViewerWidgetInner {
         );
     }
 
+    /// Prefer the user-facing path (`.orchid`) over a temp Raw unwrap path.
+    fn stamp_user_path(&self, snap: ViewerSnapshot) -> ViewerSnapshot {
+        match self.path.read().as_ref() {
+            Some(p) => snap.with_path_display(p.as_str()),
+            None => snap,
+        }
+    }
+
+    fn take_unwrap_temp(&self) -> Option<std::path::PathBuf> {
+        self.unwrap_temp.lock().take()
+    }
+
+    fn drop_unwrap_temp(&self) {
+        if let Some(p) = self.take_unwrap_temp() {
+            let _ = std::fs::remove_file(&p);
+        }
+    }
+
     async fn remember_current_image_view(&self) {
         let path = match self.path.read().clone() {
             Some(p) if is_image_path(&p) => p,
@@ -373,6 +393,7 @@ impl ViewerWidgetInner {
         self.media_tick.fetch_add(1, Ordering::Relaxed);
         self.doc_autosave_gen.fetch_add(1, Ordering::Relaxed);
         self.remember_current_image_view().await;
+        self.drop_unwrap_temp();
         let registry = self.deps.registry.clone();
         let highlighter = self.deps.highlighter.clone();
         *self.snapshot.write() = Some(ViewerSnapshot::Loading {
@@ -391,6 +412,7 @@ impl ViewerWidgetInner {
         let orchid_viewers::SelectedViewer {
             mut viewer,
             open_path,
+            temp_cleanup,
         } = match select_res {
             Ok(v) => v,
             Err(e) => {
@@ -404,6 +426,7 @@ impl ViewerWidgetInner {
                 return Ok(());
             }
         };
+        *self.unwrap_temp.lock() = temp_cleanup;
         if let Some(store) = self.deps.chunk_store.clone() {
             if let Some(doc) = viewer
                 .as_any_mut()
@@ -420,6 +443,7 @@ impl ViewerWidgetInner {
                 }
             } else if let Err(e) = viewer.open(open_path.clone(), registry).await {
                 warn!(error = %e, "viewer open failed");
+                self.drop_unwrap_temp();
                 *self.snapshot.write() = Some(ViewerSnapshot::Error {
                     path_display: path.as_str().to_string(),
                     message: e.to_string(),
@@ -429,6 +453,7 @@ impl ViewerWidgetInner {
             }
         } else if let Err(e) = viewer.open(open_path.clone(), registry).await {
             warn!(error = %e, "viewer open failed");
+            self.drop_unwrap_temp();
             *self.snapshot.write() = Some(ViewerSnapshot::Error {
                 path_display: path.as_str().to_string(),
                 message: e.to_string(),
@@ -441,7 +466,7 @@ impl ViewerWidgetInner {
                 tv.set_mode(orchid_viewers::TextViewerMode::Edit);
             }
         }
-        let snap = viewer.snapshot();
+        let snap = self.stamp_user_path(viewer.snapshot());
         *self.snapshot.write() = Some(snap);
         *self.viewer.lock().await = Some(viewer);
         // Image/media chrome keys off the opened payload path (may be a temp
@@ -458,7 +483,7 @@ impl ViewerWidgetInner {
             }
             let guard = self.viewer.lock().await;
             if let Some(v) = guard.as_ref() {
-                *self.snapshot.write() = Some(v.snapshot());
+                *self.snapshot.write() = Some(self.stamp_user_path(v.snapshot()));
             }
         }
         if is_media_path(&open_path) {
@@ -752,6 +777,7 @@ impl ViewerWidgetInner {
         if let Some(mut v) = taken {
             let _ = v.close().await;
         }
+        self.drop_unwrap_temp();
         *self.snapshot.write() = None;
         *self.path.write() = None;
         self.publish_refresh();
@@ -761,7 +787,7 @@ impl ViewerWidgetInner {
         let guard = self.viewer.lock().await;
         if let Some(v) = guard.as_ref() {
             *self.snapshot.write() = Some(apply_image_overlay(
-                v.snapshot(),
+                self.stamp_user_path(v.snapshot()),
                 &self.image_nav.read(),
                 Some(&self.image_thumbs.read()),
                 Some(&self.slideshow.read()),
@@ -1919,6 +1945,7 @@ impl ViewerWidget {
                 viewer: Mutex::new(None),
                 snapshot: RwLock::new(None),
                 path: RwLock::new(None),
+                unwrap_temp: parking_lot::Mutex::new(None),
                 pending_path: RwLock::new(None),
                 pending_edit: AtomicBool::new(false),
                 floating: RwLock::new(None),

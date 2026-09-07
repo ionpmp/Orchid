@@ -36,6 +36,30 @@ pub enum ViewerSnapshot {
     Html(HtmlSnapshot),
 }
 
+impl ViewerSnapshot {
+    /// Replace every variant's `path_display` (e.g. show `.orchid` instead of a temp unwrap).
+    #[must_use]
+    pub fn with_path_display(mut self, path_display: impl Into<String>) -> Self {
+        let path_display = path_display.into();
+        match &mut self {
+            Self::Loading {
+                path_display: slot,
+            }
+            | Self::Error {
+                path_display: slot, ..
+            } => *slot = path_display,
+            Self::Image(s) => s.path_display = path_display,
+            Self::Pdf(s) => s.path_display = path_display,
+            Self::Text(s) => s.path_display = path_display,
+            Self::Archive(s) => s.path_display = path_display,
+            Self::Document(s) => s.path_display = path_display,
+            Self::Media(s) => s.path_display = path_display,
+            Self::Html(s) => s.path_display = path_display,
+        }
+        self
+    }
+}
+
 /// Document (DOCX) snapshot for the UI layer.
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]

@@ -266,6 +266,7 @@ release yet.
   containers (`wrap_as_sealed`).
 - Document editor native `.orchid` save/open: sealed envelope with Raw=DOCX +
   Clean-Text=`plain_text`; catalog **Document** creates `Untitled.orchid`;
+  with a `ChunkStore` that Untitled file is **linked** from the start.
   `.docx` export path unchanged when the open path ends in `.docx`.
   **Save As…** (toolbar / Ctrl+Shift+S) picks `.orchid` or `.docx`.
   With the app `ChunkStore`, editor saves prefer **linked** `.orchid`
@@ -285,6 +286,7 @@ release yet.
   document save + sealed↔linked repack).
 - Opening a `.orchid` wrap dispatches by Raw MIME/name: PDF/image/text/media/…
   viewers unwrap Raw to a temp file; DOCX envelopes stay in the document editor.
+  The viewer chrome keeps the `.orchid` path; unwrap temps are deleted on close.
 
 #### Built-in widgets
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),

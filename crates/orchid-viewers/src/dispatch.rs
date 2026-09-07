@@ -35,12 +35,16 @@ pub enum ViewerKind {
 /// Viewer instance plus the path that should be passed to [`Viewer::open`].
 ///
 /// For non-document `.orchid` wraps, `open_path` is a temp file containing the
-/// Raw payload so Image/Pdf/… viewers can open the unwrapped bytes.
+/// Raw payload so Image/Pdf/… viewers can open the unwrapped bytes. The widget
+/// keeps the user-facing `.orchid` path for chrome and may delete
+/// [`Self::temp_cleanup`] when the viewer closes.
 pub struct SelectedViewer {
     /// Concrete viewer implementation.
     pub viewer: Box<dyn Viewer>,
     /// Path for [`Viewer::open`] (may differ from the user-facing file).
     pub open_path: orchid_fs::FsPath,
+    /// Temp Raw unwrap to delete after close (when `open_path` is not the original).
+    pub temp_cleanup: Option<std::path::PathBuf>,
 }
 
 /// Pick a viewer kind by sniffing magic bytes from `sample` with a fall
@@ -235,6 +239,7 @@ pub async fn select_viewer(
     Ok(SelectedViewer {
         viewer: viewer_for_kind(kind, highlighter),
         open_path: path.clone(),
+        temp_cleanup: None,
     })
 }
 
@@ -257,6 +262,7 @@ async fn select_orchid_viewer(
         return Ok(SelectedViewer {
             viewer: viewer_for_kind(ViewerKind::Document, highlighter),
             open_path: path.clone(),
+            temp_cleanup: None,
         });
     }
 
@@ -269,14 +275,16 @@ async fn select_orchid_viewer(
         return Ok(SelectedViewer {
             viewer: viewer_for_kind(ViewerKind::Document, highlighter),
             open_path: path.clone(),
+            temp_cleanup: None,
         });
     }
 
-    let open_path =
-        orchid_fs::FsPath::from_local(&tmp).map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    let open_path = orchid_fs::FsPath::from_local(&tmp)
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     Ok(SelectedViewer {
         viewer: viewer_for_kind(kind, highlighter),
         open_path,
+        temp_cleanup: Some(tmp),
     })
 }
 

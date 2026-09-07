@@ -611,10 +611,10 @@ the reverse.
    for FM wrap). Autosave and library storage prefer linked `.orchid`.
    With an app `ChunkStore`, the document editor saves **linked** `.orchid`
    (Raw = DOCX fidelity bytes, Clean-Text = `plain_text`, generation bump);
-   without a store it falls back to sealed. New documents still start as
-   sealed `Untitled.orchid` until the first editor save. Dirty linked
-   documents autosave after a short debounce. **Save As…**
-   exports `.orchid` or `.docx`.
+   without a store it falls back to sealed. Catalog **Document** creates
+   `Untitled.orchid` as **linked** when a `ChunkStore` is available (otherwise
+   sealed). Dirty linked documents autosave after a short debounce.
+   **Save As…** exports `.orchid` or `.docx`.
 3. **File manager action: “Wrap as .orchid”** packs selection → Raw +
    derived Clean-Text (+ StubEmbedder Embedding region when Clean-Text is
    non-empty). Inside a managed folder (with `ChunkStore`) the wrap is
@@ -622,7 +622,8 @@ the reverse.
    the original file name / MIME on the Raw TOC entry. Opening a wrap
    peeks that metadata and routes to the matching viewer (PDF, image,
    text, …), materializing Raw to a temp file when needed; Raw DOCX /
-   editor envelopes stay in the document viewer.
+   editor envelopes stay in the document viewer. UI chrome shows the
+   `.orchid` path; temp unwraps are removed when the viewer closes.
 4. **Search** indexes `.orchid` via Clean-Text (live `OrchidExtractor`);
    semantic / hybrid path in Phase 5.
 5. **MIME / extension** registered in the Windows installer when the CLI
