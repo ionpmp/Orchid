@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use orchid_storage::OrchidPaths;
-use orchid_ui::OrchidApp;
+use orchid_ui::{collect_cli_open_paths, OrchidApp};
 
 #[cfg(windows)]
 #[global_allocator]
@@ -34,6 +34,11 @@ fn main() -> Result<()> {
 
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "Orchid starting");
 
+    let open_paths = collect_cli_open_paths(std::env::args_os().skip(1));
+    if !open_paths.is_empty() {
+        tracing::info!(count = open_paths.len(), "opening paths from argv");
+    }
+
     let paths = OrchidPaths::resolve().context("failed to resolve Orchid paths")?;
 
     // Multi-thread runtime for async bootstrap + background indexing.
@@ -51,7 +56,8 @@ fn main() -> Result<()> {
     // `slint::spawn_local` and widget async work need the runtime in scope.
     let _guard = runtime.enter();
 
-    app.run_main().context("UI loop exited with error")?;
+    app.run_main(open_paths)
+        .context("UI loop exited with error")?;
 
     if let Ok(h) = tokio::runtime::Handle::try_current() {
         h.block_on(app.flush_after_window());

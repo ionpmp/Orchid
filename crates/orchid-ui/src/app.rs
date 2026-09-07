@@ -869,7 +869,7 @@ impl OrchidApp {
     /// cleanup runs *after* the event loop, without blocking the Tokio runtime
     /// from inside this crate.
     /// the `orchid-ui` sources (11B-Fix).
-    pub fn run_main(&self) -> Result<()> {
+    pub fn run_main(&self, open_paths: Vec<std::path::PathBuf>) -> Result<()> {
         let c = MainWindowController::new(
             self.theme.clone(),
             self.locale.clone(),
@@ -891,6 +891,7 @@ impl OrchidApp {
             self.session_routing.clone(),
             self.terminal_deps.clone(),
         )?;
+        c.queue_cli_open_paths(open_paths);
         // Kick off deferred search indexing before the event loop so crawl/watch
         // cannot block first paint (start() itself sleeps briefly then runs async).
         self.deferred_index.start();

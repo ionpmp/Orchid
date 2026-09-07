@@ -249,6 +249,8 @@ pub struct MainWindowController {
     history_recorder: Arc<HistoryRecorder>,
     /// Last applied [`OrchidConfig::privacy::history_retention_days`]; used to detect hot-config changes.
     last_history_retention_days: AtomicU32,
+    /// Paths from `orchid.exe` argv / Explorer association; opened after `show`.
+    pending_cli_paths: Mutex<Vec<PathBuf>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -556,6 +558,7 @@ impl MainWindowController {
             fm_passphrase_vault,
             history_recorder,
             last_history_retention_days: AtomicU32::new(last_history_retention_days),
+            pending_cli_paths: Mutex::new(Vec::new()),
         });
         this.apply_input_gesture_bindings();
         this.apply_theme()?;
@@ -1387,10 +1390,55 @@ impl MainWindowController {
             self.schedule_rebuild();
         }
         self.update_gesture_bounds();
+        self.drain_cli_open_paths();
         slint::run_event_loop().map_err(|e| UiError::Slint(format!("loop: {e}")))?;
         self.persist_notifications();
         tracing::info!("Main window closed");
         Ok(())
+    }
+
+    /// Queue files from the process command line (Explorer double-click / argv).
+    pub fn queue_cli_open_paths(self: &Arc<Self>, paths: Vec<PathBuf>) {
+        if paths.is_empty() {
+            return;
+        }
+        *self.pending_cli_paths.lock() = paths;
+    }
+
+    /// Open queued CLI paths after the main window is shown.
+    fn drain_cli_open_paths(self: &Arc<Self>) {
+        let paths: Vec<PathBuf> = std::mem::take(&mut *self.pending_cli_paths.lock());
+        if paths.is_empty() {
+            return;
+        }
+        let paths: Vec<PathBuf> = paths
+            .into_iter()
+            .take(Self::VIEWER_MULTI_OPEN_CAP)
+            .collect();
+        let tw = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            // Let first paint / canvas sync settle before spawning viewers.
+            tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+            let mut opened = 0usize;
+            for path in paths {
+                let Ok(fp) = orchid_fs::FsPath::from_local(&path) else {
+                    warn!(path = %path.display(), "cli open: invalid path");
+                    continue;
+                };
+                let Some(_) = tw.upgrade() else {
+                    return;
+                };
+                match Self::open_in_viewer_for_controller(tw.clone(), fp, false, false).await {
+                    Ok(_) => opened += 1,
+                    Err(e) => warn!(error = %e, path = %path.display(), "cli open failed"),
+                }
+            }
+            if opened > 0 {
+                if let Some(c) = tw.upgrade() {
+                    c.schedule_rebuild();
+                }
+            }
+        });
     }
 
     /// Soft cap on simultaneously open floating windows (taskbar still lists minimized).

@@ -6,6 +6,7 @@
 
 pub mod app;
 mod autostart;
+mod cli_open;
 mod commands;
 pub mod error;
 mod html_webview;
@@ -18,6 +19,7 @@ pub mod widgets;
 pub mod window;
 
 pub use app::OrchidApp;
+pub use cli_open::{collect_cli_open_paths, is_orchid_cli_path};
 pub use error::{Result, UiError};
 pub use theme::{
     Color, ColorTokens, DesignTokens, RadiusTokens, SpacingTokens, Theme, ThemeManager, ThemeMeta,

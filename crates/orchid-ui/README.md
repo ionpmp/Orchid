@@ -95,7 +95,7 @@ use orchid_ui::OrchidApp;
 let paths = OrchidPaths::resolve()?;
 let app = OrchidApp::bootstrap(paths).await?;
 // app.run_startup()?;   // first-run window
-// app.run_main()?;      // workspace dashboard
+// app.run_main(Vec::new())?;      // workspace dashboard
 # Ok(())
 # }
 ```
