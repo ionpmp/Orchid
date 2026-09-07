@@ -77,6 +77,48 @@ impl MainWindowController {
             self.refresh_browser(inst);
             return;
         }
+        if let Some(rest) = command.as_str().strip_prefix("move-tab:") {
+            let mut parts = rest.split(':');
+            if let (Some(from), Some(to)) = (parts.next(), parts.next()) {
+                if let (Ok(from), Ok(to)) = (from.parse::<i32>(), to.parse::<i32>()) {
+                    orchid_widgets::builtin::browser::move_tab(inst, from, to);
+                    self.refresh_browser(inst);
+                }
+            }
+            return;
+        }
+        if let Some(dl) = command.as_str().strip_prefix("download-cancel:") {
+            if let Ok(id) = Uuid::parse_str(dl) {
+                self.html_webview.cancel_download(id);
+            }
+            return;
+        }
+        if let Some(dl) = command.as_str().strip_prefix("download-open:") {
+            if let Some(path) = orchid_widgets::builtin::browser::download_path(inst, dl) {
+                if let Err(e) = opener::open(&path) {
+                    tracing::warn!(?e, %path, "browser download open");
+                }
+            }
+            return;
+        }
+        if let Some(dl) = command.as_str().strip_prefix("download-show:") {
+            if let Some(path) = orchid_widgets::builtin::browser::download_path(inst, dl) {
+                let folder = std::path::Path::new(&path)
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new(&path));
+                if let Ok(fs) = orchid_fs::FsPath::from_local(folder) {
+                    self.reveal_folder_in_fm(fs);
+                }
+            }
+            return;
+        }
+        if let Some(idx) = command.as_str().strip_prefix("download-remove:") {
+            if let Ok(index) = idx.parse::<i32>() {
+                orchid_widgets::builtin::browser::remove_download(inst, index);
+                self.refresh_browser(inst);
+            }
+            return;
+        }
         let Some(tab_id) = orchid_widgets::builtin::browser::active_tab_id(inst) else {
             return;
         };
@@ -131,13 +173,18 @@ impl MainWindowController {
     }
 
     pub(super) fn bump_browser_focus_address(&self, inst: Uuid) {
-        bump_browser_gen(&self.workspace_widgets, inst, true);
-        bump_browser_gen(&self.workspace_floating_widgets, inst, true);
+        bump_browser_gen(&self.workspace_widgets, inst, 0);
+        bump_browser_gen(&self.workspace_floating_widgets, inst, 0);
     }
 
     pub(super) fn bump_browser_show_find(&self, inst: Uuid) {
-        bump_browser_gen(&self.workspace_widgets, inst, false);
-        bump_browser_gen(&self.workspace_floating_widgets, inst, false);
+        bump_browser_gen(&self.workspace_widgets, inst, 1);
+        bump_browser_gen(&self.workspace_floating_widgets, inst, 1);
+    }
+
+    pub(super) fn bump_browser_show_downloads(&self, inst: Uuid) {
+        bump_browser_gen(&self.workspace_widgets, inst, 2);
+        bump_browser_gen(&self.workspace_floating_widgets, inst, 2);
     }
 
     pub(super) fn on_browser_open_external(self: &Arc<Self>, id: &SharedString) {
@@ -173,7 +220,7 @@ impl MainWindowController {
 fn bump_browser_gen(
     model: &slint::ModelRc<crate::slint_generated::WidgetFrameModel>,
     id: Uuid,
-    focus_address: bool,
+    kind: u8,
 ) {
     use slint::Model;
     use slint::VecModel;
@@ -195,10 +242,10 @@ fn bump_browser_gen(
         if row.type_id.as_str() != orchid_widgets::builtin::browser::TYPE_ID {
             return;
         }
-        if focus_address {
-            row.browser.focus_address_gen = row.browser.focus_address_gen.saturating_add(1);
-        } else {
-            row.browser.show_find_gen = row.browser.show_find_gen.saturating_add(1);
+        match kind {
+            0 => row.browser.focus_address_gen = row.browser.focus_address_gen.saturating_add(1),
+            2 => row.browser.show_downloads_gen = row.browser.show_downloads_gen.saturating_add(1),
+            _ => row.browser.show_find_gen = row.browser.show_find_gen.saturating_add(1),
         }
         v.set_row_data(r, row);
         return;

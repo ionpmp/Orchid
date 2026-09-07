@@ -72,9 +72,13 @@ export component BrowserView inherits Rectangle {
     property <string> synced-url: model.url;
     property <int> last-focus-gen: 0;
     property <int> last-find-gen: 0;
+    property <int> last-downloads-gen: 0;
     property <bool> find-open: false;
     property <bool> bookmarks-open: false;
+    property <bool> downloads-open: false;
     property <string> find-query: "";
+    property <int> drag-index: -1;
+    property <bool> tab-dragged: false;
 
     function fire-embed() {
         if (model.webview-available && host.width > 8px && host.height > 8px) {
@@ -147,6 +151,10 @@ export component BrowserView inherits Rectangle {
             root.new-tab();
             return true;
         }
+        if (event.modifiers.control && (event.text == "j" || event.text == "J")) {
+            root.downloads-open = !root.downloads-open;
+            return true;
+        }
         if (event.modifiers.control && (event.text == "w" || event.text == "W")) {
             root.close-tab(model.active-index);
             return true;
@@ -202,6 +210,10 @@ export component BrowserView inherits Rectangle {
                 root.find-open = false;
                 return true;
             }
+            if (root.downloads-open) {
+                root.downloads-open = false;
+                return true;
+            }
             if (root.bookmarks-open) {
                 root.bookmarks-open = false;
                 return true;
@@ -241,6 +253,13 @@ export component BrowserView inherits Rectangle {
                 find-input.focus();
             }
         }
+        if model.show-downloads-gen != root.last-downloads-gen {
+            let bump = model.show-downloads-gen > root.last-downloads-gen;
+            root.last-downloads-gen = model.show-downloads-gen;
+            if bump {
+                root.downloads-open = true;
+            }
+        }
         root.fire-embed();
     }
 
@@ -277,7 +296,7 @@ export component BrowserView inherits Rectangle {
                             alignment: start;
 
                             for tab[i] in model.tabs : Rectangle {
-                                width: max(72px, min(160px, tab-label.preferred-width + (tab.is-active ? 36px : 20px)));
+                                width: max(72px, min(160px, tab-label.preferred-width + (tab.has-icon ? 18px : 0) + (tab.is-active ? 36px : 20px)));
                                 height: 26px;
                                 y: (parent.height - self.height) / 2;
                                 border-radius: Theme.radius-md;
@@ -287,10 +306,36 @@ export component BrowserView inherits Rectangle {
                                 border-color: Theme.border-default;
 
                                 tab-ta := TouchArea {
-                                    clicked => { root.select-tab(i); }
+                                    clicked => {
+                                        if (!root.tab-dragged) {
+                                            root.select-tab(i);
+                                        }
+                                        root.tab-dragged = false;
+                                    }
                                     pointer-event(event) => {
-                                        if (event.kind == PointerEventKind.up && event.button == PointerEventButton.middle) {
-                                            root.close-tab(i);
+                                        if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                                            root.drag-index = i;
+                                            root.tab-dragged = false;
+                                        }
+                                        if (event.kind == PointerEventKind.up) {
+                                            if (event.button == PointerEventButton.middle) {
+                                                root.close-tab(i);
+                                            }
+                                            root.drag-index = -1;
+                                        }
+                                    }
+                                    moved => {
+                                        if (root.drag-index != i) {
+                                            return;
+                                        }
+                                        if (self.mouse-x > self.width + 10px && i + 1 < model.tabs.length) {
+                                            root.command("move-tab:" + i + ":" + (i + 1));
+                                            root.drag-index = i + 1;
+                                            root.tab-dragged = true;
+                                        } else if (self.mouse-x < -10px && i > 0) {
+                                            root.command("move-tab:" + i + ":" + (i - 1));
+                                            root.drag-index = i - 1;
+                                            root.tab-dragged = true;
                                         }
                                     }
                                 }
@@ -298,7 +343,14 @@ export component BrowserView inherits Rectangle {
                                 HorizontalLayout {
                                     padding-left: 8px;
                                     padding-right: 4px;
-                                    spacing: 2px;
+                                    spacing: 4px;
+
+                                    if tab.has-icon : Image {
+                                        width: 14px;
+                                        height: 14px;
+                                        y: (parent.height - self.height) / 2;
+                                        source: tab.icon;
+                                    }
 
                                     tab-label := Text {
                                         text: tab.title == "" ? model.untitled-label : tab.title;
@@ -439,6 +491,10 @@ export component BrowserView inherits Rectangle {
                     BrowserToolBtn {
                         label: model.bookmarks-label;
                         clicked => { root.bookmarks-open = !root.bookmarks-open; }
+                    }
+                    BrowserToolBtn {
+                        label: model.has-active-download ? model.downloads-label + " ●" : model.downloads-label;
+                        clicked => { root.downloads-open = !root.downloads-open; }
                     }
                     BrowserToolBtn {
                         label: model.find-label;
@@ -613,6 +669,95 @@ export component BrowserView inherits Rectangle {
             }
 
             if root.bookmarks-open : Rectangle { height: 1px; background: Theme.border-default; }
+
+            Rectangle {
+                height: root.downloads-open ? 110px : 0;
+                clip: true;
+                background: Theme.surface-base;
+                visible: root.downloads-open;
+
+                if model.downloads.length == 0 : Text {
+                    x: 12px;
+                    width: parent.width - 24px;
+                    height: 100%;
+                    text: model.downloads-empty;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+
+                Flickable {
+                    width: 100%;
+                    height: 100%;
+                    viewport-width: parent.width;
+
+                    VerticalLayout {
+                        padding: 6px;
+                        spacing: 4px;
+
+                        for dl[i] in model.downloads : Rectangle {
+                            height: 32px;
+                            border-radius: Theme.radius-md;
+                            background: Theme.surface-raised;
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 4px;
+                                spacing: 6px;
+
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 2px;
+                                    Text {
+                                        text: dl.filename;
+                                        color: Theme.text-primary;
+                                        font-size: Theme.font-size-sm;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: dl.status-label + (dl.progress >= 0 ? " " + dl.progress + "%" : "");
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                    }
+                                }
+
+                                if dl.in-progress : BrowserToolBtn {
+                                    label: model.download-cancel-label;
+                                    clicked => { root.command("download-cancel:" + dl.id); }
+                                }
+                                if !dl.in-progress && dl.state == 1 : BrowserToolBtn {
+                                    label: model.download-open-label;
+                                    clicked => { root.command("download-open:" + dl.id); }
+                                }
+                                if !dl.in-progress && dl.state == 1 : BrowserToolBtn {
+                                    label: model.download-show-label;
+                                    clicked => { root.command("download-show:" + dl.id); }
+                                }
+                                Rectangle {
+                                    width: 18px;
+                                    height: 18px;
+                                    y: (parent.height - self.height) / 2;
+                                    border-radius: Theme.radius-md;
+                                    background: dl-rm.has-hover ? Theme.surface-base : transparent;
+                                    dl-rm := TouchArea {
+                                        clicked => { root.command("download-remove:" + i); }
+                                    }
+                                    Text {
+                                        width: 100%; height: 100%;
+                                        text: "×";
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if root.downloads-open : Rectangle { height: 1px; background: Theme.border-default; }
 
             if !model.webview-available : Text {
                 height: 20px;

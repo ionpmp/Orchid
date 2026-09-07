@@ -625,6 +625,8 @@ export struct BrowserTabEntry {
     title: string,
     url: string,
     is-active: bool,
+    has-icon: bool,
+    icon: image,
 }
 
 export struct BrowserBookmarkEntry {
@@ -632,9 +634,20 @@ export struct BrowserBookmarkEntry {
     url: string,
 }
 
+export struct BrowserDownloadEntry {
+    id: string,
+    filename: string,
+    path: string,
+    progress: int,
+    state: int,
+    in-progress: bool,
+    status-label: string,
+}
+
 export struct BrowserModel {
     tabs: [BrowserTabEntry],
     bookmarks: [BrowserBookmarkEntry],
+    downloads: [BrowserDownloadEntry],
     active-index: int,
     url: string,
     title: string,
@@ -643,6 +656,7 @@ export struct BrowserModel {
     is-loading: bool,
     is-bookmarked: bool,
     webview-available: bool,
+    has-active-download: bool,
     untitled-label: string,
     address-placeholder: string,
     back-label: string,
@@ -663,8 +677,18 @@ export struct BrowserModel {
     find-prev-tip: string,
     find-next-tip: string,
     find-close-tip: string,
+    downloads-label: string,
+    downloads-empty: string,
+    download-open-label: string,
+    download-show-label: string,
+    download-cancel-label: string,
+    download-remove-tip: string,
+    download-progress-label: string,
+    download-done-label: string,
+    download-failed-label: string,
     focus-address-gen: int,
     show-find-gen: int,
+    show-downloads-gen: int,
     zoom-percent: int,
 }
 

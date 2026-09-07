@@ -89,6 +89,15 @@ browser-find-next = 次へ
 browser-find-close = 閉じる
 browser-bookmarks-empty = ブックマークはまだありません
 browser-settings-homepage = ホームページ
+browser-downloads = ダウンロード
+browser-downloads-empty = ダウンロードはまだありません
+browser-download-open = 開く
+browser-download-show = ファイルで表示
+browser-download-cancel = キャンセル
+browser-download-remove = 削除
+browser-download-progress = ダウンロード中
+browser-download-done = 完了
+browser-download-failed = 失敗
 
 
 widget-document-editor-name = Document Editor

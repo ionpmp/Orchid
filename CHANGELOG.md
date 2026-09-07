@@ -87,13 +87,15 @@ release yet.
 #### Viewers
 - **Browser widget:** catalog **Browser** with an address bar, tabs, Back /
   Forward / Home / Reload (Stop while loading), bookmarks, find-in-page, a
-  homepage setting, zoom (Ctrl++/−/0, Ctrl+wheel), and an embedded WebView2
-  overlay. `target=_blank` / `window.open` open a new tab; middle-click closes
-  a tab; Ctrl+Shift+T reopens the last closed tab; Ctrl+Tab / Ctrl+PageDown
-  (and Shift for reverse) cycle tabs; Ctrl+1–8 / Ctrl+9 jump to a tab. Empty
-  input opens a blank page; a host name navigates with HTTPS; anything else
-  searches DuckDuckGo. Missing WebView2 Runtime shows a hint plus Open in the
-  system browser.
+  homepage setting, zoom (Ctrl++/−/0, Ctrl+wheel), drag-reorder tabs, tab
+  favicons, downloads (user Downloads folder with progress, Open, Show in
+  Files, Ctrl+J), and an embedded WebView2 overlay. `target=_blank` /
+  `window.open` open a new tab; middle-click closes a tab; Ctrl+Shift+T
+  reopens the last closed tab; Ctrl+Tab / Ctrl+PageDown (and Shift for
+  reverse) cycle tabs; Ctrl+1–8 / Ctrl+9 jump to a tab. Empty input opens a
+  blank page; a host name navigates with HTTPS; anything else searches
+  DuckDuckGo. Missing WebView2 Runtime shows a hint plus Open in the system
+  browser.
 - **HTML viewer:** embedded WebView2 preview (back / forward / reload,
   source toggle) for local `html`/`htm`/`xhtml` files; falls back to the
   source pane plus Open in the system browser when the WebView2 Runtime

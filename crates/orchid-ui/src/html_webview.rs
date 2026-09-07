@@ -46,6 +46,7 @@ pub(crate) enum BrowserChromeAction {
     NextTab,
     PrevTab,
     SelectTab(u8),
+    Downloads,
 }
 
 /// One chrome shortcut for the browser widget (UI-thread drain).
@@ -55,11 +56,31 @@ pub(crate) struct BrowserChromeEvent {
     pub action: BrowserChromeAction,
 }
 
+/// PNG bytes for a browser tab favicon.
+#[derive(Debug, Clone)]
+pub(crate) struct HtmlFaviconUpdate {
+    pub instance_id: Uuid,
+    pub surface_id: Uuid,
+    pub png: Vec<u8>,
+}
+
 /// `target=_blank` / `window.open` URL to open as a tab.
 #[derive(Debug, Clone)]
 pub(crate) struct BrowserOpenRequest {
     pub instance_id: Uuid,
     pub url: String,
+}
+
+/// Progress for one WebView2 download.
+#[derive(Debug, Clone)]
+pub(crate) struct BrowserDownloadEvent {
+    pub instance_id: Uuid,
+    pub id: Uuid,
+    pub filename: String,
+    pub path: String,
+    pub bytes: u64,
+    pub total: u64,
+    pub state: u8,
 }
 
 /// Target document for a viewer / browser surface.
@@ -95,6 +116,17 @@ pub(crate) struct HtmlWebViewHost {
     nav: Arc<Mutex<Vec<HtmlNavState>>>,
     chrome: Arc<Mutex<Vec<BrowserChromeEvent>>>,
     opens: Arc<Mutex<Vec<BrowserOpenRequest>>>,
+    favicons: Arc<Mutex<Vec<HtmlFaviconUpdate>>>,
+    downloads: Arc<Mutex<Vec<BrowserDownloadEvent>>>,
+    #[cfg(windows)]
+    download_ops: Arc<
+        Mutex<
+            HashMap<
+                Uuid,
+                webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadOperation,
+            >,
+        >,
+    >,
 }
 
 #[derive(Default)]
@@ -170,6 +202,10 @@ impl HtmlWebViewHost {
             nav: Arc::new(Mutex::new(Vec::new())),
             chrome: Arc::new(Mutex::new(Vec::new())),
             opens: Arc::new(Mutex::new(Vec::new())),
+            favicons: Arc::new(Mutex::new(Vec::new())),
+            downloads: Arc::new(Mutex::new(Vec::new())),
+            #[cfg(windows)]
+            download_ops: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -195,6 +231,33 @@ impl HtmlWebViewHost {
     pub(crate) fn take_open_requests(&self) -> Vec<BrowserOpenRequest> {
         let mut g = self.opens.lock();
         std::mem::take(&mut *g)
+    }
+
+    /// Drain favicon PNG blobs for browser tabs.
+    pub(crate) fn take_favicon_updates(&self) -> Vec<HtmlFaviconUpdate> {
+        let mut g = self.favicons.lock();
+        std::mem::take(&mut *g)
+    }
+
+    /// Drain download progress events.
+    pub(crate) fn take_download_events(&self) -> Vec<BrowserDownloadEvent> {
+        let mut g = self.downloads.lock();
+        std::mem::take(&mut *g)
+    }
+
+    /// Cancel an in-flight WebView2 download.
+    pub(crate) fn cancel_download(&self, id: Uuid) {
+        #[cfg(windows)]
+        {
+            let op = self.download_ops.lock().get(&id).cloned();
+            if let Some(op) = op {
+                let _ = unsafe { op.Cancel() };
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = id;
+        }
     }
 
     /// Remember the document to show for the HTML viewer (`surface = nil`).
@@ -626,6 +689,8 @@ impl HtmlWebViewHost {
                     attach_accel(&host, key, &controller);
                     attach_new_window(&host, key, &webview);
                     attach_zoom(&host, key, &controller);
+                    attach_favicon(&host, key, &webview);
+                    attach_downloads(&host, key, &webview);
                 }
                 let zoom = {
                     let mut st = host.state.lock();
@@ -880,6 +945,7 @@ fn attach_accel(
             (true, false, false, 0x52) => Some(BrowserChromeAction::Reload),
             (true, false, false, 0x46) => Some(BrowserChromeAction::Find),
             (true, false, false, 0x44) => Some(BrowserChromeAction::Bookmark),
+            (true, false, false, 0x4A) => Some(BrowserChromeAction::Downloads),
             (true, false, true, 0x09) => Some(BrowserChromeAction::PrevTab),
             (true, false, false, 0x09) => Some(BrowserChromeAction::NextTab),
             (true, false, false, 0x22) => Some(BrowserChromeAction::NextTab),
@@ -977,6 +1043,249 @@ fn attach_zoom(
     if let Err(e) = unsafe { controller.add_ZoomFactorChanged(&handler, &mut token) } {
         debug!(?e, instance = %key.instance, "webview2 ZoomFactorChanged");
     }
+}
+
+#[cfg(windows)]
+fn attach_favicon(
+    host: &HtmlWebViewHost,
+    key: SlotKey,
+    webview: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2,
+) {
+    use webview2_com::FaviconChangedEventHandler;
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_15;
+    use windows::core::Interface;
+
+    let Ok(wv15) = webview.cast::<ICoreWebView2_15>() else {
+        return;
+    };
+    let favicons = host.favicons.clone();
+    let wv_for_get = wv15.clone();
+    request_favicon(wv15.clone(), favicons.clone(), key);
+    let handler = FaviconChangedEventHandler::create(Box::new(move |_, _| {
+        request_favicon(wv_for_get.clone(), favicons.clone(), key);
+        Ok(())
+    }));
+    let mut token = 0_i64;
+    if let Err(e) = unsafe { wv15.add_FaviconChanged(&handler, &mut token) } {
+        debug!(?e, instance = %key.instance, "webview2 FaviconChanged");
+    }
+}
+
+#[cfg(windows)]
+fn request_favicon(
+    wv15: webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_15,
+    favicons: Arc<Mutex<Vec<HtmlFaviconUpdate>>>,
+    key: SlotKey,
+) {
+    use webview2_com::GetFaviconCompletedHandler;
+    use webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_FAVICON_IMAGE_FORMAT_PNG;
+
+    let handler = GetFaviconCompletedHandler::create(Box::new(move |error, stream| {
+        if error.is_err() {
+            return Ok(());
+        }
+        let Some(stream) = stream else {
+            return Ok(());
+        };
+        if let Some(png) = read_istream(&stream) {
+            if !png.is_empty() {
+                favicons.lock().push(HtmlFaviconUpdate {
+                    instance_id: key.instance,
+                    surface_id: key.surface,
+                    png,
+                });
+            }
+        }
+        Ok(())
+    }));
+    if let Err(e) = unsafe { wv15.GetFavicon(COREWEBVIEW2_FAVICON_IMAGE_FORMAT_PNG, &handler) } {
+        debug!(?e, instance = %key.instance, "webview2 GetFavicon");
+    }
+}
+
+#[cfg(windows)]
+fn read_istream(stream: &windows::Win32::System::Com::IStream) -> Option<Vec<u8>> {
+    use std::ffi::c_void;
+
+    let mut out = Vec::new();
+    let mut buf = [0u8; 4096];
+    loop {
+        let mut read = 0u32;
+        let hr = unsafe {
+            stream.Read(
+                buf.as_mut_ptr().cast::<c_void>(),
+                buf.len() as u32,
+                Some(&mut read as *mut u32),
+            )
+        };
+        if !hr.is_ok() || read == 0 {
+            break;
+        }
+        out.extend_from_slice(&buf[..read as usize]);
+        if (read as usize) < buf.len() {
+            break;
+        }
+        if out.len() > 256 * 1024 {
+            break;
+        }
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
+#[cfg(windows)]
+fn attach_downloads(
+    host: &HtmlWebViewHost,
+    key: SlotKey,
+    webview: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2,
+) {
+    use orchid_widgets::builtin::browser::{
+        unique_download_path, DOWNLOAD_COMPLETED, DOWNLOAD_FAILED, DOWNLOAD_IN_PROGRESS,
+    };
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2_4, COREWEBVIEW2_DOWNLOAD_STATE, COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED,
+        COREWEBVIEW2_DOWNLOAD_STATE_INTERRUPTED,
+    };
+    use webview2_com::{
+        BytesReceivedChangedEventHandler, DownloadStartingEventHandler, StateChangedEventHandler,
+    };
+    use windows::core::{Interface, HSTRING};
+
+    let Ok(wv4) = webview.cast::<ICoreWebView2_4>() else {
+        return;
+    };
+    let events = host.downloads.clone();
+    let ops = host.download_ops.clone();
+    let handler = DownloadStartingEventHandler::create(Box::new(move |_, args| {
+        let Some(args) = args else {
+            return Ok(());
+        };
+        let Ok(op) = (unsafe { args.DownloadOperation() }) else {
+            return Ok(());
+        };
+        let mut suggested = windows::core::PWSTR::null();
+        let _ = unsafe { args.ResultFilePath(&mut suggested) };
+        let suggested = pwstr_to_string(suggested).unwrap_or_else(|| "download".to_string());
+        let dir = default_download_dir();
+        let _ = std::fs::create_dir_all(&dir);
+        let dest = unique_download_path(&dir, &suggested);
+        let path_s = dest.to_string_lossy().into_owned();
+        let filename = dest
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("download")
+            .to_string();
+        let _ = unsafe { args.SetResultFilePath(&HSTRING::from(path_s.as_str())) };
+        let _ = unsafe { args.SetHandled(true) };
+
+        let dl_id = Uuid::new_v4();
+        ops.lock().insert(dl_id, op.clone());
+        push_download(
+            &events,
+            key.instance,
+            dl_id,
+            &filename,
+            &path_s,
+            &op,
+            DOWNLOAD_IN_PROGRESS,
+        );
+
+        let events_b = events.clone();
+        let filename_b = filename.clone();
+        let path_b = path_s.clone();
+        let op_b = op.clone();
+        let bytes_handler = BytesReceivedChangedEventHandler::create(Box::new(move |_, _| {
+            push_download(
+                &events_b,
+                key.instance,
+                dl_id,
+                &filename_b,
+                &path_b,
+                &op_b,
+                DOWNLOAD_IN_PROGRESS,
+            );
+            Ok(())
+        }));
+        let mut token = 0_i64;
+        let _ = unsafe { op.add_BytesReceivedChanged(&bytes_handler, &mut token) };
+
+        let events_s = events.clone();
+        let ops_s = ops.clone();
+        let filename_s = filename;
+        let path_st = path_s;
+        let op_s = op.clone();
+        let state_handler = StateChangedEventHandler::create(Box::new(move |_, _| {
+            let mut st = COREWEBVIEW2_DOWNLOAD_STATE(0);
+            let _ = unsafe { op_s.State(&mut st) };
+            let mapped = if st == COREWEBVIEW2_DOWNLOAD_STATE_COMPLETED {
+                DOWNLOAD_COMPLETED
+            } else if st == COREWEBVIEW2_DOWNLOAD_STATE_INTERRUPTED {
+                DOWNLOAD_FAILED
+            } else {
+                DOWNLOAD_IN_PROGRESS
+            };
+            push_download(
+                &events_s,
+                key.instance,
+                dl_id,
+                &filename_s,
+                &path_st,
+                &op_s,
+                mapped,
+            );
+            if mapped != DOWNLOAD_IN_PROGRESS {
+                ops_s.lock().remove(&dl_id);
+            }
+            Ok(())
+        }));
+        let mut token = 0_i64;
+        let _ = unsafe { op.add_StateChanged(&state_handler, &mut token) };
+        Ok(())
+    }));
+    let mut token = 0_i64;
+    if let Err(e) = unsafe { wv4.add_DownloadStarting(&handler, &mut token) } {
+        debug!(?e, instance = %key.instance, "webview2 DownloadStarting");
+    }
+}
+
+#[cfg(windows)]
+fn push_download(
+    events: &Arc<Mutex<Vec<BrowserDownloadEvent>>>,
+    instance_id: Uuid,
+    id: Uuid,
+    filename: &str,
+    path: &str,
+    op: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2DownloadOperation,
+    state: u8,
+) {
+    let mut bytes = 0i64;
+    let mut total = 0i64;
+    let _ = unsafe { op.BytesReceived(&mut bytes) };
+    let _ = unsafe { op.TotalBytesToReceive(&mut total) };
+    events.lock().push(BrowserDownloadEvent {
+        instance_id,
+        id,
+        filename: filename.to_string(),
+        path: path.to_string(),
+        bytes: bytes.max(0) as u64,
+        total: total.max(0) as u64,
+        state,
+    });
+}
+
+#[cfg(windows)]
+fn default_download_dir() -> PathBuf {
+    directories::UserDirs::new()
+        .and_then(|u| u.download_dir().map(Path::to_path_buf))
+        .unwrap_or_else(|| {
+            std::env::var_os("USERPROFILE")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("Downloads")
+        })
 }
 
 #[cfg(windows)]

@@ -89,6 +89,15 @@ browser-find-next = 다음
 browser-find-close = 닫기
 browser-bookmarks-empty = 북마크가 없습니다
 browser-settings-homepage = 홈페이지
+browser-downloads = 다운로드
+browser-downloads-empty = 다운로드가 없습니다
+browser-download-open = 열기
+browser-download-show = 파일에서 표시
+browser-download-cancel = 취소
+browser-download-remove = 제거
+browser-download-progress = 다운로드 중
+browser-download-done = 완료
+browser-download-failed = 실패
 
 
 widget-document-editor-name = Document Editor

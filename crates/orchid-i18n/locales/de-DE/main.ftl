@@ -89,6 +89,15 @@ browser-find-next = Weiter
 browser-find-close = Schließen
 browser-bookmarks-empty = Noch keine Lesezeichen
 browser-settings-homepage = Startseite
+browser-downloads = Downloads
+browser-downloads-empty = Noch keine Downloads
+browser-download-open = Öffnen
+browser-download-show = In Dateien anzeigen
+browser-download-cancel = Abbrechen
+browser-download-remove = Entfernen
+browser-download-progress = Wird heruntergeladen
+browser-download-done = Fertig
+browser-download-failed = Fehlgeschlagen
 
 
 widget-document-editor-name = Document Editor

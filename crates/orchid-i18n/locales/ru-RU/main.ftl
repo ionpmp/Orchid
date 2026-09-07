@@ -84,6 +84,15 @@ browser-find-next = Далее
 browser-find-close = Закрыть
 browser-bookmarks-empty = Пока нет закладок
 browser-settings-homepage = Домашняя страница
+browser-downloads = Загрузки
+browser-downloads-empty = Пока нет загрузок
+browser-download-open = Открыть
+browser-download-show = Показать в Файлах
+browser-download-cancel = Отменить
+browser-download-remove = Удалить
+browser-download-progress = Загрузка
+browser-download-done = Готово
+browser-download-failed = Ошибка
 
 
 widget-document-editor-name = Document Editor

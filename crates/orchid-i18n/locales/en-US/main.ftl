@@ -217,6 +217,15 @@ browser-find-next = Next
 browser-find-close = Close
 browser-bookmarks-empty = No bookmarks yet
 browser-settings-homepage = Homepage
+browser-downloads = Downloads
+browser-downloads-empty = No downloads yet
+browser-download-open = Open
+browser-download-show = Show in Files
+browser-download-cancel = Cancel
+browser-download-remove = Remove
+browser-download-progress = Downloading
+browser-download-done = Done
+browser-download-failed = Failed
 
 widget-document-editor-name = Document Editor
 widget-document-editor-desc = Create and edit a DOCX document with rich text and tables

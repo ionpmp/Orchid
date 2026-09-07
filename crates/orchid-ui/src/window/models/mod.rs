@@ -29,7 +29,9 @@ mod widget_settings;
 pub(crate) use audio_player::{
     build_audio_player_model, empty_audio_player_model, patch_audio_player_model,
 };
-pub(crate) use browser::{build_browser_model, empty_browser_model, patch_browser_model};
+pub(crate) use browser::{
+    apply_browser_favicon, build_browser_model, empty_browser_model, patch_browser_model,
+};
 pub(crate) use calculator::{
     build_calculator_model, empty_calculator_model, patch_calculator_model,
 };

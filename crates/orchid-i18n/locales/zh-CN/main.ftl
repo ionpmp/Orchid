@@ -89,6 +89,15 @@ browser-find-next = 下一个
 browser-find-close = 关闭
 browser-bookmarks-empty = 暂无书签
 browser-settings-homepage = 主页
+browser-downloads = 下载
+browser-downloads-empty = 暂无下载
+browser-download-open = 打开
+browser-download-show = 在文件中显示
+browser-download-cancel = 取消
+browser-download-remove = 移除
+browser-download-progress = 正在下载
+browser-download-done = 完成
+browser-download-failed = 失败
 
 
 widget-document-editor-name = Document Editor

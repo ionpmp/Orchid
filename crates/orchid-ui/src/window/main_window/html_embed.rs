@@ -12,6 +12,7 @@ use orchid_widgets::WidgetPayload;
 
 use crate::html_webview::{file_url_from_path, HtmlDocument};
 use crate::slint_generated::WidgetFrameModel;
+use crate::window::models::apply_browser_favicon;
 
 use super::MainWindowController;
 
@@ -88,6 +89,8 @@ impl MainWindowController {
         }
         self.flush_browser_chrome();
         self.flush_browser_opens();
+        self.flush_browser_favicons();
+        self.flush_browser_downloads();
     }
 
     pub(super) fn sync_visible_html_webviews(&self) {
@@ -227,6 +230,9 @@ impl MainWindowController {
                     );
                     self.refresh_browser(ev.instance_id);
                 }
+                BrowserChromeAction::Downloads => {
+                    self.bump_browser_show_downloads(ev.instance_id);
+                }
             }
         }
     }
@@ -235,6 +241,36 @@ impl MainWindowController {
         let opens = self.html_webview.take_open_requests();
         for ev in opens {
             orchid_widgets::builtin::browser::new_tab_with_url(ev.instance_id, &ev.url);
+            self.refresh_browser(ev.instance_id);
+        }
+    }
+
+    fn flush_browser_favicons(&self) {
+        let updates = self.html_webview.take_favicon_updates();
+        for ev in updates {
+            let id = ev.surface_id.to_string();
+            apply_favicon_in_model(&self.workspace_widgets, ev.instance_id, &id, &ev.png);
+            apply_favicon_in_model(
+                &self.workspace_floating_widgets,
+                ev.instance_id,
+                &id,
+                &ev.png,
+            );
+        }
+    }
+
+    fn flush_browser_downloads(self: &Arc<Self>) {
+        let events = self.html_webview.take_download_events();
+        for ev in events {
+            orchid_widgets::builtin::browser::upsert_download(
+                ev.instance_id,
+                &ev.id.to_string(),
+                &ev.filename,
+                &ev.path,
+                ev.bytes,
+                ev.total,
+                ev.state,
+            );
             self.refresh_browser(ev.instance_id);
         }
     }
@@ -272,6 +308,29 @@ fn patch_html_nav_in_model(
         }
         row.viewer.html.can_go_back = can_go_back;
         row.viewer.html.can_go_forward = can_go_forward;
+        v.set_row_data(r, row);
+        return;
+    }
+}
+
+fn apply_favicon_in_model(
+    model: &slint::ModelRc<WidgetFrameModel>,
+    instance: Uuid,
+    tab_id: &str,
+    png: &[u8],
+) {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
+        return;
+    };
+    let needle = instance.to_string();
+    for r in 0..v.row_count() {
+        let Some(mut row) = v.row_data(r) else {
+            continue;
+        };
+        if row.instance_id.as_str() != needle {
+            continue;
+        }
+        apply_browser_favicon(&mut row.browser, tab_id, png);
         v.set_row_data(r, row);
         return;
     }

@@ -89,6 +89,15 @@ browser-find-next = التالي
 browser-find-close = إغلاق
 browser-bookmarks-empty = لا توجد إشارات مرجعية بعد
 browser-settings-homepage = الصفحة الرئيسية
+browser-downloads = التنزيلات
+browser-downloads-empty = لا توجد تنزيلات بعد
+browser-download-open = فتح
+browser-download-show = إظهار في الملفات
+browser-download-cancel = إلغاء
+browser-download-remove = إزالة
+browser-download-progress = جارٍ التنزيل
+browser-download-done = تم
+browser-download-failed = فشل
 
 
 widget-document-editor-name = Document Editor
