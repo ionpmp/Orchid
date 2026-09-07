@@ -618,7 +618,11 @@ the reverse.
 3. **File manager action: “Wrap as .orchid”** packs selection → Raw +
    derived Clean-Text (+ StubEmbedder Embedding region when Clean-Text is
    non-empty). Inside a managed folder (with `ChunkStore`) the wrap is
-   **linked**; outside it stays sealed.
+   **linked**; outside it stays sealed. Linked and sealed wraps both store
+   the original file name / MIME on the Raw TOC entry. Opening a wrap
+   peeks that metadata and routes to the matching viewer (PDF, image,
+   text, …), materializing Raw to a temp file when needed; Raw DOCX /
+   editor envelopes stay in the document viewer.
 4. **Search** indexes `.orchid` via Clean-Text (live `OrchidExtractor`);
    semantic / hybrid path in Phase 5.
 5. **MIME / extension** registered in the Windows installer when the CLI

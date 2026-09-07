@@ -381,8 +381,17 @@ impl ViewerWidgetInner {
         *self.path.write() = Some(path.clone());
         self.publish_refresh();
 
-        let select_res = orchid_viewers::select_viewer(&path, registry.clone(), highlighter).await;
-        let mut viewer = match select_res {
+        let select_res = orchid_viewers::select_viewer(
+            &path,
+            registry.clone(),
+            highlighter,
+            self.deps.chunk_store.as_deref(),
+        )
+        .await;
+        let orchid_viewers::SelectedViewer {
+            mut viewer,
+            open_path,
+        } = match select_res {
             Ok(v) => v,
             Err(e) => {
                 let path_display = path.as_str().to_string();
@@ -403,13 +412,13 @@ impl ViewerWidgetInner {
                 doc.set_chunk_store(store);
             }
         }
-        if is_image_path(&path) {
+        if is_image_path(&open_path) {
             let preloaded = self.image_preload.write().take(path.as_str());
             if let Some(loaded) = preloaded {
                 if let Some(img) = viewer.as_any_mut().downcast_mut::<ImageViewer>() {
-                    img.open_loaded(path.clone(), loaded);
+                    img.open_loaded(open_path.clone(), loaded);
                 }
-            } else if let Err(e) = viewer.open(path.clone(), registry).await {
+            } else if let Err(e) = viewer.open(open_path.clone(), registry).await {
                 warn!(error = %e, "viewer open failed");
                 *self.snapshot.write() = Some(ViewerSnapshot::Error {
                     path_display: path.as_str().to_string(),
@@ -418,7 +427,7 @@ impl ViewerWidgetInner {
                 self.publish_refresh();
                 return Ok(());
             }
-        } else if let Err(e) = viewer.open(path.clone(), registry).await {
+        } else if let Err(e) = viewer.open(open_path.clone(), registry).await {
             warn!(error = %e, "viewer open failed");
             *self.snapshot.write() = Some(ViewerSnapshot::Error {
                 path_display: path.as_str().to_string(),
@@ -435,20 +444,27 @@ impl ViewerWidgetInner {
         let snap = viewer.snapshot();
         *self.snapshot.write() = Some(snap);
         *self.viewer.lock().await = Some(viewer);
-        if is_image_path(&path) {
-            self.after_image_opened(&path).await;
-            self.restore_image_view(&path).await;
-            self.attach_animation_if_needed(&path).await;
+        // Image/media chrome keys off the opened payload path (may be a temp
+        // unwrap of a `.orchid` wrap). Folder nav stays on the user path only
+        // when they are the same.
+        if is_image_path(&open_path) {
+            if open_path == path {
+                self.after_image_opened(&path).await;
+                self.restore_image_view(&path).await;
+                self.attach_animation_if_needed(&path).await;
+                self.schedule_thumbs_and_preload();
+            } else {
+                self.restore_image_view(&path).await;
+            }
             let guard = self.viewer.lock().await;
             if let Some(v) = guard.as_ref() {
                 *self.snapshot.write() = Some(v.snapshot());
             }
-            self.schedule_thumbs_and_preload();
         }
-        if is_media_path(&path) {
+        if is_media_path(&open_path) {
             crate::builtin::audio_player::pause_all();
             crate::builtin::video_player::pause_all();
-            self.after_media_opened(&path).await;
+            self.after_media_opened(&open_path).await;
             self.schedule_media_ticks();
             #[cfg(windows)]
             smtc_publisher::set_active(self.instance_id);

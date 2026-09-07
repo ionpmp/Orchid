@@ -281,6 +281,10 @@ release yet.
   the main window shows.
 - Document **Save As…** from `.docx` → sealed `.orchid` names Raw
   `original.docx` (fidelity import); later native saves use `document.docx`.
+- Linked `.orchid` writes preserve Raw TOC `name` / `content_type` (FM wrap +
+  document save + sealed↔linked repack).
+- Opening a `.orchid` wrap dispatches by Raw MIME/name: PDF/image/text/media/…
+  viewers unwrap Raw to a temp file; DOCX envelopes stay in the document editor.
 
 #### Built-in widgets
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),
