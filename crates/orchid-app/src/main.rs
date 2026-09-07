@@ -7,7 +7,9 @@ use anyhow::{Context, Result};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use orchid_storage::OrchidPaths;
-use orchid_ui::{collect_cli_open_paths, OrchidApp};
+use orchid_ui::{
+    claim_instance, collect_cli_open_paths, forward_open_paths, InstanceClaim, OrchidApp,
+};
 
 #[cfg(windows)]
 #[global_allocator]
@@ -39,6 +41,17 @@ fn main() -> Result<()> {
         tracing::info!(count = open_paths.len(), "opening paths from argv");
     }
 
+    let mut primary = match claim_instance() {
+        InstanceClaim::Primary(p) => p,
+        InstanceClaim::Secondary => {
+            match forward_open_paths(&open_paths) {
+                Ok(()) => tracing::info!("forwarded open paths to the running Orchid instance"),
+                Err(e) => tracing::warn!(error = %e, "failed to forward open paths to primary"),
+            }
+            return Ok(());
+        }
+    };
+
     let paths = OrchidPaths::resolve().context("failed to resolve Orchid paths")?;
 
     // Multi-thread runtime for async bootstrap + background indexing.
@@ -56,8 +69,12 @@ fn main() -> Result<()> {
     // `slint::spawn_local` and widget async work need the runtime in scope.
     let _guard = runtime.enter();
 
-    app.run_main(open_paths)
+    let ipc_rx = primary.take_open_receiver();
+    app.run_main(open_paths, ipc_rx)
         .context("UI loop exited with error")?;
+
+    // Keep the single-instance mutex until shutdown completes.
+    drop(primary);
 
     if let Ok(h) = tokio::runtime::Handle::try_current() {
         h.block_on(app.flush_after_window());

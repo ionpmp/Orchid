@@ -253,6 +253,8 @@ pub struct MainWindowController {
     last_history_retention_days: AtomicU32,
     /// Paths from `orchid.exe` argv / Explorer association; opened after `show`.
     pending_cli_paths: Mutex<Vec<PathBuf>>,
+    /// Open requests forwarded from secondary `orchid.exe` processes.
+    ipc_open_rx: Mutex<Option<std::sync::mpsc::Receiver<Vec<PathBuf>>>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -563,6 +565,7 @@ impl MainWindowController {
             history_recorder,
             last_history_retention_days: AtomicU32::new(last_history_retention_days),
             pending_cli_paths: Mutex::new(Vec::new()),
+            ipc_open_rx: Mutex::new(None),
         });
         this.apply_input_gesture_bindings();
         this.apply_theme()?;
@@ -1406,7 +1409,34 @@ impl MainWindowController {
         if paths.is_empty() {
             return;
         }
-        *self.pending_cli_paths.lock() = paths;
+        self.pending_cli_paths.lock().extend(paths);
+    }
+
+    /// Attach the single-instance IPC receiver (secondary → primary open requests).
+    pub fn attach_ipc_open_receiver(
+        self: &Arc<Self>,
+        rx: Option<std::sync::mpsc::Receiver<Vec<PathBuf>>>,
+    ) {
+        *self.ipc_open_rx.lock() = rx;
+    }
+
+    /// Drain secondary-instance open requests onto the CLI open queue.
+    pub(super) fn drain_ipc_open_paths(self: &Arc<Self>) {
+        let mut batch = Vec::new();
+        {
+            let guard = self.ipc_open_rx.lock();
+            let Some(rx) = guard.as_ref() else {
+                return;
+            };
+            while let Ok(paths) = rx.try_recv() {
+                batch.extend(paths);
+            }
+        }
+        if batch.is_empty() {
+            return;
+        }
+        self.pending_cli_paths.lock().extend(batch);
+        self.drain_cli_open_paths();
     }
 
     /// Open queued CLI paths after the main window is shown.

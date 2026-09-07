@@ -630,7 +630,9 @@ the reverse.
    and editor open path are stable. `scripts/install-desktop.ps1` associates
    `.orchid` → `application/vnd.orchid` with `orchid.exe` under HKCU.
    `orchid.exe path.orchid` (and Explorer double-click) opens the file in a
-   viewer after the main window shows.
+   viewer after the main window shows. If Orchid is already running, a second
+   launch forwards the path to that instance (Windows named mutex + pipe)
+   instead of starting another process.
 
 Migration tip: opening a `.docx` and **Save As…** `.orchid` (without a
 `ChunkStore`) keeps the OOXML bytes under Raw TOC name `original.docx`

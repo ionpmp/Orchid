@@ -10,6 +10,7 @@ mod cli_open;
 mod commands;
 pub mod error;
 mod html_webview;
+mod single_instance;
 mod slint_generated;
 mod system_theme;
 mod terminal_font_metrics;
@@ -21,6 +22,9 @@ pub mod window;
 pub use app::OrchidApp;
 pub use cli_open::{collect_cli_open_paths, is_orchid_cli_path};
 pub use error::{Result, UiError};
+pub use single_instance::{
+    claim_instance, forward_open_paths, InstanceClaim, PrimaryInstance,
+};
 pub use theme::{
     Color, ColorTokens, DesignTokens, RadiusTokens, SpacingTokens, Theme, ThemeManager, ThemeMeta,
     TypographyTokens,

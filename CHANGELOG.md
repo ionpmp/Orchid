@@ -281,7 +281,9 @@ release yet.
 - Desktop install script associates `.orchid` /
   `application/vnd.orchid` with `orchid.exe` (per-user HKCU).
   `orchid.exe` opens argv / Explorer-associated paths in a viewer after
-  the main window shows.
+  the main window shows. A second `orchid.exe` forwards those paths to the
+  already-running instance over a named pipe (Windows single-instance) and
+  exits.
 - Document **Save As…** from `.docx` → sealed `.orchid` names Raw
   `original.docx` (fidelity import); later native saves use `document.docx`.
 - Linked `.orchid` writes preserve Raw TOC `name` / `content_type` (FM wrap +
