@@ -828,6 +828,10 @@ viewer-html-forward = Adelante
 viewer-html-reload = Recargar
 viewer-html-unavailable = Falta el runtime de WebView2; se muestra el código. Abra la página en el navegador del sistema.
 viewer-document-info = Documento · { $words } palabras · { $chars } caracteres · { $comments } comentarios · { $blocks } bloques · { $warnings } elementos no admitidos
+viewer-document-orchid-gen = gen { $generation }
+viewer-document-orchid-linked = linked
+viewer-document-orchid-c2pa-ok = C2PA ok
+viewer-document-orchid-c2pa-bad = C2PA failed
 
 viewer-document-save = Guardar
 viewer-document-save-as = Save As…

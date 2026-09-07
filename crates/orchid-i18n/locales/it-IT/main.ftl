@@ -828,6 +828,10 @@ viewer-html-forward = Avanti
 viewer-html-reload = Ricarica
 viewer-html-unavailable = Runtime WebView2 assente; viene mostrato il codice. Apri la pagina nel browser di sistema.
 viewer-document-info = Documento · { $words } parole · { $chars } caratteri · { $comments } commenti · { $blocks } blocchi · { $warnings } funzioni non supportate
+viewer-document-orchid-gen = gen { $generation }
+viewer-document-orchid-linked = linked
+viewer-document-orchid-c2pa-ok = C2PA ok
+viewer-document-orchid-c2pa-bad = C2PA failed
 
 viewer-document-save = Salva
 viewer-document-save-as = Save As…

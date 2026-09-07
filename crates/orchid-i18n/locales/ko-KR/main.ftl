@@ -828,6 +828,10 @@ viewer-html-forward = 앞으로
 viewer-html-reload = 새로 고침
 viewer-html-unavailable = WebView2 런타임이 없어 소스를 표시합니다. 시스템 브라우저에서 페이지를 여세요.
 viewer-document-info = 문서 · { $words }단어 · { $chars }자 · { $comments }댓글 · { $blocks }개 블록 · 미지원 { $warnings }
+viewer-document-orchid-gen = gen { $generation }
+viewer-document-orchid-linked = linked
+viewer-document-orchid-c2pa-ok = C2PA ok
+viewer-document-orchid-c2pa-bad = C2PA failed
 
 viewer-document-save = 저장
 viewer-document-save-as = Save As…

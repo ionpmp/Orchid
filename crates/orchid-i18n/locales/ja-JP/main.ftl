@@ -828,6 +828,10 @@ viewer-html-forward = 進む
 viewer-html-reload = 再読み込み
 viewer-html-unavailable = WebView2 ランタイムがありません。ソースを表示しています。システムブラウザーで開いてください。
 viewer-document-info = 文書 · { $words } 語 · { $chars } 文字 · { $comments } コメント · { $blocks } ブロック · 未対応 { $warnings }
+viewer-document-orchid-gen = gen { $generation }
+viewer-document-orchid-linked = linked
+viewer-document-orchid-c2pa-ok = C2PA ok
+viewer-document-orchid-c2pa-bad = C2PA failed
 
 viewer-document-save = 保存
 viewer-document-save-as = Save As…

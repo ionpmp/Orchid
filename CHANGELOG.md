@@ -291,6 +291,10 @@ release yet.
 - Opening a `.orchid` wrap dispatches by Raw MIME/name: PDF/image/text/media/…
   viewers unwrap Raw to a temp file; DOCX envelopes stay in the document editor.
   The viewer chrome keeps the `.orchid` path; unwrap temps are deleted on close.
+- Document info strip shows `.orchid` TOC **generation**, linked vs sealed, and
+  C2PA verify status when Provenance is present.
+- Sealed document saves and FM sealed wraps sign a C2PA Provenance carrier over
+  Clean-Text by default (ephemeral signer).
 
 #### Built-in widgets
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),

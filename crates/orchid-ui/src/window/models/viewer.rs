@@ -1508,7 +1508,27 @@ fn build_document_snapshot(
     model.comment_active = !s.comment_at_caret.is_empty();
     model.comment_edit_text = s.comment_edit_text.clone().into();
     model.info_text = {
-        let base = locale.tr_args("viewer-document-info", &args);
+        let mut base = locale.tr_args("viewer-document-info", &args);
+        if s.orchid_generation > 0 {
+            let gen = locale.tr_args(
+                "viewer-document-orchid-gen",
+                &orchid_i18n::FluentArgs::new()
+                    .with("generation", s.orchid_generation.to_string()),
+            );
+            base = format!("{base} · {gen}");
+            if s.orchid_linked {
+                base = format!("{base} · {}", locale.tr("viewer-document-orchid-linked"));
+            }
+            match s.orchid_c2pa_ok {
+                Some(true) => {
+                    base = format!("{base} · {}", locale.tr("viewer-document-orchid-c2pa-ok"));
+                }
+                Some(false) => {
+                    base = format!("{base} · {}", locale.tr("viewer-document-orchid-c2pa-bad"));
+                }
+                None => {}
+            }
+        }
         if s.comment_at_caret.is_empty() {
             base.into()
         } else {

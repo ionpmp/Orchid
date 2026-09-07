@@ -614,7 +614,9 @@ the reverse.
    without a store it falls back to sealed. Catalog **Document** creates
    `Untitled.orchid` as **linked** when a `ChunkStore` is available (otherwise
    sealed). Dirty linked documents autosave after a short debounce.
-   **Save As…** exports `.orchid` or `.docx`.
+   **Save As…** exports `.orchid` or `.docx`. Sealed document saves and sealed
+   FM wraps sign a C2PA Provenance carrier by default; the document info strip
+   shows generation, linked/sealed, and C2PA verify status.
 3. **File manager action: “Wrap as .orchid”** packs selection → Raw +
    derived Clean-Text (+ StubEmbedder Embedding region when Clean-Text is
    non-empty). Inside a managed folder (with `ChunkStore`) the wrap is

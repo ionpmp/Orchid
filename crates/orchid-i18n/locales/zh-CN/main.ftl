@@ -828,6 +828,10 @@ viewer-html-forward = 前进
 viewer-html-reload = 刷新
 viewer-html-unavailable = 未安装 WebView2 运行时，正在显示源码。请在系统浏览器中打开页面。
 viewer-document-info = 文档 · { $words } 词 · { $chars } 字符 · { $comments } 条批注 · { $blocks } 个块 · { $warnings } 个不支持的功能
+viewer-document-orchid-gen = gen { $generation }
+viewer-document-orchid-linked = linked
+viewer-document-orchid-c2pa-ok = C2PA ok
+viewer-document-orchid-c2pa-bad = C2PA failed
 
 viewer-document-save = 保存
 viewer-document-save-as = Save As…

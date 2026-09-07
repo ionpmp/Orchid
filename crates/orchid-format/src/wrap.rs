@@ -24,6 +24,8 @@ pub struct WrapAsOrchidRequest {
     pub clean_text: Vec<u8>,
     /// Optional hierarchical Embedding region for hybrid search.
     pub embeddings: Option<EmbeddingPayload>,
+    /// Sign a C2PA Provenance carrier over Clean-Text (sealed wraps only).
+    pub sign_c2pa: bool,
 }
 
 /// Write a sealed `.orchid` with Raw + Clean-Text + empty Structured snapshot.
@@ -41,7 +43,7 @@ pub fn wrap_as_sealed(req: &WrapAsOrchidRequest) -> Result<()> {
             structured_content_type: Some("application/json".into()),
             structured_crdt: None,
             encrypt_with: None,
-            sign_c2pa: false,
+            sign_c2pa: req.sign_c2pa,
             embeddings: req.embeddings.clone(),
         },
     )
@@ -105,11 +107,33 @@ mod tests {
             raw_content_type: Some("text/plain".into()),
             clean_text: b"hello clean".to_vec(),
             embeddings: None,
+            sign_c2pa: false,
         })
         .unwrap();
         let f = SealedFile::open(&out).unwrap();
         assert_eq!(f.raw(None).unwrap(), b"hello raw");
         assert_eq!(f.clean_text(None).unwrap(), b"hello clean");
+    }
+
+    #[test]
+    fn wrap_sealed_with_c2pa_sets_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("signed.txt.orchid");
+        wrap_as_sealed(&WrapAsOrchidRequest {
+            output: out.clone(),
+            raw: b"raw".to_vec(),
+            raw_name: Some("signed.txt".into()),
+            raw_content_type: Some("text/plain".into()),
+            clean_text: b"hello".to_vec(),
+            embeddings: None,
+            sign_c2pa: true,
+        })
+        .unwrap();
+        let f = SealedFile::open(&out).unwrap();
+        assert_ne!(f.header().capability_flags & capability::C2PA, 0);
+        let png = f.provenance_carrier().unwrap();
+        let state = crate::verify_provenance_carrier(&png).unwrap();
+        assert!(crate::is_c2pa_accepted(state));
     }
 
     #[test]
@@ -124,6 +148,7 @@ mod tests {
             raw_content_type: Some("text/plain".into()),
             clean_text: b"hello".to_vec(),
             embeddings: Some(emb.clone()),
+            sign_c2pa: false,
         })
         .unwrap();
         let f = SealedFile::open(&out).unwrap();
@@ -145,6 +170,7 @@ mod tests {
                 raw_content_type: Some("text/plain".into()),
                 clean_text: b"hello clean".to_vec(),
                 embeddings: None,
+                sign_c2pa: false,
             },
             &store,
         )

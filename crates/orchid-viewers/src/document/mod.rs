@@ -40,7 +40,9 @@ pub use orchid_io::{
     open_document_from_orchid, open_document_from_orchid_with_store, peek_orchid_raw_meta,
     pick_document_save_path, save_document_as_linked_orchid, save_document_as_orchid,
 };
-pub use sample::{create_sample_docx, create_sample_orchid, create_sample_orchid_with_store, sample_document};
+pub use sample::{
+    create_sample_docx, create_sample_orchid, create_sample_orchid_with_store, sample_document,
+};
 pub use undo::{EditCommand, RunStylePatch, UndoStack};
 
 /// Soft ceiling for DOCX payloads accepted by the viewer (128 MiB).
@@ -111,6 +113,10 @@ pub struct DocumentViewer {
     orchid_file_uuid: Mutex<Option<[u8; 16]>>,
     /// Last known TOC generation for the open `.orchid`.
     orchid_generation: Mutex<u64>,
+    /// Whether the open `.orchid` is linked (ChunkStore payloads).
+    orchid_linked: Mutex<bool>,
+    /// C2PA verify when Provenance is present (`None` = no C2PA region).
+    orchid_c2pa_ok: Mutex<Option<bool>>,
     /// When true, next `.orchid` sealed save names Raw `original.docx` (DOCX import).
     prefer_original_docx_name: Mutex<bool>,
 }
@@ -181,6 +187,8 @@ impl DocumentViewer {
             chunk_store: None,
             orchid_file_uuid: Mutex::new(None),
             orchid_generation: Mutex::new(0),
+            orchid_linked: Mutex::new(false),
+            orchid_c2pa_ok: Mutex::new(None),
             prefer_original_docx_name: Mutex::new(false),
         }
     }
@@ -191,15 +199,19 @@ impl DocumentViewer {
     }
 
     fn remember_orchid_identity(&self, path: &Path) {
-        if let Ok((uuid, gen)) = orchid_io::orchid_identity(path) {
-            *self.orchid_file_uuid.lock() = Some(uuid);
-            *self.orchid_generation.lock() = gen;
+        if let Ok(meta) = orchid_io::orchid_open_meta(path) {
+            *self.orchid_file_uuid.lock() = Some(meta.file_uuid);
+            *self.orchid_generation.lock() = meta.generation;
+            *self.orchid_linked.lock() = meta.linked;
+            *self.orchid_c2pa_ok.lock() = meta.c2pa_ok;
         }
     }
 
     fn clear_orchid_identity(&self) {
         *self.orchid_file_uuid.lock() = None;
         *self.orchid_generation.lock() = 0;
+        *self.orchid_linked.lock() = false;
+        *self.orchid_c2pa_ok.lock() = None;
     }
 
     fn set_prefer_original_docx_name(&self, prefer: bool) {
@@ -5202,6 +5214,9 @@ impl Viewer for DocumentViewer {
             footer_even_text,
             title_page,
             even_and_odd_headers,
+            orchid_generation: *self.orchid_generation.lock(),
+            orchid_linked: *self.orchid_linked.lock(),
+            orchid_c2pa_ok: *self.orchid_c2pa_ok.lock(),
         })
     }
 

@@ -829,6 +829,10 @@ viewer-html-forward = تقدم
 viewer-html-reload = إعادة تحميل
 viewer-html-unavailable = وقت تشغيل WebView2 غير مثبت؛ يُعرض المصدر. افتح الصفحة في متصفح النظام.
 viewer-document-info = مستند · { $words } كلمة · { $chars } حرف · { $comments } تعليقات · { $blocks } كتل · { $warnings } ميزات غير مدعومة
+viewer-document-orchid-gen = gen { $generation }
+viewer-document-orchid-linked = linked
+viewer-document-orchid-c2pa-ok = C2PA ok
+viewer-document-orchid-c2pa-bad = C2PA failed
 
 viewer-document-save = حفظ
 viewer-document-save-as = Save As…

@@ -71,7 +71,7 @@ pub async fn save_document_as_orchid_named(
             structured_content_type: Some("application/json".into()),
             structured_crdt: None,
             encrypt_with: None,
-            sign_c2pa: false,
+            sign_c2pa: true,
             embeddings,
         },
     )
@@ -152,12 +152,48 @@ fn stub_embeddings_for_clean(clean_text: &[u8]) -> Option<orchid_format::Embeddi
     orchid_embed::stub_embedding_payload(&text).ok().flatten()
 }
 
+/// Open-time metadata for an `.orchid` (identity + caps).
+#[derive(Debug, Clone)]
+pub struct OrchidOpenMeta {
+    /// Header file UUID.
+    pub file_uuid: [u8; 16],
+    /// TOC generation (defaults to 1).
+    pub generation: u64,
+    /// `CAP_LINKED` set.
+    pub linked: bool,
+    /// C2PA verify when Provenance present (`None` = no C2PA).
+    pub c2pa_ok: Option<bool>,
+}
+
 /// Read header UUID + TOC generation for linked save bumps.
 pub fn orchid_identity(path: &Path) -> Result<([u8; 16], u64)> {
+    let meta = orchid_open_meta(path)?;
+    Ok((meta.file_uuid, meta.generation))
+}
+
+/// Read identity, linked flag, and optional C2PA status for UI chrome.
+pub fn orchid_open_meta(path: &Path) -> Result<OrchidOpenMeta> {
+    use orchid_format::{is_c2pa_accepted, verify_provenance_carrier};
+
     let file = SealedFile::open(path).map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
-    let uuid = file.header().file_uuid;
-    let gen = file.toc().map(|t| t.generation()).unwrap_or(1);
-    Ok((uuid, gen))
+    let caps = file.header().capability_flags;
+    let generation = file.toc().map(|t| t.generation()).unwrap_or(1);
+    let c2pa_ok = if caps & capability::C2PA != 0 {
+        Some(match file.provenance_carrier() {
+            Ok(png) => verify_provenance_carrier(&png)
+                .map(is_c2pa_accepted)
+                .unwrap_or(false),
+            Err(_) => false,
+        })
+    } else {
+        None
+    };
+    Ok(OrchidOpenMeta {
+        file_uuid: file.header().file_uuid,
+        generation,
+        linked: caps & capability::LINKED != 0,
+        c2pa_ok,
+    })
 }
 
 /// Open a sealed `.orchid`: prefer Raw DOCX, else Clean-Text as paragraphs.
@@ -391,6 +427,19 @@ mod tests {
         let raw = file.find_region(RegionType::Raw).unwrap();
         assert_eq!(raw.name().unwrap(), "document.docx");
         assert_eq!(raw.content_type().unwrap(), DOCX_MIME);
+    }
+
+    #[tokio::test]
+    async fn sealed_save_signs_c2pa_and_meta_reports_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("signed.orchid");
+        save_document_as_orchid(&sample_document(), &path)
+            .await
+            .unwrap();
+        let meta = orchid_open_meta(&path).unwrap();
+        assert!(!meta.linked);
+        assert_eq!(meta.generation, 1);
+        assert_eq!(meta.c2pa_ok, Some(true));
     }
 
     #[test]

@@ -818,6 +818,10 @@ viewer-html-forward = Вперёд
 viewer-html-reload = Обновить
 viewer-html-unavailable = Среда WebView2 не установлена; показан исходник. Откройте страницу в системном браузере.
 viewer-document-info = Документ · { $words } слов · { $chars } символов · { $comments } коммент. · { $blocks } блоков · { $warnings } неподдерж. элементов
+viewer-document-orchid-gen = gen { $generation }
+viewer-document-orchid-linked = linked
+viewer-document-orchid-c2pa-ok = C2PA ok
+viewer-document-orchid-c2pa-bad = C2PA failed
 
 viewer-document-save = Сохранить
 viewer-document-save-as = Сохранить как…

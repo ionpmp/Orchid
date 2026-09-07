@@ -42,9 +42,7 @@ impl ViewerSnapshot {
     pub fn with_path_display(mut self, path_display: impl Into<String>) -> Self {
         let path_display = path_display.into();
         match &mut self {
-            Self::Loading {
-                path_display: slot,
-            }
+            Self::Loading { path_display: slot }
             | Self::Error {
                 path_display: slot, ..
             } => *slot = path_display,
@@ -184,6 +182,12 @@ pub struct DocumentSnapshot {
     pub title_page: bool,
     /// Different odd and even pages (`w:evenAndOddHeaders`) enabled.
     pub even_and_odd_headers: bool,
+    /// TOC generation for an open `.orchid` (`0` = not applicable).
+    pub orchid_generation: u64,
+    /// True when the open `.orchid` uses linked (`ChunkStore`) storage.
+    pub orchid_linked: bool,
+    /// C2PA verify result when a Provenance region is present (`None` = none).
+    pub orchid_c2pa_ok: Option<bool>,
 }
 
 /// Image snapshot.
