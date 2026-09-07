@@ -48,6 +48,7 @@ async fn two_linked_files_dedupe_shared_clean_text() {
             embeddings: None,
             encrypt_with: None,
             chunker: tiny_chunker(),
+            ..Default::default()
         },
     )
     .await
@@ -68,6 +69,7 @@ async fn two_linked_files_dedupe_shared_clean_text() {
             embeddings: None,
             encrypt_with: None,
             chunker: tiny_chunker(),
+            ..Default::default()
         },
     )
     .await
@@ -129,6 +131,7 @@ async fn linked_encrypted_region_needs_correct_identity() {
             embeddings: None,
             encrypt_with: Some(id.clone()),
             chunker: tiny_chunker(),
+            ..Default::default()
         },
     )
     .await

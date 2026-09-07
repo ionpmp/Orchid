@@ -58,6 +58,8 @@ pub async fn wrap_as_linked(req: &WrapAsOrchidRequest, store: &ChunkStore) -> Re
             generation: 1,
             parent_generation: 0,
             raw: req.raw.clone(),
+            raw_name: req.raw_name.clone(),
+            raw_content_type: req.raw_content_type.clone(),
             clean_text: req.clean_text.clone(),
             structured: b"{}".to_vec(),
             embeddings: req.embeddings.clone(),
@@ -159,6 +161,9 @@ mod tests {
                 .unwrap();
         assert_eq!(raw, b"hello raw");
         assert_eq!(clean, b"hello clean");
+        let raw_entry = f.find_region(crate::toc::RegionType::Raw).unwrap();
+        assert_eq!(raw_entry.name(), Some("note.txt"));
+        assert_eq!(raw_entry.content_type(), Some("text/plain"));
     }
 
     #[test]

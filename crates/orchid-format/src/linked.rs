@@ -31,6 +31,10 @@ pub struct LinkedCreateRequest {
     pub parent_generation: u64,
     /// Raw plaintext.
     pub raw: Vec<u8>,
+    /// Optional display name for Raw TOC (e.g. original file name).
+    pub raw_name: Option<String>,
+    /// Optional MIME for Raw TOC.
+    pub raw_content_type: Option<String>,
     /// Clean-Text UTF-8.
     pub clean_text: Vec<u8>,
     /// Structured snapshot.
@@ -51,6 +55,8 @@ impl Default for LinkedCreateRequest {
             generation: 1,
             parent_generation: 0,
             raw: Vec::new(),
+            raw_name: None,
+            raw_content_type: None,
             clean_text: Vec::new(),
             structured: Vec::new(),
             embeddings: None,
@@ -82,7 +88,7 @@ pub async fn build_linked_bytes(store: &ChunkStore, req: &LinkedCreateRequest) -
         caps |= capability::ENCRYPTED;
     }
 
-    let mut prepared: Vec<(
+    let mut     prepared: Vec<(
         u16,
         RegionType,
         crate::crypto_region::PreparedRegionBody,
@@ -94,9 +100,9 @@ pub async fn build_linked_bytes(store: &ChunkStore, req: &LinkedCreateRequest) -
             RAW,
             RegionType::Raw,
             prepare_region_body(&req.raw, CompressionCodec::None, identity)?,
-            None,
+            req.raw_name.clone(),
             0u32,
-            None,
+            req.raw_content_type.clone(),
         ),
         (
             CLEAN_TEXT,
@@ -273,12 +279,21 @@ pub async fn sealed_to_linked(
     let clean = sealed.clean_text(identity)?;
     let structured = sealed.structured(identity)?;
     let embeddings = sealed.embeddings(identity).ok();
+    let (raw_name, raw_content_type) = match sealed.find_region(RegionType::Raw) {
+        Ok(entry) => (
+            entry.name().map(str::to_owned),
+            entry.content_type().map(str::to_owned),
+        ),
+        Err(_) => (None, None),
+    };
     let req = LinkedCreateRequest {
         file_uuid: Some(header.file_uuid),
         created_unix_ms: Some(header.created_unix_ms),
         generation: sealed.toc()?.generation().saturating_add(1).max(2),
         parent_generation: sealed.toc()?.generation(),
         raw,
+        raw_name,
+        raw_content_type,
         clean_text: clean,
         structured,
         embeddings,
@@ -307,14 +322,21 @@ pub async fn linked_to_sealed(
         Ok(bytes) => crate::EmbeddingPayload::decode(&bytes).ok(),
         Err(_) => None,
     };
+    let (raw_name, raw_content_type) = match linked.find_region(RegionType::Raw) {
+        Ok(entry) => (
+            entry.name().map(str::to_owned),
+            entry.content_type().map(str::to_owned),
+        ),
+        Err(_) => (None, None),
+    };
     crate::writer::write_sealed_file(
         sealed_path,
         &crate::writer::SealedCreateRequest {
             file_uuid: Some(header.file_uuid),
             created_unix_ms: Some(header.created_unix_ms),
             raw,
-            raw_content_type: None,
-            raw_name: None,
+            raw_content_type,
+            raw_name,
             clean_text: clean,
             structured,
             structured_content_type: None,

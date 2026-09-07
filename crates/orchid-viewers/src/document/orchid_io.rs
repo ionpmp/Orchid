@@ -133,6 +133,8 @@ pub async fn save_document_as_linked_orchid(
             generation: generation.max(1),
             parent_generation,
             raw,
+            raw_name: Some("document.docx".into()),
+            raw_content_type: Some(DOCX_MIME.into()),
             clean_text,
             structured: b"{}".to_vec(),
             embeddings,
@@ -214,6 +216,84 @@ fn document_from_plain_utf8(bytes: &[u8]) -> Document {
     }
 }
 
+/// True when Raw TOC metadata indicates an OOXML Word document (editor envelope).
+#[must_use]
+pub fn is_docx_raw_meta(name: Option<&str>, content_type: Option<&str>) -> bool {
+    if content_type.is_some_and(|c| {
+        c.eq_ignore_ascii_case(DOCX_MIME) || c.to_ascii_lowercase().contains("wordprocessingml")
+    }) {
+        return true;
+    }
+    name.is_some_and(|n| {
+        let lower = n.to_ascii_lowercase();
+        lower.ends_with(".docx") || lower.ends_with(".docm")
+    })
+}
+
+/// TOC name / MIME for the Raw region (no payload fetch).
+pub fn peek_orchid_raw_meta(path: &Path) -> Result<(Option<String>, Option<String>)> {
+    let file = SealedFile::open(path).map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    let entry = file
+        .find_region(RegionType::Raw)
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    Ok((
+        entry.name().map(str::to_owned),
+        entry.content_type().map(str::to_owned),
+    ))
+}
+
+/// Load Raw plaintext (sealed inline or linked via `store`).
+pub async fn load_orchid_raw(path: &Path, store: Option<&ChunkStore>) -> Result<Vec<u8>> {
+    let path_buf = path.to_path_buf();
+    let linked = {
+        let file =
+            SealedFile::open(&path_buf).map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+        file.header().capability_flags & capability::LINKED != 0
+    };
+    if linked {
+        let store = store.ok_or_else(|| {
+            ViewerError::DocumentSave(
+                "linked .orchid requires the content-addressed chunk store".into(),
+            )
+        })?;
+        let file =
+            SealedFile::open(&path_buf).map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+        return linked_region_plaintext(&file, store, RegionType::Raw, None)
+            .await
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()));
+    }
+    let path = path_buf;
+    tokio::task::spawn_blocking(move || {
+        let file = SealedFile::open(&path).map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+        file.raw(None)
+            .map_err(|e| ViewerError::DocumentSave(e.to_string()))
+    })
+    .await
+    .map_err(|e| ViewerError::DocumentSave(format!("join: {e}")))?
+}
+
+/// Write Raw bytes to a temp file; extension comes from `raw_name` when present.
+pub async fn materialize_orchid_raw_temp(
+    path: &Path,
+    store: Option<&ChunkStore>,
+    raw_name: Option<&str>,
+) -> Result<std::path::PathBuf> {
+    let bytes = load_orchid_raw(path, store).await?;
+    let ext = raw_name
+        .and_then(|n| Path::new(n).extension())
+        .and_then(|e| e.to_str())
+        .unwrap_or("bin");
+    let tmp = std::env::temp_dir().join(format!(
+        "orchid-raw-unwrap-{}.{}",
+        uuid::Uuid::new_v4(),
+        ext
+    ));
+    tokio::fs::write(&tmp, &bytes)
+        .await
+        .map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
+    Ok(tmp)
+}
+
 fn looks_like_zip(bytes: &[u8]) -> bool {
     bytes.len() >= 4 && bytes[0] == b'P' && bytes[1] == b'K'
 }
@@ -291,6 +371,26 @@ mod tests {
         let file = SealedFile::open(&path).unwrap();
         let raw = file.find_region(RegionType::Raw).unwrap();
         assert_eq!(raw.name().unwrap(), "original.docx");
+    }
+
+    #[tokio::test]
+    async fn linked_save_names_raw_document_docx() {
+        use std::sync::Arc;
+
+        use orchid_crypto::ChunkStore;
+        use orchid_storage::StateStore;
+
+        let td = tempfile::tempdir().unwrap();
+        let storage = Arc::new(StateStore::open_in_memory("t").unwrap());
+        let store = ChunkStore::new(td.path().join("chunks"), storage).unwrap();
+        let path = td.path().join("linked.orchid");
+        save_document_as_linked_orchid(&sample_document(), &path, &store, None, 1, 0)
+            .await
+            .unwrap();
+        let file = SealedFile::open(&path).unwrap();
+        let raw = file.find_region(RegionType::Raw).unwrap();
+        assert_eq!(raw.name().unwrap(), "document.docx");
+        assert_eq!(raw.content_type().unwrap(), DOCX_MIME);
     }
 
     #[test]

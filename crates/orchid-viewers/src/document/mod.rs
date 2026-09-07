@@ -36,9 +36,9 @@ pub use model::{
     TableRow, VMerge,
 };
 pub use orchid_io::{
-    is_orchid_path, looks_like_orchid, open_document_from_orchid,
-    open_document_from_orchid_with_store, pick_document_save_path, save_document_as_linked_orchid,
-    save_document_as_orchid,
+    is_docx_raw_meta, is_orchid_path, looks_like_orchid, materialize_orchid_raw_temp,
+    open_document_from_orchid, open_document_from_orchid_with_store, peek_orchid_raw_meta,
+    pick_document_save_path, save_document_as_linked_orchid, save_document_as_orchid,
 };
 pub use sample::{create_sample_docx, create_sample_orchid, sample_document};
 pub use undo::{EditCommand, RunStylePatch, UndoStack};
