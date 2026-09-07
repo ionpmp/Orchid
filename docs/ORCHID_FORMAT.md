@@ -624,10 +624,13 @@ the reverse.
 5. **MIME / extension** registered in the Windows installer when the CLI
    and editor open path are stable. `scripts/install-desktop.ps1` associates
    `.orchid` → `application/vnd.orchid` with `orchid.exe` under HKCU.
+   `orchid.exe path.orchid` (and Explorer double-click) opens the file in a
+   viewer after the main window shows.
 
-Migration tip: keep the original DOCX as a Raw region named
-`original.docx` on first import so users can re-export bit-identical
-bytes if needed.
+Migration tip: opening a `.docx` and **Save As…** `.orchid` (without a
+`ChunkStore`) keeps the OOXML bytes under Raw TOC name `original.docx`
+so users can re-export bit-identical fidelity bytes. Subsequent native
+saves use `document.docx`.
 
 ---
 

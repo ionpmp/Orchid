@@ -277,6 +277,10 @@ release yet.
   when Clean-Text is non-empty (linked writer supports `CAP_EMBEDDINGS`).
 - Desktop install script associates `.orchid` /
   `application/vnd.orchid` with `orchid.exe` (per-user HKCU).
+  `orchid.exe` opens argv / Explorer-associated paths in a viewer after
+  the main window shows.
+- Document **Save As…** from `.docx` → sealed `.orchid` names Raw
+  `original.docx` (fidelity import); later native saves use `document.docx`.
 
 #### Built-in widgets
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),

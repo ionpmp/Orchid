@@ -4,11 +4,11 @@ use std::io::Write;
 use std::path::Path;
 
 use orchid_crypto::ChunkStore;
+use orchid_format::toc::RegionType;
 use orchid_format::{
     capability, linked_region_plaintext, write_linked_file, write_sealed_file, LinkedCreateRequest,
     SealedCreateRequest, SealedFile, EXTENSION as ORCHID_EXT, FILE_MAGIC,
 };
-use orchid_format::toc::RegionType;
 
 use crate::document::model::{Block, Document, Paragraph, Run};
 use crate::document::ooxml::container::{open_document, save_document};
@@ -43,6 +43,18 @@ pub async fn document_to_docx_bytes(doc: &Document) -> Result<Vec<u8>> {
 
 /// Write a sealed `.orchid` with Raw=DOCX, Clean-Text=`plain_text`.
 pub async fn save_document_as_orchid(doc: &Document, output_path: &Path) -> Result<()> {
+    save_document_as_orchid_named(doc, output_path, "document.docx").await
+}
+
+/// Like [`save_document_as_orchid`], with an explicit Raw TOC `name`.
+///
+/// Use `"original.docx"` when importing an existing OOXML file so the bytes
+/// stay recoverable under that TOC name.
+pub async fn save_document_as_orchid_named(
+    doc: &Document,
+    output_path: &Path,
+    raw_name: &str,
+) -> Result<()> {
     let raw = document_to_docx_bytes(doc).await?;
     let clean_text = doc.plain_text().into_bytes();
     let embeddings = stub_embeddings_for_clean(&clean_text);
@@ -53,7 +65,7 @@ pub async fn save_document_as_orchid(doc: &Document, output_path: &Path) -> Resu
             created_unix_ms: None,
             raw,
             raw_content_type: Some(DOCX_MIME.into()),
-            raw_name: Some("document.docx".into()),
+            raw_name: Some(raw_name.to_string()),
             clean_text,
             structured: b"{}".to_vec(),
             structured_content_type: Some("application/json".into()),
@@ -135,19 +147,14 @@ pub async fn save_document_as_linked_orchid(
 
 fn stub_embeddings_for_clean(clean_text: &[u8]) -> Option<orchid_format::EmbeddingPayload> {
     let text = String::from_utf8_lossy(clean_text);
-    orchid_embed::stub_embedding_payload(&text)
-        .ok()
-        .flatten()
+    orchid_embed::stub_embedding_payload(&text).ok().flatten()
 }
 
 /// Read header UUID + TOC generation for linked save bumps.
 pub fn orchid_identity(path: &Path) -> Result<([u8; 16], u64)> {
     let file = SealedFile::open(path).map_err(|e| ViewerError::DocumentSave(e.to_string()))?;
     let uuid = file.header().file_uuid;
-    let gen = file
-        .toc()
-        .map(|t| t.generation())
-        .unwrap_or(1);
+    let gen = file.toc().map(|t| t.generation()).unwrap_or(1);
     Ok((uuid, gen))
 }
 
@@ -271,6 +278,19 @@ mod tests {
         let (uuid, gen) = orchid_identity(&path).unwrap();
         assert_eq!(uuid, [0xAB; 16]);
         assert_eq!(gen, 1);
+    }
+
+    #[tokio::test]
+    async fn sealed_import_names_raw_original_docx() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("imported.orchid");
+        let doc = sample_document();
+        save_document_as_orchid_named(&doc, &path, "original.docx")
+            .await
+            .unwrap();
+        let file = SealedFile::open(&path).unwrap();
+        let raw = file.find_region(RegionType::Raw).unwrap();
+        assert_eq!(raw.name().unwrap(), "original.docx");
     }
 
     #[test]

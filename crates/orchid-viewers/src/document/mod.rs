@@ -111,6 +111,8 @@ pub struct DocumentViewer {
     orchid_file_uuid: Mutex<Option<[u8; 16]>>,
     /// Last known TOC generation for the open `.orchid`.
     orchid_generation: Mutex<u64>,
+    /// When true, next `.orchid` sealed save names Raw `original.docx` (DOCX import).
+    prefer_original_docx_name: Mutex<bool>,
 }
 
 /// Result of [`DocumentViewer::preview_pointer`].
@@ -179,6 +181,7 @@ impl DocumentViewer {
             chunk_store: None,
             orchid_file_uuid: Mutex::new(None),
             orchid_generation: Mutex::new(0),
+            prefer_original_docx_name: Mutex::new(false),
         }
     }
 
@@ -197,6 +200,18 @@ impl DocumentViewer {
     fn clear_orchid_identity(&self) {
         *self.orchid_file_uuid.lock() = None;
         *self.orchid_generation.lock() = 0;
+    }
+
+    fn set_prefer_original_docx_name(&self, prefer: bool) {
+        *self.prefer_original_docx_name.lock() = prefer;
+    }
+
+    fn take_orchid_raw_name(&self) -> &'static str {
+        if *self.prefer_original_docx_name.lock() {
+            "original.docx"
+        } else {
+            "document.docx"
+        }
     }
 
     /// Find the next / previous match in plain text.
@@ -4853,10 +4868,12 @@ impl Viewer for DocumentViewer {
                 )
                 .await?;
                 self.remember_orchid_identity(&orchid_tmp);
+                self.set_prefer_original_docx_name(false);
                 let _ = tokio::fs::remove_file(&orchid_tmp).await;
                 opened
             } else {
                 self.clear_orchid_identity();
+                self.set_prefer_original_docx_name(true);
                 Document::from_docx(&tmp).await?
             };
             let _ = tokio::fs::remove_file(&tmp).await;
@@ -4888,9 +4905,15 @@ impl Viewer for DocumentViewer {
                 orchid_io::open_document_from_orchid_with_store(os, self.chunk_store.as_deref())
                     .await?;
             self.remember_orchid_identity(os);
+            self.set_prefer_original_docx_name(false);
             opened
         } else {
             self.clear_orchid_identity();
+            let is_docx = os
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| e.eq_ignore_ascii_case("docx"));
+            self.set_prefer_original_docx_name(is_docx);
             Document::from_docx(os).await?
         };
         *self.document.write() = Some(doc);
@@ -5219,9 +5242,12 @@ impl Viewer for DocumentViewer {
                 )
                 .await?;
                 self.remember_orchid_identity(os);
+                self.set_prefer_original_docx_name(false);
             } else {
-                orchid_io::save_document_as_orchid(&doc, os).await?;
+                let raw_name = self.take_orchid_raw_name();
+                orchid_io::save_document_as_orchid_named(&doc, os, raw_name).await?;
                 self.remember_orchid_identity(os);
+                self.set_prefer_original_docx_name(false);
             }
         } else {
             self.clear_orchid_identity();
@@ -5264,6 +5290,25 @@ impl DocumentViewer {
             return Err(ViewerError::DocumentSave(String::from(
                 "saving remote documents is not supported yet",
             )));
+        }
+        if let Ok(os) = new_path.to_local() {
+            if orchid_io::is_orchid_path(Path::new(&os)) {
+                // Keep original.docx when Save As from a DOCX into `.orchid`.
+                let from_docx = self
+                    .path
+                    .read()
+                    .as_ref()
+                    .and_then(|p| p.to_local().ok())
+                    .is_some_and(|p| {
+                        Path::new(&p)
+                            .extension()
+                            .and_then(|e| e.to_str())
+                            .is_some_and(|e| e.eq_ignore_ascii_case("docx"))
+                    });
+                if from_docx {
+                    self.set_prefer_original_docx_name(true);
+                }
+            }
         }
         *self.path.write() = Some(new_path);
         <Self as Viewer>::save(self).await
