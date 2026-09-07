@@ -2,6 +2,8 @@
 
 #![allow(missing_docs)]
 
+use std::path::{Path, PathBuf};
+
 use bincode_reloaded::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -16,6 +18,27 @@ pub const MAX_BOOKMARKS: usize = 50;
 
 /// Session-only recently-closed stack (Ctrl+Shift+T).
 pub const MAX_CLOSED: usize = 10;
+
+/// Session-only download list.
+pub const MAX_DOWNLOADS: usize = 30;
+
+/// Download still writing to disk.
+pub const DOWNLOAD_IN_PROGRESS: u8 = 0;
+/// Download finished successfully.
+pub const DOWNLOAD_COMPLETED: u8 = 1;
+/// Download cancelled or interrupted.
+pub const DOWNLOAD_FAILED: u8 = 2;
+
+/// One in-session download row (not persisted).
+#[derive(Debug, Clone)]
+pub struct BrowserDownload {
+    pub id: String,
+    pub filename: String,
+    pub path: String,
+    pub bytes: u64,
+    pub total: u64,
+    pub state: u8,
+}
 
 /// One browser tab.
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
@@ -209,6 +232,20 @@ impl BrowserConfig {
         }
     }
 
+    /// Reorder tabs, keeping the same tab active.
+    pub fn move_tab(&mut self, from: usize, to: usize) -> bool {
+        if from == to || from >= self.tabs.len() || to >= self.tabs.len() {
+            return false;
+        }
+        let active_id = self.active_tab().id.clone();
+        let tab = self.tabs.remove(from);
+        self.tabs.insert(to, tab);
+        if let Some(i) = self.tabs.iter().position(|t| t.id == active_id) {
+            self.active_index = i as u32;
+        }
+        true
+    }
+
     /// Ensure at least one tab, a valid active index, and caps.
     pub fn normalize(&mut self) {
         if self.tabs.is_empty() {
@@ -257,4 +294,35 @@ impl BrowserConfig {
 
 fn bookmarkable(url: &str) -> bool {
     !url.is_empty() && url != "about:blank"
+}
+
+/// Pick a non-colliding path under `dir` for `suggested` (file name or path).
+#[must_use]
+pub fn unique_download_path(dir: &Path, suggested: &str) -> PathBuf {
+    let name = suggested
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or("download")
+        .trim();
+    let name = if name.is_empty() { "download" } else { name };
+    let name = name.replace("..", "_");
+    let dest = dir.join(&name);
+    if !dest.exists() {
+        return dest;
+    }
+    let stem = dest
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("download");
+    let ext = dest.extension().and_then(|s| s.to_str());
+    for i in 1..1000 {
+        let candidate = match ext {
+            Some(e) => dir.join(format!("{stem} ({i}).{e}")),
+            None => dir.join(format!("{stem} ({i})")),
+        };
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    dest
 }

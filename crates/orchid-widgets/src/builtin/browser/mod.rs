@@ -12,14 +12,20 @@ use uuid::Uuid;
 use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
-use crate::widget::payloads::{BrowserBookmarkRow, BrowserPayload, BrowserTabRow};
+use crate::widget::payloads::{
+    BrowserBookmarkRow, BrowserDownloadRow, BrowserPayload, BrowserTabRow,
+};
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{
     Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
 };
 use orchid_storage::{LifecycleState, WidgetSize};
 
-pub use config::{BrowserBookmark, BrowserConfig, BrowserTab, MAX_BOOKMARKS, MAX_CLOSED, MAX_TABS};
+pub use config::{
+    unique_download_path, BrowserBookmark, BrowserConfig, BrowserDownload, BrowserTab,
+    DOWNLOAD_COMPLETED, DOWNLOAD_FAILED, DOWNLOAD_IN_PROGRESS, MAX_BOOKMARKS, MAX_CLOSED,
+    MAX_DOWNLOADS, MAX_TABS,
+};
 
 /// Stable type id.
 pub const TYPE_ID: &str = "browser";
@@ -30,6 +36,7 @@ struct BrowserHandle {
     instance_id: Uuid,
     config: Arc<RwLock<BrowserConfig>>,
     closed: RwLock<Vec<BrowserTab>>,
+    downloads: RwLock<Vec<BrowserDownload>>,
     bus: Arc<orchid_core::EventBus>,
 }
 
@@ -117,6 +124,95 @@ pub fn select_numbered_tab(instance_id: Uuid, n: i32) {
         cfg.select_numbered(n);
     }
     h.publish();
+}
+
+/// Reorder a tab from `from` to `to`.
+pub fn move_tab(instance_id: Uuid, from: i32, to: i32) {
+    if from < 0 || to < 0 {
+        return;
+    }
+    let Some(h) = BROWSER_LIVE.get(&instance_id) else {
+        return;
+    };
+    let changed = {
+        let mut cfg = h.config.write();
+        cfg.move_tab(from as usize, to as usize)
+    };
+    if changed {
+        h.publish();
+    }
+}
+
+/// Insert or update a session download row.
+pub fn upsert_download(
+    instance_id: Uuid,
+    id: &str,
+    filename: &str,
+    path: &str,
+    bytes: u64,
+    total: u64,
+    state: u8,
+) {
+    let Some(h) = BROWSER_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut list = h.downloads.write();
+        if let Some(row) = list.iter_mut().find(|d| d.id == id) {
+            row.filename = filename.to_string();
+            row.path = path.to_string();
+            row.bytes = bytes;
+            row.total = total;
+            row.state = state;
+        } else {
+            if list.len() >= MAX_DOWNLOADS {
+                if let Some(i) = list.iter().position(|d| d.state != DOWNLOAD_IN_PROGRESS) {
+                    list.remove(i);
+                } else {
+                    list.remove(0);
+                }
+            }
+            list.push(BrowserDownload {
+                id: id.to_string(),
+                filename: filename.to_string(),
+                path: path.to_string(),
+                bytes,
+                total,
+                state,
+            });
+        }
+    }
+    h.publish();
+}
+
+/// Remove a download row by index.
+pub fn remove_download(instance_id: Uuid, index: i32) {
+    if index < 0 {
+        return;
+    }
+    let Some(h) = BROWSER_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let mut list = h.downloads.write();
+        let idx = index as usize;
+        if idx < list.len() {
+            list.remove(idx);
+        }
+    }
+    h.publish();
+}
+
+/// Absolute path for a download id, if still tracked.
+#[must_use]
+pub fn download_path(instance_id: Uuid, id: &str) -> Option<String> {
+    BROWSER_LIVE.get(&instance_id).and_then(|h| {
+        h.downloads
+            .read()
+            .iter()
+            .find(|d| d.id == id)
+            .map(|d| d.path.clone())
+    })
 }
 
 /// Apply a settings-dialog mutation to the live config.
@@ -424,6 +520,7 @@ impl BrowserWidget {
             instance_id,
             config: Arc::new(RwLock::new(config)),
             closed: RwLock::new(Vec::new()),
+            downloads: RwLock::new(Vec::new()),
             bus,
         });
         BROWSER_LIVE.insert(instance_id, Arc::clone(&handle));
@@ -447,6 +544,27 @@ impl BrowserWidget {
                 is_active: i == cfg.active_index as usize,
             })
             .collect();
+        let downloads = self
+            .handle
+            .downloads
+            .read()
+            .iter()
+            .map(|d| {
+                let progress = if d.total > 0 {
+                    ((d.bytes.saturating_mul(100)) / d.total).min(100) as i32
+                } else {
+                    -1
+                };
+                BrowserDownloadRow {
+                    id: d.id.clone(),
+                    filename: d.filename.clone(),
+                    path: d.path.clone(),
+                    progress,
+                    state: i32::from(d.state),
+                    in_progress: d.state == DOWNLOAD_IN_PROGRESS,
+                }
+            })
+            .collect();
         BrowserPayload {
             tabs,
             active_index: cfg.active_index as i32,
@@ -462,6 +580,7 @@ impl BrowserWidget {
                 })
                 .collect(),
             is_bookmarked: cfg.active_is_bookmarked(),
+            downloads,
         }
     }
 }
@@ -756,5 +875,30 @@ mod tests {
         assert_eq!(cfg.active_index, 1);
         cfg.select_numbered(9);
         assert_eq!(cfg.active_index, 3);
+    }
+
+    #[test]
+    fn move_tab_keeps_active_identity() {
+        let mut cfg = BrowserConfig::default();
+        cfg.tabs = (0..3)
+            .map(|i| BrowserTab::from_url(&format!("https://t{i}.example/")))
+            .collect();
+        cfg.active_index = 0;
+        let active = cfg.tabs[0].id.clone();
+        assert!(cfg.move_tab(0, 2));
+        assert_eq!(cfg.tabs[2].id, active);
+        assert_eq!(cfg.active_index, 2);
+        assert!(!cfg.move_tab(0, 0));
+    }
+
+    #[test]
+    fn unique_download_path_avoids_existing() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let first = unique_download_path(dir.path(), "report.pdf");
+        assert_eq!(first.file_name().unwrap(), "report.pdf");
+        std::fs::write(&first, b"x").expect("write");
+        let second = unique_download_path(dir.path(), "report.pdf");
+        assert_eq!(second.file_name().unwrap(), "report (1).pdf");
+        assert_ne!(first, second);
     }
 }

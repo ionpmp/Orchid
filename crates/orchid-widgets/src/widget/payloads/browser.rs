@@ -18,6 +18,17 @@ pub struct BrowserBookmarkRow {
     pub url: String,
 }
 
+/// One download row for the browser UI.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrowserDownloadRow {
+    pub id: String,
+    pub filename: String,
+    pub path: String,
+    pub progress: i32,
+    pub state: i32,
+    pub in_progress: bool,
+}
+
 /// Render payload for the browser widget.
 #[derive(Debug, Clone)]
 pub struct BrowserPayload {
@@ -28,4 +39,5 @@ pub struct BrowserPayload {
     pub homepage: String,
     pub bookmarks: Vec<BrowserBookmarkRow>,
     pub is_bookmarked: bool,
+    pub downloads: Vec<BrowserDownloadRow>,
 }

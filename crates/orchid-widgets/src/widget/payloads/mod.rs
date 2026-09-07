@@ -29,7 +29,7 @@ pub use audio_player::{
     AudioPlayerGroupRow, AudioPlayerLyricRow, AudioPlayerPayload, AudioPlayerPlaylistRow,
     AudioPlayerRootRow, AudioPlayerTrackRow,
 };
-pub use browser::{BrowserBookmarkRow, BrowserPayload, BrowserTabRow};
+pub use browser::{BrowserBookmarkRow, BrowserDownloadRow, BrowserPayload, BrowserTabRow};
 pub use calculator::{CalcHistoryRow, CalculatorPayload};
 pub use calendar::{CalendarDayCell, CalendarEventRow, CalendarPayload, CalendarUpcomingRow};
 pub use clock::{ClockCityView, ClockPayload, ClockSearchHit};
