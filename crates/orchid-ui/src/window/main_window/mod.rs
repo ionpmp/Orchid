@@ -222,8 +222,10 @@ pub struct MainWindowController {
     palette_candidates: ModelRc<SearchCandidateEntry>,
     settings: Arc<RwLock<SettingsUiState>>,
     config_file_path: PathBuf,
-    /// Directory for Document Editor untitled `.docx` files (`data/documents`).
+    /// Directory for Document Editor untitled `.orchid` files (`data/documents`).
     documents_dir: PathBuf,
+    /// App `ChunkStore` for linked Untitled `.orchid` creation (None → sealed).
+    chunk_store: Option<Arc<orchid_crypto::ChunkStore>>,
     /// WebView2 HWND overlays for HTML viewer widgets.
     html_webview: crate::html_webview::HtmlWebViewHost,
     settings_sections: ModelRc<SettingsSectionEntry>,
@@ -331,6 +333,7 @@ impl MainWindowController {
         session_manager: Arc<SessionManager>,
         session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>>,
         terminal_deps: TerminalWidgetDeps,
+        chunk_store: Option<Arc<orchid_crypto::ChunkStore>>,
     ) -> Result<Arc<Self>> {
         let window = MainWindow::new()
             .map_err(|e| UiError::Slint(format!("failed to create MainWindow: {e}")))?;
@@ -542,6 +545,7 @@ impl MainWindowController {
             settings: Arc::new(RwLock::new(SettingsUiState::default())),
             config_file_path,
             documents_dir,
+            chunk_store,
             html_webview: crate::html_webview::HtmlWebViewHost::new(),
             settings_sections,
             settings_fields,

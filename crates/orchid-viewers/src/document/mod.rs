@@ -40,7 +40,7 @@ pub use orchid_io::{
     open_document_from_orchid, open_document_from_orchid_with_store, peek_orchid_raw_meta,
     pick_document_save_path, save_document_as_linked_orchid, save_document_as_orchid,
 };
-pub use sample::{create_sample_docx, create_sample_orchid, sample_document};
+pub use sample::{create_sample_docx, create_sample_orchid, create_sample_orchid_with_store, sample_document};
 pub use undo::{EditCommand, RunStylePatch, UndoStack};
 
 /// Soft ceiling for DOCX payloads accepted by the viewer (128 MiB).

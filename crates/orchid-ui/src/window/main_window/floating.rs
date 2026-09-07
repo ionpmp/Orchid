@@ -256,16 +256,25 @@ impl MainWindowController {
     }
 
     /// Create a sample `.orchid` under [`Self::documents_dir`] and open it docked on the canvas.
+    ///
+    /// When a [`ChunkStore`] is available the file is written as **linked** so
+    /// the first editor save does not need a sealed→linked upgrade.
     pub(super) fn spawn_open_document_editor(self: &Arc<Self>, placement: AddWidgetPlacement) {
         let ctrl = Arc::downgrade(self);
         let documents_dir = self.documents_dir.clone();
+        let chunk_store = self.chunk_store.clone();
         spawn::spawn_local(async move {
             if let Err(e) = tokio::fs::create_dir_all(&documents_dir).await {
                 warn!(?e, "document editor: create documents dir");
                 return;
             }
             let path = super::next_untitled_docx_path(&documents_dir);
-            if let Err(e) = orchid_viewers::create_sample_orchid(&path).await {
+            let create = orchid_viewers::create_sample_orchid_with_store(
+                &path,
+                chunk_store.as_deref(),
+            )
+            .await;
+            if let Err(e) = create {
                 warn!(?e, path = %path.display(), "document editor: write sample orchid");
                 return;
             }

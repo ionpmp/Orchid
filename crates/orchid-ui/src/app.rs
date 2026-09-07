@@ -158,6 +158,8 @@ pub struct OrchidApp {
     password_vault: Arc<orchid_crypto::PasswordVault>,
     /// FM encrypted-folder passphrase vault (Windows Hello).
     fm_passphrase_vault: Arc<orchid_crypto::FmPassphraseVault>,
+    /// Content-addressed store for linked `.orchid` (Untitled / managed wraps).
+    chunk_store: Arc<orchid_crypto::ChunkStore>,
     /// Keeps the config watcher background task alive.
     _config_watcher: ConfigWatcher,
 }
@@ -789,6 +791,7 @@ impl OrchidApp {
             recent_files,
             password_vault,
             fm_passphrase_vault,
+            chunk_store,
             _config_watcher: config_watcher,
         })
     }
@@ -890,6 +893,7 @@ impl OrchidApp {
             self.session_manager.clone(),
             self.session_routing.clone(),
             self.terminal_deps.clone(),
+            Some(self.chunk_store.clone()),
         )?;
         c.queue_cli_open_paths(open_paths);
         // Kick off deferred search indexing before the event loop so crawl/watch

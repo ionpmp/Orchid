@@ -95,10 +95,32 @@ pub async fn create_sample_docx(path: &Path) -> Result<()> {
 ///
 /// Propagates sealed-write / OOXML failures.
 pub async fn create_sample_orchid(path: &Path) -> Result<()> {
+    create_sample_orchid_with_store(path, None).await
+}
+
+/// Like [`create_sample_orchid`], but writes a **linked** envelope when `store`
+/// is provided (catalog / Untitled path with an app [`ChunkStore`]).
+///
+/// # Errors
+///
+/// Propagates linked/sealed write or OOXML failures.
+pub async fn create_sample_orchid_with_store(
+    path: &Path,
+    store: Option<&orchid_crypto::ChunkStore>,
+) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    crate::document::orchid_io::save_document_as_orchid(&sample_document(), path).await
+    let doc = sample_document();
+    match store {
+        Some(store) => {
+            crate::document::orchid_io::save_document_as_linked_orchid(
+                &doc, path, store, None, 1, 0,
+            )
+            .await
+        }
+        None => crate::document::orchid_io::save_document_as_orchid(&doc, path).await,
+    }
 }
 
 #[cfg(test)]
@@ -129,6 +151,32 @@ mod tests {
         let doc = crate::document::orchid_io::open_document_from_orchid(&path)
             .await
             .unwrap();
+        assert!(doc.plain_text().contains("Sample document"));
+    }
+
+    #[tokio::test]
+    async fn sample_orchid_with_store_is_linked() {
+        use std::sync::Arc;
+
+        use orchid_crypto::ChunkStore;
+        use orchid_format::{capability, SealedFile};
+        use orchid_storage::StateStore;
+
+        let td = tempfile::tempdir().unwrap();
+        let storage = Arc::new(StateStore::open_in_memory("sample").unwrap());
+        let store = ChunkStore::new(td.path().join("chunks"), storage).unwrap();
+        let path = td.path().join("linked.orchid");
+        create_sample_orchid_with_store(&path, Some(&store))
+            .await
+            .unwrap();
+        let file = SealedFile::open(&path).unwrap();
+        assert_ne!(file.header().capability_flags & capability::LINKED, 0);
+        let doc = crate::document::orchid_io::open_document_from_orchid_with_store(
+            &path,
+            Some(&store),
+        )
+        .await
+        .unwrap();
         assert!(doc.plain_text().contains("Sample document"));
     }
 }
