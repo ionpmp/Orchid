@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use slint::winit_030::WinitWindowAccessor;
@@ -37,8 +37,8 @@ use orchid_terminal::SessionManager;
 use orchid_widgets::layout::PixelBounds;
 use orchid_widgets::layout::ViewportSize;
 use orchid_widgets::{
-    visible_instance_ids, GroupManager, LayoutEngine, RecentFilesStore, WidgetManager,
-    WorkspaceManager,
+    visible_instance_ids, GroupManager, LayoutEngine, LayoutSnapshot, RecentFilesStore,
+    WidgetManager, WorkspaceManager,
 };
 use parking_lot::RwLock;
 
@@ -137,6 +137,12 @@ pub struct MainWindowController {
     rebuild_pending: Arc<AtomicBool>,
     /// Debounces concurrent [`Self::sync_widget_visibility`] spawns from [`Self::schedule_rebuild`].
     visibility_sync_pending: Arc<AtomicBool>,
+    /// Bumped on each canvas-scroll tick so mid-pan visibility work is discarded.
+    visibility_scroll_seq: AtomicU32,
+    /// True while a post-pan visibility waiter is sleeping.
+    visibility_scroll_armed: AtomicBool,
+    /// Last set passed to [`WidgetManager::apply_visibility`]; skip if unchanged.
+    last_visible_ids: Mutex<Vec<Uuid>>,
     /// Set when `config.toml` hot-reload completes; applied on the next UI tick.
     config_reload_pending: Arc<AtomicBool>,
     /// Last `Window::scale_factor` used to raster the terminal; when it changes, we re-raster.
@@ -501,6 +507,9 @@ impl MainWindowController {
             canvas_size: Arc::new(Mutex::new((800.0, 500.0))),
             rebuild_pending: Arc::new(AtomicBool::new(false)),
             visibility_sync_pending: Arc::new(AtomicBool::new(false)),
+            visibility_scroll_seq: AtomicU32::new(0),
+            visibility_scroll_armed: AtomicBool::new(false),
+            last_visible_ids: Mutex::new(Vec::new()),
             config_reload_pending,
             last_window_scale: parking_lot::Mutex::new(0.0),
             last_terminal_viewport_pty: Arc::new(Mutex::new(HashMap::new())),
@@ -946,15 +955,56 @@ impl MainWindowController {
         }
         let t = Arc::downgrade(self);
         spawn::spawn_local(async move {
-            if let Some(c) = t.upgrade() {
+            let Some(c) = t.upgrade() else {
+                return;
+            };
+            loop {
                 c.visibility_sync_pending.store(false, Ordering::Release);
                 c.sync_widget_visibility().await;
+                if !c.visibility_sync_pending.swap(false, Ordering::AcqRel) {
+                    break;
+                }
+            }
+        });
+    }
+
+    /// Wheel / trackpad pan: keep scroll coords live, but wait until motion
+    /// stops before sleeping or waking widgets (that work janks the Flickable).
+    fn schedule_visibility_sync_after_scroll(self: &Arc<Self>) {
+        self.visibility_scroll_seq.fetch_add(1, Ordering::Relaxed);
+        if self.visibility_scroll_armed.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let t = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            loop {
+                let seq = match t.upgrade() {
+                    Some(c) => c.visibility_scroll_seq.load(Ordering::Acquire),
+                    None => return,
+                };
+                tokio::time::sleep(Duration::from_millis(150)).await;
+                let Some(c) = t.upgrade() else {
+                    return;
+                };
+                if c.visibility_scroll_seq.load(Ordering::Acquire) != seq {
+                    continue;
+                }
+                c.visibility_scroll_armed.store(false, Ordering::Release);
+                if c.visibility_scroll_seq.load(Ordering::Acquire) != seq {
+                    if !c.visibility_scroll_armed.swap(true, Ordering::AcqRel) {
+                        continue;
+                    }
+                    return;
+                }
+                c.schedule_visibility_sync();
+                return;
             }
         });
     }
 
     async fn sync_widget_visibility(&self) {
         let Ok(ws) = self.workspace_manager.active() else {
+            *self.last_visible_ids.lock() = Vec::new();
             self.widget_manager.apply_visibility(&[]).await;
             return;
         };
@@ -965,54 +1015,65 @@ impl MainWindowController {
         );
         let (sx, sy) = *self.canvas_scroll.lock();
         let (vw, vh) = *self.canvas_size.lock();
+        let all = self.widget_manager.instances_for_workspace(ws.id);
+        let docked = Self::docked_instances(&all);
+        let view = ViewportSize {
+            width_px: vw.max(1.0),
+            height_px: vh.max(1.0),
+        };
+        let snap = self.layout_engine.snapshot(ws.id, &docked, view);
         // Sleep widgets scrolled fully outside the canvas viewport (e.g. Processes
         // stops its expensive refresh while off-screen).
         ids.retain(|id| {
             self.is_windowed(*id)
-                || self.widget_intersects_canvas_viewport(ws.id, *id, sx, sy, vw, vh)
+                || Self::placed_intersects_viewport(
+                    &snap,
+                    *id,
+                    sx,
+                    sy,
+                    vw,
+                    vh,
+                    view,
+                    &self.group_manager,
+                    &self.layout_engine,
+                )
         });
+        ids.sort_unstable();
+        {
+            let mut last = self.last_visible_ids.lock();
+            if *last == ids {
+                return;
+            }
+            *last = ids.clone();
+        }
         self.widget_manager.apply_visibility(&ids).await;
     }
 
-    /// `true` when the widget's layout bounds intersect the scrolled canvas viewport.
-    fn widget_intersects_canvas_viewport(
-        &self,
-        workspace_id: Uuid,
+    fn placed_intersects_viewport(
+        snap: &LayoutSnapshot,
         instance_id: Uuid,
         scroll_x: f32,
         scroll_y: f32,
         viewport_w: f32,
         viewport_h: f32,
+        view: ViewportSize,
+        groups: &GroupManager,
+        layout: &LayoutEngine,
     ) -> bool {
-        let all = self.widget_manager.instances_for_workspace(workspace_id);
-        let docked = Self::docked_instances(&all);
-        let view = ViewportSize {
-            width_px: viewport_w.max(1.0),
-            height_px: viewport_h.max(1.0),
-        };
-        let snap = self.layout_engine.snapshot(workspace_id, &docked, view);
         let Some(pl) = snap.cells.iter().find(|c| c.instance_id == instance_id) else {
-            // Unknown placement — keep active rather than sleep incorrectly.
             return true;
         };
         let mut bounds = pl.bounds;
-        if let Some(group) = self
-            .group_manager
+        if let Some(group) = groups
             .find_for_instance(instance_id)
             .filter(|g| g.members.len() >= 2)
         {
-            bounds = self
-                .layout_engine
-                .pixel_bounds_for(group.position, group.size, view);
+            bounds = layout.pixel_bounds_for(group.position, group.size, view);
         }
-        let vx0 = scroll_x;
-        let vy0 = scroll_y;
-        let vx1 = scroll_x + viewport_w;
-        let vy1 = scroll_y + viewport_h;
-        bounds.x < vx1
-            && bounds.x + bounds.width > vx0
-            && bounds.y < vy1
-            && bounds.y + bounds.height > vy0
+        bounds.x < scroll_x + viewport_w
+            && bounds.x + bounds.width > scroll_x
+            && bounds.y < scroll_y + viewport_h
+            && bounds.y + bounds.height > scroll_y
     }
 
     /// `create` stores new instances at a placeholder cell; place them on a free grid cell.
@@ -1173,7 +1234,7 @@ impl MainWindowController {
 
     fn on_canvas_scrolled(self: &Arc<Self>, viewport_x: f32, viewport_y: f32) {
         *self.canvas_scroll.lock() = (-viewport_x, -viewport_y);
-        self.schedule_visibility_sync();
+        self.schedule_visibility_sync_after_scroll();
     }
 
     async fn dispatch_command(self: &Arc<Self>, cmd_id: &str) {

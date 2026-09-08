@@ -495,6 +495,10 @@ release yet.
 - **Widget groups**: workspace lists and `find_for_instance` use id indexes
   instead of scanning every tab stack.
 - **Audio / video libraries**: `find_by_path` is a HashMap lookup after scan.
+- **Canvas pan**: wheel / trackpad scroll updates the Flickable offset
+  without waking or sleeping widgets on every tick; visibility sync
+  waits until motion stops, skips an unchanged id set, and does not
+  `touch()` widgets that are already Active.
 
 ### Fixed
 - File-manager listings stop scrolling past the last entry: the list and grid

@@ -293,8 +293,8 @@ impl WidgetManager {
             let id = inst.id;
             let state = *inst.lifecycle.read();
             if visible.contains(&id) {
-                self.touch(id);
                 if state == LifecycleState::Sleeping || state == LifecycleState::Unloaded {
+                    self.touch(id);
                     if let Err(e) = self.change_lifecycle(id, LifecycleState::Active).await {
                         warn!(widget_id = %id, error = %e, "apply_visibility: wake failed");
                     } else {
