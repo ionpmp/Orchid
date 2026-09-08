@@ -67,6 +67,11 @@ export component FmEntryGrid inherits Rectangle {
     property <bool> virtualized: virtual-content-height > 0px;
     property <int> total-count: entry-total-count > 0 ? entry-total-count : entries.length;
     property <int> first-index: virtualized ? max(0, virtual-first-index) : 0;
+    // Scroll extent follows the tiles laid out here. The backend derives its
+    // own content height from the last width it was told about, so after a
+    // resize it could report far more rows than exist and left the view
+    // scrolling into empty space below the last tile.
+    property <length> content-height: tile-spacing + row-count() * (tile-height + tile-spacing);
 
     function cancel-press() {
         root.pressing-path = "";
@@ -284,9 +289,7 @@ export component FmEntryGrid inherits Rectangle {
         height: parent.height;
         interactive: !root.drag-active && !root.press-empty && !root.marquee-active;
         viewport-width: self.width;
-        viewport-height: virtualized
-            ? max(self.height, virtual-content-height)
-            : max(self.height, ceil(entries.length / columns) * (tile-height + tile-spacing) + tile-spacing);
+        viewport-height: max(self.height, content-height);
 
         changed viewport-y => {
             root.viewport-changed(self.viewport-y, self.height, self.width);

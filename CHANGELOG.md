@@ -497,6 +497,10 @@ release yet.
 - **Audio / video libraries**: `find_by_path` is a HashMap lookup after scan.
 
 ### Fixed
+- File-manager listings stop scrolling past the last entry: the list and grid
+  derive their scroll extent from the rows / tiles they lay out instead of the
+  backend's content height, which is computed from the last reported pane width
+  and left dead space below the listing after a resize.
 - File-manager hover no longer dirties every row's Image/Text tree: a single
   overlay strip tracks the hovered index, decoration snapshot publishes are
   coalesced (prefetch/thumbs), Icons view uses ExtraLarge instead of Jumbo,

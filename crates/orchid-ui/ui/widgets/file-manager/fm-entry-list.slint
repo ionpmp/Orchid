@@ -174,8 +174,12 @@ export component FmEntryList inherits Rectangle {
     property <length> header-height: details ? 28px : 0px;
     property <bool> virtualized: virtual-content-height > 0px;
     property <int> first-index: virtualized ? max(0, virtual-first-index) : 0;
+    // Scroll extent is derived from what this component actually draws. Taking
+    // it from the backend let the two disagree and left dead space under the
+    // last row that the user could still scroll into.
+    property <length> content-height: header-height + total-count * row-height;
     property <length> bottom-pad: virtualized
-        ? max(0px, virtual-content-height - virtual-pad-top - header-height - entries.length * row-height)
+        ? max(0px, content-height - virtual-pad-top - header-height - entries.length * row-height)
         : 0px;
 
     // Absolute index of a virtual row — used so the rubber band can paint
@@ -228,9 +232,7 @@ export component FmEntryList inherits Rectangle {
         height: parent.height;
         interactive: !root.drag-active && !root.press-empty && !root.marquee-active;
         viewport-width: self.width;
-        viewport-height: virtualized
-            ? max(self.height, virtual-content-height)
-            : max(self.height, list-stack.preferred-height);
+        viewport-height: max(self.height, content-height);
 
         changed viewport-y => {
             root.viewport-changed(self.viewport-y, self.height, self.width);
