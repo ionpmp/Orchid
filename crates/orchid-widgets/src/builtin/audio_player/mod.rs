@@ -33,6 +33,7 @@ use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{
     Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
 };
+use orchid_i18n::{FluentArgs, LocaleManager};
 use orchid_storage::{LifecycleState, WidgetSize};
 
 pub use config::{AudioPlayerConfig, BrowseTab, LibrarySort, PlaylistEntry, RepeatMode};
@@ -70,6 +71,7 @@ struct AudioHandle {
     /// Bumped when Queue should auto-scroll to the current track.
     scroll_gen: AtomicU32,
     last_scroll: Mutex<(u8, Option<String>)>,
+    locale: Arc<LocaleManager>,
 }
 
 impl AudioHandle {
@@ -741,7 +743,11 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
         "new-playlist" => {
             let mut cfg = h.config.write();
             let n = cfg.playlists.len() + 1;
-            let pl = PlaylistEntry::new(format!("Playlist {n}"));
+            let name = h.locale.tr_args(
+                "audio-player-new-playlist-name",
+                &FluentArgs::new().with("n", n.to_string()),
+            );
+            let pl = PlaylistEntry::new(name);
             cfg.active_playlist_id = pl.id.clone();
             cfg.playlists.push(pl);
             cfg.browse_tab = BrowseTab::Playlists;
@@ -1479,6 +1485,7 @@ impl AudioPlayerWidget {
         instance_id: Uuid,
         mut config: AudioPlayerConfig,
         bus: Arc<orchid_core::EventBus>,
+        locale: Arc<LocaleManager>,
     ) -> Self {
         config.normalize();
         let queue = PlayQueue::from_paths(
@@ -1514,6 +1521,7 @@ impl AudioPlayerWidget {
             scan_gen: AtomicU64::new(0),
             scroll_gen: AtomicU32::new(0),
             last_scroll: Mutex::new((0, None)),
+            locale,
         });
         AUDIO_LIVE.insert(instance_id, Arc::clone(&handle));
         handle.restore_current_paused();
@@ -1792,7 +1800,7 @@ impl AudioPlayerWidget {
             muted: self.handle.player.muted(),
             shuffle: q.shuffle,
             repeat: q.repeat.as_u8(),
-            sleep_label: self.handle.sleep.read().label.clone(),
+            sleep_label: format_sleep_label(&self.handle.sleep.read(), &self.handle.locale),
             eq_label: self.handle.player.eq_label(),
             rg_label: self.handle.player.replaygain_label(),
             speed_label: self.handle.player.speed_label(),
@@ -1956,6 +1964,25 @@ impl Widget for AudioPlayerWidget {
     }
 }
 
+fn format_sleep_label(timer: &SleepTimer, locale: &LocaleManager) -> String {
+    let Some((minutes, seconds)) = timer.remaining_parts() else {
+        return String::new();
+    };
+    if minutes > 0 {
+        locale.tr_args(
+            "audio-player-sleep-countdown",
+            &FluentArgs::new()
+                .with("minutes", minutes.to_string())
+                .with("seconds", format!("{seconds:02}")),
+        )
+    } else {
+        locale.tr_args(
+            "audio-player-sleep-seconds",
+            &FluentArgs::new().with("seconds", seconds.to_string()),
+        )
+    }
+}
+
 /// Descriptor for the audio library player.
 #[must_use]
 pub fn descriptor() -> WidgetDescriptor {
@@ -1967,6 +1994,7 @@ pub fn descriptor() -> WidgetDescriptor {
             ctx.instance_id,
             config,
             ctx.bus.clone(),
+            ctx.locale.clone(),
         )) as Box<dyn Widget>)
     });
     WidgetDescriptor {
@@ -2001,7 +2029,9 @@ mod tests {
             orchid_core::EventBusConfig::default(),
         ));
         let id = Uuid::new_v4();
-        let w = AudioPlayerWidget::new(id, AudioPlayerConfig::default(), bus);
+        let locale =
+            Arc::new(LocaleManager::new(orchid_i18n::default_language(), None).expect("locale"));
+        let w = AudioPlayerWidget::new(id, AudioPlayerConfig::default(), bus, locale);
         let snap = w.snapshot().expect("snapshot");
         match snap.payload {
             WidgetPayload::AudioPlayer(p) => {

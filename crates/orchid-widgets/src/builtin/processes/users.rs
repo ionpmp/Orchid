@@ -90,17 +90,17 @@ mod win {
     fn state_label(state: WTS_CONNECTSTATE_CLASS) -> String {
         // Compare `.0` — windows crate constants trigger `non_upper_case_globals` in patterns.
         match state.0 {
-            0 => "Active".into(),
-            1 => "Connected".into(),
-            2 => "Connect query".into(),
-            3 => "Shadow".into(),
-            4 => "Disconnected".into(),
-            5 => "Idle".into(),
-            6 => "Listen".into(),
-            7 => "Reset".into(),
-            8 => "Down".into(),
-            9 => "Init".into(),
-            other => format!("Unknown ({other})"),
+            0 => "processes-session-active".into(),
+            1 => "processes-session-connected".into(),
+            2 => "processes-session-connect-query".into(),
+            3 => "processes-session-shadow".into(),
+            4 => "processes-session-disconnected".into(),
+            5 => "processes-session-idle".into(),
+            6 => "processes-session-listen".into(),
+            7 => "processes-session-reset".into(),
+            8 => "processes-session-down".into(),
+            9 => "processes-session-init".into(),
+            other => format!("processes-session-unknown:{other}"),
         }
     }
 }

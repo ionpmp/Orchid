@@ -202,25 +202,25 @@ mod win {
 
     fn state_label(state: SERVICE_STATUS_CURRENT_STATE) -> String {
         match state.0 {
-            x if x == SERVICE_STOPPED.0 => "Stopped".into(),
-            x if x == SERVICE_START_PENDING.0 => "Start pending".into(),
-            x if x == SERVICE_STOP_PENDING.0 => "Stop pending".into(),
-            x if x == SERVICE_RUNNING.0 => "Running".into(),
-            x if x == SERVICE_CONTINUE_PENDING.0 => "Continue pending".into(),
-            x if x == SERVICE_PAUSE_PENDING.0 => "Pause pending".into(),
-            x if x == SERVICE_PAUSED.0 => "Paused".into(),
-            other => format!("Unknown ({other})"),
+            x if x == SERVICE_STOPPED.0 => "processes-svc-state-stopped".into(),
+            x if x == SERVICE_START_PENDING.0 => "processes-svc-state-start-pending".into(),
+            x if x == SERVICE_STOP_PENDING.0 => "processes-svc-state-stop-pending".into(),
+            x if x == SERVICE_RUNNING.0 => "processes-svc-state-running".into(),
+            x if x == SERVICE_CONTINUE_PENDING.0 => "processes-svc-state-continue-pending".into(),
+            x if x == SERVICE_PAUSE_PENDING.0 => "processes-svc-state-pause-pending".into(),
+            x if x == SERVICE_PAUSED.0 => "processes-svc-state-paused".into(),
+            other => format!("processes-svc-state-unknown:{other}"),
         }
     }
 
     fn start_type_label(t: SERVICE_START_TYPE) -> String {
         match t.0 {
-            x if x == SERVICE_BOOT_START.0 => "Boot".into(),
-            x if x == SERVICE_SYSTEM_START.0 => "System".into(),
-            x if x == SERVICE_AUTO_START.0 => "Automatic".into(),
-            x if x == SERVICE_DEMAND_START.0 => "Manual".into(),
-            x if x == SERVICE_DISABLED.0 => "Disabled".into(),
-            other => format!("Other ({other})"),
+            x if x == SERVICE_BOOT_START.0 => "processes-svc-start-boot".into(),
+            x if x == SERVICE_SYSTEM_START.0 => "processes-svc-start-system".into(),
+            x if x == SERVICE_AUTO_START.0 => "processes-svc-start-auto".into(),
+            x if x == SERVICE_DEMAND_START.0 => "processes-svc-start-manual".into(),
+            x if x == SERVICE_DISABLED.0 => "processes-svc-start-disabled".into(),
+            other => format!("processes-svc-start-other:{other}"),
         }
     }
 

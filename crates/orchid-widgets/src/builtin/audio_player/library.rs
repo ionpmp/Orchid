@@ -52,16 +52,8 @@ impl LibraryTrack {
         Self {
             path,
             title: meta.title,
-            artist: if meta.artist.is_empty() {
-                "Unknown Artist".into()
-            } else {
-                meta.artist
-            },
-            album: if meta.album.is_empty() {
-                "Unknown Album".into()
-            } else {
-                meta.album
-            },
+            artist: meta.artist,
+            album: meta.album,
             genre: meta.genre,
             track: meta.track,
             year: meta.year,

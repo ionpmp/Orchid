@@ -154,6 +154,18 @@ fn labels_only(locale: &LocaleManager) -> AudioPlayerModel {
     }
 }
 
+fn display_or_unknown(
+    value: &str,
+    unknown_key: &'static str,
+    locale: &LocaleManager,
+) -> SharedString {
+    if value.is_empty() {
+        locale.tr(unknown_key).into()
+    } else {
+        value.into()
+    }
+}
+
 fn sort_label_for(sort: u8, locale: &LocaleManager) -> SharedString {
     let key = match sort {
         1 => "audio-player-sort-title",
@@ -411,8 +423,8 @@ pub(crate) fn build_audio_player_model(
             )),
             has_track: p.has_track,
             title: p.title.clone().into(),
-            artist: p.artist.clone().into(),
-            album: p.album.clone().into(),
+            artist: display_or_unknown(&p.artist, "audio-player-unknown-artist", locale),
+            album: display_or_unknown(&p.album, "audio-player-unknown-album", locale),
             is_playing: p.is_playing,
             progress: p.progress.clamp(0.0, 1.0),
             position_label: p.position_label.clone().into(),
@@ -587,8 +599,8 @@ pub(crate) fn patch_audio_player_model(
     model.active_playlist_id = p.active_playlist_id.clone().into();
     model.has_track = p.has_track;
     model.title = p.title.clone().into();
-    model.artist = p.artist.clone().into();
-    model.album = p.album.clone().into();
+    model.artist = display_or_unknown(&p.artist, "audio-player-unknown-artist", locale);
+    model.album = display_or_unknown(&p.album, "audio-player-unknown-album", locale);
     model.is_playing = p.is_playing;
     model.progress = p.progress.clamp(0.0, 1.0);
     model.position_label = p.position_label.clone().into();

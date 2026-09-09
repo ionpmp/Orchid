@@ -127,6 +127,18 @@ impl ProcessesHandle {
     }
 }
 
+fn localize_coded(locale: &orchid_i18n::LocaleManager, raw: &str) -> String {
+    if let Some((key, code)) = raw.split_once(':') {
+        if key.starts_with("processes-") {
+            return locale.tr_args(key, &orchid_i18n::FluentArgs::new().with("code", code));
+        }
+    }
+    if raw.starts_with("processes-") {
+        return locale.tr(raw);
+    }
+    raw.to_string()
+}
+
 fn refresh_side_tabs(
     ui: &RwLock<UiState>,
     locale: &orchid_i18n::LocaleManager,
@@ -135,17 +147,26 @@ fn refresh_side_tabs(
 ) {
     match tab {
         ProcessesTab::Services => {
-            let services = services::list_services().unwrap_or_else(|e| {
+            let mut services = services::list_services().unwrap_or_else(|e| {
                 tracing::warn!(error = %e, "list services failed");
                 Vec::new()
             });
+            for s in &mut services {
+                s.status = localize_coded(locale, &s.status);
+                s.start_type = localize_coded(locale, &s.start_type);
+            }
             ui.write().services = services;
         }
         ProcessesTab::Startup => {
-            let startups = startup::list_startup().unwrap_or_else(|e| {
+            let mut startups = startup::list_startup().unwrap_or_else(|e| {
                 tracing::warn!(error = %e, "list startup failed");
                 Vec::new()
             });
+            for row in &mut startups {
+                if row.location.starts_with("processes-") {
+                    row.location = locale.tr(&row.location);
+                }
+            }
             ui.write().startups = startups;
         }
         ProcessesTab::Users => {
@@ -155,6 +176,7 @@ fn refresh_side_tabs(
             });
             for u in &mut users {
                 u.memory_text = locale.format_byte_size(u.memory_bytes);
+                u.state = localize_coded(locale, &u.state);
             }
             ui.write().users = users;
         }

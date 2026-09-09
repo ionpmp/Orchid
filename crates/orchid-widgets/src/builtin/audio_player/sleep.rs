@@ -73,6 +73,18 @@ impl SleepTimer {
     pub fn is_active(&self) -> bool {
         self.until.is_some()
     }
+
+    /// Remaining `(minutes, seconds)` while the timer is running.
+    #[must_use]
+    pub fn remaining_parts(&self) -> Option<(u32, u32)> {
+        let until = self.until?;
+        let now = Instant::now();
+        if now >= until {
+            return None;
+        }
+        let total = until.saturating_duration_since(now).as_secs();
+        Some(((total / 60) as u32, (total % 60) as u32))
+    }
 }
 
 #[cfg(test)]

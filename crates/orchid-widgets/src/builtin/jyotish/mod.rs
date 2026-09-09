@@ -106,11 +106,7 @@ fn observation_location(
     if cfg.use_current {
         if let Some(r) = current {
             return JyotishLocation {
-                name: if r.label.is_empty() {
-                    "Current location".into()
-                } else {
-                    r.label.clone()
-                },
+                name: r.label.clone(),
                 latitude: r.latitude,
                 longitude: r.longitude,
             };

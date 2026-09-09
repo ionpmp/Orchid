@@ -50,12 +50,12 @@ mod win {
         ));
         out.extend(enum_startup_folder(
             &FOLDERID_Startup,
-            "Startup folder",
+            "processes-startup-user-folder",
             "user-folder",
         ));
         out.extend(enum_startup_folder(
             &FOLDERID_CommonStartup,
-            "Common Startup",
+            "processes-startup-common-folder",
             "common-folder",
         ));
         out.sort_by(|a, b| {
@@ -242,7 +242,7 @@ mod win {
         map
     }
 
-    fn enum_startup_folder(folder_id: &GUID, location: &str, tag: &str) -> Vec<StartupRowView> {
+    fn enum_startup_folder(folder_id: &GUID, location: &str, _tag: &str) -> Vec<StartupRowView> {
         let Some(dir) = known_folder(folder_id) else {
             return Vec::new();
         };
@@ -264,7 +264,7 @@ mod win {
                 id: format!("folder:{command}"),
                 name,
                 command,
-                location: format!("{location} ({tag})"),
+                location: location.into(),
                 enabled: true,
                 can_toggle: false,
             });
