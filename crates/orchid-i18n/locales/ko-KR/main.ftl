@@ -2370,6 +2370,7 @@ jyotish-profiles-save = 저장
 jyotish-profiles-cancel = 취소
 jyotish-profiles-empty = 출생 프로필 추가
 jyotish-profile-name-placeholder = 이름
+jyotish-profile-default-name = 프로필
 jyotish-profile-offset-label = UTC
 jyotish-profile-time-label = 시간
 jyotish-profile-date-label = 날짜

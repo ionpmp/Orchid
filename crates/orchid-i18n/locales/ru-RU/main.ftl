@@ -2378,6 +2378,7 @@ jyotish-profiles-save = Сохранить
 jyotish-profiles-cancel = Отмена
 jyotish-profiles-empty = Добавить профиль рождения
 jyotish-profile-name-placeholder = Имя
+jyotish-profile-default-name = Профиль
 jyotish-profile-offset-label = UTC
 jyotish-profile-time-label = Время
 jyotish-profile-date-label = Дата

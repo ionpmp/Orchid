@@ -203,7 +203,7 @@ pub(crate) fn build_jyotish_model(
         m.search_busy = p.search_busy;
         m.current_locating = p.current_locating;
         m.current_failed = p.current_failed;
-        m.profiles = ModelRc::new(VecModel::from(jyotish_profile_entries(p)));
+        m.profiles = ModelRc::new(VecModel::from(jyotish_profile_entries(p, locale)));
         m.active_profile_index = p.active_profile_index as i32;
         m.profile_picker_open = p.profile_picker_open;
         m.profile_search_query = p.profile_search_query.clone().into();
@@ -211,7 +211,7 @@ pub(crate) fn build_jyotish_model(
         m.profile_search_busy = p.profile_search_busy;
         m.profile_editing = p.profile_editing;
         m.profile_edit_index = p.profile_edit_index;
-        m.profile_edit_name = p.profile_edit_name.clone().into();
+        m.profile_edit_name = display_profile_name(&p.profile_edit_name, locale);
         m.profile_edit_gender = i32::from(p.profile_edit_gender);
         m.profile_edit_date = p.profile_edit_date.clone().into();
         m.profile_edit_time = p.profile_edit_time.clone().into();
@@ -388,7 +388,7 @@ pub(crate) fn build_jyotish_model(
         current_location_label: locale.tr("jyotish-current-location").into(),
         current_locating_label: locale.tr("jyotish-current-locating").into(),
         current_failed_label: locale.tr("jyotish-current-failed").into(),
-        profiles: ModelRc::new(VecModel::from(jyotish_profile_entries(p))),
+        profiles: ModelRc::new(VecModel::from(jyotish_profile_entries(p, locale))),
         active_profile_index: p.active_profile_index as i32,
         profile_picker_open: p.profile_picker_open,
         profile_search_query: p.profile_search_query.clone().into(),
@@ -396,7 +396,7 @@ pub(crate) fn build_jyotish_model(
         profile_search_busy: p.profile_search_busy,
         profile_editing: p.profile_editing,
         profile_edit_index: p.profile_edit_index,
-        profile_edit_name: p.profile_edit_name.clone().into(),
+        profile_edit_name: display_profile_name(&p.profile_edit_name, locale),
         profile_edit_gender: i32::from(p.profile_edit_gender),
         profile_edit_date: p.profile_edit_date.clone().into(),
         profile_edit_time: p.profile_edit_time.clone().into(),
@@ -627,11 +627,22 @@ pub(crate) fn patch_jyotish_model(
     model.rectify.window_labels = rectify_window_labels;
 }
 
-fn jyotish_profile_entries(p: &orchid_widgets::JyotishPayload) -> Vec<JyotishProfileEntry> {
+fn display_profile_name(name: &str, locale: &LocaleManager) -> SharedString {
+    if name == "Profile" {
+        locale.tr("jyotish-profile-default-name").into()
+    } else {
+        name.into()
+    }
+}
+
+fn jyotish_profile_entries(
+    p: &orchid_widgets::JyotishPayload,
+    locale: &LocaleManager,
+) -> Vec<JyotishProfileEntry> {
     p.profiles
         .iter()
         .map(|c| JyotishProfileEntry {
-            name: c.name.clone().into(),
+            name: display_profile_name(&c.name, locale),
             active: c.active,
             has_birth_data: c.has_birth_data,
         })

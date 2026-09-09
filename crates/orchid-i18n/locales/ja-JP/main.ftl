@@ -2369,6 +2369,7 @@ jyotish-profiles-save = 保存
 jyotish-profiles-cancel = キャンセル
 jyotish-profiles-empty = 誕生プロフィールを追加
 jyotish-profile-name-placeholder = 名前
+jyotish-profile-default-name = プロフィール
 jyotish-profile-offset-label = UTC
 jyotish-profile-time-label = 時刻
 jyotish-profile-date-label = 日付

@@ -2372,6 +2372,7 @@ jyotish-profiles-save = حفظ
 jyotish-profiles-cancel = إلغاء
 jyotish-profiles-empty = أضف ملف ولادة
 jyotish-profile-name-placeholder = الاسم
+jyotish-profile-default-name = ملف
 jyotish-profile-offset-label = UTC
 jyotish-profile-time-label = الوقت
 jyotish-profile-date-label = التاريخ

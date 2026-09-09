@@ -379,7 +379,8 @@ release yet.
   restored to UTF-8. Remaining English viewer/file-manager parse errors,
   passphrase and annotation hints, and moon libration labels are
   translated (command-syntax crumbs stay in English). Window-manager
-  cap and dock-failed notifications are translated in all locales.
+  cap and dock-failed notifications are translated in all locales. The
+  default Jyotish birth-profile name (`Profile`) is resolved through Fluent.
 - **Video Player** library/queue UX brought to Audio Player parity: folder
   drill-down (play/enqueue group), play-next, queue reorder (drag + up/down),
   reshuffle remaining, jump-to-current auto-scroll, remaining-count strip,

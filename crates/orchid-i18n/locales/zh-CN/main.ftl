@@ -2370,6 +2370,7 @@ jyotish-profiles-save = 保存
 jyotish-profiles-cancel = 取消
 jyotish-profiles-empty = 添加出生档案
 jyotish-profile-name-placeholder = 姓名
+jyotish-profile-default-name = 个人资料
 jyotish-profile-offset-label = UTC
 jyotish-profile-time-label = 时间
 jyotish-profile-date-label = 日期

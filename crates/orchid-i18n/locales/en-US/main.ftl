@@ -2431,6 +2431,7 @@ jyotish-profiles-save = Save
 jyotish-profiles-cancel = Cancel
 jyotish-profiles-empty = Add a birth profile
 jyotish-profile-name-placeholder = Name
+jyotish-profile-default-name = Profile
 jyotish-profile-offset-label = UTC
 jyotish-profile-time-label = Time
 jyotish-profile-date-label = Date
