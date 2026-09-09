@@ -22,6 +22,7 @@
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -168,6 +169,11 @@ struct Inner {
     /// Bundled sources for locales not yet parsed (lazy load on switch).
     pending: RwLock<Vec<(&'static str, &'static str)>>,
     extra_dir: Option<PathBuf>,
+    /// Resolved argument-free lookups for the current locale. UI model
+    /// builders resolve hundreds of static labels per frame; without this
+    /// every one of them re-runs Fluent pattern resolution. Cleared
+    /// whenever the active locale or any bundle changes.
+    tr_cache: RwLock<HashMap<Box<str>, Arc<str>>>,
 }
 
 impl std::fmt::Debug for LocaleManager {
@@ -237,6 +243,7 @@ impl LocaleManager {
                 fallback,
                 pending: RwLock::new(pending),
                 extra_dir,
+                tr_cache: RwLock::new(HashMap::new()),
             }),
         })
     }
@@ -251,6 +258,7 @@ impl LocaleManager {
     pub fn set_current(&self, locale: LocaleId) {
         if self.ensure_loaded(&locale) {
             *self.inner.current.write() = locale;
+            self.inner.tr_cache.write().clear();
         } else {
             warn!(?locale, "locale not registered; ignoring set_current");
         }
@@ -287,6 +295,7 @@ impl LocaleManager {
             }
         }
         self.inner.bundles.write().push((parsed, bundle));
+        self.inner.tr_cache.write().clear();
         true
     }
 
@@ -314,7 +323,25 @@ impl LocaleManager {
     /// [`default_language`] and finally to the key itself.
     #[must_use]
     pub fn tr(&self, key: &str) -> String {
-        self.tr_args(key, &FluentArgs::new())
+        self.tr_shared(key).as_ref().to_owned()
+    }
+
+    /// Argument-free lookup that hands back a shared, cached string.
+    ///
+    /// Prefer this over [`Self::tr`] on paths that resolve many static
+    /// labels: repeat lookups cost a hash and a refcount bump instead of a
+    /// Fluent pattern resolution plus an allocation.
+    #[must_use]
+    pub fn tr_shared(&self, key: &str) -> Arc<str> {
+        if let Some(hit) = self.inner.tr_cache.read().get(key) {
+            return Arc::clone(hit);
+        }
+        let resolved: Arc<str> = Arc::from(self.tr_args(key, &FluentArgs::new()));
+        self.inner
+            .tr_cache
+            .write()
+            .insert(Box::from(key), Arc::clone(&resolved));
+        resolved
     }
 
     /// Variant of [`Self::tr`] with message arguments.
