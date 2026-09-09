@@ -32,12 +32,12 @@ duration-minutes = { $minutes }分
 locale-name-ar-SA = العربية
 locale-name-de-DE = Deutsch
 locale-name-en-US = English (United States)
-locale-name-es-ES = EspaÃ±ol
-locale-name-fr-FR = FranÃ§ais
+locale-name-es-ES = Español
+locale-name-fr-FR = Français
 locale-name-it-IT = Italiano
 locale-name-ja-JP = 日本語
 locale-name-ko-KR = 한국어
-locale-name-pt-BR = PortuguÃªs (Brasil)
+locale-name-pt-BR = Português (Brasil)
 locale-name-ru-RU = Русский
 locale-name-zh-CN = 简体中文
 
@@ -196,7 +196,7 @@ moon-moonrise = 月の出: { $time }
 moon-moonset = 月の入り: { $time }
 moon-sunrise = 日の出: { $time }
 moon-sunset = 日の入り: { $time }
-moon-libration = Libration: { $lat }Â°, { $lon }Â°
+moon-libration = Libration: { $lat }°, { $lon }°
 moon-loading = 月のデータを計算中…
 
 
@@ -760,7 +760,7 @@ viewer-pdf-printed = プリンターに送信しました
 viewer-pdf-highlighted = 保存しました { $path }
 viewer-pdf-highlight-empty = ハイライトするテキストを選択してください
 viewer-pdf-match-case = 大文字と小文字を区別
-viewer-image-info = { $width } Ã— { $height } Â· { $size } Â· { $format }
+viewer-image-info = { $width } × { $height } · { $size } · { $format }
 viewer-image-format-avif = AVIF
 viewer-image-format-bmp = BMP
 viewer-image-format-gif = GIF

@@ -32,12 +32,12 @@ duration-minutes = { $minutes }분
 locale-name-ar-SA = العربية
 locale-name-de-DE = Deutsch
 locale-name-en-US = English (United States)
-locale-name-es-ES = EspaÃ±ol
-locale-name-fr-FR = FranÃ§ais
+locale-name-es-ES = Español
+locale-name-fr-FR = Français
 locale-name-it-IT = Italiano
 locale-name-ja-JP = 日本語
 locale-name-ko-KR = 한국어
-locale-name-pt-BR = PortuguÃªs (Brasil)
+locale-name-pt-BR = Português (Brasil)
 locale-name-ru-RU = Русский
 locale-name-zh-CN = 简体中文
 
@@ -196,7 +196,7 @@ moon-moonrise = 월출: { $time }
 moon-moonset = 월몰: { $time }
 moon-sunrise = 일출: { $time }
 moon-sunset = 일몰: { $time }
-moon-libration = Libration: { $lat }Â°, { $lon }Â°
+moon-libration = Libration: { $lat }°, { $lon }°
 moon-loading = 달 데이터 계산 중…
 
 
@@ -760,7 +760,7 @@ viewer-pdf-printed = 프린터로 보냈습니다
 viewer-pdf-highlighted = 저장됨 { $path }
 viewer-pdf-highlight-empty = 강조할 텍스트를 선택하세요
 viewer-pdf-match-case = 대/소문자 구분
-viewer-image-info = { $width } Ã— { $height } Â· { $size } Â· { $format }
+viewer-image-info = { $width } × { $height } · { $size } · { $format }
 viewer-image-format-avif = AVIF
 viewer-image-format-bmp = BMP
 viewer-image-format-gif = GIF
