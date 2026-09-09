@@ -172,16 +172,24 @@ impl SearchEngine {
 
     /// Commit any pending changes to disk.
     ///
+    /// Also refreshes the reader, so a commit is immediately visible to
+    /// subsequent queries. Doing it here rather than per query means the
+    /// segment-meta re-read is paid once per (already coalesced) commit
+    /// instead of on every keystroke.
+    ///
     /// # Errors
     ///
     /// Propagates Tantivy errors.
     pub async fn commit(&self) -> Result<()> {
         let inner = Arc::clone(&self.inner);
         tokio::task::spawn_blocking(move || {
-            let mut guard = inner.writer.lock();
-            if let Some(w) = guard.as_mut() {
-                w.commit().map(|_| ())?;
+            {
+                let mut guard = inner.writer.lock();
+                if let Some(w) = guard.as_mut() {
+                    w.commit().map(|_| ())?;
+                }
             }
+            inner.reader.reload()?;
             Ok::<_, SearchError>(())
         })
         .await
@@ -320,7 +328,8 @@ fn remove_sync(inner: &SearchEngineInner, path: &str) -> Result<()> {
 }
 
 fn run_query(inner: &SearchEngineInner, q: &Query) -> Result<SearchResults> {
-    inner.reader.reload()?;
+    // No `reload()` here: `commit` refreshes the reader, and the reader's
+    // `OnCommitWithDelay` policy covers writes made by other handles.
     let searcher = inner.reader.searcher();
 
     let mut clauses: Vec<(Occur, Box<dyn TantivyQuery>)> = Vec::new();
