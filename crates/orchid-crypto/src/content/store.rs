@@ -6,6 +6,7 @@
 //! bump the refcount, and `release` decrements until the refcount reaches
 //! zero at which point the blob file is deleted.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -102,11 +103,20 @@ pub struct GcStats {
     pub bytes_freed: u64,
 }
 
+/// How many pending `last_accessed_at` updates to accumulate before folding
+/// them into a single redb transaction. Reassembling a document walks one
+/// chunk at a time, so flushing per chunk would mean one fsync per megabyte
+/// of document on a pure read path.
+const ACCESS_FLUSH_THRESHOLD: usize = 256;
+
 /// Disk + redb chunk store.
 pub struct ChunkStore {
     chunks_dir: PathBuf,
     storage: Arc<orchid_storage::StateStore>,
     clock: Arc<dyn Clock>,
+    /// Coalesced `last_accessed_at` updates awaiting a batched commit.
+    /// Keyed by hex hash; only the newest instant per chunk is kept.
+    pending_access: parking_lot::Mutex<HashMap<String, DateTime<Utc>>>,
 }
 
 impl std::fmt::Debug for ChunkStore {
@@ -144,6 +154,7 @@ impl ChunkStore {
             chunks_dir,
             storage,
             clock,
+            pending_access: parking_lot::Mutex::new(HashMap::new()),
         };
         // Touch the table so it exists before the first read.
         let db = store.raw_db();
@@ -195,6 +206,8 @@ impl ChunkStore {
                 got.map(|g| g.value())
             };
             if let Some(mut info) = existing {
+                // This write supersedes any buffered touch for the chunk.
+                self.pending_access.lock().remove(&key);
                 info.refcount = info.refcount.saturating_add(1);
                 info.last_accessed_at = now;
                 {
@@ -231,7 +244,22 @@ impl ChunkStore {
             let txn = db.begin_write().map_err(to_crypto)?;
             {
                 let mut table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
-                table.insert(key.as_str(), &info).map_err(to_crypto)?;
+                // The probe above ran in its own transaction, so another
+                // task may have registered this chunk since. Bump rather
+                // than overwrite, or its references would be lost.
+                let row = match table
+                    .get(key.as_str())
+                    .map_err(to_crypto)?
+                    .map(|g| g.value())
+                {
+                    Some(mut existing) => {
+                        existing.refcount = existing.refcount.saturating_add(1);
+                        existing.last_accessed_at = now;
+                        existing
+                    }
+                    None => info.clone(),
+                };
+                table.insert(key.as_str(), &row).map_err(to_crypto)?;
             }
             txn.commit().map_err(to_crypto)?;
             Ok(())
@@ -283,25 +311,55 @@ impl ChunkStore {
             });
         }
 
-        // Best-effort last-access update.
+        // Best-effort last-access update. Buffered rather than committed
+        // here: `last_accessed_at` only feeds age-based reporting and GC, so
+        // it is not worth an fsync per chunk read.
         let now = self.clock.now();
-        if let Err(e) = self.touch(&key, now) {
-            warn!(error = %e, hash = %hex(hash), "failed to update last_accessed_at");
+        let should_flush = {
+            let mut pending = self.pending_access.lock();
+            pending.insert(key, now);
+            pending.len() >= ACCESS_FLUSH_THRESHOLD
+        };
+        if should_flush {
+            if let Err(e) = self.flush_access_times() {
+                warn!(error = %e, "failed to flush last_accessed_at batch");
+            }
         }
 
         Ok(ZeroizingBytes::new(bytes))
     }
 
-    fn touch(&self, key: &str, now: DateTime<Utc>) -> Result<()> {
+    /// Commit any buffered `last_accessed_at` updates in one transaction.
+    ///
+    /// Called automatically once enough reads have accumulated and on drop;
+    /// callers only need this to make access times immediately visible.
+    ///
+    /// # Errors
+    ///
+    /// Propagates redb errors. On failure the batch is dropped rather than
+    /// retried — access times are advisory.
+    pub fn flush_access_times(&self) -> Result<()> {
+        let batch: Vec<(String, DateTime<Utc>)> = {
+            let mut pending = self.pending_access.lock();
+            if pending.is_empty() {
+                return Ok(());
+            }
+            pending.drain().collect()
+        };
         let db = self.raw_db();
         let txn = db.begin_write().map_err(to_crypto)?;
         {
             let mut table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
-            let got = table.get(key).map_err(to_crypto)?;
-            let current: Option<ChunkRefInfo> = got.map(|g| g.value());
-            if let Some(mut info) = current {
-                info.last_accessed_at = now;
-                table.insert(key, &info).map_err(to_crypto)?;
+            for (key, now) in batch {
+                let current: Option<ChunkRefInfo> = table
+                    .get(key.as_str())
+                    .map_err(to_crypto)?
+                    .map(|g| g.value());
+                // Skip chunks released to zero while the touch was buffered.
+                if let Some(mut info) = current {
+                    info.last_accessed_at = now;
+                    table.insert(key.as_str(), &info).map_err(to_crypto)?;
+                }
             }
         }
         txn.commit().map_err(to_crypto)?;
@@ -380,10 +438,18 @@ impl ChunkStore {
         let db = self.raw_db();
         let txn = db.begin_read().map_err(to_crypto)?;
         let table = txn.open_table(CHUNK_REFS_TABLE).map_err(to_crypto)?;
-        Ok(table
+        let mut info: Option<ChunkRefInfo> = table
             .get(key.as_str())
             .map_err(to_crypto)?
-            .map(|g| g.value()))
+            .map(|g| g.value());
+        // Surface buffered access times so callers never observe a stale
+        // timestamp just because the batch has not been committed yet.
+        if let Some(info) = info.as_mut() {
+            if let Some(pending) = self.pending_access.lock().get(&key) {
+                info.last_accessed_at = *pending;
+            }
+        }
+        Ok(info)
     }
 
     /// Total bytes tracked by the table. Does not stat the filesystem.
@@ -461,6 +527,14 @@ impl ChunkStore {
     }
 }
 
+impl Drop for ChunkStore {
+    fn drop(&mut self) {
+        if let Err(e) = self.flush_access_times() {
+            warn!(error = %e, "failed to flush last_accessed_at on drop");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -527,6 +601,41 @@ mod tests {
         tokio::fs::write(&path, b"tampered").await.unwrap();
         let err = s.get(&h).await.unwrap_err();
         assert!(matches!(err, CryptoError::ChunkIntegrity { .. }));
+    }
+
+    #[tokio::test]
+    async fn get_updates_access_time_without_committing() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(orchid_storage::StateStore::open_in_memory("0").unwrap());
+        let t0 = DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let clock = Arc::new(FixedClock::new(t0));
+        let s = ChunkStore::with_clock(dir.path().join("chunks"), storage, clock.clone()).unwrap();
+
+        let h = s.put(b"batched access").await.unwrap();
+        let t1 = t0 + chrono::Duration::hours(3);
+        clock.set(t1);
+        s.get(&h).await.unwrap();
+
+        // Buffered, not yet committed, but still observable.
+        assert!(s.pending_access.lock().contains_key(&hex(&h)));
+        assert_eq!(s.info(&h).unwrap().unwrap().last_accessed_at, t1);
+
+        s.flush_access_times().unwrap();
+        assert!(s.pending_access.lock().is_empty());
+        assert_eq!(s.info(&h).unwrap().unwrap().last_accessed_at, t1);
+    }
+
+    #[tokio::test]
+    async fn buffered_access_time_survives_release_to_zero() {
+        let (_td, s) = store().await;
+        let h = s.put(b"released").await.unwrap();
+        s.get(&h).await.unwrap();
+        s.release(&h).await.unwrap();
+        // The row is gone; flushing the stale touch must not resurrect it.
+        s.flush_access_times().unwrap();
+        assert!(s.info(&h).unwrap().is_none());
     }
 
     #[tokio::test]
