@@ -368,6 +368,11 @@ release yet.
   listed only in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ### Changed
+- Widget Fluent catalogues: leftover English chrome is translated in all 10
+  non-English locales (viewer, file manager, audio/video players, processes,
+  and remaining widget chrome). Process status / session / startup labels,
+  audio unknown artist/album and sleep timer, and empty “Current location”
+  fallbacks go through `LocaleManager`.
 - **Video Player** library/queue UX brought to Audio Player parity: folder
   drill-down (play/enqueue group), play-next, queue reorder (drag + up/down),
   reshuffle remaining, jump-to-current auto-scroll, remaining-count strip,
@@ -431,6 +436,39 @@ release yet.
   then a cheap Triangle resize instead of a full Lanczos3 decode.
 - **PDF page cache**: worker keeps up to 8 rasterized pages (32 MiB)
   so page / zoom toggles skip Pdfium when the viewport matches.
+- **Zero-copy / serialization pass** across the storage and network chains:
+  - `ChunkStore::get` no longer opens a redb **write** transaction per chunk
+    just to stamp `last_accessed_at`; touches are coalesced in memory and
+    flushed in one transaction (every 256 reads and on drop). Reassembling a
+    linked `.orchid` cost one fsync per chunk — roughly one per megabyte of
+    document — on a pure read path.
+  - `ChunkStore::put_with_hash` re-checks the row inside the insert
+    transaction and bumps instead of overwriting, so a chunk registered
+    concurrently no longer has its refcount reset to 1.
+  - rclone RC listings are deserialized **once**, straight from the socket
+    buffer into typed rows. They previously went through a `serde_json::Value`
+    DOM, a deep clone of the `list` sub-tree, a re-serialize to `Vec<u8>`, and
+    a second parse — five materializations per directory listing. Only the
+    HTTP status line is decoded as text now; the body stays borrowed bytes.
+  - `rclone cat` streams are bound to the reader's lifetime (`kill_on_drop`),
+    so sniffing 4 KiB of magic bytes on a remote file no longer leaves rclone
+    downloading the entire object.
+  - rclone listing rows move their `Name` and `MimeType` out of the parsed
+    struct instead of cloning both per entry.
+  - Tantivy's `reader.reload()` moved off the per-query path onto `commit`,
+    which is already coalesced at 750 ms — search stopped re-reading segment
+    metadata on every keystroke.
+  - One process-wide pooled `reqwest::Client` (`orchid_ui::http::shared_client`);
+    weather's "use my location" was building a fresh client, TLS root store and
+    connection pool per click.
+  - IP geolocation parses response bytes directly instead of round-tripping
+    through a `String`; the RSS poller clones cached items only on a 304
+    instead of deep-cloning every `FeedItem` on every fetch.
+- **i18n lookups are memoized**: argument-free `LocaleManager::tr` caches
+  resolved strings (new `tr_shared` returns the shared `Arc<str>`), cleared on
+  locale switch. Building one widget frame resolves ~650 Fluent patterns, so
+  this lands on every workspace rebuild — resize, workspace switch, and the
+  flush at the end of every drag / resize gesture.
 - **Processes widget**: full process census on activate and every 4th
   tick; intervening samples refresh only last-known PIDs.
 - **DOCX preview**: caret / selection paints over a cached page raster
