@@ -292,14 +292,9 @@ impl OrchidApp {
             .register(terminal_descriptor(terminal_deps.clone()))
             .map_err(|e| UiError::Slint(format!("register terminal: {e}")))?;
 
-        let http = reqwest::Client::builder()
-            .user_agent(format!("Orchid/{}", env!("CARGO_PKG_VERSION")))
-            // Shared by weather + RSS; bounded waits keep tests and the UI
-            // thread from depending on hung outbound connections.
-            .timeout(std::time::Duration::from_secs(30))
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .build()
-            .map_err(|e| UiError::Slint(format!("HTTP client: {e}")))?;
+        // Shared by weather + RSS + clock + jyotish, and by one-off UI
+        // actions such as "use my location".
+        let http = crate::http::shared_client().clone();
 
         let command_registry: Arc<CommandRegistry> = Arc::new(CommandRegistry::new());
         let command_palette: Arc<CommandPalette> =

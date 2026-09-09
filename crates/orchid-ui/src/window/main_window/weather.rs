@@ -100,12 +100,13 @@ impl MainWindowController {
         };
         let wm = self.widget_manager.clone();
         let t = Arc::downgrade(self);
+        let locale = self.locale.clone();
         spawn::spawn_local_compat(async move {
-            let client = reqwest::Client::new();
-            match orchid_widgets::builtin::jyotish::resolve_current_location(&client).await {
+            let client = crate::http::shared_client();
+            match orchid_widgets::builtin::jyotish::resolve_current_location(client).await {
                 Ok(loc) => {
                     let name = if loc.label.is_empty() {
-                        "Current location".to_string()
+                        locale.tr("jyotish-current-location")
                     } else {
                         loc.label
                     };

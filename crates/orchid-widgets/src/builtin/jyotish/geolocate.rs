@@ -86,15 +86,17 @@ pub async fn resolve_ip_location(
             resp.status()
         )));
     }
+    // `bytes()` + `from_slice` rather than `text()` + `from_str`: the latter
+    // re-validates and copies the whole body into a `String` first.
     let body = resp
-        .text()
+        .bytes()
         .await
         .map_err(|e| GeolocateError::Parse(e.to_string()))?;
     parse_ipwho_response(&body)
 }
 
 /// Parse an `ipwho.is` JSON body into a [`ResolvedLocation`].
-pub fn parse_ipwho_response(body: &str) -> Result<ResolvedLocation, GeolocateError> {
+pub fn parse_ipwho_response(body: &[u8]) -> Result<ResolvedLocation, GeolocateError> {
     #[derive(serde::Deserialize)]
     struct IpWhoTz {
         id: Option<String>,
@@ -110,7 +112,7 @@ pub fn parse_ipwho_response(body: &str) -> Result<ResolvedLocation, GeolocateErr
         timezone: Option<IpWhoTz>,
     }
     let parsed: IpWho =
-        serde_json::from_str(body).map_err(|e| GeolocateError::Parse(e.to_string()))?;
+        serde_json::from_slice(body).map_err(|e| GeolocateError::Parse(e.to_string()))?;
     if parsed.success == Some(false) {
         return Err(GeolocateError::Unavailable(
             parsed.message.unwrap_or_else(|| "IP lookup failed".into()),
@@ -224,7 +226,7 @@ mod tests {
             "longitude": 82.9739,
             "timezone": { "id": "Asia/Kolkata" }
         }"#;
-        let loc = parse_ipwho_response(body).expect("parse");
+        let loc = parse_ipwho_response(body.as_bytes()).expect("parse");
         assert_eq!(loc.label, "Varanasi, India");
         assert!((loc.latitude - 25.3176).abs() < 1e-6);
         assert!((loc.longitude - 82.9739).abs() < 1e-6);
@@ -235,7 +237,7 @@ mod tests {
     #[test]
     fn parse_ipwho_failure_message() {
         let body = r#"{"success": false, "message": "reserved range"}"#;
-        let err = parse_ipwho_response(body).expect_err("should fail");
+        let err = parse_ipwho_response(body.as_bytes()).expect_err("should fail");
         assert!(matches!(err, GeolocateError::Unavailable(_)));
     }
 

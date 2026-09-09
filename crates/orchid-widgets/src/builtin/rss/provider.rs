@@ -100,13 +100,21 @@ async fn fetch_one(
 ) -> std::result::Result<Vec<FeedItem>, String> {
     use reqwest::header::{ETAG, IF_MODIFIED_SINCE, IF_NONE_MATCH, LAST_MODIFIED};
 
-    let cached = cache.lock().get(&source.url).cloned().unwrap_or_default();
+    // Only the validators are needed to build the request. Cloning the
+    // cached items here too would deep-copy every `FeedItem` on every poll,
+    // and they are only wanted on the (rarer) 304 path.
+    let (cached_etag, cached_last_modified) = {
+        let guard = cache.lock();
+        guard
+            .get(&source.url)
+            .map_or((None, None), |c| (c.etag.clone(), c.last_modified.clone()))
+    };
 
     let mut req = client.get(&source.url);
-    if let Some(etag) = &cached.etag {
+    if let Some(etag) = &cached_etag {
         req = req.header(IF_NONE_MATCH, etag);
     }
-    if let Some(lm) = &cached.last_modified {
+    if let Some(lm) = &cached_last_modified {
         req = req.header(IF_MODIFIED_SINCE, lm);
     }
 
@@ -114,7 +122,11 @@ async fn fetch_one(
 
     // Unchanged: no body was sent, so replay what we parsed last time.
     if resp.status() == reqwest::StatusCode::NOT_MODIFIED {
-        return Ok(cached.items);
+        return Ok(cache
+            .lock()
+            .get(&source.url)
+            .map(|c| c.items.clone())
+            .unwrap_or_default());
     }
     if !resp.status().is_success() {
         return Err(format!("HTTP {}", resp.status()));
