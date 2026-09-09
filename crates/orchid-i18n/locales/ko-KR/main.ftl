@@ -2506,15 +2506,15 @@ jyotish-label-yamagandam = Yamagandam
 jyotish-label-gulika = Gulika
 jyotish-until = { $time }까지
 
-window-float-capped-title = Too many floating windows
-window-float-capped-body = At most { $cap } floating windows can be open at once. Dock or close one first.
+window-float-capped-title = 부동 창이 너무 많습니다
+window-float-capped-body = 부동 창은 한 번에 최대 { $cap }개까지 열 수 있습니다. 먼저 도킹하거나 닫으세요.
 widget-undock-tooltip = 부동 창으로 열기
 widget-dock-tooltip = 캔버스에 도킹
 widget-minimize-tooltip = 최소화
 widget-maximize-tooltip = 최대화
 widget-restore-tooltip = 복원
-window-dock-failed-title = Could not dock
-window-dock-failed-body = No free cell on the canvas. Close or move a widget, then try again.
+window-dock-failed-title = 도킹할 수 없습니다
+window-dock-failed-body = 캔버스에 빈 칸이 없습니다. 위젯을 닫거나 옮긴 뒤 다시 시도하세요.
 
 # Video Player (en stub — translate)
 fm-action-play-in-video-player = 동영상 플레이어에서 재생

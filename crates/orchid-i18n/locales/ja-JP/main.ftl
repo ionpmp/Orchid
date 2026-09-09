@@ -2505,15 +2505,15 @@ jyotish-label-yamagandam = Yamagandam
 jyotish-label-gulika = Gulika
 jyotish-until = { $time }まで
 
-window-float-capped-title = Too many floating windows
-window-float-capped-body = At most { $cap } floating windows can be open at once. Dock or close one first.
+window-float-capped-title = フローティング ウィンドウが多すぎます
+window-float-capped-body = フローティング ウィンドウは同時に { $cap } 個までです。先にドッキングするか閉じてください。
 widget-undock-tooltip = フローティング ウィンドウで開く
 widget-dock-tooltip = キャンバスにドッキング
 widget-minimize-tooltip = 最小化
 widget-maximize-tooltip = 最大化
 widget-restore-tooltip = 元に戻す
-window-dock-failed-title = Could not dock
-window-dock-failed-body = No free cell on the canvas. Close or move a widget, then try again.
+window-dock-failed-title = ドッキングできません
+window-dock-failed-body = キャンバスに空きセルがありません。ウィジェットを閉じるか移動してから再試行してください。
 
 # Video Player (en stub — translate)
 fm-action-play-in-video-player = 動画プレーヤーで再生

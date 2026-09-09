@@ -2506,15 +2506,15 @@ jyotish-label-yamagandam = Yamagandam
 jyotish-label-gulika = Gulika
 jyotish-until = até { $time }
 
-window-float-capped-title = Too many floating windows
-window-float-capped-body = At most { $cap } floating windows can be open at once. Dock or close one first.
+window-float-capped-title = Janelas flutuantes demais
+window-float-capped-body = No máximo { $cap } janelas flutuantes podem ficar abertas ao mesmo tempo. Encaixe ou feche uma primeiro.
 widget-undock-tooltip = Abrir em janela flutuante
 widget-dock-tooltip = Encaixar na tela
 widget-minimize-tooltip = Minimizar
 widget-maximize-tooltip = Maximizar
 widget-restore-tooltip = Restaurar
-window-dock-failed-title = Could not dock
-window-dock-failed-body = No free cell on the canvas. Close or move a widget, then try again.
+window-dock-failed-title = Não foi possível encaixar
+window-dock-failed-body = Nenhuma célula livre na tela. Feche ou mova um widget e tente de novo.
 
 # Video Player (en stub — translate)
 fm-action-play-in-video-player = Reproduzir no reprodutor de vídeo
