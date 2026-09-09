@@ -652,7 +652,7 @@ viewer-image-filter-look-drama = Drama
 viewer-image-filter-look-clean = Sauber
 viewer-image-annotate = Zeichnen / Anmerkungen (Kopie)
 viewer-image-annotate-apply = Polygon schließen
-viewer-image-annotate-hint = Drag a shape, click text, or apply a watermark. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
+viewer-image-annotate-hint = Eine Form ziehen, Text anklicken oder ein Wasserzeichen setzen. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
 viewer-image-annotate-line = Linie
 viewer-image-annotate-arrow = Pfeil
 viewer-image-annotate-rect = Rechteck
@@ -839,7 +839,7 @@ viewer-document-orchid-linked = verknüpft
 viewer-document-orchid-c2pa-ok = C2PA ok
 viewer-document-orchid-c2pa-bad = C2PA fehlgeschlagen
 viewer-document-passphrase-title = Dokument entsperren
-viewer-document-passphrase-hint = Enter the passphrase for this encrypted .orchid file.
+viewer-document-passphrase-hint = Geben Sie die Passphrase für diese verschlüsselte .orchid-Datei ein.
 viewer-document-passphrase-ok = Entsperren
 viewer-document-passphrase-required = Diese .orchid-Datei ist verschlüsselt. Geben Sie die Passphrase ein, um sie zu öffnen.
 
@@ -1572,19 +1572,19 @@ fm-office-meta-hint = Titel | Betreff | Autor | Schlüsselwörter | Beschreibung
 fm-image-resize-title = Bildgröße
 fm-image-resize-hint = 50%  |  800x600  |  800x  |  10cmx15cm  |  filter=nearest/bilinear/bicubic/lanczos
 fm-image-canvas-title = Leinwand
-fm-image-canvas-hint = 2000x1500  or  +40+40 padding
-fm-image-edit-bad-spec = Could not parse the size.
+fm-image-canvas-hint = 2000x1500  oder  +40+40 Abstand
+fm-image-edit-bad-spec = Die Größe konnte nicht gelesen werden.
 fm-image-adjust-title = Farbe / Ton
 fm-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
-fm-image-adjust-bad-spec = Could not parse the adjustment.
+fm-image-adjust-bad-spec = Die Korrektur konnte nicht gelesen werden.
 fm-image-filter-title = Filter / Effekt
 fm-image-filter-hint = sharpen= unsharp=1,1,0 blur= motion=12,45 median=1 despeckle emboss edges oil=3 watercolor cartoon sketch grain=20 vignette=40 lens=-0.12 ca=2 redeye skin=50 look=vivid|soft|drama|clean|fade
-fm-image-filter-bad-spec = Could not parse the filter.
+fm-image-filter-bad-spec = Der Filter konnte nicht gelesen werden.
 fm-image-filter-save-title = Look speichern
 fm-image-filter-save-hint = name=portrait | skin=40 | vignette=15
 fm-image-annotate-title = Annotation
 fm-image-annotate-hint = line= x,y,x,y arrow= rect= ellipse= poly= pen= text= callout= privacy= highlight= watermark= wm-image= stamp | color= width= size= font= opacity= pos=br
-fm-image-annotate-bad-spec = Could not parse the annotation.
+fm-image-annotate-bad-spec = Die Annotation konnte nicht gelesen werden.
 fm-image-watermark-title = Text-Wasserzeichen
 fm-image-watermark-hint = watermark=© Orchid | pos=br | opacity=40 | size=18 | color=#ffffff
 fm-image-wm-image-title = Bild-Wasserzeichen
@@ -1604,7 +1604,7 @@ fm-image-batch-save-title = Rezept speichern
 fm-image-batch-save-hint = name=web | resize=50% | convert=jpg
 fm-image-batch-cancel-title = Stapel abbrechen
 fm-image-batch-cancel-body = Der aktuelle Stapel stoppt nach der Datei, die gerade verarbeitet wird.
-fm-image-batch-bad-spec = Could not parse the batch command.
+fm-image-batch-bad-spec = Der Stapelbefehl konnte nicht gelesen werden.
 fm-image-compare-need = 2–4 Bilder auswählen.
 fm-image-pick-title = Bestes behalten
 fm-image-pick-hint = keep=1
@@ -1618,7 +1618,7 @@ fm-image-print-sheet-title = Kontaktabzug
 fm-image-print-nup-title = N-up-Druck
 fm-image-print-batch-title = Stapeldruck
 fm-image-print-hint = paper=a4 | margin=12 | nup=4 | fit=contain | header={"{name}"} | footer={"{date}"} {"{wxh}"} | icc=srgb | sheet | landscape
-fm-image-print-bad-spec = Could not parse the print layout.
+fm-image-print-bad-spec = Das Drucklayout konnte nicht gelesen werden.
 fm-image-export-title = Bild exportieren
 fm-image-export-hint = jpg | q=85 | max=1920
 fm-image-email-title = E-Mail-Anhang
@@ -1627,7 +1627,7 @@ fm-image-share-title = Teilen
 fm-image-share-hint = twitter | facebook | vk | system
 fm-image-screenshot-title = Screenshot
 fm-image-screenshot-hint = screen | window | region=x,y,w,h | delay=3
-fm-image-export-bad-spec = Could not parse the export settings.
+fm-image-export-bad-spec = Die Exporteinstellungen konnten nicht gelesen werden.
 fm-meta-edit-title = Bildmetadaten
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS

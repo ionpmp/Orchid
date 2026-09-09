@@ -196,7 +196,7 @@ moon-moonrise = 月の出: { $time }
 moon-moonset = 月の入り: { $time }
 moon-sunrise = 日の出: { $time }
 moon-sunset = 日の入り: { $time }
-moon-libration = Libration: { $lat }°, { $lon }°
+moon-libration = 秤動: { $lat }°, { $lon }°
 moon-loading = 月のデータを計算中…
 
 
@@ -652,7 +652,7 @@ viewer-image-filter-look-drama = ドラマ
 viewer-image-filter-look-clean = クリーン
 viewer-image-annotate = 描画 / 注釈（コピー）
 viewer-image-annotate-apply = 多角形を閉じる
-viewer-image-annotate-hint = Drag a shape, click text, or apply a watermark. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
+viewer-image-annotate-hint = 図形をドラッグするか、テキストをクリックするか、透かしを適用します。 color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
 viewer-image-annotate-line = 直線
 viewer-image-annotate-arrow = 矢印
 viewer-image-annotate-rect = 矩形
@@ -723,7 +723,7 @@ viewer-image-meta = メタデータ
 viewer-image-meta-overlay = EXIFオーバーレイ
 viewer-image-histogram = ヒストグラム
 viewer-image-gps-map = 地図で表示
-viewer-image-meta-save = Save
+viewer-image-meta-save = 保存
 viewer-image-meta-strip = すべて削除
 viewer-image-meta-strip-gps = GPSを削除
 viewer-image-meta-export-csv = CSV
@@ -733,7 +733,7 @@ viewer-image-meta-creator-field = 作成者
 viewer-image-meta-copyright-field = 著作権
 viewer-image-meta-keywords-field = キーワード
 viewer-image-meta-description-field = 説明
-viewer-image-meta-date-field = Date
+viewer-image-meta-date-field = 日付
 viewer-image-meta-gps-field = GPS
 viewer-archive-root = (ルート)
 viewer-archive-parent = 親フォルダー
@@ -839,7 +839,7 @@ viewer-document-orchid-linked = リンク済
 viewer-document-orchid-c2pa-ok = C2PA ok
 viewer-document-orchid-c2pa-bad = C2PA 失敗
 viewer-document-passphrase-title = 文書のロック解除
-viewer-document-passphrase-hint = Enter the passphrase for this encrypted .orchid file.
+viewer-document-passphrase-hint = この暗号化された .orchid ファイルのパスフレーズを入力してください。
 viewer-document-passphrase-ok = ロック解除
 viewer-document-passphrase-required = この .orchid ファイルは暗号化されています。開くにはパスフレーズを入力してください。
 
@@ -1571,19 +1571,19 @@ fm-office-meta-hint = タイトル | 件名 | 作成者 | キーワード | 説�
 fm-image-resize-title = 画像サイズ
 fm-image-resize-hint = 50%  |  800x600  |  800x  |  10cmx15cm  |  filter=nearest/bilinear/bicubic/lanczos
 fm-image-canvas-title = キャンバス
-fm-image-canvas-hint = 2000x1500  or  +40+40 padding
-fm-image-edit-bad-spec = Could not parse the size.
+fm-image-canvas-hint = 2000x1500  または  +40+40 余白
+fm-image-edit-bad-spec = サイズを解析できませんでした。
 fm-image-adjust-title = 色 / トーン
 fm-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
-fm-image-adjust-bad-spec = Could not parse the adjustment.
+fm-image-adjust-bad-spec = 補正を解析できませんでした。
 fm-image-filter-title = フィルター / 効果
 fm-image-filter-hint = sharpen= unsharp=1,1,0 blur= motion=12,45 median=1 despeckle emboss edges oil=3 watercolor cartoon sketch grain=20 vignette=40 lens=-0.12 ca=2 redeye skin=50 look=vivid|soft|drama|clean|fade
-fm-image-filter-bad-spec = Could not parse the filter.
+fm-image-filter-bad-spec = フィルターを解析できませんでした。
 fm-image-filter-save-title = ルックを保存
 fm-image-filter-save-hint = name=portrait | skin=40 | vignette=15
 fm-image-annotate-title = 注釈
 fm-image-annotate-hint = line= x,y,x,y arrow= rect= ellipse= poly= pen= text= callout= privacy= highlight= watermark= wm-image= stamp | color= width= size= font= opacity= pos=br
-fm-image-annotate-bad-spec = Could not parse the annotation.
+fm-image-annotate-bad-spec = 注釈を解析できませんでした。
 fm-image-watermark-title = 文字透かし
 fm-image-watermark-hint = watermark=© Orchid | pos=br | opacity=40 | size=18 | color=#ffffff
 fm-image-wm-image-title = 画像透かし
@@ -1603,7 +1603,7 @@ fm-image-batch-save-title = レシピを保存
 fm-image-batch-save-hint = name=web | resize=50% | convert=jpg
 fm-image-batch-cancel-title = バッチをキャンセル
 fm-image-batch-cancel-body = 処理中のファイルの後で現在のバッチを停止します。
-fm-image-batch-bad-spec = Could not parse the batch command.
+fm-image-batch-bad-spec = 一括コマンドを解析できませんでした。
 fm-image-compare-need = 画像を 2–4 枚選択してください。
 fm-image-pick-title = 最良を残す
 fm-image-pick-hint = keep=1
@@ -1617,7 +1617,7 @@ fm-image-print-sheet-title = インデックスシート
 fm-image-print-nup-title = N-up 印刷
 fm-image-print-batch-title = 一括印刷
 fm-image-print-hint = paper=a4 | margin=12 | nup=4 | fit=contain | header={"{name}"} | footer={"{date}"} {"{wxh}"} | icc=srgb | sheet | landscape
-fm-image-print-bad-spec = Could not parse the print layout.
+fm-image-print-bad-spec = 印刷レイアウトを解析できませんでした。
 fm-image-export-title = 画像を書き出し
 fm-image-export-hint = jpg | q=85 | max=1920
 fm-image-email-title = メール添付
@@ -1626,21 +1626,21 @@ fm-image-share-title = 共有
 fm-image-share-hint = twitter | facebook | vk | system
 fm-image-screenshot-title = スクリーンショット
 fm-image-screenshot-hint = screen | window | region=x,y,w,h | delay=3
-fm-image-export-bad-spec = Could not parse the export settings.
+fm-image-export-bad-spec = 書き出し設定を解析できませんでした。
 fm-meta-edit-title = 画像メタデータ
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS
-fm-meta-gps-hint = gps=lat,lon — empty value clears coordinates
+fm-meta-gps-hint = gps=lat,lon — 空の値で座標を消去
 fm-meta-date-title = 撮影日
-fm-meta-date-hint = date=YYYY:MM:DD HH:MM:SS — empty value clears
+fm-meta-date-hint = date=YYYY:MM:DD HH:MM:SS — 空の値で消去
 fm-meta-shift-title = 撮影日をずらす
-fm-meta-shift-hint = shift=+1h  -2d  +30m  or seconds
+fm-meta-shift-hint = shift=+1h  -2d  +30m  または秒
 fm-meta-import-title = メタデータ CSV 取り込み
-fm-meta-import-hint = Path to CSV, or paste rows (path,title,headline,description,creator,copyright,keywords,credit,lat,lon,date)
+fm-meta-import-hint = CSV のパス、または行を貼り付け (path,title,headline,description,creator,copyright,keywords,credit,lat,lon,date)
 fm-meta-template-save-title = メタデータテンプレートを保存
 fm-meta-template-save-hint = name=press plus title= creator= copyright= …
 fm-meta-template-apply-title = メタデータテンプレートを適用
-fm-meta-template-apply-hint = Template name
+fm-meta-template-apply-hint = テンプレート名
 fm-meta-template-missing = 不明なメタデータテンプレートです。
 fm-meta-applied = { $count } 個のファイルを更新しました。
 fm-meta-none = 選択に画像がありません。

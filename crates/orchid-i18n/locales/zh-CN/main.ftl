@@ -196,7 +196,7 @@ moon-moonrise = 月出：{ $time }
 moon-moonset = 月落：{ $time }
 moon-sunrise = 日出：{ $time }
 moon-sunset = 日落：{ $time }
-moon-libration = Libration：{ $lat }°，{ $lon }°
+moon-libration = 天平动：{ $lat }°，{ $lon }°
 moon-loading = 正在计算月相数据…
 
 
@@ -652,7 +652,7 @@ viewer-image-filter-look-drama = 戏剧
 viewer-image-filter-look-clean = 干净
 viewer-image-annotate = 绘制 / 批注（副本）
 viewer-image-annotate-apply = 闭合多边形
-viewer-image-annotate-hint = Drag a shape, click text, or apply a watermark. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
+viewer-image-annotate-hint = 拖动形状、点击文本或应用水印。 color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
 viewer-image-annotate-line = 直线
 viewer-image-annotate-arrow = 箭头
 viewer-image-annotate-rect = 矩形
@@ -723,7 +723,7 @@ viewer-image-meta = 元数据
 viewer-image-meta-overlay = EXIF 叠加
 viewer-image-histogram = 直方图
 viewer-image-gps-map = 在地图上显示
-viewer-image-meta-save = Save
+viewer-image-meta-save = 保存
 viewer-image-meta-strip = 全部清除
 viewer-image-meta-strip-gps = 清除 GPS
 viewer-image-meta-export-csv = CSV
@@ -733,7 +733,7 @@ viewer-image-meta-creator-field = 作者
 viewer-image-meta-copyright-field = 版权
 viewer-image-meta-keywords-field = 关键词
 viewer-image-meta-description-field = 说明
-viewer-image-meta-date-field = Date
+viewer-image-meta-date-field = 日期
 viewer-image-meta-gps-field = GPS
 viewer-archive-root = (根目录)
 viewer-archive-parent = 上级文件夹
@@ -839,7 +839,7 @@ viewer-document-orchid-linked = 已链接
 viewer-document-orchid-c2pa-ok = C2PA ok
 viewer-document-orchid-c2pa-bad = C2PA 失败
 viewer-document-passphrase-title = 解锁文档
-viewer-document-passphrase-hint = Enter the passphrase for this encrypted .orchid file.
+viewer-document-passphrase-hint = 请输入此加密 .orchid 文件的密码。
 viewer-document-passphrase-ok = 解锁
 viewer-document-passphrase-required = 此 .orchid 文件已加密。请输入密码短语以打开。
 
@@ -1572,19 +1572,19 @@ fm-office-meta-hint = 标题 | 主题 | 作者 | 关键字 | 说明
 fm-image-resize-title = 图像大小
 fm-image-resize-hint = 50%  |  800x600  |  800x  |  10cmx15cm  |  filter=nearest/bilinear/bicubic/lanczos
 fm-image-canvas-title = 画布
-fm-image-canvas-hint = 2000x1500  or  +40+40 padding
-fm-image-edit-bad-spec = Could not parse the size.
+fm-image-canvas-hint = 2000x1500  或  +40+40 边距
+fm-image-edit-bad-spec = 无法解析尺寸。
 fm-image-adjust-title = 颜色 / 色调
 fm-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
-fm-image-adjust-bad-spec = Could not parse the adjustment.
+fm-image-adjust-bad-spec = 无法解析调整参数。
 fm-image-filter-title = 滤镜 / 效果
 fm-image-filter-hint = sharpen= unsharp=1,1,0 blur= motion=12,45 median=1 despeckle emboss edges oil=3 watercolor cartoon sketch grain=20 vignette=40 lens=-0.12 ca=2 redeye skin=50 look=vivid|soft|drama|clean|fade
-fm-image-filter-bad-spec = Could not parse the filter.
+fm-image-filter-bad-spec = 无法解析滤镜。
 fm-image-filter-save-title = 保存风格
 fm-image-filter-save-hint = name=portrait | skin=40 | vignette=15
 fm-image-annotate-title = 批注
 fm-image-annotate-hint = line= x,y,x,y arrow= rect= ellipse= poly= pen= text= callout= privacy= highlight= watermark= wm-image= stamp | color= width= size= font= opacity= pos=br
-fm-image-annotate-bad-spec = Could not parse the annotation.
+fm-image-annotate-bad-spec = 无法解析标注。
 fm-image-watermark-title = 文字水印
 fm-image-watermark-hint = watermark=© Orchid | pos=br | opacity=40 | size=18 | color=#ffffff
 fm-image-wm-image-title = 图片水印
@@ -1604,7 +1604,7 @@ fm-image-batch-save-title = 保存配方
 fm-image-batch-save-hint = name=web | resize=50% | convert=jpg
 fm-image-batch-cancel-title = 取消批处理
 fm-image-batch-cancel-body = 当前批处理将在正在处理的文件之后停止。
-fm-image-batch-bad-spec = Could not parse the batch command.
+fm-image-batch-bad-spec = 无法解析批处理命令。
 fm-image-compare-need = 请选择 2–4 张图片。
 fm-image-pick-title = 保留最佳
 fm-image-pick-hint = keep=1
@@ -1618,7 +1618,7 @@ fm-image-print-sheet-title = 索引页
 fm-image-print-nup-title = N-up 打印
 fm-image-print-batch-title = 批量打印
 fm-image-print-hint = paper=a4 | margin=12 | nup=4 | fit=contain | header={"{name}"} | footer={"{date}"} {"{wxh}"} | icc=srgb | sheet | landscape
-fm-image-print-bad-spec = Could not parse the print layout.
+fm-image-print-bad-spec = 无法解析打印布局。
 fm-image-export-title = 导出图像
 fm-image-export-hint = jpg | q=85 | max=1920
 fm-image-email-title = 邮件附件
@@ -1627,21 +1627,21 @@ fm-image-share-title = 分享
 fm-image-share-hint = twitter | facebook | vk | system
 fm-image-screenshot-title = 屏幕截图
 fm-image-screenshot-hint = screen | window | region=x,y,w,h | delay=3
-fm-image-export-bad-spec = Could not parse the export settings.
+fm-image-export-bad-spec = 无法解析导出设置。
 fm-meta-edit-title = 图像元数据
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS
-fm-meta-gps-hint = gps=lat,lon — empty value clears coordinates
+fm-meta-gps-hint = gps=lat,lon — 空值清除坐标
 fm-meta-date-title = 拍摄日期
-fm-meta-date-hint = date=YYYY:MM:DD HH:MM:SS — empty value clears
+fm-meta-date-hint = date=YYYY:MM:DD HH:MM:SS — 空值清除
 fm-meta-shift-title = 偏移拍摄日期
-fm-meta-shift-hint = shift=+1h  -2d  +30m  or seconds
+fm-meta-shift-hint = shift=+1h  -2d  +30m  或秒
 fm-meta-import-title = 导入元数据 CSV
-fm-meta-import-hint = Path to CSV, or paste rows (path,title,headline,description,creator,copyright,keywords,credit,lat,lon,date)
+fm-meta-import-hint = CSV 路径，或粘贴行 (path,title,headline,description,creator,copyright,keywords,credit,lat,lon,date)
 fm-meta-template-save-title = 保存元数据模板
 fm-meta-template-save-hint = name=press plus title= creator= copyright= …
 fm-meta-template-apply-title = 应用元数据模板
-fm-meta-template-apply-hint = Template name
+fm-meta-template-apply-hint = 模板名称
 fm-meta-template-missing = 未知的元数据模板。
 fm-meta-applied = 已更新 { $count } 个文件。
 fm-meta-none = 所选内容中没有图片。

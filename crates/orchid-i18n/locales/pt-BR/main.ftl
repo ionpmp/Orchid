@@ -196,7 +196,7 @@ moon-moonrise = Nascer da lua: { $time }
 moon-moonset = Pôr da lua: { $time }
 moon-sunrise = Nascer do sol: { $time }
 moon-sunset = Pôr do sol: { $time }
-moon-libration = Libration: { $lat }°, { $lon }°
+moon-libration = Libração: { $lat }°, { $lon }°
 moon-loading = Calculando dados lunares…
 
 
@@ -652,7 +652,7 @@ viewer-image-filter-look-drama = Drama
 viewer-image-filter-look-clean = Limpo
 viewer-image-annotate = Desenho / anotações (cópia)
 viewer-image-annotate-apply = Fechar polígono
-viewer-image-annotate-hint = Drag a shape, click text, or apply a watermark. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
+viewer-image-annotate-hint = Arraste uma forma, clique no texto ou aplique uma marca d'água. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
 viewer-image-annotate-line = Linha
 viewer-image-annotate-arrow = Seta
 viewer-image-annotate-rect = Retângulo
@@ -723,7 +723,7 @@ viewer-image-meta = Metadados
 viewer-image-meta-overlay = Sobreposição EXIF
 viewer-image-histogram = Histograma
 viewer-image-gps-map = No mapa
-viewer-image-meta-save = Save
+viewer-image-meta-save = Salvar
 viewer-image-meta-strip = Apagar tudo
 viewer-image-meta-strip-gps = Apagar GPS
 viewer-image-meta-export-csv = CSV
@@ -733,7 +733,7 @@ viewer-image-meta-creator-field = Autor
 viewer-image-meta-copyright-field = Direitos autorais
 viewer-image-meta-keywords-field = Palavras-chave
 viewer-image-meta-description-field = Descrição
-viewer-image-meta-date-field = Date
+viewer-image-meta-date-field = Data
 viewer-image-meta-gps-field = GPS
 viewer-archive-root = (raiz)
 viewer-archive-parent = Pasta pai
@@ -839,7 +839,7 @@ viewer-document-orchid-linked = vinculado
 viewer-document-orchid-c2pa-ok = C2PA ok
 viewer-document-orchid-c2pa-bad = C2PA falhou
 viewer-document-passphrase-title = Desbloquear documento
-viewer-document-passphrase-hint = Enter the passphrase for this encrypted .orchid file.
+viewer-document-passphrase-hint = Digite a senha deste arquivo .orchid criptografado.
 viewer-document-passphrase-ok = Desbloquear
 viewer-document-passphrase-required = Este arquivo .orchid está criptografado. Digite a senha para abri-lo.
 
@@ -1572,19 +1572,19 @@ fm-office-meta-hint = título | assunto | autor | palavras-chave | descrição
 fm-image-resize-title = Tamanho da imagem
 fm-image-resize-hint = 50%  |  800x600  |  800x  |  10cmx15cm  |  filter=nearest/bilinear/bicubic/lanczos
 fm-image-canvas-title = Tela
-fm-image-canvas-hint = 2000x1500  or  +40+40 padding
-fm-image-edit-bad-spec = Could not parse the size.
+fm-image-canvas-hint = 2000x1500  ou  +40+40 de preenchimento
+fm-image-edit-bad-spec = Não foi possível interpretar o tamanho.
 fm-image-adjust-title = Cor / tom
 fm-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
-fm-image-adjust-bad-spec = Could not parse the adjustment.
+fm-image-adjust-bad-spec = Não foi possível interpretar o ajuste.
 fm-image-filter-title = Filtro / efeito
 fm-image-filter-hint = sharpen= unsharp=1,1,0 blur= motion=12,45 median=1 despeckle emboss edges oil=3 watercolor cartoon sketch grain=20 vignette=40 lens=-0.12 ca=2 redeye skin=50 look=vivid|soft|drama|clean|fade
-fm-image-filter-bad-spec = Could not parse the filter.
+fm-image-filter-bad-spec = Não foi possível interpretar o filtro.
 fm-image-filter-save-title = Salvar look
 fm-image-filter-save-hint = name=portrait | skin=40 | vignette=15
 fm-image-annotate-title = Anotação
 fm-image-annotate-hint = line= x,y,x,y arrow= rect= ellipse= poly= pen= text= callout= privacy= highlight= watermark= wm-image= stamp | color= width= size= font= opacity= pos=br
-fm-image-annotate-bad-spec = Could not parse the annotation.
+fm-image-annotate-bad-spec = Não foi possível interpretar a anotação.
 fm-image-watermark-title = Marca d’água de texto
 fm-image-watermark-hint = watermark=© Orchid | pos=br | opacity=40 | size=18 | color=#ffffff
 fm-image-wm-image-title = Marca d’água de imagem
@@ -1604,7 +1604,7 @@ fm-image-batch-save-title = Salvar receita
 fm-image-batch-save-hint = name=web | resize=50% | convert=jpg
 fm-image-batch-cancel-title = Cancelar lote
 fm-image-batch-cancel-body = O lote atual parará após o arquivo em andamento.
-fm-image-batch-bad-spec = Could not parse the batch command.
+fm-image-batch-bad-spec = Não foi possível interpretar o comando em lote.
 fm-image-compare-need = Selecione 2–4 imagens.
 fm-image-pick-title = Manter o melhor
 fm-image-pick-hint = keep=1
@@ -1618,7 +1618,7 @@ fm-image-print-sheet-title = Folha de contatos
 fm-image-print-nup-title = Impressão N-up
 fm-image-print-batch-title = Impressão em lote
 fm-image-print-hint = paper=a4 | margin=12 | nup=4 | fit=contain | header={"{name}"} | footer={"{date}"} {"{wxh}"} | icc=srgb | sheet | landscape
-fm-image-print-bad-spec = Could not parse the print layout.
+fm-image-print-bad-spec = Não foi possível interpretar o layout de impressão.
 fm-image-export-title = Exportar imagem
 fm-image-export-hint = jpg | q=85 | max=1920
 fm-image-email-title = Anexo de e-mail
@@ -1627,21 +1627,21 @@ fm-image-share-title = Compartilhar
 fm-image-share-hint = twitter | facebook | vk | system
 fm-image-screenshot-title = Captura de tela
 fm-image-screenshot-hint = screen | window | region=x,y,w,h | delay=3
-fm-image-export-bad-spec = Could not parse the export settings.
+fm-image-export-bad-spec = Não foi possível interpretar as configurações de exportação.
 fm-meta-edit-title = Metadados da imagem
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS
-fm-meta-gps-hint = gps=lat,lon — empty value clears coordinates
+fm-meta-gps-hint = gps=lat,lon — um valor vazio limpa as coordenadas
 fm-meta-date-title = Data da foto
-fm-meta-date-hint = date=YYYY:MM:DD HH:MM:SS — empty value clears
+fm-meta-date-hint = date=YYYY:MM:DD HH:MM:SS — um valor vazio limpa
 fm-meta-shift-title = Deslocar data da foto
-fm-meta-shift-hint = shift=+1h  -2d  +30m  or seconds
+fm-meta-shift-hint = shift=+1h  -2d  +30m  ou segundos
 fm-meta-import-title = Importar metadados CSV
-fm-meta-import-hint = Path to CSV, or paste rows (path,title,headline,description,creator,copyright,keywords,credit,lat,lon,date)
+fm-meta-import-hint = Caminho para o CSV, ou cole linhas (path,title,headline,description,creator,copyright,keywords,credit,lat,lon,date)
 fm-meta-template-save-title = Salvar modelo de metadados
 fm-meta-template-save-hint = name=press plus title= creator= copyright= …
 fm-meta-template-apply-title = Aplicar modelo de metadados
-fm-meta-template-apply-hint = Template name
+fm-meta-template-apply-hint = Nome do modelo
 fm-meta-template-missing = Modelo de metadados desconhecido.
 fm-meta-applied = Atualizado(s) { $count } arquivo(s).
 fm-meta-none = Não há imagens na seleção.

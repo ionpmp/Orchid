@@ -196,7 +196,7 @@ moon-moonrise = Salida de la luna: { $time }
 moon-moonset = Puesta de la luna: { $time }
 moon-sunrise = Amanecer: { $time }
 moon-sunset = Atardecer: { $time }
-moon-libration = Libration: { $lat }°, { $lon }°
+moon-libration = Libración: { $lat }°, { $lon }°
 moon-loading = Calculando datos lunares…
 
 
@@ -652,7 +652,7 @@ viewer-image-filter-look-drama = Drama
 viewer-image-filter-look-clean = Limpio
 viewer-image-annotate = Dibujo / anotaciones (copia)
 viewer-image-annotate-apply = Cerrar polígono
-viewer-image-annotate-hint = Drag a shape, click text, or apply a watermark. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
+viewer-image-annotate-hint = Arrastre una forma, pulse texto o aplique una marca de agua. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
 viewer-image-annotate-line = Línea
 viewer-image-annotate-arrow = Flecha
 viewer-image-annotate-rect = Rectángulo
@@ -839,7 +839,7 @@ viewer-document-orchid-linked = vinculado
 viewer-document-orchid-c2pa-ok = C2PA ok
 viewer-document-orchid-c2pa-bad = C2PA error
 viewer-document-passphrase-title = Desbloquear documento
-viewer-document-passphrase-hint = Enter the passphrase for this encrypted .orchid file.
+viewer-document-passphrase-hint = Introduzca la frase de contraseña de este archivo .orchid cifrado.
 viewer-document-passphrase-ok = Desbloquear
 viewer-document-passphrase-required = Este archivo .orchid está cifrado. Introduzca la frase de contraseña para abrirlo.
 
@@ -1572,19 +1572,19 @@ fm-office-meta-hint = título | asunto | autor | palabras clave | descripción
 fm-image-resize-title = Tamaño de imagen
 fm-image-resize-hint = 50%  |  800x600  |  800x  |  10cmx15cm  |  filter=nearest/bilinear/bicubic/lanczos
 fm-image-canvas-title = Lienzo
-fm-image-canvas-hint = 2000x1500  or  +40+40 padding
-fm-image-edit-bad-spec = Could not parse the size.
+fm-image-canvas-hint = 2000x1500  o  +40+40 de relleno
+fm-image-edit-bad-spec = No se pudo interpretar el tamaño.
 fm-image-adjust-title = Color / tono
 fm-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
-fm-image-adjust-bad-spec = Could not parse the adjustment.
+fm-image-adjust-bad-spec = No se pudo interpretar el ajuste.
 fm-image-filter-title = Filtro / efecto
 fm-image-filter-hint = sharpen= unsharp=1,1,0 blur= motion=12,45 median=1 despeckle emboss edges oil=3 watercolor cartoon sketch grain=20 vignette=40 lens=-0.12 ca=2 redeye skin=50 look=vivid|soft|drama|clean|fade
-fm-image-filter-bad-spec = Could not parse the filter.
+fm-image-filter-bad-spec = No se pudo interpretar el filtro.
 fm-image-filter-save-title = Guardar look
 fm-image-filter-save-hint = name=portrait | skin=40 | vignette=15
 fm-image-annotate-title = Anotación
 fm-image-annotate-hint = line= x,y,x,y arrow= rect= ellipse= poly= pen= text= callout= privacy= highlight= watermark= wm-image= stamp | color= width= size= font= opacity= pos=br
-fm-image-annotate-bad-spec = Could not parse the annotation.
+fm-image-annotate-bad-spec = No se pudo interpretar la anotación.
 fm-image-watermark-title = Marca de agua de texto
 fm-image-watermark-hint = watermark=© Orchid | pos=br | opacity=40 | size=18 | color=#ffffff
 fm-image-wm-image-title = Marca de agua de imagen
@@ -1604,7 +1604,7 @@ fm-image-batch-save-title = Guardar receta
 fm-image-batch-save-hint = name=web | resize=50% | convert=jpg
 fm-image-batch-cancel-title = Cancelar lote
 fm-image-batch-cancel-body = El lote actual se detendrá después del archivo en proceso.
-fm-image-batch-bad-spec = Could not parse the batch command.
+fm-image-batch-bad-spec = No se pudo interpretar el comando por lotes.
 fm-image-compare-need = Seleccione 2–4 imágenes.
 fm-image-pick-title = Conservar el mejor
 fm-image-pick-hint = keep=1
@@ -1618,7 +1618,7 @@ fm-image-print-sheet-title = Hoja de contactos
 fm-image-print-nup-title = Impresión N-up
 fm-image-print-batch-title = Impresión por lotes
 fm-image-print-hint = paper=a4 | margin=12 | nup=4 | fit=contain | header={"{name}"} | footer={"{date}"} {"{wxh}"} | icc=srgb | sheet | landscape
-fm-image-print-bad-spec = Could not parse the print layout.
+fm-image-print-bad-spec = No se pudo interpretar el diseño de impresión.
 fm-image-export-title = Exportar imagen
 fm-image-export-hint = jpg | q=85 | max=1920
 fm-image-email-title = Adjunto de correo
@@ -1627,7 +1627,7 @@ fm-image-share-title = Compartir
 fm-image-share-hint = twitter | facebook | vk | system
 fm-image-screenshot-title = Captura de pantalla
 fm-image-screenshot-hint = screen | window | region=x,y,w,h | delay=3
-fm-image-export-bad-spec = Could not parse the export settings.
+fm-image-export-bad-spec = No se pudo interpretar la configuración de exportación.
 fm-meta-edit-title = Metadatos de imagen
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS

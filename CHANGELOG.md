@@ -376,7 +376,9 @@ release yet.
           (titles, subtitles, source badge) and untitled calendar events resolve
           Fluent keys instead of English literals. Western European catalogues
           that were stored as cp1252 mojibake (`é` as `Ã©`, and similar) are
-          restored to UTF-8.
+          restored to UTF-8. Remaining English viewer/file-manager parse errors,
+          passphrase and annotation hints, and moon libration labels are
+          translated (command-syntax crumbs stay in English).
 - **Video Player** library/queue UX brought to Audio Player parity: folder
   drill-down (play/enqueue group), play-next, queue reorder (drag + up/down),
   reshuffle remaining, jump-to-current auto-scroll, remaining-count strip,

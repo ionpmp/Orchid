@@ -196,7 +196,7 @@ moon-moonrise = شروق القمر: { $time }
 moon-moonset = غروب القمر: { $time }
 moon-sunrise = شروق الشمس: { $time }
 moon-sunset = غروب الشمس: { $time }
-moon-libration = Libration: { $lat }°، { $lon }°
+moon-libration = الترنح: { $lat }°، { $lon }°
 moon-loading = جارٍ حساب بيانات القمر…
 
 
@@ -653,7 +653,7 @@ viewer-image-filter-look-drama = دراما
 viewer-image-filter-look-clean = نظيف
 viewer-image-annotate = رسم / تعليقات (نسخة)
 viewer-image-annotate-apply = إغلاق المضلع
-viewer-image-annotate-hint = Drag a shape, click text, or apply a watermark. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
+viewer-image-annotate-hint = اسحب شكلاً، أو انقر نصاً، أو طبّق علامة مائية. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
 viewer-image-annotate-line = خط
 viewer-image-annotate-arrow = سهم
 viewer-image-annotate-rect = مستطيل
@@ -724,7 +724,7 @@ viewer-image-meta = بيانات وصفية
 viewer-image-meta-overlay = تراكب EXIF
 viewer-image-histogram = مدرج تكراري
 viewer-image-gps-map = عرض على الخريطة
-viewer-image-meta-save = Save
+viewer-image-meta-save = حفظ
 viewer-image-meta-strip = مسح الكل
 viewer-image-meta-strip-gps = مسح GPS
 viewer-image-meta-export-csv = CSV
@@ -734,7 +734,7 @@ viewer-image-meta-creator-field = المنشئ
 viewer-image-meta-copyright-field = حقوق النشر
 viewer-image-meta-keywords-field = الكلمات المفتاحية
 viewer-image-meta-description-field = الوصف
-viewer-image-meta-date-field = Date
+viewer-image-meta-date-field = التاريخ
 viewer-image-meta-gps-field = GPS
 viewer-archive-root = (الجذر)
 viewer-archive-parent = المجلد الأب
@@ -840,7 +840,7 @@ viewer-document-orchid-linked = مرتبط
 viewer-document-orchid-c2pa-ok = C2PA ok
 viewer-document-orchid-c2pa-bad = C2PA فشل
 viewer-document-passphrase-title = إلغاء قفل المستند
-viewer-document-passphrase-hint = Enter the passphrase for this encrypted .orchid file.
+viewer-document-passphrase-hint = أدخل عبارة المرور لهذا الملف المشفر .orchid.
 viewer-document-passphrase-ok = إلغاء القفل
 viewer-document-passphrase-required = ملف .orchid هذا مشفّر. أدخل عبارة المرور لفتحه.
 
@@ -1573,19 +1573,19 @@ fm-office-meta-hint = العنوان | الموضوع | المؤلف | الكل�
 fm-image-resize-title = حجم الصورة
 fm-image-resize-hint = 50%  |  800x600  |  800x  |  10cmx15cm  |  filter=nearest/bilinear/bicubic/lanczos
 fm-image-canvas-title = اللوحة
-fm-image-canvas-hint = 2000x1500  or  +40+40 padding
-fm-image-edit-bad-spec = Could not parse the size.
+fm-image-canvas-hint = 2000x1500  أو  +40+40 حواف
+fm-image-edit-bad-spec = تعذر تحليل الحجم.
 fm-image-adjust-title = اللون / الدرجة
 fm-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
-fm-image-adjust-bad-spec = Could not parse the adjustment.
+fm-image-adjust-bad-spec = تعذر تحليل التعديل.
 fm-image-filter-title = مرشح / تأثير
 fm-image-filter-hint = sharpen= unsharp=1,1,0 blur= motion=12,45 median=1 despeckle emboss edges oil=3 watercolor cartoon sketch grain=20 vignette=40 lens=-0.12 ca=2 redeye skin=50 look=vivid|soft|drama|clean|fade
-fm-image-filter-bad-spec = Could not parse the filter.
+fm-image-filter-bad-spec = تعذر تحليل المرشح.
 fm-image-filter-save-title = حفظ المظهر
 fm-image-filter-save-hint = name=portrait | skin=40 | vignette=15
 fm-image-annotate-title = تعليق
 fm-image-annotate-hint = line= x,y,x,y arrow= rect= ellipse= poly= pen= text= callout= privacy= highlight= watermark= wm-image= stamp | color= width= size= font= opacity= pos=br
-fm-image-annotate-bad-spec = Could not parse the annotation.
+fm-image-annotate-bad-spec = تعذر تحليل التعليق.
 fm-image-watermark-title = علامة مائية نصية
 fm-image-watermark-hint = watermark=© Orchid | pos=br | opacity=40 | size=18 | color=#ffffff
 fm-image-wm-image-title = علامة مائية صورية
@@ -1605,7 +1605,7 @@ fm-image-batch-save-title = حفظ الوصفة
 fm-image-batch-save-hint = name=web | resize=50% | convert=jpg
 fm-image-batch-cancel-title = إلغاء الدفعة
 fm-image-batch-cancel-body = ستتوقف الدفعة الحالية بعد الملف قيد المعالجة.
-fm-image-batch-bad-spec = Could not parse the batch command.
+fm-image-batch-bad-spec = تعذر تحليل أمر الدفعة.
 fm-image-compare-need = حدد 2–4 صور.
 fm-image-pick-title = الإبقاء على الأفضل
 fm-image-pick-hint = keep=1
@@ -1619,7 +1619,7 @@ fm-image-print-sheet-title = ورقة الفهرس
 fm-image-print-nup-title = طباعة N-up
 fm-image-print-batch-title = طباعة دفعية
 fm-image-print-hint = paper=a4 | margin=12 | nup=4 | fit=contain | header={"{name}"} | footer={"{date}"} {"{wxh}"} | icc=srgb | sheet | landscape
-fm-image-print-bad-spec = Could not parse the print layout.
+fm-image-print-bad-spec = تعذر تحليل تخطيط الطباعة.
 fm-image-export-title = تصدير الصورة
 fm-image-export-hint = jpg | q=85 | max=1920
 fm-image-email-title = مرفق بريد
@@ -1628,21 +1628,21 @@ fm-image-share-title = مشاركة
 fm-image-share-hint = twitter | facebook | vk | system
 fm-image-screenshot-title = لقطة شاشة
 fm-image-screenshot-hint = screen | window | region=x,y,w,h | delay=3
-fm-image-export-bad-spec = Could not parse the export settings.
+fm-image-export-bad-spec = تعذر تحليل إعدادات التصدير.
 fm-meta-edit-title = بيانات وصفية للصورة
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS
-fm-meta-gps-hint = gps=lat,lon — empty value clears coordinates
+fm-meta-gps-hint = gps=lat,lon — القيمة الفارغة تمسح الإحداثيات
 fm-meta-date-title = تاريخ التصوير
-fm-meta-date-hint = date=YYYY:MM:DD HH:MM:SS — empty value clears
+fm-meta-date-hint = date=YYYY:MM:DD HH:MM:SS — القيمة الفارغة تمسح
 fm-meta-shift-title = إزاحة تاريخ التصوير
-fm-meta-shift-hint = shift=+1h  -2d  +30m  or seconds
+fm-meta-shift-hint = shift=+1h  -2d  +30m  أو ثوانٍ
 fm-meta-import-title = استيراد البيانات الوصفية CSV
-fm-meta-import-hint = Path to CSV, or paste rows (path,title,headline,description,creator,copyright,keywords,credit,lat,lon,date)
+fm-meta-import-hint = مسار CSV، أو الصق صفوفاً (path,title,headline,description,creator,copyright,keywords,credit,lat,lon,date)
 fm-meta-template-save-title = حفظ قالب البيانات الوصفية
 fm-meta-template-save-hint = name=press plus title= creator= copyright= …
 fm-meta-template-apply-title = تطبيق قالب البيانات الوصفية
-fm-meta-template-apply-hint = Template name
+fm-meta-template-apply-hint = اسم القالب
 fm-meta-template-missing = قالب بيانات وصفية غير معروف.
 fm-meta-applied = تم تحديث { $count } من الملفات.
 fm-meta-none = لا توجد صور في التحديد.

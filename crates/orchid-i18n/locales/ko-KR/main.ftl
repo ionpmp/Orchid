@@ -196,7 +196,7 @@ moon-moonrise = 월출: { $time }
 moon-moonset = 월몰: { $time }
 moon-sunrise = 일출: { $time }
 moon-sunset = 일몰: { $time }
-moon-libration = Libration: { $lat }°, { $lon }°
+moon-libration = 칭동: { $lat }°, { $lon }°
 moon-loading = 달 데이터 계산 중…
 
 
@@ -652,7 +652,7 @@ viewer-image-filter-look-drama = 드라마
 viewer-image-filter-look-clean = 클린
 viewer-image-annotate = 그리기 / 주석 (사본)
 viewer-image-annotate-apply = 다각형 닫기
-viewer-image-annotate-hint = Drag a shape, click text, or apply a watermark. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
+viewer-image-annotate-hint = 도형을 드래그하거나 텍스트를 클릭하거나 워터마크를 적용하세요. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
 viewer-image-annotate-line = 선
 viewer-image-annotate-arrow = 화살표
 viewer-image-annotate-rect = 사각형
@@ -723,7 +723,7 @@ viewer-image-meta = 메타데이터
 viewer-image-meta-overlay = EXIF 오버레이
 viewer-image-histogram = 히스토그램
 viewer-image-gps-map = 지도에서 보기
-viewer-image-meta-save = Save
+viewer-image-meta-save = 저장
 viewer-image-meta-strip = 모두 제거
 viewer-image-meta-strip-gps = GPS 제거
 viewer-image-meta-export-csv = CSV
@@ -733,7 +733,7 @@ viewer-image-meta-creator-field = 작성자
 viewer-image-meta-copyright-field = 저작권
 viewer-image-meta-keywords-field = 키워드
 viewer-image-meta-description-field = 설명
-viewer-image-meta-date-field = Date
+viewer-image-meta-date-field = 날짜
 viewer-image-meta-gps-field = GPS
 viewer-archive-root = (루트)
 viewer-archive-parent = 상위 폴더
@@ -839,7 +839,7 @@ viewer-document-orchid-linked = 연결됨
 viewer-document-orchid-c2pa-ok = C2PA ok
 viewer-document-orchid-c2pa-bad = C2PA 실패
 viewer-document-passphrase-title = 문서 잠금 해제
-viewer-document-passphrase-hint = Enter the passphrase for this encrypted .orchid file.
+viewer-document-passphrase-hint = 이 암호화된 .orchid 파일의 암호를 입력하세요.
 viewer-document-passphrase-ok = 잠금 해제
 viewer-document-passphrase-required = 이 .orchid 파일은 암호화되어 있습니다. 열려면 암호 구문을 입력하세요.
 
@@ -1572,19 +1572,19 @@ fm-office-meta-hint = 제목 | 주제 | 작성자 | 키워드 | 설명
 fm-image-resize-title = 이미지 크기
 fm-image-resize-hint = 50%  |  800x600  |  800x  |  10cmx15cm  |  filter=nearest/bilinear/bicubic/lanczos
 fm-image-canvas-title = 캔버스
-fm-image-canvas-hint = 2000x1500  or  +40+40 padding
-fm-image-edit-bad-spec = Could not parse the size.
+fm-image-canvas-hint = 2000x1500  또는  +40+40 여백
+fm-image-edit-bad-spec = 크기를 해석할 수 없습니다.
 fm-image-adjust-title = 색 / 톤
 fm-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
-fm-image-adjust-bad-spec = Could not parse the adjustment.
+fm-image-adjust-bad-spec = 보정을 해석할 수 없습니다.
 fm-image-filter-title = 필터 / 효과
 fm-image-filter-hint = sharpen= unsharp=1,1,0 blur= motion=12,45 median=1 despeckle emboss edges oil=3 watercolor cartoon sketch grain=20 vignette=40 lens=-0.12 ca=2 redeye skin=50 look=vivid|soft|drama|clean|fade
-fm-image-filter-bad-spec = Could not parse the filter.
+fm-image-filter-bad-spec = 필터를 해석할 수 없습니다.
 fm-image-filter-save-title = 룩 저장
 fm-image-filter-save-hint = name=portrait | skin=40 | vignette=15
 fm-image-annotate-title = 주석
 fm-image-annotate-hint = line= x,y,x,y arrow= rect= ellipse= poly= pen= text= callout= privacy= highlight= watermark= wm-image= stamp | color= width= size= font= opacity= pos=br
-fm-image-annotate-bad-spec = Could not parse the annotation.
+fm-image-annotate-bad-spec = 주석을 해석할 수 없습니다.
 fm-image-watermark-title = 텍스트 워터마크
 fm-image-watermark-hint = watermark=© Orchid | pos=br | opacity=40 | size=18 | color=#ffffff
 fm-image-wm-image-title = 이미지 워터마크
@@ -1604,7 +1604,7 @@ fm-image-batch-save-title = 레시피 저장
 fm-image-batch-save-hint = name=web | resize=50% | convert=jpg
 fm-image-batch-cancel-title = 일괄 작업 취소
 fm-image-batch-cancel-body = 현재 일괄 작업은 진행 중인 파일 다음에 중지됩니다.
-fm-image-batch-bad-spec = Could not parse the batch command.
+fm-image-batch-bad-spec = 일괄 명령을 해석할 수 없습니다.
 fm-image-compare-need = 이미지를 2–4장 선택하세요.
 fm-image-pick-title = 가장 좋은 것 유지
 fm-image-pick-hint = keep=1
@@ -1618,7 +1618,7 @@ fm-image-print-sheet-title = 인덱스 시트
 fm-image-print-nup-title = N-up 인쇄
 fm-image-print-batch-title = 일괄 인쇄
 fm-image-print-hint = paper=a4 | margin=12 | nup=4 | fit=contain | header={"{name}"} | footer={"{date}"} {"{wxh}"} | icc=srgb | sheet | landscape
-fm-image-print-bad-spec = Could not parse the print layout.
+fm-image-print-bad-spec = 인쇄 레이아웃을 해석할 수 없습니다.
 fm-image-export-title = 이미지 내보내기
 fm-image-export-hint = jpg | q=85 | max=1920
 fm-image-email-title = 이메일 첨부
@@ -1627,21 +1627,21 @@ fm-image-share-title = 공유
 fm-image-share-hint = twitter | facebook | vk | system
 fm-image-screenshot-title = 스크린샷
 fm-image-screenshot-hint = screen | window | region=x,y,w,h | delay=3
-fm-image-export-bad-spec = Could not parse the export settings.
+fm-image-export-bad-spec = 내보내기 설정을 해석할 수 없습니다.
 fm-meta-edit-title = 이미지 메타데이터
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS
-fm-meta-gps-hint = gps=lat,lon — empty value clears coordinates
+fm-meta-gps-hint = gps=lat,lon — 빈 값은 좌표를 지웁니다
 fm-meta-date-title = 촬영일
-fm-meta-date-hint = date=YYYY:MM:DD HH:MM:SS — empty value clears
+fm-meta-date-hint = date=YYYY:MM:DD HH:MM:SS — 빈 값은 지웁니다
 fm-meta-shift-title = 촬영일 이동
-fm-meta-shift-hint = shift=+1h  -2d  +30m  or seconds
+fm-meta-shift-hint = shift=+1h  -2d  +30m  또는 초
 fm-meta-import-title = 메타데이터 CSV 가져오기
-fm-meta-import-hint = Path to CSV, or paste rows (path,title,headline,description,creator,copyright,keywords,credit,lat,lon,date)
+fm-meta-import-hint = CSV 경로 또는 행 붙여넣기 (path,title,headline,description,creator,copyright,keywords,credit,lat,lon,date)
 fm-meta-template-save-title = 메타데이터 템플릿 저장
 fm-meta-template-save-hint = name=press plus title= creator= copyright= …
 fm-meta-template-apply-title = 메타데이터 템플릿 적용
-fm-meta-template-apply-hint = Template name
+fm-meta-template-apply-hint = 템플릿 이름
 fm-meta-template-missing = 알 수 없는 메타데이터 템플릿입니다.
 fm-meta-applied = 파일 { $count }개를 업데이트했습니다.
 fm-meta-none = 선택 항목에 이미지가 없습니다.

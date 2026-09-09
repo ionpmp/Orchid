@@ -652,7 +652,7 @@ viewer-image-filter-look-drama = Drame
 viewer-image-filter-look-clean = Épuré
 viewer-image-annotate = Dessin / annotations (copie)
 viewer-image-annotate-apply = Fermer le polygone
-viewer-image-annotate-hint = Drag a shape, click text, or apply a watermark. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
+viewer-image-annotate-hint = Faites glisser une forme, cliquez du texte ou appliquez un filigrane. color= #rrggbb  width=  size=  font=  opacity=  pos=tl|tc|tr|cl|c|cr|bl|bc|br
 viewer-image-annotate-line = Ligne
 viewer-image-annotate-arrow = Flèche
 viewer-image-annotate-rect = Rectangle
@@ -839,7 +839,7 @@ viewer-document-orchid-linked = lié
 viewer-document-orchid-c2pa-ok = C2PA ok
 viewer-document-orchid-c2pa-bad = C2PA échec
 viewer-document-passphrase-title = Déverrouiller le document
-viewer-document-passphrase-hint = Enter the passphrase for this encrypted .orchid file.
+viewer-document-passphrase-hint = Saisissez la phrase secrète de ce fichier .orchid chiffré.
 viewer-document-passphrase-ok = Déverrouiller
 viewer-document-passphrase-required = Ce fichier .orchid est chiffré. Saisissez la phrase secrète pour l’ouvrir.
 
@@ -1572,19 +1572,19 @@ fm-office-meta-hint = titre | sujet | auteur | mots-clés | description
 fm-image-resize-title = Taille de l’image
 fm-image-resize-hint = 50%  |  800x600  |  800x  |  10cmx15cm  |  filter=nearest/bilinear/bicubic/lanczos
 fm-image-canvas-title = Canevas
-fm-image-canvas-hint = 2000x1500  or  +40+40 padding
-fm-image-edit-bad-spec = Could not parse the size.
+fm-image-canvas-hint = 2000x1500  ou  +40+40 de marge
+fm-image-edit-bad-spec = Impossible d’analyser la taille.
 fm-image-adjust-title = Couleur / ton
 fm-image-adjust-hint = brightness= contrast= exposure= highlights= shadows= temp= tint= saturation= vibrance= hue= gamma= levels=0,1,255 curves=0,0 255,255 selective=reds 0,10,0,0 mixer=1,0,0;0,1,0;0,0,1 posterize=6 solarize=128 threshold=128
-fm-image-adjust-bad-spec = Could not parse the adjustment.
+fm-image-adjust-bad-spec = Impossible d’analyser la correction.
 fm-image-filter-title = Filtre / effet
 fm-image-filter-hint = sharpen= unsharp=1,1,0 blur= motion=12,45 median=1 despeckle emboss edges oil=3 watercolor cartoon sketch grain=20 vignette=40 lens=-0.12 ca=2 redeye skin=50 look=vivid|soft|drama|clean|fade
-fm-image-filter-bad-spec = Could not parse the filter.
+fm-image-filter-bad-spec = Impossible d’analyser le filtre.
 fm-image-filter-save-title = Enregistrer le look
 fm-image-filter-save-hint = name=portrait | skin=40 | vignette=15
 fm-image-annotate-title = Annotation
 fm-image-annotate-hint = line= x,y,x,y arrow= rect= ellipse= poly= pen= text= callout= privacy= highlight= watermark= wm-image= stamp | color= width= size= font= opacity= pos=br
-fm-image-annotate-bad-spec = Could not parse the annotation.
+fm-image-annotate-bad-spec = Impossible d’analyser l’annotation.
 fm-image-watermark-title = Filigrane texte
 fm-image-watermark-hint = watermark=© Orchid | pos=br | opacity=40 | size=18 | color=#ffffff
 fm-image-wm-image-title = Filigrane image
@@ -1604,7 +1604,7 @@ fm-image-batch-save-title = Enregistrer la recette
 fm-image-batch-save-hint = name=web | resize=50% | convert=jpg
 fm-image-batch-cancel-title = Annuler le lot
 fm-image-batch-cancel-body = Le lot en cours s’arrêtera après le fichier en cours de traitement.
-fm-image-batch-bad-spec = Could not parse the batch command.
+fm-image-batch-bad-spec = Impossible d’analyser la commande par lot.
 fm-image-compare-need = Sélectionnez 2–4 images.
 fm-image-pick-title = Garder le meilleur
 fm-image-pick-hint = keep=1
@@ -1618,7 +1618,7 @@ fm-image-print-sheet-title = Planche contact
 fm-image-print-nup-title = Impression N-up
 fm-image-print-batch-title = Impression par lot
 fm-image-print-hint = paper=a4 | margin=12 | nup=4 | fit=contain | header={"{name}"} | footer={"{date}"} {"{wxh}"} | icc=srgb | sheet | landscape
-fm-image-print-bad-spec = Could not parse the print layout.
+fm-image-print-bad-spec = Impossible d’analyser la mise en page d’impression.
 fm-image-export-title = Exporter l’image
 fm-image-export-hint = jpg | q=85 | max=1920
 fm-image-email-title = Pièce jointe
@@ -1627,7 +1627,7 @@ fm-image-share-title = Partager
 fm-image-share-hint = twitter | facebook | vk | system
 fm-image-screenshot-title = Capture d’écran
 fm-image-screenshot-hint = screen | window | region=x,y,w,h | delay=3
-fm-image-export-bad-spec = Could not parse the export settings.
+fm-image-export-bad-spec = Impossible d’analyser les paramètres d’export.
 fm-meta-edit-title = Métadonnées de l’image
 fm-meta-edit-hint = title= headline= description= creator= copyright= keywords= credit= gps=lat,lon date=YYYY:MM:DD HH:MM:SS
 fm-meta-gps-title = GPS
