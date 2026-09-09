@@ -1,15 +1,17 @@
 //! Network filesystem access via the `rclone` CLI.
 
 use std::path::Path;
+use std::pin::Pin;
 use std::process::Stdio;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use serde::Deserialize;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
+use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader, ReadBuf};
+use tokio::process::{Child, ChildStdout, Command};
 
 use crate::entry::{ExtendedAttributes, FsEntry, FsEntryKind, FsMetadata};
 use crate::error::{FsError, Result};
@@ -332,15 +334,8 @@ impl RcloneProvider {
     }
 
     async fn run_lsjson(&self, remote: &str) -> Result<Vec<RcloneEntry>> {
-        match super::rclone_rc::list_json(&self.rclone_bin, remote).await {
-            Some(Ok(bytes)) => {
-                if bytes.is_empty() || bytes == b"null" {
-                    return Ok(Vec::new());
-                }
-                return serde_json::from_slice(&bytes).map_err(|e| FsError::InvalidPath {
-                    reason: format!("rclone rc lsjson parse error: {e}"),
-                });
-            }
+        match super::rclone_rc::list::<RcloneEntry>(&self.rclone_bin, remote).await {
+            Some(Ok(rows)) => return Ok(rows),
             Some(Err(e)) => return Err(e),
             None => {
                 tracing::debug!("rclone rcd list unavailable; using CLI");
@@ -380,12 +375,8 @@ impl RcloneProvider {
 
     /// Stat one path without listing its parent (`rclone lsjson --stat`).
     async fn run_lsjson_stat(&self, remote: &str) -> Result<RcloneEntry> {
-        match super::rclone_rc::stat_json(&self.rclone_bin, remote).await {
-            Some(Ok(Some(bytes))) => {
-                return serde_json::from_slice(&bytes).map_err(|e| FsError::InvalidPath {
-                    reason: format!("rclone rc stat parse error: {e}"),
-                });
-            }
+        match super::rclone_rc::stat::<RcloneEntry>(&self.rclone_bin, remote).await {
+            Some(Ok(Some(row))) => return Ok(row),
             Some(Ok(None)) => return Err(FsError::NotFound(remote.to_string())),
             Some(Err(e)) => return Err(e),
             None => {
@@ -414,7 +405,7 @@ impl RcloneProvider {
         })
     }
 
-    fn metadata_from_row(&self, name: &str, row: &RcloneEntry) -> FsMetadata {
+    fn metadata_from_row(&self, name: &str, row: RcloneEntry) -> FsMetadata {
         let modified = row.mod_time.as_deref().and_then(parse_rclone_time);
         FsMetadata {
             kind: if row.is_dir {
@@ -429,18 +420,21 @@ impl RcloneProvider {
             readonly: false,
             hidden: name_starts_hidden(name),
             system: false,
-            mime: row.mime_type.clone(),
+            mime: row.mime_type,
             extended: ExtendedAttributes::default(),
         }
     }
 
-    fn entry_from_rclone(&self, parent: &FsPath, row: &RcloneEntry) -> Result<FsEntry> {
-        let name = row.name.clone();
+    fn entry_from_rclone(&self, parent: &FsPath, mut row: RcloneEntry) -> Result<FsEntry> {
+        // Move the name out of the parsed row so neither it nor the mime
+        // type is cloned on the per-entry listing path.
+        let name = std::mem::take(&mut row.name);
         let child = parent.join(&name);
+        let metadata = self.metadata_from_row(&name, row);
         Ok(FsEntry {
-            name: name.clone(),
+            name,
             path: child,
-            metadata: self.metadata_from_row(&name, row),
+            metadata,
         })
     }
 }
@@ -448,6 +442,24 @@ impl RcloneProvider {
 struct ResolvedMount {
     mount: orchid_storage::NetworkMountConfig,
     relative_path: String,
+}
+
+/// `rclone cat` stdout that keeps the child process alive exactly as long as
+/// the reader. The `Command` is configured with `kill_on_drop`, so dropping
+/// this stops the transfer instead of letting it run to completion.
+struct RcloneReadStream {
+    stdout: ChildStdout,
+    _child: Child,
+}
+
+impl AsyncRead for RcloneReadStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.stdout).poll_read(cx, buf)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -478,7 +490,7 @@ impl FsProvider for RcloneProvider {
         let resolved = self.resolve_mount(path)?;
         let remote = self.rclone_remote_spec(&resolved)?;
         let rows = self.run_lsjson(&remote).await?;
-        rows.iter()
+        rows.into_iter()
             .map(|row| self.entry_from_rclone(path, row))
             .collect()
     }
@@ -487,8 +499,11 @@ impl FsProvider for RcloneProvider {
         let resolved = self.resolve_mount(path)?;
         let remote = self.rclone_remote_spec(&resolved)?;
         let row = self.run_lsjson_stat(&remote).await?;
-        let name = path.file_name().unwrap_or(row.name.as_str());
-        Ok(self.metadata_from_row(name, &row))
+        let name = match path.file_name() {
+            Some(n) => n.to_owned(),
+            None => row.name.clone(),
+        };
+        Ok(self.metadata_from_row(&name, row))
     }
 
     async fn exists(&self, path: &FsPath) -> Result<bool> {
@@ -528,6 +543,10 @@ impl FsProvider for RcloneProvider {
             .args(["cat", &remote])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
+            // Bind the transfer to the reader's lifetime. Callers that only
+            // want a prefix (magic-byte sniffing) drop the stream early;
+            // without this rclone keeps downloading the whole object.
+            .kill_on_drop(true)
             .spawn()
             .map_err(FsError::Io)?;
         let stdout = child.stdout.take().ok_or_else(|| FsError::InvalidPath {
@@ -539,16 +558,16 @@ impl FsProvider for RcloneProvider {
                 use tokio::io::AsyncReadExt;
                 let mut buf = Vec::new();
                 let _ = err.read_to_end(&mut buf).await;
-                let status = child.wait().await;
-                if !matches!(status, Ok(s) if s.success()) {
+                if !buf.is_empty() {
                     let msg = redact_secrets(&String::from_utf8_lossy(&buf));
-                    tracing::debug!(error = %msg, "rclone cat stream ended with error");
+                    tracing::debug!(error = %msg, "rclone cat stream reported errors");
                 }
-            } else {
-                let _ = child.wait().await;
             }
         });
-        Ok(Box::new(stdout))
+        Ok(Box::new(RcloneReadStream {
+            stdout,
+            _child: child,
+        }))
     }
 
     async fn write(&self, path: &FsPath, bytes: &[u8]) -> Result<()> {

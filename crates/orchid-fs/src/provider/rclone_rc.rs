@@ -7,6 +7,8 @@
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use serde::de::DeserializeOwned;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -14,6 +16,28 @@ use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 
 use crate::error::{FsError, Result};
+
+/// `operations/list` response envelope, deserialized straight into the
+/// caller's row type.
+#[derive(Deserialize)]
+struct ListEnvelope<T> {
+    #[serde(default = "Vec::new")]
+    list: Vec<T>,
+}
+
+/// `operations/stat` response envelope.
+#[derive(Deserialize)]
+struct StatEnvelope<T> {
+    #[serde(default = "Option::default")]
+    item: Option<T>,
+}
+
+/// Error body returned by `rcd` on a non-2xx status.
+#[derive(Deserialize)]
+struct ErrorEnvelope {
+    #[serde(default = "Option::default")]
+    error: Option<String>,
+}
 
 struct RcDaemon {
     port: u16,
@@ -23,24 +47,19 @@ struct RcDaemon {
 static DAEMON: OnceLock<Mutex<Option<RcDaemon>>> = OnceLock::new();
 
 /// `operations/list` via RC. `None` means the daemon is down — use the CLI.
-pub async fn list_json(rclone_bin: &str, remote: &str) -> Option<Result<Vec<u8>>> {
+///
+/// Rows are deserialized directly out of the socket buffer into `T`, so the
+/// listing is materialized exactly once.
+pub async fn list<T: DeserializeOwned>(rclone_bin: &str, remote: &str) -> Option<Result<Vec<T>>> {
     let port = ensure_daemon(rclone_bin).await.ok()?;
-    match rc_post(
+    match rc_post::<ListEnvelope<T>>(
         port,
         "operations/list",
         &json!({ "fs": remote, "remote": "" }),
     )
     .await
     {
-        Ok(body) => {
-            let list = body
-                .get("list")
-                .cloned()
-                .unwrap_or(Value::Array(Vec::new()));
-            Some(serde_json::to_vec(&list).map_err(|e| FsError::InvalidPath {
-                reason: format!("rclone rc list encode: {e}"),
-            }))
-        }
+        Ok(envelope) => Some(Ok(envelope.list)),
         Err(FsError::Io(_)) => None,
         Err(e) => Some(Err(e)),
     }
@@ -48,28 +67,19 @@ pub async fn list_json(rclone_bin: &str, remote: &str) -> Option<Result<Vec<u8>>
 
 /// `operations/stat` via RC. `None` (outer) means use the CLI.
 /// Inner `None` means the path does not exist.
-pub async fn stat_json(rclone_bin: &str, remote: &str) -> Option<Result<Option<Vec<u8>>>> {
+pub async fn stat<T: DeserializeOwned>(
+    rclone_bin: &str,
+    remote: &str,
+) -> Option<Result<Option<T>>> {
     let port = ensure_daemon(rclone_bin).await.ok()?;
-    match rc_post(
+    match rc_post::<StatEnvelope<T>>(
         port,
         "operations/stat",
         &json!({ "fs": remote, "remote": "" }),
     )
     .await
     {
-        Ok(body) => {
-            let item = body.get("item").cloned().unwrap_or(Value::Null);
-            if item.is_null() || item.as_object().is_some_and(serde_json::Map::is_empty) {
-                return Some(Ok(None));
-            }
-            Some(
-                serde_json::to_vec(&item)
-                    .map(Some)
-                    .map_err(|e| FsError::InvalidPath {
-                        reason: format!("rclone rc stat encode: {e}"),
-                    }),
-            )
-        }
+        Ok(envelope) => Some(Ok(envelope.item)),
         Err(FsError::Io(_)) => None,
         Err(e) => Some(Err(e)),
     }
@@ -119,7 +129,10 @@ async fn spawn_rcd(rclone_bin: &str) -> Result<RcDaemon> {
         })?;
 
     for _ in 0..40 {
-        if rc_post(port, "rc/noop", &json!({})).await.is_ok() {
+        if rc_post::<serde::de::IgnoredAny>(port, "rc/noop", &json!({}))
+            .await
+            .is_ok()
+        {
             return Ok(RcDaemon { port, child });
         }
         if matches!(child.try_wait(), Ok(Some(_))) {
@@ -133,7 +146,7 @@ async fn spawn_rcd(rclone_bin: &str) -> Result<RcDaemon> {
     })
 }
 
-async fn rc_post(port: u16, path: &str, body: &Value) -> Result<Value> {
+async fn rc_post<T: DeserializeOwned>(port: u16, path: &str, body: &Value) -> Result<T> {
     let payload = serde_json::to_vec(body).map_err(|e| FsError::InvalidPath {
         reason: format!("rclone rc body: {e}"),
     })?;
@@ -151,42 +164,47 @@ async fn rc_post(port: u16, path: &str, body: &Value) -> Result<Value> {
     stream.write_all(&payload).await.map_err(FsError::Io)?;
     let mut raw = Vec::new();
     stream.read_to_end(&mut raw).await.map_err(FsError::Io)?;
-    let (status, json_body) = parse_http_json(&raw)?;
+    let (status, body) = split_http_response(&raw)?;
     if !(200..300).contains(&status) {
-        let err = json_body
-            .get("error")
-            .and_then(Value::as_str)
-            .unwrap_or("rc request failed");
+        let err = serde_json::from_slice::<ErrorEnvelope>(body)
+            .ok()
+            .and_then(|e| e.error)
+            .unwrap_or_else(|| "rc request failed".to_string());
         return Err(FsError::InvalidPath {
             reason: format!("rclone rc {path}: {err}"),
         });
     }
-    Ok(json_body)
+    // An empty body is still valid for calls like `rc/noop`; feed serde an
+    // empty object so `T` gets a chance to default.
+    let body = if body.iter().all(u8::is_ascii_whitespace) {
+        b"{}".as_slice()
+    } else {
+        body
+    };
+    serde_json::from_slice(body).map_err(|e| FsError::InvalidPath {
+        reason: format!("rclone rc json: {e}"),
+    })
 }
 
-fn parse_http_json(raw: &[u8]) -> Result<(u16, Value)> {
-    let text = std::str::from_utf8(raw).map_err(|e| FsError::InvalidPath {
-        reason: format!("rclone rc response utf8: {e}"),
-    })?;
-    let (head, body) = text
-        .split_once("\r\n\r\n")
+/// Split a raw HTTP/1.1 response into its status code and body bytes.
+///
+/// Only the status line is decoded as text; the body is left as borrowed
+/// bytes so the JSON payload is parsed once, in place.
+fn split_http_response(raw: &[u8]) -> Result<(u16, &[u8])> {
+    let split = raw
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
         .ok_or_else(|| FsError::InvalidPath {
             reason: "rclone rc response missing header terminator".into(),
         })?;
-    let status = head
-        .lines()
-        .next()
+    let (head, body) = raw.split_at(split);
+    let status = std::str::from_utf8(head)
+        .ok()
+        .and_then(|head| head.lines().next())
         .and_then(|line| line.split_whitespace().nth(1))
         .and_then(|code| code.parse().ok())
         .unwrap_or(0);
-    let json_body = if body.trim().is_empty() {
-        json!({})
-    } else {
-        serde_json::from_str(body).map_err(|e| FsError::InvalidPath {
-            reason: format!("rclone rc json: {e}"),
-        })?
-    };
-    Ok((status, json_body))
+    Ok((status, &body[4..]))
 }
 
 #[cfg(test)]
@@ -194,18 +212,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_http_json_reads_status_and_object() {
+    fn split_http_response_reads_status_and_body() {
         let raw = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"list\":[]}";
-        let (status, value) = parse_http_json(raw).unwrap();
+        let (status, body) = split_http_response(raw).unwrap();
         assert_eq!(status, 200);
-        assert_eq!(value["list"], json!([]));
+        assert_eq!(body, b"{\"list\":[]}");
     }
 
     #[test]
-    fn parse_http_json_empty_body() {
+    fn split_http_response_empty_body() {
         let raw = b"HTTP/1.1 200 OK\r\n\r\n";
-        let (status, value) = parse_http_json(raw).unwrap();
+        let (status, body) = split_http_response(raw).unwrap();
         assert_eq!(status, 200);
-        assert_eq!(value, json!({}));
+        assert!(body.is_empty());
+    }
+
+    #[test]
+    fn list_envelope_deserializes_rows_and_defaults() {
+        let env: ListEnvelope<Value> =
+            serde_json::from_slice(br#"{"list":[{"Name":"a"}]}"#).unwrap();
+        assert_eq!(env.list.len(), 1);
+        let empty: ListEnvelope<Value> = serde_json::from_slice(br#"{}"#).unwrap();
+        assert!(empty.list.is_empty());
+    }
+
+    #[test]
+    fn stat_envelope_reports_missing_item() {
+        let env: StatEnvelope<Value> = serde_json::from_slice(br#"{"item":null}"#).unwrap();
+        assert!(env.item.is_none());
+        let env: StatEnvelope<Value> = serde_json::from_slice(br#"{}"#).unwrap();
+        assert!(env.item.is_none());
     }
 }
