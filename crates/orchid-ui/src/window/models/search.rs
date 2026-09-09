@@ -75,7 +75,8 @@ fn candidate_entries(
         .iter()
         .map(|c| {
             let title: SharedString = match c.source_name.as_str() {
-                "commands" | "settings" => locale.tr(c.title.as_str()).into(),
+                "commands" | "settings" | "jyotish" => locale.tr(c.title.as_str()).into(),
+                "calendar" if c.title == "…" => locale.tr("calendar-untitled").into(),
                 _ => c.title.clone().into(),
             };
             let source_label = match c.source_name.as_str() {
@@ -83,9 +84,12 @@ fn candidate_entries(
                 "commands" => locale.tr("search-source-commands"),
                 "settings" => locale.tr("search-source-settings"),
                 "calculator" => locale.tr("search-source-calculator"),
+                "calendar" => locale.tr("search-source-calendar"),
+                "jyotish" => locale.tr("search-source-jyotish"),
                 _ => c.source_name.clone(),
             };
             let subtitle: SharedString = match &c.subtitle {
+                Some(s) if c.source_name == "jyotish" => locale.tr(s).into(),
                 Some(s) => s.clone().into(),
                 None => source_label.clone().into(),
             };

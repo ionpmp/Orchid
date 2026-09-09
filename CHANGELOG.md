@@ -372,7 +372,9 @@ release yet.
   non-English locales (viewer, file manager, audio/video players, processes,
   and remaining widget chrome). Process status / session / startup labels,
   audio unknown artist/album and sleep timer, and empty “Current location”
-  fallbacks go through `LocaleManager`.
+  fallbacks go through `LocaleManager`. Universal search Jyotish hits
+  (titles, subtitles, source badge) and untitled calendar events resolve
+  Fluent keys instead of English literals.
 - **Video Player** library/queue UX brought to Audio Player parity: folder
   drill-down (play/enqueue group), play-next, queue reorder (drag + up/down),
   reshuffle remaining, jump-to-current auto-scroll, remaining-count strip,

@@ -1894,28 +1894,78 @@ pub struct JyotishCatalogHit {
 
 /// Static keyword catalog matched (case-insensitively) against the query.
 ///
-/// `(keyword, title, subtitle, force_today)` — `force_today` pins the action
+/// `(keyword, title_key, subtitle_key, force_today)` — `force_today` pins the action
 /// to `day_offset = 0` regardless of the instance's currently viewed day
 /// (used for "today" / Rahu Kalam hits); other keywords keep the instance's
 /// current offset so a generic "jyotish" search returns to wherever the
-/// widget was left.
+/// widget was left. Title/subtitle are Fluent ids resolved in universal search.
 const KEYWORDS: &[(&str, &str, &str, bool)] = &[
-    ("today", "Jyotish · Today", "Panchanga for today", true),
-    ("jyotish", "Jyotish", "Vedic panchanga", false),
     (
-        "panchanga",
-        "Jyotish · Panchanga",
-        "Tithi, nakshatra, yoga, karana",
+        "today",
+        "jyotish-search-today-title",
+        "jyotish-search-today-sub",
+        true,
+    ),
+    (
+        "jyotish",
+        "widget-jyotish-name",
+        "jyotish-search-generic-sub",
         false,
     ),
-    ("rahu", "Rahu Kalam", "Inauspicious window", true),
-    ("rahukalam", "Rahu Kalam", "Inauspicious window", true),
-    ("tithi", "Jyotish · Tithi", "Lunar day", false),
-    ("nakshatra", "Jyotish · Nakshatra", "Lunar mansion", false),
-    ("yoga", "Jyotish · Yoga", "Panchanga yoga", false),
-    ("karana", "Jyotish · Karana", "Half-tithi", false),
-    ("muhurta", "Jyotish · Muhurta", "Auspicious windows", false),
-    ("dasha", "Jyotish · Dasha", "Vimshottari periods", false),
+    (
+        "panchanga",
+        "jyotish-search-panchanga-title",
+        "jyotish-search-panchanga-sub",
+        false,
+    ),
+    (
+        "rahu",
+        "jyotish-search-rahu-title",
+        "jyotish-search-rahu-sub",
+        true,
+    ),
+    (
+        "rahukalam",
+        "jyotish-search-rahu-title",
+        "jyotish-search-rahu-sub",
+        true,
+    ),
+    (
+        "tithi",
+        "jyotish-search-tithi-title",
+        "jyotish-search-tithi-sub",
+        false,
+    ),
+    (
+        "nakshatra",
+        "jyotish-search-nakshatra-title",
+        "jyotish-search-nakshatra-sub",
+        false,
+    ),
+    (
+        "yoga",
+        "jyotish-search-yoga-title",
+        "jyotish-search-yoga-sub",
+        false,
+    ),
+    (
+        "karana",
+        "jyotish-search-karana-title",
+        "jyotish-search-karana-sub",
+        false,
+    ),
+    (
+        "muhurta",
+        "jyotish-search-muhurta-title",
+        "jyotish-search-muhurta-sub",
+        false,
+    ),
+    (
+        "dasha",
+        "jyotish-search-dasha-title",
+        "jyotish-search-dasha-sub",
+        false,
+    ),
 ];
 
 /// Score a query against the static keyword catalog.
@@ -1959,7 +2009,12 @@ pub fn search_catalog(query: &str, limit: usize) -> Vec<JyotishCatalogHit> {
         let cfg = entry.value().config.read();
         let hit = score_keyword_match(&q).or_else(|| {
             let loc_l = cfg.location_name().to_lowercase();
-            (!loc_l.is_empty() && loc_l.contains(&q)).then_some((60, "Jyotish", "Panchanga", false))
+            (!loc_l.is_empty() && loc_l.contains(&q)).then_some((
+                60,
+                "widget-jyotish-name",
+                "jyotish-badge-panchanga",
+                false,
+            ))
         });
         if let Some((score, title, subtitle, force_today)) = hit {
             hits.push(JyotishCatalogHit {
@@ -2637,7 +2692,7 @@ mod search_tests {
     fn score_keyword_match_exact_beats_prefix() {
         let (score, title, _subtitle, force_today) =
             score_keyword_match("rahukalam").expect("keyword hit");
-        assert_eq!(title, "Rahu Kalam");
+        assert_eq!(title, "jyotish-search-rahu-title");
         assert!(force_today);
         assert_eq!(score, 100);
     }
@@ -2646,7 +2701,7 @@ mod search_tests {
     fn score_keyword_match_prefix_hit() {
         let (_score, title, _subtitle, force_today) =
             score_keyword_match("tith").expect("prefix hit");
-        assert_eq!(title, "Jyotish · Tithi");
+        assert_eq!(title, "jyotish-search-tithi-title");
         assert!(!force_today);
     }
 
