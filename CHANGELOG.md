@@ -404,6 +404,14 @@ release yet.
 - Build: `.cargo/config.toml` raises `RUST_MIN_STACK` and `orchid-ui/build.rs`
   compiles Slint on a 256 MiB stack — the generated UI tree overflowed both the
   Slint compiler and rustc on Windows.
+- **Document viewer toolbar**: extract shared `DocToolBtn` so Slint/rustc
+  spend less stack and memory on the `viewer-document` compile tree.
+- **Image viewer chrome**: extract shared `ImageToolBtn` so Slint generates
+  fewer duplicate button trees in `viewer-image`.
+- **Password widget**: restyled on the cinema control kit to match the
+  touch-first shell.
+- **Jyotish widget**: restyled on the cinema control kit to match the
+  touch-first shell.
 - Widget Fluent catalogues: leftover English chrome is translated in all 10
   non-English locales (viewer, file manager, audio/video players, processes,
   and remaining widget chrome). Process status / session / startup labels,
