@@ -1,3 +1,9 @@
+# The Slint UI tree generates deeply nested Rust, which overflows rustc's own
+# 8 MiB analysis stack on Windows (STATUS_STACK_BUFFER_OVERRUN while compiling
+# `orchid-ui`). Give every cargo-spawned rustc a roomier stack.
+[env]
+RUST_MIN_STACK = "268435456"
+
 # Increase default stack size on Windows to match Linux (~8 MiB).
 # Required for Slint compile (build.rs) and large UI trees; MSVC defaults to 1 MiB.
 [target.x86_64-pc-windows-msvc]
