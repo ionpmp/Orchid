@@ -1,4 +1,6 @@
 import { Theme } from "../../theme_global.slint";
+import { ButtonTone, ControlSize, Divider, ToggleSwitch, TouchButton } from "../../kit.slint";
+import { Icon } from "../../kit-icons.slint";
 import { FmConflictDialog } from "../../workspace/defs.slint";
 
 export component FmConflictDialog inherits Rectangle {
@@ -7,7 +9,12 @@ export component FmConflictDialog inherits Rectangle {
 
     callback choice(string, bool);
 
-    background: #00000080;
+    property <bool> entered: false;
+    init => { self.entered = true; }
+
+    background: Theme.scrim;
+    opacity: self.entered ? 1.0 : 0.0;
+    animate opacity { duration: Theme.motion-fast; easing: ease-out; }
 
     backdrop-ta := TouchArea {
         clicked => { root.choice("cancel", false); }
@@ -15,24 +22,55 @@ export component FmConflictDialog inherits Rectangle {
 
     Rectangle {
         x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        width: min(parent.width - 24px, 420px);
-        height: lay.preferred-height + 16px;
-        background: Theme.surface-raised;
-        border-radius: Theme.radius-md;
-        drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
-        drop-shadow-color: #00000080;
+        y: (parent.height - self.height) / 2 + (root.entered ? 0px : Theme.space-5);
+        width: min(440px, parent.width - Theme.space-8);
+        height: min(lay.preferred-height, parent.height - Theme.space-8);
+
+        animate y { duration: Theme.motion-base; easing: ease-out; }
+        background: Theme.gradient-glass;
+        border-radius: Theme.radius-xl;
+        border-width: Theme.hairline;
+        border-color: Theme.border-strong;
+        drop-shadow-blur: Theme.elev-3-blur;
+        drop-shadow-offset-y: Theme.elev-3-y;
+        drop-shadow-color: Theme.shadow-key;
+        clip: true;
+
+        TouchArea { }
 
         lay := VerticalLayout {
-            padding: 16px;
-            spacing: 10px;
+            padding: Theme.space-5;
+            spacing: Theme.space-4;
 
-            Text {
-                text: dialog.title;
-                color: Theme.text-primary;
-                font-size: Theme.font-size-lg;
-                font-weight: Theme.weight-semibold;
+            HorizontalLayout {
+                spacing: Theme.space-3;
+
+                Rectangle {
+                    min-width: Theme.control-md;
+                    max-width: Theme.control-md;
+                    min-height: Theme.control-md;
+                    max-height: Theme.control-md;
+                    border-radius: Theme.radius-md;
+                    background: Theme.feedback-danger-soft;
+
+                    Icon {
+                        name: "warning";
+                        size: Theme.font-size-xl;
+                        tint: Theme.feedback-danger;
+                    }
+                }
+
+                Text {
+                    text: dialog.title;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-xl;
+                    font-weight: Theme.weight-bold;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    wrap: word-wrap;
+                }
             }
+
             Text {
                 text: dialog.message;
                 color: Theme.text-secondary;
@@ -40,104 +78,88 @@ export component FmConflictDialog inherits Rectangle {
                 wrap: word-wrap;
             }
 
-            Rectangle {
-                height: 28px;
-                border-radius: Theme.radius-md;
-                apply-ta := TouchArea { clicked => { root.apply-all = !root.apply-all; } }
+            Divider { }
+
+            HorizontalLayout {
+                spacing: Theme.space-3;
+                min-height: Theme.touch-target;
+
                 Text {
-                    text: (root.apply-all ? "☑ " : "☐ ") + dialog.apply-all-label;
-                    color: Theme.text-primary;
-                    font-size: Theme.font-size-sm;
+                    text: dialog.apply-all-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-md;
                     vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+
+                ToggleSwitch {
+                    checked: root.apply-all;
+                    toggled => { root.apply-all = !root.apply-all; }
                 }
             }
 
             VerticalLayout {
-                spacing: 6px;
+                spacing: Theme.space-2;
 
-                Rectangle {
-                    height: 36px;
-                    background: ow-ta.has-hover ? Theme.accent-brand : #4d82ff88;
-                    border-radius: Theme.radius-md;
-                    ow-ta := TouchArea { clicked => { root.choice("overwrite", root.apply-all); } }
-                    Text {
-                        text: dialog.overwrite-label;
-                        color: Theme.text-primary;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                TouchButton {
+                    text: dialog.overwrite-label;
+                    tone: ButtonTone.filled;
+                    size: ControlSize.md;
+                    wide: true;
+                    tooltip: dialog.overwrite-label;
+                    clicked => { root.choice("overwrite", root.apply-all); }
+                }
+
+                HorizontalLayout {
+                    spacing: Theme.space-2;
+
+                    TouchButton {
+                        text: dialog.skip-label;
+                        tone: ButtonTone.neutral;
+                        size: ControlSize.md;
+                        wide: true;
+                        tooltip: dialog.skip-label;
+                        clicked => { root.choice("skip", root.apply-all); }
+                    }
+
+                    TouchButton {
+                        text: dialog.rename-label;
+                        tone: ButtonTone.neutral;
+                        size: ControlSize.md;
+                        wide: true;
+                        tooltip: dialog.rename-label;
+                        clicked => { root.choice("rename", root.apply-all); }
                     }
                 }
+
                 HorizontalLayout {
-                    spacing: 6px;
-                    Rectangle {
-                        height: 32px;
-                        horizontal-stretch: 1;
-                        background: sk-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        sk-ta := TouchArea { clicked => { root.choice("skip", root.apply-all); } }
-                        Text {
-                            text: dialog.skip-label;
-                            color: Theme.text-secondary;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                    spacing: Theme.space-2;
+
+                    TouchButton {
+                        text: dialog.older-label;
+                        tone: ButtonTone.ghost;
+                        size: ControlSize.md;
+                        wide: true;
+                        tooltip: dialog.older-label;
+                        clicked => { root.choice("older", root.apply-all); }
                     }
-                    Rectangle {
-                        height: 32px;
-                        horizontal-stretch: 1;
-                        background: rn-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        rn-ta := TouchArea { clicked => { root.choice("rename", root.apply-all); } }
-                        Text {
-                            text: dialog.rename-label;
-                            color: Theme.text-secondary;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+
+                    if dialog.show-resume : TouchButton {
+                        text: dialog.resume-label;
+                        tone: ButtonTone.ghost;
+                        size: ControlSize.md;
+                        wide: true;
+                        tooltip: dialog.resume-label;
+                        clicked => { root.choice("resume", root.apply-all); }
                     }
-                }
-                HorizontalLayout {
-                    spacing: 6px;
-                    Rectangle {
-                        height: 32px;
-                        horizontal-stretch: 1;
-                        background: ol-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        ol-ta := TouchArea { clicked => { root.choice("older", root.apply-all); } }
-                        Text {
-                            text: dialog.older-label;
-                            color: Theme.text-secondary;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            wrap: no-wrap;
-                            overflow: elide;
-                        }
-                    }
-                    if dialog.show-resume : Rectangle {
-                        height: 32px;
-                        horizontal-stretch: 1;
-                        background: rs-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        rs-ta := TouchArea { clicked => { root.choice("resume", root.apply-all); } }
-                        Text {
-                            text: dialog.resume-label;
-                            color: Theme.text-secondary;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                    }
-                    Rectangle {
-                        height: 32px;
-                        horizontal-stretch: 1;
-                        background: ca-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        ca-ta := TouchArea { clicked => { root.choice("cancel", false); } }
-                        Text {
-                            text: dialog.cancel-label;
-                            color: Theme.text-secondary;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+
+                    TouchButton {
+                        text: dialog.cancel-label;
+                        tone: ButtonTone.outline;
+                        size: ControlSize.md;
+                        wide: true;
+                        tooltip: dialog.cancel-label;
+                        clicked => { root.choice("cancel", false); }
                     }
                 }
             }

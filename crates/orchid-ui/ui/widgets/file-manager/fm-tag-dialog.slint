@@ -1,4 +1,6 @@
 import { Theme } from "../../theme_global.slint";
+import { ButtonTone, ControlSize, Divider, IconButton, TouchButton } from "../../kit.slint";
+import { Icon } from "../../kit-icons.slint";
 import { FmTagState } from "../../workspace/defs.slint";
 
 export component FmTagDialog inherits Rectangle {
@@ -7,8 +9,13 @@ export component FmTagDialog inherits Rectangle {
     callback cancel();
 
     property <string> edited-tag: state.proposed-tag;
+    property <bool> entered: false;
 
-    background: #00000080;
+    init => { self.entered = true; }
+
+    background: Theme.scrim;
+    opacity: self.entered ? 1.0 : 0.0;
+    animate opacity { duration: Theme.motion-fast; easing: ease-out; }
 
     backdrop-ta := TouchArea {
         clicked => { root.cancel(); }
@@ -16,83 +23,116 @@ export component FmTagDialog inherits Rectangle {
 
     Rectangle {
         x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        width: 360px;
-        height: lay.preferred-height + 16px;
-        background: Theme.surface-raised;
-        border-radius: Theme.radius-md;
-        drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
-        drop-shadow-color: #00000080;
+        y: (parent.height - self.height) / 2 + (root.entered ? 0px : Theme.space-5);
+        width: min(400px, parent.width - Theme.space-8);
+        height: min(lay.preferred-height, parent.height - Theme.space-8);
+
+        animate y { duration: Theme.motion-base; easing: ease-out; }
+        background: Theme.gradient-glass;
+        border-radius: Theme.radius-xl;
+        border-width: Theme.hairline;
+        border-color: Theme.border-strong;
+        drop-shadow-blur: Theme.elev-3-blur;
+        drop-shadow-offset-y: Theme.elev-3-y;
+        drop-shadow-color: Theme.shadow-key;
+        clip: true;
+
+        TouchArea { }
 
         lay := VerticalLayout {
-            padding: 16px;
-            spacing: 12px;
+            padding: Theme.space-5;
+            spacing: Theme.space-4;
 
-            Text {
-                text: state.title;
-                color: Theme.text-primary;
-                font-size: Theme.font-size-lg;
-                font-weight: Theme.weight-semibold;
+            HorizontalLayout {
+                spacing: Theme.space-3;
+
+                Rectangle {
+                    min-width: Theme.control-md;
+                    max-width: Theme.control-md;
+                    min-height: Theme.control-md;
+                    max-height: Theme.control-md;
+                    border-radius: Theme.radius-md;
+                    background: Theme.accent-soft;
+
+                    Icon {
+                        name: "star";
+                        size: Theme.font-size-xl;
+                        tint: Theme.accent-brand;
+                    }
+                }
+
+                Text {
+                    text: state.title;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-xl;
+                    font-weight: Theme.weight-bold;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    wrap: word-wrap;
+                }
+
+                IconButton {
+                    icon: "close";
+                    size: ControlSize.sm;
+                    tooltip: state.cancel-label;
+                    tooltip-flip: true;
+                    clicked => { root.cancel(); }
+                }
             }
 
+            Divider { }
+
             Rectangle {
-                height: 32px;
-                background: Theme.surface-base;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: tag-fs.has-focus ? Theme.accent-brand : Theme.border-default;
+                height: Theme.control-md;
+                background: Theme.surface-sunken;
+                border-radius: Theme.radius-pill;
+                border-width: Theme.hairline;
+                border-color: tag-fs.has-focus ? Theme.border-focus : Theme.border-default;
+                animate border-color { duration: Theme.motion-fast; easing: ease-out; }
 
                 tag-fs := FocusScope {
                     width: parent.width;
                     height: parent.height;
+                    init => { self.focus(); }
                     TouchArea { clicked => { tag-fs.focus(); } }
 
-                    TextInput {
-                        text: root.edited-tag;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        vertical-alignment: center;
-                        horizontal-stretch: 1;
-                        single-line: true;
-                        edited => { root.edited-tag = self.text; }
+                    HorizontalLayout {
+                        padding-left: Theme.space-4;
+                        padding-right: Theme.space-4;
+
+                        TextInput {
+                            text: root.edited-tag;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-md;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            single-line: true;
+                            edited => { root.edited-tag = self.text; }
+                            accepted => { root.commit(root.edited-tag); }
+                        }
                     }
                 }
             }
 
             HorizontalLayout {
-                spacing: 8px;
+                spacing: Theme.space-2;
                 alignment: end;
 
-                Rectangle {
-                    width: 96px;
-                    height: 32px;
-                    background: cancel-ta.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-                    cancel-ta := TouchArea { clicked => { root.cancel(); } }
-                    Text {
-                        text: state.cancel-label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                TouchButton {
+                    text: state.cancel-label;
+                    tone: ButtonTone.ghost;
+                    size: ControlSize.md;
+                    tooltip: state.cancel-label;
+                    clicked => { root.cancel(); }
                 }
 
-                Rectangle {
-                    width: 96px;
-                    height: 32px;
-                    background: ok-ta.has-hover ? Theme.accent-brand : #4d82ff88;
-                    border-radius: Theme.radius-md;
-                    ok-ta := TouchArea {
-                        clicked => { root.commit(root.edited-tag); }
-                    }
-                    Text {
-                        text: state.ok-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                TouchButton {
+                    text: state.ok-label;
+                    icon: "check";
+                    tone: ButtonTone.filled;
+                    size: ControlSize.md;
+                    tooltip: state.ok-label;
+                    clicked => { root.commit(root.edited-tag); }
                 }
             }
         }
