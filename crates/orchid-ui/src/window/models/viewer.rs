@@ -1180,7 +1180,7 @@ pub(crate) fn patch_viewer_model(
             patch_image_snapshot(&mut model.image, s, locale);
         }
         Vs::Pdf(s) if model.kind == 4 => {
-            model.pdf = build_pdf_snapshot(s, locale);
+            patch_pdf_snapshot(&mut model.pdf, s, locale);
         }
         Vs::Archive(s) if model.kind == 6 => {
             patch_archive_snapshot(&mut model.archive, s, locale);
@@ -2068,6 +2068,46 @@ fn slint_folder_thumb(
         gps_lat: t.gps_lat,
         gps_lon: t.gps_lon,
     }
+}
+
+fn patch_pdf_snapshot(
+    model: &mut ViewerPdfModel,
+    s: &orchid_viewers::PdfSnapshot,
+    locale: &LocaleManager,
+) {
+    // Keep outline / overlay ModelRc identities so page changes do not tear
+    // down and remount the Slint repeaters.
+    let outline = model.outline.clone();
+    let overlays = model.overlays.clone();
+    *model = build_pdf_snapshot(s, locale);
+    model.outline = outline;
+    model.overlays = overlays;
+    sync_model_rows(
+        &model.outline,
+        s.outline
+            .iter()
+            .map(|row| ViewerPdfOutlineRow {
+                title: row.title.clone().into(),
+                page: row.page as i32,
+                depth: row.depth as i32,
+            })
+            .collect(),
+        |a, b| a.title == b.title && a.page == b.page && a.depth == b.depth,
+    );
+    sync_model_rows(
+        &model.overlays,
+        s.overlays
+            .iter()
+            .map(|ov| ViewerPdfOverlay {
+                x: ov.x,
+                y: ov.y,
+                w: ov.w,
+                h: ov.h,
+                kind: i32::from(ov.kind),
+            })
+            .collect(),
+        |a, b| a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h && a.kind == b.kind,
+    );
 }
 
 fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -> ViewerPdfModel {
