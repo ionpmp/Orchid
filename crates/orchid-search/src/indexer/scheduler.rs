@@ -129,7 +129,9 @@ async fn worker_loop(engine: Arc<SearchEngine>, mut rx: mpsc::UnboundedReceiver<
                     warn!(error = %e, %path, "index remove failed");
                 }
                 dirty = true;
-                force_commit = true;
+                // Let the existing 750 ms coalescing window absorb a burst of
+                // removes (e.g. deleting a watched directory tree) instead of
+                // forcing one Tantivy commit per file.
             }
             IndexTask::Flush => {
                 force_commit = true;
@@ -152,7 +154,6 @@ async fn worker_loop(engine: Arc<SearchEngine>, mut rx: mpsc::UnboundedReceiver<
                         warn!(error = %e, %path, "index remove failed");
                     }
                     dirty = true;
-                    force_commit = true;
                     break;
                 }
                 Ok(IndexTask::Flush) => {
