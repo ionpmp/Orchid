@@ -377,7 +377,7 @@ release yet.
   `control-*` metrics so every tap target stays finger-sized under any theme.
   A new control kit (`kit.slint`, `kit-icons.slint`) provides `TouchButton`,
   `IconButton`, `Chip`, `ToggleSwitch`, `TouchSlider`, `ProgressTrack`,
-  `GlassCard`, `ListTile`, `Badge`, `Tooltip`, `EmptyState`, and a stroked
+  `GlassCard`, `BottomSheet`, `ListTile`, `Badge`, `Tooltip`, `EmptyState`, and a stroked
   vector icon set that replaces the ASCII and emoji glyph buttons. Shell
   (welcome screen, widget frames, group tabs, workspace orb, dock), overlays
   (command palette, settings, notification centre, widget catalog, onboarding),
@@ -395,7 +395,9 @@ release yet.
   card tracks the finger and fades as it goes), and swiping across a widget
   group's tab strip steps through the stack. On narrow canvases the settings
   panel and widget catalog present as bottom sheets with a grab handle instead
-  of centred cards.
+  of centred cards. The cinema kit exposes a reusable `BottomSheet` control;
+  the file-manager context menu uses it on narrow panes (inline submenu
+  expansion) and keeps the cursor-anchored popover on wider layouts.
 - Light themes: raised surfaces now brighten instead of darkening, so elevation
   reads correctly on paper backgrounds; Solarized Light, Catppuccin Latte, and
   High Contrast Light had their canvas / panel tones swapped to match. Text on

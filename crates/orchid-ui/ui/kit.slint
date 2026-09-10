@@ -546,6 +546,72 @@ export component Grabber inherits Rectangle {
     background: Theme.text-tertiary.with-alpha(0.5);
 }
 
+/// Modal bottom sheet for tablet / touch overlays.
+///
+/// Fill the parent (typically a widget or window overlay). The glass card
+/// slides up from the bottom over `Theme.scrim`; backdrop taps emit
+/// `dismissed`. Put the sheet body in `@children`.
+///
+/// Long-press is **not** wired into `ListTile` / `IconButton`: Slint has no
+/// first-class long-press on `TouchArea`, and the Timer + `pointer-event`
+/// pattern used by the workspace canvas is too heavy for every kit control.
+/// Prefer a parent-owned Timer when press-and-hold is required.
+export component BottomSheet inherits Rectangle {
+    callback dismissed();
+    /// Cap the glass card height. `0px` means ~92% of the parent.
+    in property <length> max-sheet-height: 0px;
+    /// Show the grab handle above the body.
+    in property <bool> show-grabber: true;
+
+    property <bool> entered: false;
+    init => { self.entered = true; }
+
+    background: Theme.scrim;
+    opacity: self.entered ? 1.0 : 0.0;
+    animate opacity { duration: Theme.motion-fast; easing: ease-out; }
+
+    TouchArea {
+        clicked => { root.dismissed(); }
+    }
+
+    sheet := Rectangle {
+        width: 100%;
+        height: min(
+            content-lay.preferred-height,
+            root.max-sheet-height > 0px ? root.max-sheet-height : parent.height * 0.92
+        );
+        y: root.entered ? parent.height - self.height : parent.height;
+        animate y { duration: Theme.motion-base; easing: ease-out; }
+
+        background: Theme.gradient-glass;
+        border-radius: Theme.radius-xl;
+        border-width: Theme.hairline;
+        border-color: Theme.border-strong;
+        drop-shadow-blur: Theme.elev-3-blur;
+        drop-shadow-offset-y: Theme.elev-3-y;
+        drop-shadow-color: Theme.shadow-key;
+        clip: true;
+
+        // Keep taps on the card from dismissing via the scrim.
+        TouchArea { }
+
+        content-lay := VerticalLayout {
+            padding-top: root.show-grabber ? Theme.space-2 : Theme.space-3;
+            padding-bottom: Theme.space-3;
+            padding-left: Theme.space-3;
+            padding-right: Theme.space-3;
+            spacing: Theme.space-2;
+
+            if root.show-grabber : HorizontalLayout {
+                alignment: center;
+                Grabber { }
+            }
+
+            @children
+        }
+    }
+}
+
 /// Small count / status badge.
 export component Badge inherits Rectangle {
     in property <string> text;
