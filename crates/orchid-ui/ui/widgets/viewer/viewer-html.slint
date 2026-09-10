@@ -1,5 +1,7 @@
 import { Theme } from "../../theme_global.slint";
+import { ControlSize, EmptyState, IconButton } from "../../kit.slint";
 import { ViewerHtmlModel } from "../../workspace/defs.slint";
+import { DocToolBtn } from "viewer-doc-toolbtn.slint";
 
 export component ViewerHtmlView inherits Rectangle {
     in property <ViewerHtmlModel> model;
@@ -24,107 +26,90 @@ export component ViewerHtmlView inherits Rectangle {
     VerticalLayout {
         spacing: 0;
 
+        // Main chrome
         Rectangle {
-            height: 36px;
-            background: Theme.surface-base;
+            height: Theme.control-xs + Theme.space-2;
+            background: Theme.surface-sunken;
+            clip: false;
+            z: 20;
+
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 6px;
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
+                spacing: Theme.space-1;
                 alignment: start;
 
-                if model.webview-available : Rectangle {
-                    width: max(56px, back-lbl.preferred-width + 12px);
-                    height: 28px;
-                    background: back-ta.has-hover && model.can-go-back ? Theme.surface-raised : transparent;
-                    opacity: model.can-go-back ? 1.0 : 0.45;
-                    border-radius: Theme.radius-md;
+                if model.webview-available : IconButton {
+                    icon: "chevron-left";
+                    size: ControlSize.xs;
                     y: (parent.height - self.height) / 2;
-                    back-ta := TouchArea {
-                        clicked => { if (model.can-go-back) { root.html-command("back"); } }
-                    }
-                    back-lbl := Text {
-                        text: model.back-label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                    opacity: model.can-go-back ? 1.0 : 0.4;
+                    tooltip: model.back-label;
+                    clicked => {
+                        if (model.can-go-back) {
+                            root.html-command("back");
+                        }
                     }
                 }
-                if model.webview-available : Rectangle {
-                    width: max(68px, fwd-lbl.preferred-width + 12px);
-                    height: 28px;
-                    background: fwd-ta.has-hover && model.can-go-forward ? Theme.surface-raised : transparent;
-                    opacity: model.can-go-forward ? 1.0 : 0.45;
-                    border-radius: Theme.radius-md;
+
+                if model.webview-available : IconButton {
+                    icon: "chevron-right";
+                    size: ControlSize.xs;
                     y: (parent.height - self.height) / 2;
-                    fwd-ta := TouchArea {
-                        clicked => { if (model.can-go-forward) { root.html-command("forward"); } }
-                    }
-                    fwd-lbl := Text {
-                        text: model.forward-label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                    opacity: model.can-go-forward ? 1.0 : 0.4;
+                    tooltip: model.forward-label;
+                    clicked => {
+                        if (model.can-go-forward) {
+                            root.html-command("forward");
+                        }
                     }
                 }
-                if model.webview-available : Rectangle {
-                    width: max(64px, reload-lbl.preferred-width + 12px);
-                    height: 28px;
-                    background: reload-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
+
+                if model.webview-available : IconButton {
+                    icon: "refresh";
+                    size: ControlSize.xs;
                     y: (parent.height - self.height) / 2;
-                    reload-ta := TouchArea { clicked => { root.html-command("reload"); } }
-                    reload-lbl := Text {
-                        text: model.reload-label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                    tooltip: model.reload-label;
+                    clicked => { root.html-command("reload"); }
                 }
-                if model.webview-available : Rectangle {
-                    width: max(64px, src-lbl.preferred-width + 12px);
-                    height: 28px;
-                    background: src-ta.has-hover || root.show-source ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    src-ta := TouchArea { clicked => { root.show-source = !root.show-source; } }
-                    src-lbl := Text {
-                        text: model.source-label;
-                        color: root.show-source ? Theme.accent-brand : Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+
+                if model.webview-available : DocToolBtn {
+                    label: model.source-label;
+                    tip: model.source-label;
+                    active: root.show-source;
+                    clicked => { root.show-source = !root.show-source; }
                 }
+
                 Rectangle { horizontal-stretch: 1; }
-                Rectangle {
-                    width: max(96px, open-label.preferred-width + 16px);
-                    height: 28px;
-                    background: open-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    open-ta := TouchArea { clicked => { root.open-browser(); } }
-                    open-label := Text {
-                        text: model.open-label;
-                        color: Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+
+                DocToolBtn {
+                    label: model.open-label;
+                    tip: model.open-label;
+                    clicked => { root.open-browser(); }
                 }
             }
         }
 
-        Text {
-            height: 20px;
-            text: model.webview-available ? model.hint-label : model.unavailable-label;
-            color: Theme.text-tertiary;
-            font-size: Theme.font-size-sm;
-            vertical-alignment: center;
+        Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
+
+        Rectangle {
+            height: Theme.control-xs - Theme.space-1;
+            background: Theme.surface-sunken;
+            HorizontalLayout {
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
+                Text {
+                    text: model.webview-available ? model.hint-label : model.unavailable-label;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    wrap: no-wrap;
+                    overflow: elide;
+                }
+            }
         }
+
+        Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
 
         embed-slot := Rectangle {
             vertical-stretch: 1;
@@ -150,10 +135,20 @@ export component ViewerHtmlView inherits Rectangle {
                 height: parent.height;
                 visible: root.show-source || !model.webview-available;
                 viewport-width: self.width;
-                viewport-height: max(self.height, src.preferred-height + 8px);
+                viewport-height: max(self.height, src.preferred-height + Theme.space-2);
+
+                if model.source-preview == "" : EmptyState {
+                    width: parent.width;
+                    height: parent.height;
+                    icon: model.webview-available ? "layers" : "warning";
+                    title: model.webview-available ? model.source-label : model.unavailable-label;
+                    hint: model.hint-label;
+                }
+
                 src := Text {
-                    x: 8px;
-                    width: parent.width - 16px;
+                    x: Theme.space-2;
+                    width: parent.width - Theme.space-4;
+                    visible: model.source-preview != "";
                     text: model.source-preview;
                     wrap: no-wrap;
                     color: Theme.text-primary;
