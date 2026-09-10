@@ -415,7 +415,8 @@ fn downscale_shell_icon(icon: orchid_fs::ShellIcon, max_edge: u32) -> orchid_fs:
     if max_edge == 0 || (icon.width <= max_edge && icon.height <= max_edge) {
         return icon;
     }
-    let Some(img) = image::RgbaImage::from_raw(icon.width, icon.height, (*icon.rgba).clone()) else {
+    let Some(img) = image::RgbaImage::from_raw(icon.width, icon.height, (*icon.rgba).clone())
+    else {
         return icon;
     };
     let resized = image::DynamicImage::ImageRgba8(img)
@@ -1930,14 +1931,22 @@ impl FileManagerInner {
         let display_px = shell_icon_display_px(tab.view_mode);
         let (first, end) = self.visible_entry_range(tab, entries.len());
         let visible = self.collect_missing_shell_icons(entries, first..end, size);
-        if !visible.is_empty() && self.extract_shell_icon_batch(&visible, size, display_px).await {
+        if !visible.is_empty()
+            && self
+                .extract_shell_icon_batch(&visible, size, display_px)
+                .await
+        {
             // First visible batch paints immediately; further decoration churn
             // is coalesced so hover/scroll are not fighting every icon tick.
             self.publish_refresh();
         }
         let prefetch_end = (end + 48).min(entries.len());
         let extra = self.collect_missing_shell_icons(entries, end..prefetch_end, size);
-        if !extra.is_empty() && self.extract_shell_icon_batch(&extra, size, display_px).await {
+        if !extra.is_empty()
+            && self
+                .extract_shell_icon_batch(&extra, size, display_px)
+                .await
+        {
             self.schedule_decoration_publish();
         }
     }
@@ -4225,28 +4234,34 @@ pub async fn run_action_with_opts(
     let inner = live_inner(instance_id)?;
     if let Some(tag) = action_id.strip_prefix("fs.tag-remove:") {
         if !tag.is_empty() {
-            for p in &target_paths {
-                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
-                inner
-                    .deps
-                    .tag_manager
-                    .remove_tag(&fp, tag)
-                    .map_err(map_fs_error)?;
-            }
+            let fps: Result<Vec<_>, _> = target_paths
+                .iter()
+                .map(|p| orchid_fs::FsPath::new(p).map_err(map_fs_error))
+                .collect();
+            let fps = fps?;
+            let refs: Vec<&orchid_fs::FsPath> = fps.iter().collect();
+            inner
+                .deps
+                .tag_manager
+                .remove_tag_many(&refs, tag)
+                .map_err(map_fs_error)?;
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
         }
     }
     if let Some(tag) = action_id.strip_prefix("fs.tag:") {
         if !tag.is_empty() {
-            for p in &target_paths {
-                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
-                inner
-                    .deps
-                    .tag_manager
-                    .add_tag(&fp, tag)
-                    .map_err(map_fs_error)?;
-            }
+            let fps: Result<Vec<_>, _> = target_paths
+                .iter()
+                .map(|p| orchid_fs::FsPath::new(p).map_err(map_fs_error))
+                .collect();
+            let fps = fps?;
+            let refs: Vec<&orchid_fs::FsPath> = fps.iter().collect();
+            inner
+                .deps
+                .tag_manager
+                .add_tag_many(&refs, tag)
+                .map_err(map_fs_error)?;
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
         }
@@ -4691,26 +4706,32 @@ pub async fn run_action_with_opts(
             return Ok(ActionOutcome::Done);
         }
         "fs.star" => {
-            for p in &target_paths {
-                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
-                inner
-                    .deps
-                    .tag_manager
-                    .set_starred(&fp, true)
-                    .map_err(map_fs_error)?;
-            }
+            let fps: Result<Vec<_>, _> = target_paths
+                .iter()
+                .map(|p| orchid_fs::FsPath::new(p).map_err(map_fs_error))
+                .collect();
+            let fps = fps?;
+            let refs: Vec<&orchid_fs::FsPath> = fps.iter().collect();
+            inner
+                .deps
+                .tag_manager
+                .set_starred_many(&refs, true)
+                .map_err(map_fs_error)?;
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
         }
         "fs.unstar" => {
-            for p in &target_paths {
-                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
-                inner
-                    .deps
-                    .tag_manager
-                    .set_starred(&fp, false)
-                    .map_err(map_fs_error)?;
-            }
+            let fps: Result<Vec<_>, _> = target_paths
+                .iter()
+                .map(|p| orchid_fs::FsPath::new(p).map_err(map_fs_error))
+                .collect();
+            let fps = fps?;
+            let refs: Vec<&orchid_fs::FsPath> = fps.iter().collect();
+            inner
+                .deps
+                .tag_manager
+                .set_starred_many(&refs, false)
+                .map_err(map_fs_error)?;
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
         }
@@ -4887,14 +4908,17 @@ pub async fn run_action_with_opts(
         }
         action_id if action_id.starts_with("fs.color-label:") => {
             let color = color_label_from_action_id(action_id);
-            for p in &target_paths {
-                let fp = orchid_fs::FsPath::new(p).map_err(map_fs_error)?;
-                inner
-                    .deps
-                    .tag_manager
-                    .set_color(&fp, color)
-                    .map_err(map_fs_error)?;
-            }
+            let fps: Result<Vec<_>, _> = target_paths
+                .iter()
+                .map(|p| orchid_fs::FsPath::new(p).map_err(map_fs_error))
+                .collect();
+            let fps = fps?;
+            let refs: Vec<&orchid_fs::FsPath> = fps.iter().collect();
+            inner
+                .deps
+                .tag_manager
+                .set_color_many(&refs, color)
+                .map_err(map_fs_error)?;
             inner.refresh_all_tabs().await;
             return Ok(ActionOutcome::Done);
         }

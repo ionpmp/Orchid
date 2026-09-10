@@ -141,6 +141,110 @@ impl TagManager {
         Ok(())
     }
 
+    /// Star or unstar many paths in one redb transaction.
+    ///
+    /// # Errors
+    ///
+    /// Propagates storage errors. On failure nothing is committed.
+    pub fn set_starred_many(&self, paths: &[&FsPath], starred: bool) -> Result<()> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let now = Utc::now();
+        let mut rows = Vec::with_capacity(paths.len());
+        for path in paths {
+            let mut existing = self.load_or_new(path)?;
+            existing.starred = starred;
+            existing.updated_at = now;
+            rows.push(existing);
+        }
+        self.write_many(rows)?;
+        for path in paths {
+            self.publish(path);
+        }
+        Ok(())
+    }
+
+    /// Set (or clear) the colour label on many paths in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// Propagates storage errors.
+    pub fn set_color_many(&self, paths: &[&FsPath], color: Option<ColorLabel>) -> Result<()> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let now = Utc::now();
+        let mut rows = Vec::with_capacity(paths.len());
+        for path in paths {
+            let mut existing = self.load_or_new(path)?;
+            existing.color_label = color;
+            existing.updated_at = now;
+            rows.push(existing);
+        }
+        self.write_many(rows)?;
+        for path in paths {
+            self.publish(path);
+        }
+        Ok(())
+    }
+
+    /// Append a tag to many paths in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::add_tag`].
+    pub fn add_tag_many(&self, paths: &[&FsPath], tag: &str) -> Result<()> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let normalised = normalise_tag(tag)?;
+        let now = Utc::now();
+        let mut rows = Vec::with_capacity(paths.len());
+        for path in paths {
+            let mut existing = self.load_or_new(path)?;
+            let mut set: BTreeSet<String> = existing.tags.iter().cloned().collect();
+            set.insert(normalised.clone());
+            existing.tags = set.into_iter().collect();
+            existing.updated_at = now;
+            rows.push(existing);
+        }
+        self.write_many(rows)?;
+        for path in paths {
+            self.publish(path);
+        }
+        Ok(())
+    }
+
+    /// Remove a tag from many paths in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// Propagates storage errors.
+    pub fn remove_tag_many(&self, paths: &[&FsPath], tag: &str) -> Result<()> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let Ok(norm) = normalise_tag(tag) else {
+            return Ok(());
+        };
+        let now = Utc::now();
+        let mut rows = Vec::with_capacity(paths.len());
+        for path in paths {
+            let Some(mut existing) = self.get(path)? else {
+                continue;
+            };
+            existing.tags.retain(|t| t != &norm);
+            existing.updated_at = now;
+            rows.push(existing);
+        }
+        self.write_many(rows)?;
+        for path in paths {
+            self.publish(path);
+        }
+        Ok(())
+    }
+
     /// Every distinct tag string present in the database.
     ///
     /// # Errors
@@ -253,6 +357,22 @@ impl TagManager {
     fn write(&self, tag: FileTag) -> Result<()> {
         let mut w = self.storage.write()?;
         w.put_file_tag(&tag)?;
+        w.commit()?;
+        Ok(())
+    }
+
+    /// Persist many tag rows in a single redb transaction.
+    ///
+    /// Multi-select star/color/tag actions previously opened one write
+    /// transaction (and one fsync) per path.
+    fn write_many(&self, tags: Vec<FileTag>) -> Result<()> {
+        if tags.is_empty() {
+            return Ok(());
+        }
+        let mut w = self.storage.write()?;
+        for tag in &tags {
+            w.put_file_tag(tag)?;
+        }
         w.commit()?;
         Ok(())
     }
