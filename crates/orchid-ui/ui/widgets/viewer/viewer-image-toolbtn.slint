@@ -1,0 +1,44 @@
+import { Theme } from "../../theme_global.slint";
+import { Tooltip } from "../../kit.slint";
+import { ViewerBarIcon } from "viewer-icons.slint";
+
+/// Dense image-viewer toolbar icon button (DocToolBtn pattern + ViewerBarIcon).
+export component ImageToolBtn inherits Rectangle {
+    in property <string> icon-id;
+    in property <string> tip;
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    width: 28px;
+    height: 28px;
+    border-radius: Theme.radius-md;
+    background: !root.enabled ? Colors.transparent :
+        root.active ? Theme.surface-raised :
+        ta.has-hover ? Theme.surface-raised : Colors.transparent;
+    opacity: root.enabled ? 1.0 : 0.35;
+
+    animate background { duration: Theme.motion-fast; easing: ease-out; }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.clicked(); }
+    }
+
+    ViewerBarIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        icon-id: root.icon-id;
+        icon-size: 16px;
+        ink: !root.enabled ? Theme.text-disabled :
+            root.active ? Theme.accent-brand : Theme.text-primary;
+    }
+
+    Tooltip {
+        text: root.tip;
+        shown: ta.has-hover && root.enabled && root.tip != "";
+        x: (parent.width - self.width) / 2;
+        y: -self.height - Theme.space-2;
+    }
+}
