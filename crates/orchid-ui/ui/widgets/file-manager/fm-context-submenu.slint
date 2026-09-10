@@ -1,72 +1,80 @@
 import { Theme } from "../../theme_global.slint";
+import { Divider, GlassCard } from "../../kit.slint";
 import { FmContextSubitem } from "../../workspace/defs.slint";
 import { FmActionIcon } from "fm-icons.slint";
 
-export component FmContextSubmenu inherits Rectangle {
+export component FmContextSubmenu inherits GlassCard {
     in property <[FmContextSubitem]> actions;
     callback action-clicked(string);
 
-    background: Theme.surface-raised;
-    border-color: Theme.border-default;
-    border-width: 1px;
-    border-radius: Theme.radius-md;
-    drop-shadow-blur: Theme.reduce-motion ? 0px : 12px;
-    drop-shadow-color: #00000060;
+    elevation: 2;
+    clip: false;
 
     VerticalLayout {
-        padding: 4px;
-        spacing: 1px;
+        padding: Theme.space-2;
+        spacing: Theme.space-1;
 
         for child in actions : Rectangle {
-            height: child.is-separator ? 5px : 28px;
-            background: child-ta.has-hover && child.enabled && !child.is-separator
-                ? Theme.accent-brand : transparent;
-            border-radius: Theme.radius-md;
-            opacity: child.enabled ? 1.0 : 0.4;
+            height: child.is-separator ? Theme.space-3 : Theme.row-height;
+            background: transparent;
 
-            child-ta := TouchArea {
-                enabled: child.enabled && !child.is-separator;
-                clicked => { root.action-clicked(child.id); }
-            }
-
-            if child.is-separator : Rectangle {
-                y: 2px;
-                height: 1px;
+            if child.is-separator : Divider {
+                y: (parent.height - self.height) / 2;
                 width: parent.width;
-                background: Theme.border-default;
             }
 
-            if !child.is-separator : HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 8px;
+            if !child.is-separator : Rectangle {
+                width: 100%;
+                height: 100%;
+                border-radius: Theme.radius-md;
+                opacity: child.enabled ? 1.0 : 0.4;
+                background: child-ta.pressed && child.enabled ? Theme.state-press
+                    : child-ta.has-hover && child.enabled ? Theme.state-hover
+                    : Colors.transparent;
 
-                if child.swatch-color != "" : Rectangle {
-                    width: 12px;
-                    height: 12px;
-                    border-radius: 6px;
-                    border-width: child.swatch-color == "none" ? 1px : 0px;
-                    border-color: Theme.border-default;
-                    background: child.swatch-color == "red" ? #ef4444
-                              : child.swatch-color == "orange" ? #f97316
-                              : child.swatch-color == "yellow" ? #eab308
-                              : child.swatch-color == "green" ? #22c55e
-                              : child.swatch-color == "blue" ? #3b82f6
-                              : child.swatch-color == "purple" ? #a855f7
-                              : child.swatch-color == "gray" ? #9ca3af
-                              : transparent;
+                animate background { duration: Theme.motion-instant; easing: ease-out; }
+
+                child-ta := TouchArea {
+                    enabled: child.enabled && !child.is-separator;
+                    mouse-cursor: MouseCursor.pointer;
+                    clicked => { root.action-clicked(child.id); }
                 }
-                if child.swatch-color == "" : FmActionIcon {
-                    y: (parent.height - self.height) / 2;
-                    icon-size: 14px;
-                    icon-id: child.icon;
-                }
-                Text {
-                    text: child.label;
-                    color: Theme.text-primary;
-                    font-size: Theme.font-size-sm;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
+
+                HorizontalLayout {
+                    padding-left: Theme.space-3;
+                    padding-right: Theme.space-3;
+                    spacing: Theme.space-3;
+
+                    if child.swatch-color != "" : Rectangle {
+                        y: (parent.height - self.height) / 2;
+                        width: Theme.font-size-md;
+                        height: Theme.font-size-md;
+                        border-radius: self.height / 2;
+                        border-width: child.swatch-color == "none" ? Theme.hairline : 0px;
+                        border-color: Theme.border-default;
+                        background: child.swatch-color == "red" ? #ef4444
+                                  : child.swatch-color == "orange" ? #f97316
+                                  : child.swatch-color == "yellow" ? #eab308
+                                  : child.swatch-color == "green" ? #22c55e
+                                  : child.swatch-color == "blue" ? #3b82f6
+                                  : child.swatch-color == "purple" ? #a855f7
+                                  : child.swatch-color == "gray" ? #9ca3af
+                                  : transparent;
+                    }
+                    if child.swatch-color == "" : FmActionIcon {
+                        y: (parent.height - self.height) / 2;
+                        icon-size: Theme.font-size-md;
+                        icon-id: child.icon;
+                    }
+                    Text {
+                        text: child.label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        font-weight: Theme.weight-medium;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
                 }
             }
         }
