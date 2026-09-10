@@ -410,7 +410,13 @@ release yet.
 - **Document viewer toolbar**: extract shared `DocToolBtn` so Slint/rustc
   spend less stack and memory on the `viewer-document` compile tree.
 - **Image viewer chrome**: extract shared `ImageToolBtn` so Slint generates
-  fewer duplicate button trees in `viewer-image`.
+  fewer duplicate button trees in `viewer-image`; extract and restyle
+  sidebar / overlay panels in `viewer-image-panels` on the cinema kit.
+- **Archive / HTML viewer chrome**: restyled on the cinema control kit
+  (`IconButton` / `DocToolBtn`, Theme control heights, `surface-sunken`
+  toolbars).
+- **File-manager dialogs**: find, rename, conflict, passphrase, and tag
+  dialogs restyled on the cinema control kit.
 - **Password widget**: restyled on the cinema control kit to match the
   touch-first shell.
 - **Jyotish widget**: restyled on the cinema control kit to match the
