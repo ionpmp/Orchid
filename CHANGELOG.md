@@ -412,6 +412,12 @@ release yet.
   touch-first shell.
 - **Jyotish widget**: restyled on the cinema control kit to match the
   touch-first shell.
+- Light-theme cinema contrast: glass / scrim / shadow alphas and ink-based
+  edge highlights so panels and GlassCard stay readable on paper
+  (`a9df27fd`).
+- **PDF / media / text viewer chrome**: restyled on the cinema control kit
+  (`IconButton` / `DocToolBtn` / `Tooltip`, Theme control heights, hairline
+  separators, `surface-sunken` toolbars).
 - Widget Fluent catalogues: leftover English chrome is translated in all 10
   non-English locales (viewer, file manager, audio/video players, processes,
   and remaining widget chrome). Process status / session / startup labels,
