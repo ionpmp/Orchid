@@ -368,6 +368,42 @@ release yet.
   listed only in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ### Changed
+- **Touch-first "cinema" redesign of the whole interface.** `Theme` in
+  `theme_global.slint` now derives a full design system from the seven raw
+  theme colours: surface ramp (sunken → glass → floating), hover / press /
+  selected state layers, accent and feedback ramps, radius / spacing /
+  elevation / motion scales, cinematic gradient brushes, and density-aware
+  `control-*` metrics so every tap target stays finger-sized under any theme.
+  A new control kit (`kit.slint`, `kit-icons.slint`) provides `TouchButton`,
+  `IconButton`, `Chip`, `ToggleSwitch`, `TouchSlider`, `ProgressTrack`,
+  `GlassCard`, `ListTile`, `Badge`, `Tooltip`, `EmptyState`, and a stroked
+  vector icon set that replaces the ASCII and emoji glyph buttons. Shell
+  (welcome screen, widget frames, group tabs, workspace orb, dock), overlays
+  (command palette, settings, notification centre, widget catalog, onboarding),
+  and widgets (calculator, clock, weather, media, moon, system, RSS, recent
+  files, notes, calendar, browser, processes, file-manager toolbar / tabs /
+  sidebar / breadcrumbs, terminal tabs, audio and video players, viewer states,
+  confirm dialogs) were rebuilt on those tokens. The players get a hero play
+  button with an accent bloom and seek rails that thicken under the finger;
+  calendar shares a single event-colour palette; the browser gains a tabbed
+  strip with an accent underline and a focus-lit address pill.
+- Overlays animate in: dialogs, palette, settings, catalog, and the tour fade
+  and rise into place, and the notification centre slides in from its docked
+  edge. All of it collapses to instant when "reduce motion" is on.
+- Touch gestures: notifications can be swiped away in either direction (the
+  card tracks the finger and fades as it goes), and swiping across a widget
+  group's tab strip steps through the stack. On narrow canvases the settings
+  panel and widget catalog present as bottom sheets with a grab handle instead
+  of centred cards.
+- Light themes: raised surfaces now brighten instead of darkening, so elevation
+  reads correctly on paper backgrounds; Solarized Light, Catppuccin Latte, and
+  High Contrast Light had their canvas / panel tones swapped to match. Text on
+  a solid accent fill is chosen from the accent's own brightness rather than
+  from the theme being dark or light, which fixes white-on-yellow and
+  black-on-blue pairings in the high-contrast and Solarized themes.
+- Build: `.cargo/config.toml` raises `RUST_MIN_STACK` and `orchid-ui/build.rs`
+  compiles Slint on a 256 MiB stack — the generated UI tree overflowed both the
+  Slint compiler and rustc on Windows.
 - Widget Fluent catalogues: leftover English chrome is translated in all 10
   non-English locales (viewer, file manager, audio/video players, processes,
   and remaining widget chrome). Process status / session / startup labels,
