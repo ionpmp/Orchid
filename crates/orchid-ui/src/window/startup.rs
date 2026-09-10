@@ -153,7 +153,8 @@ fn apply_theme_to(window: &StartupWindow, theme: &ThemeManager, config: &RwLock<
     let theme = theme.current();
     let tokens = &theme.tokens;
     let cfg = config.read();
-    let scale = cfg.appearance.density.ui_scale() * cfg.appearance.font_scale.clamp(0.75, 2.0);
+    let control_scale = cfg.appearance.density.ui_scale();
+    let scale = control_scale * cfg.appearance.font_scale.clamp(0.75, 2.0);
     let reduce_motion = cfg.appearance.reduce_motion;
     let font_sans = crate::system_theme::resolve_font_family_sans(
         &cfg.appearance,
@@ -186,6 +187,8 @@ fn apply_theme_to(window: &StartupWindow, theme: &ThemeManager, config: &RwLock<
     g.set_radius_md(tokens.radius.md * scale);
     g.set_spacing_unit(tokens.spacing.unit * scale);
     g.set_reduce_motion(reduce_motion);
+    g.set_is_dark(theme.meta.is_dark);
+    g.set_control_scale(control_scale);
 }
 
 fn apply_strings_to(window: &StartupWindow, mgr: &LocaleManager) {

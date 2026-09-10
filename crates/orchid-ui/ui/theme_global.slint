@@ -1,4 +1,26 @@
+// Orchid design tokens.
+//
+// Rust feeds the small set of `in` properties (raw theme colours, typography,
+// scales). Everything else is derived here so that every bundled *and*
+// user-installed JSON theme automatically gains the full cinematic palette,
+// elevation ramp, touch metrics, and motion scale.
+//
+// Naming groups:
+//   surface-*   painted backgrounds, from deepest to most raised
+//   state-*     hover / press / selected overlays
+//   accent-*    brand ramp + glow
+//   feedback-*  success / warning / danger / info
+//   text-*      foreground ramp
+//   border-*    hairlines and focus rings
+//   radius-*    corner ramp
+//   space-*     spacing ramp (multiples of spacing-unit)
+//   control-*   touch-first control metrics
+//   elev-*      drop-shadow ramp
+//   motion-*    animation durations (collapse to 0ms when reduce-motion)
+//   gradient-*  cinematic brushes
+
 export global Theme {
+    // ----- Raw tokens pushed from Rust -------------------------------------
     in property <color> surface-base;
     in property <color> surface-raised;
     in property <color> text-primary;
@@ -20,4 +42,227 @@ export global Theme {
     in property <length> radius-md;
     in property <length> spacing-unit;
     in property <bool> reduce-motion: false;
+    /// True when the active theme is dark; flips every derived tint.
+    in property <bool> is-dark: true;
+    /// Density-driven metric scale (1.0 = hybrid). Independent of font scale so
+    /// that touch targets stay finger-sized even when text is scaled down.
+    in property <float> control-scale: 1.0;
+
+    // ----- Surfaces --------------------------------------------------------
+    //
+    // Dark themes gain light as they rise; light themes are already near the
+    // white ceiling, so they rise by *shedding* the canvas tint and leaning on
+    // the elevation shadows instead. Deriving both directions from the same two
+    // raw colours keeps user JSON themes correct without extra fields.
+
+    /// Recessed wells: canvas behind cards, list backdrops, inset fields.
+    out property <color> surface-sunken: is-dark
+        ? surface-base.darker(0.45)
+        : surface-base.darker(0.05);
+    /// One step above `surface-raised` — popovers, menus, sheets.
+    out property <color> surface-overlay: is-dark
+        ? surface-raised.brighter(0.28)
+        : surface-raised.brighter(0.35);
+    /// Highest layer: command palette, modal dialogs.
+    out property <color> surface-floating: is-dark
+        ? surface-raised.brighter(0.5)
+        : surface-raised.brighter(0.6);
+    /// Translucent panel fill for glass chrome stacked over content.
+    out property <color> surface-glass: is-dark
+        ? surface-raised.brighter(0.2).with-alpha(0.72)
+        : surface-raised.with-alpha(0.78);
+    /// Heavier glass for toolbars that sit directly on media.
+    out property <color> surface-glass-strong: is-dark
+        ? surface-base.with-alpha(0.9)
+        : surface-raised.with-alpha(0.92);
+    /// Modal backdrop.
+    out property <color> scrim: is-dark ? #00000099 : #1A1B2266;
+
+    // ----- Interaction states ---------------------------------------------
+    out property <color> state-hover: is-dark
+        ? text-primary.with-alpha(0.08)
+        : text-primary.with-alpha(0.06);
+    out property <color> state-press: is-dark
+        ? text-primary.with-alpha(0.14)
+        : text-primary.with-alpha(0.11);
+    out property <color> state-selected: accent-brand.with-alpha(is-dark ? 0.22 : 0.16);
+    out property <color> state-disabled: text-primary.with-alpha(0.05);
+
+    // ----- Accent ramp -----------------------------------------------------
+    /// Tinted background for accented chips, active tabs, selected rows.
+    out property <color> accent-soft: accent-brand.with-alpha(is-dark ? 0.18 : 0.14);
+    /// Slightly stronger tint for hovered accent surfaces.
+    out property <color> accent-soft-strong: accent-brand.with-alpha(is-dark ? 0.3 : 0.24);
+    /// Pressed / emphasised solid accent.
+    out property <color> accent-strong: is-dark
+        ? accent-brand.brighter(0.15)
+        : accent-brand.darker(0.15);
+    /// Muted accent for outlines and inactive indicators.
+    out property <color> accent-muted: accent-brand.with-alpha(0.45);
+    /// Perceptual brightness of the accent (0 = black, 1 = white).
+    out property <float> accent-luma:
+        (accent-brand.red * 0.299 + accent-brand.green * 0.587 + accent-brand.blue * 0.114) / 255;
+    /// Readable foreground on a solid `accent-brand` fill. Picked from the
+    /// accent's own brightness, so a yellow accent gets ink and a navy accent
+    /// gets paper — regardless of whether the theme is dark or light.
+    out property <color> accent-contrast: accent-luma > 0.62 ? #0E0F14 : #FFFFFF;
+    /// Bloom colour used for accent drop shadows.
+    out property <color> accent-glow: accent-brand.with-alpha(is-dark ? 0.45 : 0.28);
+    /// Complementary hue for two-stop cinematic gradients.
+    out property <color> accent-secondary: is-dark ? #4EA8DE : #2C7BE5;
+
+    // ----- Feedback --------------------------------------------------------
+    out property <color> feedback-success: is-dark ? #3DDC97 : #12855A;
+    out property <color> feedback-warning: is-dark ? #FFB454 : #B26A00;
+    out property <color> feedback-danger: is-dark ? #FF6B81 : #C62B45;
+    out property <color> feedback-info: is-dark ? #5AC8FA : #0B72C4;
+    out property <color> feedback-success-soft: feedback-success.with-alpha(0.16);
+    out property <color> feedback-warning-soft: feedback-warning.with-alpha(0.16);
+    out property <color> feedback-danger-soft: feedback-danger.with-alpha(0.16);
+    out property <color> feedback-info-soft: feedback-info.with-alpha(0.16);
+
+    // ----- Text ------------------------------------------------------------
+    out property <color> text-on-accent: accent-contrast;
+    out property <color> text-disabled: text-tertiary.with-alpha(0.5);
+    /// Wide-tracked micro labels ("EYEBROW" captions).
+    out property <color> text-eyebrow: text-tertiary;
+
+    // ----- Borders ---------------------------------------------------------
+    out property <color> border-subtle: border-default.with-alpha(0.5);
+    out property <color> border-strong: is-dark
+        ? text-primary.with-alpha(0.22)
+        : text-primary.with-alpha(0.18);
+    out property <color> border-focus: accent-brand;
+    /// Top highlight that gives glass panels their lit edge.
+    out property <color> border-highlight: is-dark ? #FFFFFF1F : #FFFFFFCC;
+
+    // ----- Typography ------------------------------------------------------
+    out property <length> font-size-xs: max(9px, font-size-sm * 0.85);
+    out property <length> font-size-4xl: font-size-3xl * 1.35;
+    out property <length> font-size-display: font-size-3xl * 1.8;
+    out property <int> weight-bold: min(900, weight-semibold + 100);
+    /// Tracking for uppercase micro labels.
+    out property <length> tracking-wide: 1.2px;
+    out property <length> tracking-wider: 2px;
+
+    // ----- Radius ramp -----------------------------------------------------
+    out property <length> radius-xs: radius-md * 0.375;
+    out property <length> radius-sm: radius-md * 0.625;
+    out property <length> radius-lg: radius-md * 1.75;
+    out property <length> radius-xl: radius-md * 2.5;
+    out property <length> radius-2xl: radius-md * 3.5;
+    /// Fully rounded; large enough to pill any control height.
+    out property <length> radius-pill: 999px;
+
+    // ----- Spacing ramp ----------------------------------------------------
+    out property <length> space-1: spacing-unit;
+    out property <length> space-2: spacing-unit * 2;
+    out property <length> space-3: spacing-unit * 3;
+    out property <length> space-4: spacing-unit * 4;
+    out property <length> space-5: spacing-unit * 5;
+    out property <length> space-6: spacing-unit * 6;
+    out property <length> space-8: spacing-unit * 8;
+    out property <length> space-10: spacing-unit * 10;
+
+    // ----- Touch-first control metrics -------------------------------------
+    /// Minimum comfortable finger target. Never render a tap area below this.
+    out property <length> touch-target: 44px * control-scale;
+    out property <length> control-xs: 30px * control-scale;
+    out property <length> control-sm: 38px * control-scale;
+    out property <length> control-md: 48px * control-scale;
+    out property <length> control-lg: 60px * control-scale;
+    out property <length> control-xl: 76px * control-scale;
+    /// Square icon buttons in chrome.
+    out property <length> icon-button: 44px * control-scale;
+    /// Compact icon buttons for dense in-widget toolbars.
+    out property <length> icon-button-sm: 36px * control-scale;
+    /// Widget frame title bar.
+    out property <length> header-height: 52px * control-scale;
+    /// In-widget toolbars / tab strips.
+    out property <length> toolbar-height: 52px * control-scale;
+    /// Tap rows in lists (file manager, settings, results).
+    out property <length> row-height: 48px * control-scale;
+    /// Hairline that stays crisp at any scale.
+    out property <length> hairline: 1px;
+    /// Thickness of the active-state indicator bar under tabs.
+    out property <length> indicator-thickness: 3px;
+    /// Drag handle used by sheets and resize grips.
+    out property <length> grabber-width: 40px * control-scale;
+    out property <length> grabber-height: 5px;
+    /// Slider / progress rails. The `-lg` variant is the hovered, grabbable
+    /// state — the rail thickens under the finger instead of staying hairline.
+    out property <length> track-height: 5px;
+    out property <length> track-height-lg: 9px;
+
+    // ----- Elevation -------------------------------------------------------
+    out property <color> shadow-ambient: is-dark ? #00000073 : #1A1B2226;
+    out property <color> shadow-key: is-dark ? #000000A6 : #1A1B2233;
+    out property <length> elev-1-blur: reduce-motion ? 0px : 10px;
+    out property <length> elev-1-y: reduce-motion ? 0px : 2px;
+    out property <length> elev-2-blur: reduce-motion ? 0px : 24px;
+    out property <length> elev-2-y: reduce-motion ? 0px : 8px;
+    out property <length> elev-3-blur: reduce-motion ? 0px : 48px;
+    out property <length> elev-3-y: reduce-motion ? 0px : 18px;
+    out property <length> elev-glow-blur: reduce-motion ? 0px : 26px;
+
+    // ----- Motion ----------------------------------------------------------
+    out property <duration> motion-instant: reduce-motion ? 0ms : 90ms;
+    out property <duration> motion-fast: reduce-motion ? 0ms : 150ms;
+    out property <duration> motion-base: reduce-motion ? 0ms : 240ms;
+    out property <duration> motion-slow: reduce-motion ? 0ms : 380ms;
+    /// Scale factor applied to a control while pressed.
+    out property <float> press-scale: reduce-motion ? 1.0 : 0.965;
+
+    // ----- Cinematic brushes ----------------------------------------------
+    /// App backdrop: a slow vertical fade that keeps the eye on the content.
+    /// Light themes fade the other way — paper is brightest where content sits.
+    out property <brush> gradient-canvas: @linear-gradient(
+        180deg,
+        surface-base.brighter(is-dark ? 0.18 : 0.02) 0%,
+        surface-base 45%,
+        surface-base.darker(is-dark ? 0.25 : 0.05) 100%
+    );
+    /// Lit glass panel: brighter at the top edge, like a backlit screen.
+    out property <brush> gradient-glass: @linear-gradient(
+        180deg,
+        surface-raised.brighter(is-dark ? 0.22 : 0.5).with-alpha(0.95) 0%,
+        surface-raised.with-alpha(is-dark ? 0.82 : 0.92) 100%
+    );
+    /// Chrome bars (widget headers, toolbars).
+    out property <brush> gradient-chrome: @linear-gradient(
+        180deg,
+        surface-raised.brighter(is-dark ? 0.3 : 0.4) 0%,
+        surface-raised.darker(is-dark ? 0.08 : 0.03) 100%
+    );
+    /// Primary call-to-action fill.
+    out property <brush> gradient-accent: @linear-gradient(
+        135deg,
+        accent-brand.brighter(0.22) 0%,
+        accent-brand 55%,
+        accent-secondary.mix(accent-brand, 0.35) 100%
+    );
+    /// Hero / onboarding backdrop with an accent bloom in the corner.
+    out property <brush> gradient-hero: @linear-gradient(
+        160deg,
+        accent-brand.with-alpha(is-dark ? 0.3 : 0.16) 0%,
+        surface-base.with-alpha(0.0) 42%,
+        accent-secondary.with-alpha(is-dark ? 0.2 : 0.1) 100%
+    );
+    /// Letterbox fade used to keep overlaid controls legible over media.
+    out property <brush> gradient-scrim-bottom: @linear-gradient(
+        180deg,
+        #00000000 0%,
+        #000000B3 100%
+    );
+    out property <brush> gradient-scrim-top: @linear-gradient(
+        180deg,
+        #000000A6 0%,
+        #00000000 100%
+    );
+    /// Hairline sheen drawn along the top edge of raised chrome.
+    out property <brush> gradient-edge-highlight: @linear-gradient(
+        180deg,
+        border-highlight 0%,
+        #FFFFFF00 100%
+    );
 }

@@ -27,13 +27,13 @@ pub fn orchid_dark_theme() -> Theme {
             is_dark: true,
         },
         ColorTokens {
-            surface_base: Color::rgb(0x17, 0x18, 0x1E),
-            surface_raised: Color::rgb(0x20, 0x22, 0x2A),
-            text_primary: Color::rgb(0xEB, 0xEC, 0xF0),
-            text_secondary: Color::rgb(0xAE, 0xB0, 0xBC),
-            text_tertiary: Color::rgb(0x80, 0x84, 0x94),
-            accent_brand: Color::rgb(0xC4, 0x9B, 0xE6),
-            border_default: Color::rgba(0xFF, 0xFF, 0xFF, 0x14),
+            surface_base: Color::rgb(0x0C, 0x0D, 0x12),
+            surface_raised: Color::rgb(0x16, 0x18, 0x21),
+            text_primary: Color::rgb(0xF2, 0xF3, 0xF7),
+            text_secondary: Color::rgb(0xB4, 0xB7, 0xC6),
+            text_tertiary: Color::rgb(0x7E, 0x83, 0x99),
+            accent_brand: Color::rgb(0xC9, 0x9C, 0xFF),
+            border_default: Color::rgba(0xFF, 0xFF, 0xFF, 0x1A),
         },
     )
 }
@@ -90,12 +90,14 @@ pub fn solarized_light_theme() -> Theme {
             is_dark: false,
         },
         ColorTokens {
-            surface_base: Color::rgb(0xFD, 0xF6, 0xE3),   // base3
-            surface_raised: Color::rgb(0xEE, 0xE8, 0xD5), // base2
-            text_primary: Color::rgb(0x65, 0x7B, 0x83),   // base00
-            text_secondary: Color::rgb(0x58, 0x6E, 0x75), // base01
-            text_tertiary: Color::rgb(0x93, 0xA2, 0xA1),  // base1
-            accent_brand: Color::rgb(0x26, 0x8B, 0xD2),   // blue
+            // Raised panels must be *lighter* than the canvas, so base2 is the
+            // canvas and base3 (the lightest tone) lifts the panels.
+            surface_base: Color::rgb(0xEE, 0xE8, 0xD5), // base2
+            surface_raised: Color::rgb(0xFD, 0xF6, 0xE3), // base3
+            text_primary: Color::rgb(0x58, 0x6E, 0x75), // base01
+            text_secondary: Color::rgb(0x65, 0x7B, 0x83), // base00
+            text_tertiary: Color::rgb(0x93, 0xA2, 0xA1), // base1
+            accent_brand: Color::rgb(0x26, 0x8B, 0xD2), // blue
             border_default: Color::rgba(0x58, 0x6E, 0x75, 0x40), // base01 @ 25%
         },
     )
@@ -153,12 +155,14 @@ pub fn catppuccin_latte_theme() -> Theme {
             is_dark: false,
         },
         ColorTokens {
-            surface_base: Color::rgb(0xEF, 0xF1, 0xF5),   // base
-            surface_raised: Color::rgb(0xCC, 0xD0, 0xDA), // surface0
-            text_primary: Color::rgb(0x4C, 0x4F, 0x69),   // text
+            // Mantle is the canvas; `base` lifts panels above it (surface0 is
+            // darker than the canvas and would invert the elevation ramp).
+            surface_base: Color::rgb(0xE6, 0xE9, 0xEF), // mantle
+            surface_raised: Color::rgb(0xEF, 0xF1, 0xF5), // base
+            text_primary: Color::rgb(0x4C, 0x4F, 0x69), // text
             text_secondary: Color::rgb(0x5C, 0x5F, 0x77), // subtext1
-            text_tertiary: Color::rgb(0x6C, 0x6F, 0x85),  // subtext0
-            accent_brand: Color::rgb(0x88, 0x39, 0xEF),   // mauve
+            text_tertiary: Color::rgb(0x6C, 0x6F, 0x85), // subtext0
+            accent_brand: Color::rgb(0x88, 0x39, 0xEF), // mauve
             border_default: Color::rgba(0x4C, 0x4F, 0x69, 0x20),
         },
     )
@@ -195,8 +199,9 @@ pub fn high_contrast_light_theme() -> Theme {
             is_dark: false,
         },
         ColorTokens {
-            surface_base: Color::rgb(0xFF, 0xFF, 0xFF),
-            surface_raised: Color::rgb(0xF0, 0xF0, 0xF0),
+            // Panels stay pure white; the canvas steps down so elevation reads.
+            surface_base: Color::rgb(0xF0, 0xF0, 0xF0),
+            surface_raised: Color::rgb(0xFF, 0xFF, 0xFF),
             text_primary: Color::rgb(0x00, 0x00, 0x00),
             text_secondary: Color::rgb(0x1A, 0x1A, 0x1A),
             text_tertiary: Color::rgb(0x40, 0x40, 0x40),

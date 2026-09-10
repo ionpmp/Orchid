@@ -603,8 +603,8 @@ impl MainWindowController {
         let theme = self.theme.current();
         let cfg = self.config.read();
         let (canvas_w, _) = *self.canvas_size.lock();
-        let scale = crate::window::effective_ui_scale(cfg.appearance.density, canvas_w)
-            * cfg.appearance.font_scale.clamp(0.75, 2.0);
+        let control_scale = crate::window::effective_ui_scale(cfg.appearance.density, canvas_w);
+        let scale = control_scale * cfg.appearance.font_scale.clamp(0.75, 2.0);
         let reduce_motion = cfg.appearance.reduce_motion;
         let font_sans = crate::system_theme::resolve_font_family_sans(
             &cfg.appearance,
@@ -636,6 +636,8 @@ impl MainWindowController {
         g.set_radius_md(t.radius.md * scale);
         g.set_spacing_unit(t.spacing.unit * scale);
         g.set_reduce_motion(reduce_motion);
+        g.set_is_dark(theme.meta.is_dark);
+        g.set_control_scale(control_scale);
         Ok(())
     }
 

@@ -96,9 +96,9 @@ pub struct RadiusTokens {
 impl Default for RadiusTokens {
     fn default() -> Self {
         Self {
-            sm: 4.0,
-            md: 8.0,
-            lg: 16.0,
+            sm: 6.0,
+            md: 14.0,
+            lg: 28.0,
         }
     }
 }
