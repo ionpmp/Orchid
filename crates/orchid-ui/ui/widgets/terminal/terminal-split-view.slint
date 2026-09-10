@@ -1,5 +1,5 @@
 import { Theme } from "../../theme_global.slint";
-import { Strings } from "../../strings_global.slint";
+import { ControlSize, IconButton, Tooltip } from "../../kit.slint";
 import { Strings } from "../../strings_global.slint";
 import { TerminalPaneModel, TerminalDividerModel } from "../../workspace/defs.slint";
 import { TerminalView } from "../../workspace/terminal-view.slint";
@@ -23,7 +23,7 @@ export component TerminalSplitView inherits Rectangle {
         height: parent.height * (pane.bottom - pane.top);
         clip: true;
         background: Theme.surface-base;
-        border-width: pane.is-focused ? 1px : 0px;
+        border-width: pane.is-focused ? Theme.hairline : 0px;
         border-color: Theme.accent-brand;
 
         TerminalView {
@@ -49,51 +49,26 @@ export component TerminalSplitView inherits Rectangle {
             clicked => { root.pane-clicked(pane.session-id); }
         }
 
-        if pane.show-close : Rectangle {
-            x: parent.width - 20px;
-            y: 2px;
-            width: 18px;
-            height: 18px;
-            background: close-ta.has-hover ? Theme.surface-raised : transparent;
-            border-radius: 9px;
-
-            close-ta := TouchArea {
-                clicked => { root.pane-closed(pane.session-id); }
-            }
-            if close-ta.has-hover : Rectangle {
-                x: parent.x + parent.width - close-hint.preferred-width - 12px;
-                y: parent.height + 2px;
-                width: close-hint.preferred-width + 12px;
-                height: close-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                close-hint := Text {
-                    x: 6px; y: 3px;
-                    text: Strings.terminal-tooltip-pane-close;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
-            }
-
-            Text {
-                text: "×";
-                color: Theme.text-tertiary;
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
+        if pane.show-close : IconButton {
+            x: parent.width - self.width - Theme.space-1;
+            y: Theme.space-1;
+            icon: "close";
+            size: ControlSize.xs;
+            tooltip: Strings.terminal-tooltip-pane-close;
+            tooltip-flip: true;
+            clicked => { root.pane-closed(pane.session-id); }
         }
     }
 
     for div in dividers : Rectangle {
         x: parent.width * div.left;
         y: parent.height * div.top;
-        width: div.horizontal ? max(parent.width * (div.right - div.left), 6px) : parent.width * (div.right - div.left);
-        height: !div.horizontal ? max(parent.height * (div.bottom - div.top), 6px) : parent.height * (div.bottom - div.top);
+        width: div.horizontal ? max(parent.width * (div.right - div.left), Theme.space-2) : parent.width * (div.right - div.left);
+        height: !div.horizontal ? max(parent.height * (div.bottom - div.top), Theme.space-2) : parent.height * (div.bottom - div.top);
         background: div-ta.has-hover || div-ta.pressed ? Theme.accent-brand : Theme.border-default;
+        border-radius: Theme.radius-pill;
+
+        animate background { duration: Theme.motion-fast; easing: ease-out; }
 
         div-ta := TouchArea {
             moved => {
@@ -104,22 +79,12 @@ export component TerminalSplitView inherits Rectangle {
                 }
             }
         }
-        if div-ta.has-hover && !div-ta.pressed : Rectangle {
-            x: (parent.width - div-hint.preferred-width - 12px) / 2;
-            y: (parent.height - div-hint.preferred-height - 6px) / 2;
-            width: div-hint.preferred-width + 12px;
-            height: div-hint.preferred-height + 6px;
-            background: Theme.surface-raised;
-            border-radius: Theme.radius-md;
-            border-width: 1px;
-            border-color: Theme.border-default;
-            z: 100;
-            div-hint := Text {
-                x: 6px; y: 3px;
-                text: Strings.terminal-tooltip-split-drag;
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-            }
+
+        Tooltip {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            shown: div-ta.has-hover && !div-ta.pressed;
+            text: Strings.terminal-tooltip-split-drag;
         }
     }
 }
