@@ -1,0 +1,764 @@
+import { Theme } from "../../theme_global.slint";
+import { ViewerImageModel } from "../../workspace/defs.slint";
+import {
+    ButtonTone, Chip, ControlSize, Divider, Eyebrow, GlassCard, IconButton, TouchButton,
+} from "../../kit.slint";
+
+/// Compact sunken text field for dense image-viewer panels.
+component PanelField inherits Rectangle {
+    in-out property <string> text;
+    in property <bool> mono: false;
+    callback accepted();
+
+    height: Theme.control-sm;
+    background: Theme.surface-sunken;
+    border-radius: Theme.radius-md;
+    border-width: Theme.hairline;
+    border-color: field-fs.has-focus ? Theme.border-focus : Theme.border-subtle;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    animate border-color { duration: Theme.motion-fast; easing: ease-out; }
+
+    field-fs := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        TouchArea { clicked => { field-fs.focus(); } }
+
+        HorizontalLayout {
+            padding-left: Theme.space-2;
+            padding-right: Theme.space-2;
+
+            TextInput {
+                text <=> root.text;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-sm;
+                font-family: root.mono ? Theme.font-family-mono : Theme.font-family-sans;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                single-line: true;
+                accepted => { root.accepted(); }
+            }
+        }
+    }
+}
+
+/// Label + field row for metadata editing.
+component MetaFieldRow inherits HorizontalLayout {
+    in property <string> label;
+    in-out property <string> value;
+
+    spacing: Theme.space-2;
+    min-height: Theme.control-sm;
+    max-height: Theme.control-sm;
+    alignment: center;
+
+    Text {
+        text: root.label;
+        color: Theme.text-secondary;
+        font-size: Theme.font-size-xs;
+        font-weight: Theme.weight-medium;
+        width: 76px;
+        vertical-alignment: center;
+    }
+
+    PanelField {
+        text <=> root.value;
+        horizontal-stretch: 1;
+    }
+}
+
+/// Annotation tools: shapes, privacy, watermark, stamp.
+export component ImageAnnotatePanel inherits GlassCard {
+    in property <ViewerImageModel> model;
+    in-out property <int> ann-mode;
+    in-out property <bool> ann-pixel;
+    in-out property <string> ann-color;
+    in-out property <string> ann-width;
+    in-out property <string> ann-size;
+    in-out property <string> ann-font;
+    in-out property <string> ann-opacity;
+    in-out property <string> ann-pos;
+    in-out property <string> ann-text;
+    in-out property <string> ann-wm;
+    in-out property <string> ann-wm-path;
+    in-out property <string> poly-pts;
+
+    callback command(string);
+
+    elevation: 2;
+    clip: true;
+
+    function ann-style() -> string {
+        return "color=" + root.ann-color + " | width=" + root.ann-width + " | size=" + root.ann-size
+            + " | font=" + root.ann-font + " | opacity=" + root.ann-opacity + " | pos=" + root.ann-pos;
+    }
+
+    VerticalLayout {
+        padding: Theme.space-3;
+        spacing: Theme.space-2;
+
+        Eyebrow { text: model.annotate-label; }
+        Text {
+            text: model.annotate-hint-label;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+        }
+        Divider { }
+
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            Chip { text: model.annotate-line-label; selected: root.ann-mode == 1; clicked => { root.ann-mode = 1; } }
+            Chip { text: model.annotate-arrow-label; selected: root.ann-mode == 2; clicked => { root.ann-mode = 2; } }
+            Chip { text: model.annotate-rect-label; selected: root.ann-mode == 3; clicked => { root.ann-mode = 3; } }
+            Chip { text: model.annotate-ellipse-label; selected: root.ann-mode == 4; clicked => { root.ann-mode = 4; } }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            Chip {
+                text: model.annotate-poly-label;
+                selected: root.ann-mode == 5;
+                clicked => { root.ann-mode = 5; root.poly-pts = ""; }
+            }
+            Chip { text: model.annotate-pen-label; selected: root.ann-mode == 6; clicked => { root.ann-mode = 6; } }
+            Chip { text: model.annotate-text-label; selected: root.ann-mode == 7; clicked => { root.ann-mode = 7; } }
+            Chip { text: model.annotate-callout-label; selected: root.ann-mode == 8; clicked => { root.ann-mode = 8; } }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            Chip { text: model.annotate-privacy-label; selected: root.ann-mode == 9; clicked => { root.ann-mode = 9; } }
+            Chip {
+                text: root.ann-pixel ? "px" : "blur";
+                selected: root.ann-pixel;
+                clicked => { root.ann-pixel = !root.ann-pixel; }
+            }
+            Chip { text: model.annotate-highlight-label; selected: root.ann-mode == 10; clicked => { root.ann-mode = 10; } }
+            TouchButton {
+                text: model.annotate-apply-label;
+                tone: ButtonTone.tonal;
+                size: ControlSize.sm;
+                clicked => {
+                    if (root.poly-pts != "") {
+                        root.command("annotate-view:poly:" + root.poly-pts + " | " + root.ann-style());
+                        root.poly-pts = "";
+                    }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            PanelField { text <=> root.ann-text; }
+            PanelField { text <=> root.ann-color; width: 72px; horizontal-stretch: 0; }
+            PanelField { text <=> root.ann-width; width: 40px; horizontal-stretch: 0; }
+            PanelField { text <=> root.ann-size; width: 40px; horizontal-stretch: 0; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            PanelField { text <=> root.ann-font; }
+            PanelField { text <=> root.ann-opacity; width: 40px; horizontal-stretch: 0; }
+            PanelField { text <=> root.ann-pos; width: 40px; horizontal-stretch: 0; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            PanelField { text <=> root.ann-wm; }
+            TouchButton {
+                text: model.annotate-watermark-label;
+                tone: ButtonTone.tonal;
+                size: ControlSize.sm;
+                clicked => { root.command("annotate:watermark=" + root.ann-wm + " | " + root.ann-style()); }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            PanelField { text <=> root.ann-wm-path; }
+            TouchButton {
+                text: model.annotate-wm-image-label;
+                tone: ButtonTone.tonal;
+                size: ControlSize.sm;
+                clicked => {
+                    root.command("annotate:wm-image=" + root.ann-wm-path + " | " + root.ann-style() + " | scale=0.22");
+                }
+            }
+        }
+        TouchButton {
+            text: model.annotate-stamp-label;
+            tone: ButtonTone.filled;
+            size: ControlSize.sm;
+            wide: true;
+            clicked => { root.command("annotate:stamp | " + root.ann-style()); }
+        }
+    }
+}
+
+/// Print paper / N-up / preview controls.
+export component ImagePrintPanel inherits GlassCard {
+    in property <ViewerImageModel> model;
+    in-out property <string> print-paper;
+    in-out property <string> print-margin;
+    in-out property <string> print-nup;
+    in-out property <string> print-fit;
+    in-out property <string> print-header;
+    in-out property <string> print-footer;
+    in-out property <string> print-icc;
+
+    callback command(string);
+
+    elevation: 2;
+    clip: true;
+
+    function print-spec() -> string {
+        return "paper=" + root.print-paper + " | margin=" + root.print-margin + " | nup=" + root.print-nup
+            + " | fit=" + root.print-fit + " | header=" + root.print-header + " | footer=" + root.print-footer
+            + " | icc=" + root.print-icc;
+    }
+
+    VerticalLayout {
+        padding: Theme.space-3;
+        spacing: Theme.space-2;
+
+        Eyebrow { text: model.print-label; }
+        Text {
+            text: model.print-hint-label;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+        }
+        Divider { }
+
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            PanelField { text <=> root.print-paper; width: 64px; horizontal-stretch: 0; }
+            PanelField { text <=> root.print-margin; width: 44px; horizontal-stretch: 0; }
+            PanelField { text <=> root.print-nup; width: 36px; horizontal-stretch: 0; }
+            PanelField { text <=> root.print-fit; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            PanelField { text <=> root.print-header; }
+            PanelField { text <=> root.print-footer; }
+        }
+        PanelField { text <=> root.print-icc; }
+
+        HorizontalLayout {
+            spacing: Theme.space-2;
+            TouchButton {
+                text: model.print-preview-label;
+                tone: ButtonTone.neutral;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("print-preview:" + root.print-spec()); }
+            }
+            TouchButton {
+                text: model.print-label;
+                tone: ButtonTone.filled;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("print:" + root.print-spec()); }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            alignment: center;
+            TouchButton {
+                text: model.print-sheet-label;
+                tone: ButtonTone.tonal;
+                size: ControlSize.sm;
+                clicked => { root.command("print-preview:sheet | folder | " + root.print-spec()); }
+            }
+            Chip {
+                text: "2";
+                selected: root.print-nup == "2";
+                clicked => { root.print-nup = "2"; root.command("print-preview:folder | " + root.print-spec()); }
+            }
+            Chip {
+                text: "4";
+                selected: root.print-nup == "4";
+                clicked => { root.print-nup = "4"; root.command("print-preview:folder | " + root.print-spec()); }
+            }
+            Chip {
+                text: "6";
+                selected: root.print-nup == "6";
+                clicked => { root.print-nup = "6"; root.command("print-preview:folder | " + root.print-spec()); }
+            }
+            Chip {
+                text: "9";
+                selected: root.print-nup == "9";
+                clicked => { root.print-nup = "9"; root.command("print-preview:folder | " + root.print-spec()); }
+            }
+        }
+    }
+}
+
+/// Export / share / screenshot actions.
+export component ImageSharePanel inherits GlassCard {
+    in property <ViewerImageModel> model;
+    in-out property <string> export-fmt;
+    in-out property <string> export-q;
+    in-out property <string> export-max;
+
+    callback command(string);
+
+    elevation: 2;
+    clip: true;
+
+    function export-spec() -> string {
+        return root.export-fmt + " | q=" + root.export-q + " | max=" + root.export-max;
+    }
+
+    VerticalLayout {
+        padding: Theme.space-3;
+        spacing: Theme.space-2;
+
+        Eyebrow { text: model.export-label; }
+        Text {
+            text: model.export-hint-label;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+        }
+        Divider { }
+
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            PanelField { text <=> root.export-fmt; width: 64px; horizontal-stretch: 0; }
+            PanelField { text <=> root.export-q; width: 44px; horizontal-stretch: 0; }
+            PanelField { text <=> root.export-max; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            TouchButton {
+                text: model.export-save-label;
+                tone: ButtonTone.filled;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("export:" + root.export-spec()); }
+            }
+            TouchButton {
+                text: model.export-ico-label;
+                tone: ButtonTone.neutral;
+                size: ControlSize.sm;
+                clicked => { root.command("export:ico"); }
+            }
+            TouchButton {
+                text: model.export-favicon-label;
+                tone: ButtonTone.neutral;
+                size: ControlSize.sm;
+                clicked => { root.command("export:favicon"); }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            TouchButton {
+                text: model.export-copy-label;
+                tone: ButtonTone.neutral;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("copy-image"); }
+            }
+            TouchButton {
+                text: model.export-paste-label;
+                tone: ButtonTone.neutral;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("paste-image"); }
+            }
+            TouchButton {
+                text: model.export-wallpaper-label;
+                tone: ButtonTone.neutral;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("wallpaper"); }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            TouchButton {
+                text: model.export-email-label;
+                tone: ButtonTone.tonal;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("email:max=" + root.export-max); }
+            }
+            TouchButton {
+                text: model.export-share-label;
+                tone: ButtonTone.tonal;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("share:twitter"); }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            TouchButton {
+                text: model.export-shot-label;
+                tone: ButtonTone.ghost;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("screenshot:screen"); }
+            }
+            TouchButton {
+                text: model.export-shot-window-label;
+                tone: ButtonTone.ghost;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("screenshot:window | delay=2"); }
+            }
+            TouchButton {
+                text: model.export-shot-delay-label;
+                tone: ButtonTone.ghost;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("screenshot:screen | delay=3"); }
+            }
+        }
+    }
+}
+
+/// Quick filters and looks.
+export component ImageFilterPanel inherits GlassCard {
+    in property <ViewerImageModel> model;
+    callback command(string);
+
+    elevation: 2;
+    clip: true;
+
+    property <string> filter-expr: "sharpen=1 | vignette=20";
+
+    VerticalLayout {
+        padding: Theme.space-3;
+        spacing: Theme.space-2;
+
+        Eyebrow { text: model.filter-label; }
+        Text {
+            text: model.filter-hint-label;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+        }
+        Divider { }
+
+        PanelField {
+            text <=> root.filter-expr;
+            mono: true;
+            accepted => { root.command("filter:" + root.filter-expr); }
+        }
+        TouchButton {
+            text: model.filter-apply-label;
+            tone: ButtonTone.filled;
+            size: ControlSize.sm;
+            wide: true;
+            clicked => { root.command("filter:" + root.filter-expr); }
+        }
+
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            Chip { text: model.filter-sharpen-label; clicked => { root.command("filter:sharpen"); } }
+            Chip { text: model.filter-blur-label; clicked => { root.command("filter:blur=1.5"); } }
+            Chip { text: model.filter-despeckle-label; clicked => { root.command("filter:despeckle"); } }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            Chip { text: model.filter-cartoon-label; clicked => { root.command("filter:cartoon"); } }
+            Chip { text: model.filter-sketch-label; clicked => { root.command("filter:sketch"); } }
+            Chip { text: model.filter-vignette-label; clicked => { root.command("filter:vignette=40"); } }
+            Chip { text: model.filter-redeye-label; clicked => { root.command("filter:redeye"); } }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            Chip { text: model.filter-look-vivid-label; clicked => { root.command("filter:look=vivid"); } }
+            Chip { text: model.filter-look-soft-label; clicked => { root.command("filter:look=soft"); } }
+            Chip { text: model.filter-look-drama-label; clicked => { root.command("filter:look=drama"); } }
+            Chip { text: model.filter-look-clean-label; clicked => { root.command("filter:look=clean"); } }
+        }
+    }
+}
+
+/// Tone / colour adjustments.
+export component ImageAdjustPanel inherits GlassCard {
+    in property <ViewerImageModel> model;
+    callback command(string);
+
+    elevation: 2;
+    clip: true;
+
+    property <string> adjust-expr: "brightness=0 | contrast=0 | saturation=0 | temp=0";
+
+    VerticalLayout {
+        padding: Theme.space-3;
+        spacing: Theme.space-2;
+
+        Eyebrow { text: model.adjust-label; }
+        Text {
+            text: model.adjust-hint-label;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+        }
+        Divider { }
+
+        PanelField {
+            text <=> root.adjust-expr;
+            mono: true;
+            accepted => { root.command("adjust:" + root.adjust-expr); }
+        }
+        TouchButton {
+            text: model.adjust-apply-label;
+            tone: ButtonTone.filled;
+            size: ControlSize.sm;
+            wide: true;
+            clicked => { root.command("adjust:" + root.adjust-expr); }
+        }
+
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            Chip { text: model.adjust-auto-levels-label; clicked => { root.command("adjust:auto-levels"); } }
+            Chip { text: model.adjust-auto-contrast-label; clicked => { root.command("adjust:auto-contrast"); } }
+            Chip { text: model.adjust-auto-color-label; clicked => { root.command("adjust:auto-color"); } }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            Chip { text: model.adjust-gray-label; clicked => { root.command("adjust:gray"); } }
+            Chip { text: model.adjust-sepia-label; clicked => { root.command("adjust:sepia"); } }
+            Chip { text: model.adjust-invert-label; clicked => { root.command("adjust:invert"); } }
+        }
+    }
+}
+
+/// Histogram, GPS, editable EXIF / IPTC fields.
+export component ImageMetaPanel inherits GlassCard {
+    in property <ViewerImageModel> model;
+    callback command(string);
+
+    elevation: 2;
+    clip: true;
+
+    property <string> edit-title: model.meta-edit-title;
+    property <string> edit-creator: model.meta-edit-creator;
+    property <string> edit-copyright: model.meta-edit-copyright;
+    property <string> edit-keywords: model.meta-edit-keywords;
+    property <string> edit-description: model.meta-edit-description;
+    property <string> edit-date: model.meta-edit-date;
+    property <string> edit-gps: model.meta-edit-gps;
+
+    changed model => {
+        root.edit-title = model.meta-edit-title;
+        root.edit-creator = model.meta-edit-creator;
+        root.edit-copyright = model.meta-edit-copyright;
+        root.edit-keywords = model.meta-edit-keywords;
+        root.edit-description = model.meta-edit-description;
+        root.edit-date = model.meta-edit-date;
+        root.edit-gps = model.meta-edit-gps;
+    }
+
+    VerticalLayout {
+        padding: Theme.space-3;
+        spacing: Theme.space-2;
+
+        Eyebrow { text: model.meta-label; }
+
+        if model.hist-width > 0 : Image {
+            source: model.hist-image;
+            width: parent.width - Theme.space-3 * 2;
+            height: 72px;
+            image-fit: fill;
+        }
+        if model.probe-text != "" : Text {
+            text: model.probe-text;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+            font-family: Theme.font-family-mono;
+            wrap: word-wrap;
+        }
+        if model.has-gps : TouchButton {
+            text: model.gps-map-label + "  " + model.gps-label;
+            tone: ButtonTone.tonal;
+            size: ControlSize.sm;
+            wide: true;
+            clicked => { root.command("gps-map"); }
+        }
+
+        Divider { }
+
+        MetaFieldRow { label: model.meta-title-field-label; value <=> root.edit-title; }
+        MetaFieldRow { label: model.meta-creator-field-label; value <=> root.edit-creator; }
+        MetaFieldRow { label: model.meta-copyright-field-label; value <=> root.edit-copyright; }
+        MetaFieldRow { label: model.meta-keywords-field-label; value <=> root.edit-keywords; }
+        MetaFieldRow { label: model.meta-description-field-label; value <=> root.edit-description; }
+        MetaFieldRow { label: model.meta-date-field-label; value <=> root.edit-date; }
+        MetaFieldRow { label: model.meta-gps-field-label; value <=> root.edit-gps; }
+
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            TouchButton {
+                text: model.meta-save-label;
+                tone: ButtonTone.filled;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => {
+                    root.command("meta-save:title=" + root.edit-title
+                        + "\ncreator=" + root.edit-creator
+                        + "\ncopyright=" + root.edit-copyright
+                        + "\nkeywords=" + root.edit-keywords
+                        + "\ndescription=" + root.edit-description
+                        + "\ndate=" + root.edit-date
+                        + "\ngps=" + root.edit-gps);
+                }
+            }
+            TouchButton {
+                text: model.meta-strip-label;
+                tone: ButtonTone.neutral;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("meta-strip"); }
+            }
+            TouchButton {
+                text: model.meta-strip-gps-label;
+                tone: ButtonTone.ghost;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("meta-strip-gps"); }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            TouchButton {
+                text: model.meta-export-csv-label;
+                tone: ButtonTone.ghost;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("meta-export-csv"); }
+            }
+            TouchButton {
+                text: model.meta-export-xml-label;
+                tone: ButtonTone.ghost;
+                size: ControlSize.sm;
+                wide: true;
+                clicked => { root.command("meta-export-xml"); }
+            }
+        }
+
+        Flickable {
+            vertical-stretch: 1;
+            viewport-width: self.width;
+            viewport-height: max(self.height, meta-body.preferred-height);
+            meta-body := Text {
+                width: parent.width;
+                text: model.meta-text;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-sm;
+                font-family: Theme.font-family-mono;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+/// Multi-frame / animation transport strip.
+export component ImageAnimBar inherits GlassCard {
+    in property <ViewerImageModel> model;
+    callback command(string);
+
+    elevation: 2;
+    clip: true;
+    background: Theme.surface-floating;
+
+    VerticalLayout {
+        padding: Theme.space-2;
+        spacing: Theme.space-2;
+
+        HorizontalLayout {
+            spacing: Theme.space-1;
+            alignment: center;
+            height: Theme.control-sm;
+
+            if model.anim-can-play : IconButton {
+                icon: model.anim-playing ? "pause" : "play";
+                size: ControlSize.sm;
+                active: model.anim-playing;
+                tooltip: model.anim-playing ? model.anim-pause-label : model.anim-play-label;
+                clicked => { root.command("anim-toggle"); }
+            }
+            IconButton {
+                icon: "skip-prev";
+                size: ControlSize.sm;
+                tooltip: model.anim-first-label;
+                clicked => { root.command("anim-first"); }
+            }
+            IconButton {
+                icon: "chevron-left";
+                size: ControlSize.sm;
+                tooltip: model.anim-prev-label;
+                clicked => { root.command("anim-prev"); }
+            }
+            IconButton {
+                icon: "chevron-right";
+                size: ControlSize.sm;
+                tooltip: model.anim-next-label;
+                clicked => { root.command("anim-next"); }
+            }
+            IconButton {
+                icon: "skip-next";
+                size: ControlSize.sm;
+                tooltip: model.anim-last-label;
+                clicked => { root.command("anim-last"); }
+            }
+            Text {
+                text: model.anim-label + "  " + model.anim-index-label;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            TouchButton {
+                text: model.anim-extract-label;
+                tone: ButtonTone.tonal;
+                size: ControlSize.sm;
+                clicked => { root.command("anim-extract"); }
+            }
+            if model.anim-can-play : TouchButton {
+                text: model.anim-export-label;
+                tone: ButtonTone.neutral;
+                size: ControlSize.sm;
+                clicked => { root.command("anim-export"); }
+            }
+        }
+
+        Flickable {
+            height: 44px;
+            viewport-width: max(self.width, model.anim-thumbs.length * 40px + 8px);
+            viewport-height: self.height;
+            HorizontalLayout {
+                spacing: Theme.space-1;
+                for item in model.anim-thumbs : Rectangle {
+                    width: 36px;
+                    height: 40px;
+                    background: item.selected ? Theme.accent-soft : Colors.transparent;
+                    border-radius: Theme.radius-md;
+                    border-width: item.selected ? Theme.hairline : 0px;
+                    border-color: Theme.accent-brand;
+                    TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
+                        clicked => { root.command("anim-goto:" + item.index); }
+                    }
+                    VerticalLayout {
+                        Image {
+                            source: item.thumbnail;
+                            width: 32px;
+                            height: 24px;
+                            image-fit: contain;
+                        }
+                        Text {
+                            text: item.name;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-xs;
+                            horizontal-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
