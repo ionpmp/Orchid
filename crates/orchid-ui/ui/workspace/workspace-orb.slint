@@ -1,4 +1,5 @@
 import { Theme } from "../theme_global.slint";
+import { ButtonTone, Divider, Eyebrow, GlassCard, ListTile, TouchButton } from "../kit.slint";
 import { Strings } from "../strings_global.slint";
 import { NavigationGlobal } from "../navigation_global.slint";
 import { AppState } from "../app_state_global.slint";
@@ -15,7 +16,7 @@ export component WorkspaceOrb inherits Rectangle {
     callback toggle-requested();
     callback dismiss-requested();
 
-    private property <length> orb-size: 88px;
+    private property <length> orb-size: 96px;
     private property <bool> mirrored: AppState.edge-panels-mirrored;
     private property <bool> menu-visible: NavigationGlobal.workspace-orb-open;
     private property <bool> orb-active: NavigationGlobal.workspace-orb-open || orb-ta.has-hover;
@@ -35,150 +36,56 @@ export component WorkspaceOrb inherits Rectangle {
 
             VerticalLayout {
                 alignment: end;
-                spacing: 10px;
+                spacing: Theme.space-3;
 
-                if root.menu-visible: Rectangle {
-                    // Vertical list panel — deliberately not square.
-                    width: 260px;
-                    height: menu-list.preferred-height + 16px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
-                    drop-shadow-color: #00000040;
-                    drop-shadow-offset-y: Theme.reduce-motion ? 0px : 4px;
+                if root.menu-visible: GlassCard {
+                    width: 340px;
+                    height: menu-list.preferred-height + Theme.space-5 * 2;
+                    elevation: 3;
                     horizontal-stretch: 0;
 
                     menu-list := VerticalLayout {
-                        padding: 8px;
-                        spacing: 4px;
+                        padding: Theme.space-5;
+                        spacing: Theme.space-2;
 
-                        Text {
+                        Eyebrow {
                             text: NavigationGlobal.workspace-panel-title;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            font-weight: Theme.weight-medium;
                             horizontal-stretch: 1;
                         }
 
                         // Only workspaces that exist in storage (no placeholder slots).
-                        for ws[i] in root.workspaces: Rectangle {
-                            height: 36px;
-                            background: ws.is-active ? Theme.accent-brand : Theme.surface-base;
-                            border-radius: Theme.radius-md;
+                        for ws[i] in root.workspaces: ListTile {
+                            title: ws.name;
+                            icon: ws.is-active ? "dot" : "layers";
+                            selected: ws.is-active;
                             horizontal-stretch: 1;
-
-                            ws-ta := TouchArea {
-                                clicked => {
-                                    root.workspace-clicked(ws.id);
-                                    root.dismiss-requested();
-                                }
-                            }
-                            states [
-                                hover when ws-ta.has-hover && !ws.is-active: {
-                                    background: Theme.surface-raised;
-                                }
-                            ]
-
-                            Text {
-                                x: 12px;
-                                width: parent.width - 24px;
-                                height: 100%;
-                                text: ws.name;
-                                color: ws.is-active ? Theme.text-primary : Theme.text-secondary;
-                                font-size: Theme.font-size-sm;
-                                font-weight: ws.is-active ? Theme.weight-semibold : Theme.weight-regular;
-                                horizontal-alignment: left;
-                                vertical-alignment: center;
-                                wrap: no-wrap;
-                                overflow: elide;
+                            clicked => {
+                                root.workspace-clicked(ws.id);
+                                root.dismiss-requested();
                             }
                         }
 
-                        Rectangle {
-                            height: 36px;
-                            background: Theme.surface-base;
-                            border-radius: Theme.radius-md;
-                            border-width: 1px;
-                            border-color: Theme.border-default;
-                            horizontal-stretch: 1;
+                        Divider { }
 
-                            add-ta := TouchArea {
-                                clicked => {
-                                    root.catalog-requested();
-                                    root.dismiss-requested();
-                                }
-                            }
-                            states [
-                                hover when add-ta.has-hover: {
-                                    border-color: Theme.accent-brand;
-                                }
-                            ]
-
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-                                spacing: 8px;
-                                alignment: start;
-
-                                Text {
-                                    text: "⊞";
-                                    color: Theme.text-secondary;
-                                    font-size: Theme.font-size-md;
-                                    font-weight: Theme.weight-semibold;
-                                    vertical-alignment: center;
-                                }
-                                Text {
-                                    text: Strings.dock-add-label;
-                                    color: Theme.text-secondary;
-                                    font-size: Theme.font-size-sm;
-                                    vertical-alignment: center;
-                                    horizontal-stretch: 1;
-                                }
+                        TouchButton {
+                            text: Strings.dock-add-label;
+                            icon: "grid";
+                            tone: ButtonTone.neutral;
+                            wide: true;
+                            clicked => {
+                                root.catalog-requested();
+                                root.dismiss-requested();
                             }
                         }
 
-                        Rectangle {
-                            height: 36px;
-                            background: Theme.surface-base;
-                            border-radius: Theme.radius-md;
-                            border-width: 1px;
-                            border-color: Theme.border-default;
-                            horizontal-stretch: 1;
-
-                            new-ta := TouchArea {
-                                clicked => {
-                                    root.workspace-create-clicked();
-                                    root.dismiss-requested();
-                                }
-                            }
-                            states [
-                                hover when new-ta.has-hover: {
-                                    border-color: Theme.accent-brand;
-                                }
-                            ]
-
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-                                spacing: 8px;
-                                alignment: start;
-
-                                Text {
-                                    text: "+";
-                                    color: Theme.text-secondary;
-                                    font-size: Theme.font-size-lg;
-                                    font-weight: Theme.weight-semibold;
-                                    vertical-alignment: center;
-                                }
-                                Text {
-                                    text: Strings.workspace-new-label;
-                                    color: Theme.text-secondary;
-                                    font-size: Theme.font-size-sm;
-                                    vertical-alignment: center;
-                                    horizontal-stretch: 1;
-                                }
+                        TouchButton {
+                            text: Strings.workspace-new-label;
+                            icon: "plus";
+                            tone: ButtonTone.filled;
+                            wide: true;
+                            clicked => {
+                                root.workspace-create-clicked();
+                                root.dismiss-requested();
                             }
                         }
                     }
@@ -197,14 +104,21 @@ export component WorkspaceOrb inherits Rectangle {
                         }
                     }
 
-                    // Soft brand glow behind the Crest flower (circular, not a square plate).
+                    // Brand bloom behind the Crest flower; swells when engaged.
                     Rectangle {
-                        x: (parent.width - root.orb-size * 0.9) / 2;
-                        y: (parent.height - root.orb-size * 0.9) / 2;
-                        width: root.orb-size * 0.9;
-                        height: root.orb-size * 0.9;
-                        border-radius: root.orb-size;
-                        background: root.orb-active ? #c49be655 : #c49be633;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        width: root.orb-size * (root.orb-active ? 0.98 : 0.86);
+                        height: self.width;
+                        border-radius: self.width / 2;
+                        background: Theme.accent-brand.with-alpha(root.orb-active ? 0.35 : 0.18);
+                        drop-shadow-blur: root.orb-active ? Theme.elev-glow-blur : Theme.elev-1-blur;
+                        drop-shadow-color: Theme.accent-glow;
+
+                        animate width, background, drop-shadow-blur {
+                            duration: Theme.motion-base;
+                            easing: ease-out;
+                        }
                     }
 
                     Image {
@@ -213,6 +127,7 @@ export component WorkspaceOrb inherits Rectangle {
                         source: @image-url("../assets/orchid-icon.png");
                         image-fit: contain;
                         opacity: root.orb-active ? 1.0 : 0.92;
+                        animate opacity { duration: Theme.motion-fast; easing: ease-out; }
                     }
                 }
             }

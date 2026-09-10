@@ -1,4 +1,6 @@
 import { Theme } from "../theme_global.slint";
+import { ButtonTone, ControlSize, EmptyState, Eyebrow, Grabber, IconButton, TouchButton } from "../kit.slint";
+import { Icon } from "../kit-icons.slint";
 import { Strings } from "../strings_global.slint";
 import { WidgetCatalog } from "../widget_catalog_global.slint";
 
@@ -40,41 +42,47 @@ component CatalogCard inherits Rectangle {
     }
 
     horizontal-stretch: 1;
-    min-width: 220px;
-    height: root.card-visible ? 88px : 0px;
+    min-width: 240px;
+    height: root.card-visible ? Theme.control-xl + Theme.space-6 : 0px;
     visible: root.card-visible;
-    background: card-ta.has-hover ? Theme.surface-base : transparent;
-    border-radius: Theme.radius-md;
-    border-width: 1px;
-    border-color: card-ta.has-hover ? Theme.accent-brand : Theme.border-default;
+    background: card-ta.has-hover ? Theme.surface-overlay : Theme.surface-raised;
+    border-radius: Theme.radius-lg;
+    border-width: Theme.hairline;
+    border-color: card-ta.has-hover ? Theme.accent-muted : Theme.border-default;
+    drop-shadow-blur: card-ta.has-hover ? Theme.elev-2-blur : Theme.elev-1-blur;
+    drop-shadow-offset-y: card-ta.has-hover ? Theme.elev-2-y : Theme.elev-1-y;
+    drop-shadow-color: Theme.shadow-ambient;
     clip: true;
 
-    animate background, border-color {
-        duration: Theme.reduce-motion ? 0ms : 150ms;
+    animate background, border-color, drop-shadow-blur, drop-shadow-offset-y {
+        duration: Theme.motion-fast;
         easing: ease-out;
     }
 
     card-ta := TouchArea {
+        mouse-cursor: MouseCursor.pointer;
         clicked => { root.pick(root.type-id); }
     }
 
     HorizontalLayout {
         width: 100%;
         height: 100%;
-        padding: 12px;
-        spacing: 12px;
+        padding: Theme.space-4;
+        spacing: Theme.space-4;
         alignment: center;
 
         Rectangle {
-            width: 44px;
-            height: 44px;
-            background: card-ta.has-hover ? Theme.accent-brand : Theme.surface-raised;
-            border-radius: 10px;
-            border-width: 1px;
-            border-color: card-ta.has-hover ? transparent : Theme.border-default;
+            min-width: Theme.control-md;
+            max-width: Theme.control-md;
+            min-height: Theme.control-md;
+            max-height: Theme.control-md;
+            background: card-ta.has-hover ? Theme.gradient-accent : Theme.accent-soft;
+            border-radius: Theme.radius-md;
+            drop-shadow-blur: card-ta.has-hover ? Theme.elev-glow-blur : 0px;
+            drop-shadow-color: Theme.accent-glow;
 
-            animate background, border-color {
-                duration: Theme.reduce-motion ? 0ms : 150ms;
+            animate background, drop-shadow-blur {
+                duration: Theme.motion-fast;
                 easing: ease-out;
             }
 
@@ -82,9 +90,9 @@ component CatalogCard inherits Rectangle {
                 width: 100%;
                 height: 100%;
                 text: root.get-icon(root.type-id);
-                color: card-ta.has-hover ? #ffffff : Theme.text-primary;
-                font-size: 15px;
-                font-weight: Theme.weight-semibold;
+                color: card-ta.has-hover ? Theme.accent-contrast : Theme.accent-brand;
+                font-size: Theme.font-size-md;
+                font-weight: Theme.weight-bold;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
@@ -92,13 +100,13 @@ component CatalogCard inherits Rectangle {
 
         VerticalLayout {
             horizontal-stretch: 1;
-            spacing: 4px;
+            spacing: Theme.space-1;
             alignment: center;
 
             Text {
                 text: root.label;
                 color: Theme.text-primary;
-                font-size: Theme.font-size-sm;
+                font-size: Theme.font-size-md;
                 font-weight: Theme.weight-semibold;
                 wrap: no-wrap;
                 overflow: elide;
@@ -121,14 +129,24 @@ export component WidgetCatalogPanel inherits Rectangle {
     callback dismiss();
     callback search-changed(string);
 
-    width: 640px;
-    height: 520px;
-    background: Theme.surface-raised;
-    border-radius: Theme.radius-md;
-    border-width: 1px;
-    border-color: Theme.border-default;
-    drop-shadow-blur: Theme.reduce-motion ? 0px : 12px;
-    drop-shadow-color: #00000050;
+    /// Bottom-sheet presentation for narrow canvases: full width, anchored to
+    /// the bottom edge, with a grab handle instead of a floating card.
+    in property <bool> sheet: false;
+
+    property <bool> entered: false;
+    init => { self.entered = true; }
+    opacity: self.entered ? 1.0 : 0.0;
+    animate opacity { duration: Theme.motion-base; easing: ease-out; }
+
+    width: 880px;
+    height: 660px;
+    background: Theme.gradient-glass;
+    border-radius: Theme.radius-xl;
+    border-width: Theme.hairline;
+    border-color: Theme.border-strong;
+    drop-shadow-blur: Theme.elev-3-blur;
+    drop-shadow-offset-y: Theme.elev-3-y;
+    drop-shadow-color: Theme.shadow-key;
     clip: true;
 
     property <string> draft-query: "";
@@ -144,109 +162,107 @@ export component WidgetCatalogPanel inherits Rectangle {
     VerticalLayout {
         width: 100%;
         height: 100%;
-        padding: 12px;
-        spacing: 8px;
+        y: root.entered ? 0px : Theme.space-4;
+        padding: Theme.space-5;
+        spacing: Theme.space-4;
+
+        animate y { duration: Theme.motion-base; easing: ease-out; }
+
+        if root.sheet : Grabber { }
 
         HorizontalLayout {
-            height: 28px;
-            spacing: Theme.spacing-unit;
+            spacing: Theme.space-3;
 
-            Text {
-                text: Strings.catalog-title;
-                color: Theme.text-primary;
-                font-size: Theme.font-size-md;
-                font-weight: Theme.weight-semibold;
-                vertical-alignment: center;
+            VerticalLayout {
+                alignment: center;
                 horizontal-stretch: 1;
-            }
+                spacing: 2px;
 
-            Rectangle {
-                width: sort-label-text.preferred-width + 20px;
-                height: 28px;
-                background: sort-ta.has-hover ? Theme.surface-base : transparent;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-
-                sort-ta := TouchArea {
-                    clicked => {
-                        root.sort-mode = root.sort-mode >= 2 ? 0 : root.sort-mode + 1;
-                    }
-                }
-
-                sort-label-text := Text {
-                    width: 100%;
-                    height: 100%;
-                    text: root.sort-label();
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-            }
-
-            Rectangle {
-                width: 28px;
-                height: 28px;
-                background: close-ta.has-hover ? Theme.surface-base : transparent;
-                border-radius: Theme.radius-md;
-
-                close-ta := TouchArea {
-                    clicked => { root.dismiss(); }
-                }
+                Eyebrow { text: Strings.dock-add-label; }
 
                 Text {
-                    width: 100%;
-                    height: 100%;
-                    text: "×";
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-lg;
-                    horizontal-alignment: center;
+                    text: Strings.catalog-title;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-2xl;
+                    font-weight: Theme.weight-bold;
                     vertical-alignment: center;
                 }
+            }
+
+            TouchButton {
+                text: root.sort-label();
+                icon: "sliders";
+                tone: ButtonTone.neutral;
+                size: ControlSize.sm;
+                clicked => {
+                    root.sort-mode = root.sort-mode >= 2 ? 0 : root.sort-mode + 1;
+                }
+            }
+
+            IconButton {
+                icon: "close";
+                tooltip-flip: true;
+                clicked => { root.dismiss(); }
             }
         }
 
         Rectangle {
-            height: 36px;
-            background: Theme.surface-base;
-            border-radius: Theme.radius-md;
-            border-width: 1px;
-            border-color: catalog-input.has-focus ? Theme.accent-brand : Theme.border-default;
+            height: Theme.control-lg;
+            background: Theme.surface-sunken;
+            border-radius: Theme.radius-pill;
+            border-width: Theme.hairline;
+            border-color: catalog-input.has-focus ? Theme.border-focus : Theme.border-default;
             clip: true;
 
-            if root.draft-query == "" : Text {
-                x: 10px;
-                width: parent.width - 20px;
-                height: 100%;
-                text: Strings.catalog-search-placeholder;
-                color: Theme.text-tertiary;
-                font-size: Theme.font-size-sm;
-                vertical-alignment: center;
-            }
+            animate border-color { duration: Theme.motion-fast; easing: ease-out; }
 
-            catalog-input := TextInput {
-                x: 10px;
-                width: parent.width - 20px;
-                height: 100%;
-                text <=> root.draft-query;
-                color: Theme.text-primary;
-                font-size: Theme.font-size-sm;
-                vertical-alignment: center;
-                single-line: true;
-                edited => {
-                    root.search-changed(self.text);
+            HorizontalLayout {
+                padding-left: Theme.space-5;
+                padding-right: Theme.space-5;
+                spacing: Theme.space-3;
+
+                Icon {
+                    name: "search";
+                    size: Theme.font-size-lg;
+                    tint: catalog-input.has-focus ? Theme.accent-brand : Theme.text-tertiary;
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 100%;
+                    background: transparent;
+
+                    if root.draft-query == "" : Text {
+                        x: 0;
+                        width: parent.width;
+                        height: 100%;
+                        text: Strings.catalog-search-placeholder;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-md;
+                        vertical-alignment: center;
+                    }
+
+                    catalog-input := TextInput {
+                        x: 0;
+                        width: parent.width;
+                        height: 100%;
+                        text <=> root.draft-query;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        vertical-alignment: center;
+                        single-line: true;
+                        edited => {
+                            root.search-changed(self.text);
+                        }
+                    }
                 }
             }
         }
 
-        if WidgetCatalog.is-empty : Text {
+        if WidgetCatalog.is-empty : EmptyState {
             vertical-stretch: 1;
-            text: Strings.catalog-no-results;
-            color: Theme.text-tertiary;
-            font-size: Theme.font-size-sm;
-            horizontal-alignment: center;
-            vertical-alignment: center;
+            icon: "search";
+            title: Strings.catalog-no-results;
         }
 
         if !WidgetCatalog.is-empty : Flickable {
@@ -268,7 +284,7 @@ export component WidgetCatalogPanel inherits Rectangle {
 
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "terminal"; glyph: ">_"; label: Strings.dock-widget-terminal;
                             description: Strings.widget-terminal-desc;
@@ -284,7 +300,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "moon"; glyph: "O"; label: Strings.dock-widget-moon;
                             description: Strings.widget-moon-desc;
@@ -312,7 +328,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "rss"; glyph: "N"; label: Strings.dock-widget-rss;
                             description: Strings.widget-rss-desc;
@@ -328,7 +344,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "search"; glyph: "/"; label: Strings.dock-widget-search;
                             description: Strings.widget-search-desc;
@@ -362,7 +378,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "password"; glyph: "*"; label: Strings.dock-widget-password;
                             description: Strings.widget-password-desc;
@@ -390,7 +406,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "file-manager"; glyph: "#"; label: Strings.dock-widget-fm;
                             description: Strings.widget-fm-desc;
@@ -431,7 +447,7 @@ export component WidgetCatalogPanel inherits Rectangle {
 
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "file-manager"; glyph: "#"; label: Strings.dock-widget-fm;
                             description: Strings.widget-fm-desc;
@@ -465,7 +481,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "moon"; glyph: "O"; label: Strings.dock-widget-moon;
                             description: Strings.widget-moon-desc;
@@ -493,7 +509,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "password"; glyph: "*"; label: Strings.dock-widget-password;
                             description: Strings.widget-password-desc;
@@ -509,7 +525,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "search"; glyph: "/"; label: Strings.dock-widget-search;
                             description: Strings.widget-search-desc;
@@ -525,7 +541,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "terminal"; glyph: ">_"; label: Strings.dock-widget-terminal;
                             description: Strings.widget-terminal-desc;
@@ -553,7 +569,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "weather"; glyph: "W"; label: Strings.dock-widget-weather;
                             description: Strings.widget-weather-desc;
@@ -594,7 +610,7 @@ export component WidgetCatalogPanel inherits Rectangle {
 
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "weather"; glyph: "W"; label: Strings.dock-widget-weather;
                             description: Strings.widget-weather-desc;
@@ -622,7 +638,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "terminal"; glyph: ">_"; label: Strings.dock-widget-terminal;
                             description: Strings.widget-terminal-desc;
@@ -638,7 +654,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "search"; glyph: "/"; label: Strings.dock-widget-search;
                             description: Strings.widget-search-desc;
@@ -654,7 +670,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "password"; glyph: "*"; label: Strings.dock-widget-password;
                             description: Strings.widget-password-desc;
@@ -670,7 +686,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "moon"; glyph: "O"; label: Strings.dock-widget-moon;
                             description: Strings.widget-moon-desc;
@@ -716,7 +732,7 @@ export component WidgetCatalogPanel inherits Rectangle {
                     }
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 88px;
+                        height: Theme.control-xl + Theme.space-6;
                         CatalogCard {
                             type-id: "file-manager"; glyph: "#"; label: Strings.dock-widget-fm;
                             description: Strings.widget-fm-desc;

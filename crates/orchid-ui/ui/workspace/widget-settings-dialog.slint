@@ -1,5 +1,6 @@
 import { Theme } from "../theme_global.slint";
-import { CheckBox, ComboBox, LineEdit } from "std-widgets.slint";
+import { ButtonTone, Divider, ToggleSwitch, TouchButton } from "../kit.slint";
+import { ComboBox, LineEdit } from "std-widgets.slint";
 import { WidgetSettingsDialog } from "defs.slint";
 
 export component WidgetSettingsDialog inherits Rectangle {
@@ -7,7 +8,12 @@ export component WidgetSettingsDialog inherits Rectangle {
     callback field-changed(string, string);
     callback dismiss();
 
-    background: #00000080;
+    property <bool> entered: false;
+    init => { self.entered = true; }
+
+    background: Theme.scrim;
+    opacity: self.entered ? 1.0 : 0.0;
+    animate opacity { duration: Theme.motion-fast; easing: ease-out; }
 
     backdrop-ta := TouchArea {
         clicked => { root.dismiss(); }
@@ -15,48 +21,55 @@ export component WidgetSettingsDialog inherits Rectangle {
 
     Rectangle {
         x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        width: min(380px, parent.width - 24px);
-        height: min(lay.preferred-height + 16px, parent.height - 24px);
-        background: Theme.surface-raised;
-        border-radius: Theme.radius-md;
-        drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
-        drop-shadow-color: #00000080;
+        y: (parent.height - self.height) / 2 + (root.entered ? 0px : Theme.space-5);
+        width: min(460px, parent.width - Theme.space-6);
+        height: min(lay.preferred-height, parent.height - Theme.space-6);
+
+        animate y { duration: Theme.motion-base; easing: ease-out; }
+        background: Theme.gradient-glass;
+        border-radius: Theme.radius-xl;
+        border-width: Theme.hairline;
+        border-color: Theme.border-strong;
+        drop-shadow-blur: Theme.elev-3-blur;
+        drop-shadow-offset-y: Theme.elev-3-y;
+        drop-shadow-color: Theme.shadow-key;
         clip: true;
 
         // Swallow clicks so they don't dismiss via the backdrop.
         TouchArea { }
 
         lay := VerticalLayout {
-            padding: 16px;
-            spacing: 12px;
+            padding: Theme.space-5;
+            spacing: Theme.space-4;
 
             Text {
                 text: dialog.title;
                 color: Theme.text-primary;
-                font-size: Theme.font-size-lg;
-                font-weight: Theme.weight-semibold;
+                font-size: Theme.font-size-xl;
+                font-weight: Theme.weight-bold;
             }
+
+            Divider { }
 
             Flickable {
                 vertical-stretch: 1;
-                viewport-width: parent.width - 32px;
+                viewport-width: parent.width - Theme.space-10;
                 viewport-height: field-list.preferred-height;
-                height: min(field-list.preferred-height, 280px);
+                height: min(field-list.preferred-height, 320px);
 
                 field-list := VerticalLayout {
                     width: parent.viewport-width;
-                    spacing: 8px;
+                    spacing: Theme.space-1;
 
                     for row in dialog.fields: HorizontalLayout {
-                        spacing: 12px;
-                        min-height: 32px;
+                        spacing: Theme.space-3;
+                        min-height: Theme.row-height;
 
                         Text {
                             width: 42%;
                             text: row.label;
                             color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                            font-size: Theme.font-size-md;
                             wrap: no-wrap;
                             overflow: elide;
                             vertical-alignment: center;
@@ -66,23 +79,27 @@ export component WidgetSettingsDialog inherits Rectangle {
                             horizontal-stretch: 1;
                             text: row.value;
                             color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
+                            font-size: Theme.font-size-md;
                             wrap: word-wrap;
                             vertical-alignment: center;
                         }
 
-                        if row.kind == 1 : CheckBox {
+                        if row.kind == 1 : Rectangle {
                             horizontal-stretch: 1;
-                            checked: row.bool-value;
-                            toggled => {
-                                root.field-changed(row.key, self.checked ? "true" : "false");
+                            ToggleSwitch {
+                                x: 0;
+                                y: (parent.height - self.height) / 2;
+                                checked: row.bool-value;
+                                toggled => {
+                                    root.field-changed(row.key, row.bool-value ? "false" : "true");
+                                }
                             }
                         }
 
                         if row.kind == 2 : LineEdit {
                             horizontal-stretch: 1;
                             text: row.value;
-                            font-size: Theme.font-size-sm;
+                            font-size: Theme.font-size-md;
                             accepted(text) => {
                                 root.field-changed(row.key, text);
                             }
@@ -100,23 +117,11 @@ export component WidgetSettingsDialog inherits Rectangle {
                 }
             }
 
-            Rectangle {
-                height: 36px;
-                background: Theme.accent-brand;
-                border-radius: Theme.radius-md;
-                opacity: close-ta.has-hover ? 0.88 : 1.0;
-
-                close-ta := TouchArea {
-                    clicked => { root.dismiss(); }
-                }
-
-                Text {
-                    text: dialog.close-label;
-                    color: Theme.text-primary;
-                    font-size: Theme.font-size-md;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
+            TouchButton {
+                text: dialog.close-label;
+                tone: ButtonTone.filled;
+                wide: true;
+                clicked => { root.dismiss(); }
             }
         }
     }

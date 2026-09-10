@@ -1,4 +1,5 @@
 import { Theme } from "theme_global.slint";
+import { ButtonTone, Chip, ControlSize, Eyebrow, TouchButton } from "kit.slint";
 import { Strings } from "strings_global.slint";
 import { AppState } from "app_state_global.slint";
 import { WidgetCatalog } from "widget_catalog_global.slint";
@@ -87,7 +88,7 @@ export component MainWindow inherits Window {
     preferred-height: 800px;
     min-width: 800px;
     min-height: 600px;
-    background: Theme.surface-base;
+    background: Theme.gradient-canvas;
     default-font-family: Theme.font-family-sans;
     default-font-size: Theme.font-size-md;
 
@@ -439,93 +440,85 @@ export component MainWindow inherits Window {
             triggered => { root.ui-tick(); }
         }
 
-        if AppState.mode == 0: VerticalLayout {
-            padding: Theme.spacing-unit * 8;
-            spacing: Theme.spacing-unit * 4;
-            alignment: center;
+        if AppState.mode == 0: Rectangle {
+            background: Theme.gradient-canvas;
 
-            Text {
-                text: Strings.welcome;
-                color: Theme.text-primary;
-                font-size: Theme.font-size-3xl;
-                font-weight: Theme.weight-semibold;
-                horizontal-alignment: center;
-            }
-
-            Text {
-                text: Strings.subtitle;
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-lg;
-                horizontal-alignment: center;
-            }
-
+            // Accent bloom washing across the backdrop.
             Rectangle {
-                width: 320px;
-                height: 56px;
-                background: Theme.accent-brand;
-                border-radius: Theme.radius-md;
-                opacity: start-ta.has-hover ? 0.88 : 1.0;
-
-                start-ta := TouchArea {
-                    clicked => { root.get-started-clicked(); }
-                }
-                if start-ta.has-hover : Rectangle {
-                    x: parent.x;
-                    y: parent.height + 2px;
-                    width: start-hint.preferred-width + 12px;
-                    height: start-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    start-hint := Text {
-                        x: 6px; y: 3px;
-                        text: Strings.get-started-label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                    }
-                }
-
-                Text {
-                    text: Strings.get-started-label;
-                    color: Theme.text-primary;
-                    font-size: Theme.font-size-lg;
-                    font-weight: Theme.weight-semibold;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
+                width: 100%;
+                height: 100%;
+                background: Theme.gradient-hero;
             }
 
             VerticalLayout {
-                spacing: Theme.spacing-unit;
+                padding: Theme.space-10;
+                spacing: Theme.space-6;
                 alignment: center;
 
-                Text {
-                    text: Strings.version-label;
-                    color: Theme.text-tertiary;
-                    font-size: Theme.font-size-sm;
+                Eyebrow {
+                    text: Strings.window-title;
                     horizontal-alignment: center;
                 }
 
+                Text {
+                    text: Strings.welcome;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-display;
+                    font-weight: Theme.weight-bold;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+
+                Text {
+                    text: Strings.subtitle;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-xl;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+
                 HorizontalLayout {
-                    spacing: Theme.spacing-unit * 3;
                     alignment: center;
+                    padding-top: Theme.space-4;
+
+                    TouchButton {
+                        text: Strings.get-started-label;
+                        icon: "arrow-right";
+                        tone: ButtonTone.filled;
+                        size: ControlSize.lg;
+                        min-width: 320px;
+                        clicked => { root.get-started-clicked(); }
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: Theme.space-3;
+                    alignment: center;
+                    padding-top: Theme.space-6;
 
                     Text {
-                        text: Strings.theme-label + " " + AppState.current-theme-id;
+                        text: Strings.version-label;
                         color: Theme.text-tertiary;
                         font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
                     }
-                    Text {
-                        text: Strings.language-label + " " + AppState.current-language;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                    }
-                    Text {
-                        text: Strings.density-label + " " + AppState.current-density;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
+
+                    HorizontalLayout {
+                        spacing: Theme.space-2;
+                        alignment: center;
+
+                        Chip {
+                            text: Strings.theme-label + " " + AppState.current-theme-id;
+                            icon: "layers";
+                        }
+                        Chip {
+                            text: Strings.language-label + " " + AppState.current-language;
+                            icon: "info";
+                        }
+                        Chip {
+                            text: Strings.density-label + " " + AppState.current-density;
+                            icon: "sliders";
+                        }
                     }
                 }
             }
@@ -899,7 +892,7 @@ export component MainWindow inherits Window {
             if CommandPaletteGlobal.visible: Rectangle {
                 width: 100%;
                 height: 100%;
-                background: #00000050;
+                background: Theme.scrim;
 
                 palette-backdrop := TouchArea {
                     clicked => {
@@ -908,10 +901,10 @@ export component MainWindow inherits Window {
                 }
 
                 CommandPalettePanel {
-                    width: min(parent.width - 32px, 560px);
-                    height: min(parent.height - 120px, 420px);
+                    width: min(parent.width - 48px, 720px);
+                    height: min(parent.height - 96px, 560px);
                     x: (parent.width - self.width) / 2;
-                    y: parent.height * 0.12;
+                    y: parent.height * 0.1;
                     query-changed(q) => {
                         root.command-palette-query-changed(q);
                     }
@@ -930,7 +923,7 @@ export component MainWindow inherits Window {
             if SettingsGlobal.visible: Rectangle {
                 width: 100%;
                 height: 100%;
-                background: #00000050;
+                background: Theme.scrim;
 
                 TouchArea {
                     clicked => {
@@ -939,10 +932,16 @@ export component MainWindow inherits Window {
                 }
 
                 SettingsPanel {
-                    width: min(parent.width - 48px, 720px);
-                    height: min(parent.height - 80px, 480px);
+                    // Narrow canvases get a bottom sheet; wide ones a card.
+                    sheet: parent.width < 760px;
+                    width: self.sheet ? parent.width : min(parent.width - 64px, 960px);
+                    height: self.sheet
+                        ? min(parent.height * 0.94, 680px)
+                        : min(parent.height - 80px, 680px);
                     x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
+                    y: self.sheet
+                        ? parent.height - self.height
+                        : (parent.height - self.height) / 2;
                     dismiss => {
                         root.settings-dismiss();
                     }

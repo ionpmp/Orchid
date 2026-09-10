@@ -1,4 +1,6 @@
 import { Theme } from "../theme_global.slint";
+import { ButtonTone, TouchButton } from "../kit.slint";
+import { Icon } from "../kit-icons.slint";
 import { WidgetCloseConfirmDialog } from "defs.slint";
 
 export component WidgetCloseConfirmDialog inherits Rectangle {
@@ -7,7 +9,12 @@ export component WidgetCloseConfirmDialog inherits Rectangle {
     callback discard();
     callback cancel();
 
-    background: #00000080;
+    property <bool> entered: false;
+    init => { self.entered = true; }
+
+    background: Theme.scrim;
+    opacity: self.entered ? 1.0 : 0.0;
+    animate opacity { duration: Theme.motion-fast; easing: ease-out; }
 
     backdrop-ta := TouchArea {
         clicked => { root.cancel(); }
@@ -15,23 +22,52 @@ export component WidgetCloseConfirmDialog inherits Rectangle {
 
     Rectangle {
         x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        width: 360px;
-        height: lay.preferred-height + 16px;
-        background: Theme.surface-raised;
-        border-radius: Theme.radius-md;
-        drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
-        drop-shadow-color: #00000080;
+        y: (parent.height - self.height) / 2 + (root.entered ? 0px : Theme.space-5);
+        width: 440px;
+        height: lay.preferred-height;
+
+        animate y { duration: Theme.motion-base; easing: ease-out; }
+        background: Theme.gradient-glass;
+        border-radius: Theme.radius-xl;
+        border-width: Theme.hairline;
+        border-color: Theme.border-strong;
+        drop-shadow-blur: Theme.elev-3-blur;
+        drop-shadow-offset-y: Theme.elev-3-y;
+        drop-shadow-color: Theme.shadow-key;
+
+        TouchArea { }
 
         lay := VerticalLayout {
-            padding: 16px;
-            spacing: 12px;
+            padding: Theme.space-5;
+            spacing: Theme.space-4;
 
-            Text {
-                text: dialog.title;
-                color: Theme.text-primary;
-                font-size: Theme.font-size-lg;
-                font-weight: Theme.weight-semibold;
+            HorizontalLayout {
+                spacing: Theme.space-3;
+
+                Rectangle {
+                    min-width: Theme.control-md;
+                    max-width: Theme.control-md;
+                    min-height: Theme.control-md;
+                    max-height: Theme.control-md;
+                    border-radius: Theme.radius-md;
+                    background: Theme.feedback-warning-soft;
+
+                    Icon {
+                        name: "warning";
+                        size: Theme.font-size-xl;
+                        tint: Theme.feedback-warning;
+                    }
+                }
+
+                Text {
+                    text: dialog.title;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-xl;
+                    font-weight: Theme.weight-bold;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    wrap: word-wrap;
+                }
             }
 
             Text {
@@ -42,105 +78,25 @@ export component WidgetCloseConfirmDialog inherits Rectangle {
             }
 
             HorizontalLayout {
-                spacing: 8px;
+                spacing: Theme.space-2;
                 alignment: end;
 
-                Rectangle {
-                    width: max(72px, cancel-label.preferred-width + 16px);
-                    height: 32px;
-                    background: cancel-ta.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-                    cancel-ta := TouchArea { clicked => { root.cancel(); } }
-                    if cancel-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: cancel-hint.preferred-width + 12px;
-                        height: cancel-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        cancel-hint := Text {
-                            x: 6px; y: 3px;
-                            text: dialog.cancel-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-                    cancel-label := Text {
-                        text: dialog.cancel-label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                TouchButton {
+                    text: dialog.cancel-label;
+                    tone: ButtonTone.ghost;
+                    clicked => { root.cancel(); }
                 }
 
-                Rectangle {
-                    width: max(72px, discard-label.preferred-width + 16px);
-                    height: 32px;
-                    background: discard-ta.has-hover ? #ef444444 : #ef444422;
-                    border-radius: Theme.radius-md;
-                    border-width: discard-ta.has-hover ? 1px : 0px;
-                    border-color: discard-ta.has-hover ? #ef4444 : transparent;
-                    discard-ta := TouchArea { clicked => { root.discard(); } }
-                    if discard-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: discard-hint.preferred-width + 12px;
-                        height: discard-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        discard-hint := Text {
-                            x: 6px; y: 3px;
-                            text: dialog.discard-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-                    discard-label := Text {
-                        text: dialog.discard-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                TouchButton {
+                    text: dialog.discard-label;
+                    tone: ButtonTone.danger;
+                    clicked => { root.discard(); }
                 }
 
-                Rectangle {
-                    width: max(72px, save-label.preferred-width + 16px);
-                    height: 32px;
-                    background: save-ta.has-hover ? Theme.accent-brand : #4d82ff88;
-                    border-radius: Theme.radius-md;
-                    save-ta := TouchArea { clicked => { root.save(); } }
-                    if save-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: save-hint.preferred-width + 12px;
-                        height: save-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        save-hint := Text {
-                            x: 6px; y: 3px;
-                            text: dialog.save-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-                    save-label := Text {
-                        text: dialog.save-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                TouchButton {
+                    text: dialog.save-label;
+                    tone: ButtonTone.filled;
+                    clicked => { root.save(); }
                 }
             }
         }

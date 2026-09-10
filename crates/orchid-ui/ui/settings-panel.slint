@@ -1,7 +1,8 @@
 import { Theme } from "theme_global.slint";
+import { ButtonTone, ControlSize, Divider, Eyebrow, Grabber, ListTile, ToggleSwitch, TouchButton } from "kit.slint";
 import { Strings } from "strings_global.slint";
 import { SettingsGlobal } from "settings_global.slint";
-import { CheckBox, ComboBox, LineEdit } from "std-widgets.slint";
+import { ComboBox, LineEdit } from "std-widgets.slint";
 
 export component SettingsPanel inherits Rectangle {
     callback dismiss();
@@ -9,151 +10,121 @@ export component SettingsPanel inherits Rectangle {
     callback field-changed(string, string, string);
     callback open-config();
 
-    background: Theme.surface-raised;
-    border-radius: Theme.radius-md;
-    border-width: 1px;
-    border-color: Theme.border-default;
-    drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
-    drop-shadow-color: #00000060;
+    /// Bottom-sheet presentation for narrow canvases.
+    in property <bool> sheet: false;
+
+    property <bool> entered: false;
+    init => { self.entered = true; }
+    opacity: self.entered ? 1.0 : 0.0;
+    animate opacity { duration: Theme.motion-base; easing: ease-out; }
+
+    background: Theme.gradient-glass;
+    border-radius: Theme.radius-xl;
+    border-width: Theme.hairline;
+    border-color: Theme.border-strong;
+    drop-shadow-blur: Theme.elev-3-blur;
+    drop-shadow-offset-y: Theme.elev-3-y;
+    drop-shadow-color: Theme.shadow-key;
     clip: true;
 
+    if root.sheet : Grabber {
+        x: (parent.width - self.width) / 2;
+        y: Theme.space-2;
+    }
+
     HorizontalLayout {
+        y: root.sheet ? Theme.space-4 : 0px;
+        height: parent.height - self.y;
         padding: 0;
         spacing: 0;
 
-        // Section sidebar
+        // Section rail; narrows on a sheet so the content column keeps room.
         Rectangle {
-            width: 148px;
-            background: Theme.surface-base;
-            border-radius: Theme.radius-md;
+            width: root.sheet ? 168px : 240px;
+            background: Theme.surface-sunken;
+
+            Rectangle {
+                x: parent.width - Theme.hairline;
+                width: Theme.hairline;
+                height: parent.height;
+                background: Theme.border-default;
+            }
 
             VerticalLayout {
-                padding: 8px;
-                spacing: 2px;
+                padding: Theme.space-3;
+                spacing: Theme.space-1;
 
-                for sec[i] in SettingsGlobal.sections: Rectangle {
-                    height: 36px;
-                    background:
-                        i == SettingsGlobal.selected-section-index
-                            ? Theme.surface-raised
-                            : (sec-ta.has-hover ? Theme.surface-raised : transparent);
-                    border-radius: Theme.radius-md;
-                    border-width: i == SettingsGlobal.selected-section-index ? 1px : 0px;
-                    border-color: i == SettingsGlobal.selected-section-index
-                        ? Theme.accent-brand : transparent;
+                Eyebrow {
+                    text: SettingsGlobal.panel-title;
+                    horizontal-stretch: 1;
+                }
 
-                    sec-ta := TouchArea {
-                        clicked => {
-                            root.section-selected(i);
-                        }
-                    }
-                    if sec-ta.has-hover : Rectangle {
-                        x: parent.width + 4px;
-                        y: parent.y;
-                        width: sec-hint.preferred-width + 12px;
-                        height: sec-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        sec-hint := Text {
-                            x: 6px; y: 3px;
-                            text: sec.label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-
-                    Text {
-                        x: 12px;
-                        text: sec.label;
-                        color: i == SettingsGlobal.selected-section-index
-                            ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        wrap: no-wrap;
-                        overflow: elide;
-                        width: parent.width - 16px;
-                    }
+                for sec[i] in SettingsGlobal.sections: ListTile {
+                    title: sec.label;
+                    icon: "sliders";
+                    selected: i == SettingsGlobal.selected-section-index;
+                    horizontal-stretch: 1;
+                    clicked => { root.section-selected(i); }
                 }
             }
         }
 
         // Content
         VerticalLayout {
-            padding: 20px;
-            spacing: 12px;
+            padding: Theme.space-6;
+            spacing: Theme.space-4;
             horizontal-stretch: 1;
 
-            Text {
-                text: SettingsGlobal.panel-title;
-                color: Theme.text-primary;
-                font-size: Theme.font-size-lg;
-                font-weight: Theme.weight-semibold;
-            }
+            VerticalLayout {
+                spacing: Theme.space-2;
 
-            Text {
-                text: SettingsGlobal.hint-text;
-                color: Theme.text-tertiary;
-                font-size: Theme.font-size-sm;
-                wrap: word-wrap;
+                Text {
+                    text: SettingsGlobal.panel-title;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-2xl;
+                    font-weight: Theme.weight-bold;
+                }
+
+                Text {
+                    text: SettingsGlobal.hint-text;
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-md;
+                    wrap: word-wrap;
+                }
             }
 
             if SettingsGlobal.coming-soon-text != "" : Text {
                 text: SettingsGlobal.coming-soon-text;
                 color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
+                font-size: Theme.font-size-md;
                 wrap: word-wrap;
             }
 
             if SettingsGlobal.config-path != "" : VerticalLayout {
-                spacing: 6px;
+                spacing: Theme.space-2;
 
                 Text {
                     text: SettingsGlobal.config-path;
-                    color: Theme.text-secondary;
+                    color: Theme.text-tertiary;
                     font-size: Theme.font-size-sm;
                     wrap: word-wrap;
                 }
 
-                Rectangle {
-                    height: 32px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
+                HorizontalLayout {
+                    alignment: start;
 
-                    open-cfg-ta := TouchArea {
-                        clicked => { root.open-config(); }
-                    }
-                    if open-cfg-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: open-cfg-hint.preferred-width + 12px;
-                        height: open-cfg-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        open-cfg-hint := Text {
-                            x: 6px; y: 3px;
-                            text: Strings.settings_open_in_editor;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-
-                    Text {
+                    TouchButton {
                         text: Strings.settings_open_config_file;
-                        color: Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                        icon: "undock";
+                        tone: ButtonTone.neutral;
+                        size: ControlSize.sm;
+                        tooltip: Strings.settings_open_in_editor;
+                        clicked => { root.open-config(); }
                     }
                 }
             }
+
+            Divider { }
 
             Flickable {
                 vertical-stretch: 1;
@@ -162,130 +133,95 @@ export component SettingsPanel inherits Rectangle {
 
                 field-list := VerticalLayout {
                     width: parent.viewport-width;
-                    spacing: 8px;
+                    spacing: Theme.space-1;
 
-                    for row in SettingsGlobal.fields: HorizontalLayout {
-                        spacing: 12px;
-                        min-height: 32px;
+                    for row in SettingsGlobal.fields: Rectangle {
+                        min-height: Theme.row-height;
+                        border-radius: Theme.radius-md;
+                        background: field-row-ta.has-hover ? Theme.state-hover : Colors.transparent;
 
-                        Rectangle {
-                            width: 42%;
-                            height: 100%;
+                        animate background { duration: Theme.motion-instant; easing: ease-out; }
 
-                            field-label-ta := TouchArea { }
-                            if field-label-ta.has-hover && row.label != "" : Rectangle {
-                                x: parent.x;
-                                y: parent.height + 2px;
-                                width: field-label-hint.preferred-width + 12px;
-                                height: field-label-hint.preferred-height + 6px;
-                                background: Theme.surface-raised;
-                                border-radius: Theme.radius-md;
-                                border-width: 1px;
-                                border-color: Theme.border-default;
-                                z: 100;
-                                field-label-hint := Text {
-                                    x: 6px; y: 3px;
-                                    text: row.label;
-                                    color: Theme.text-secondary;
-                                    font-size: Theme.font-size-sm;
-                                }
-                            }
+                        field-row-ta := TouchArea { }
+
+                        HorizontalLayout {
+                            padding-left: Theme.space-3;
+                            padding-right: Theme.space-3;
+                            spacing: Theme.space-4;
 
                             Text {
+                                width: 40%;
                                 text: row.label;
                                 color: Theme.text-secondary;
-                                font-size: Theme.font-size-sm;
+                                font-size: Theme.font-size-md;
                                 wrap: no-wrap;
                                 overflow: elide;
                                 vertical-alignment: center;
-                                width: 100%;
-                                height: 100%;
                             }
-                        }
 
-                        if row.kind == 0 : Text {
-                            horizontal-stretch: 1;
-                            text: row.value;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            wrap: word-wrap;
-                            vertical-alignment: center;
-                        }
-
-                        if row.kind == 1 : CheckBox {
-                            horizontal-stretch: 1;
-                            checked: row.bool-value;
-                            toggled => {
-                                root.field-changed(
-                                    SettingsGlobal.current-section-id,
-                                    row.key,
-                                    self.checked ? "true" : "false",
-                                );
+                            if row.kind == 0 : Text {
+                                horizontal-stretch: 1;
+                                text: row.value;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-md;
+                                wrap: word-wrap;
+                                vertical-alignment: center;
                             }
-                        }
 
-                        if row.kind == 2 : LineEdit {
-                            horizontal-stretch: 1;
-                            text: row.value;
-                            font-size: Theme.font-size-sm;
-                            accepted(text) => {
-                                root.field-changed(
-                                    SettingsGlobal.current-section-id,
-                                    row.key,
-                                    text,
-                                );
+                            if row.kind == 1 : HorizontalLayout {
+                                horizontal-stretch: 1;
+                                alignment: start;
+
+                                ToggleSwitch {
+                                    checked: row.bool-value;
+                                    toggled => {
+                                        root.field-changed(
+                                            SettingsGlobal.current-section-id,
+                                            row.key,
+                                            row.bool-value ? "false" : "true",
+                                        );
+                                    }
+                                }
                             }
-                        }
 
-                        if row.kind == 3 : ComboBox {
-                            horizontal-stretch: 1;
-                            model: row.combo-options;
-                            current-index: row.combo-index;
-                            selected(_value) => {
-                                root.field-changed(
-                                    SettingsGlobal.current-section-id,
-                                    row.key,
-                                    row.combo-values[self.current-index],
-                                );
+                            if row.kind == 2 : LineEdit {
+                                horizontal-stretch: 1;
+                                text: row.value;
+                                font-size: Theme.font-size-md;
+                                accepted(text) => {
+                                    root.field-changed(
+                                        SettingsGlobal.current-section-id,
+                                        row.key,
+                                        text,
+                                    );
+                                }
+                            }
+
+                            if row.kind == 3 : ComboBox {
+                                horizontal-stretch: 1;
+                                model: row.combo-options;
+                                current-index: row.combo-index;
+                                selected(_value) => {
+                                    root.field-changed(
+                                        SettingsGlobal.current-section-id,
+                                        row.key,
+                                        row.combo-values[self.current-index],
+                                    );
+                                }
                             }
                         }
                     }
                 }
             }
 
-            Rectangle {
-                height: 36px;
-                background: Theme.accent-brand;
-                border-radius: Theme.radius-md;
-                opacity: close-ta.has-hover ? 0.88 : 1.0;
+            HorizontalLayout {
+                alignment: end;
 
-                close-ta := TouchArea {
-                    clicked => { root.dismiss(); }
-                }
-                if close-ta.has-hover : Rectangle {
-                    x: parent.x;
-                    y: parent.height + 2px;
-                    width: close-hint.preferred-width + 12px;
-                    height: close-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    close-hint := Text {
-                        x: 6px; y: 3px;
-                        text: Strings.settings_panel_ok;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                    }
-                }
-
-                Text {
+                TouchButton {
                     text: Strings.settings_panel_ok;
-                    color: Theme.text-primary;
-                    font-size: Theme.font-size-md;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                    icon: "check";
+                    tone: ButtonTone.filled;
+                    clicked => { root.dismiss(); }
                 }
             }
         }

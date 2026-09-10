@@ -1,4 +1,5 @@
 import { Theme } from "theme_global.slint";
+import { ButtonTone, Eyebrow, GlassCard, TouchButton } from "kit.slint";
 import { OnboardingGlobal } from "onboarding_global.slint";
 
 export component OnboardingOverlay inherits Rectangle {
@@ -6,170 +7,115 @@ export component OnboardingOverlay inherits Rectangle {
     callback back-clicked();
     callback skip-clicked();
 
+    property <bool> on-last-step:
+        OnboardingGlobal.current-step + 1 >= OnboardingGlobal.step-count;
+
+    property <bool> entered: false;
+    init => { self.entered = true; }
+
     width: 100%;
     height: 100%;
-    background: #00000066;
+    background: Theme.scrim;
+    opacity: self.entered ? 1.0 : 0.0;
+    animate opacity { duration: Theme.motion-base; easing: ease-out; }
 
     TouchArea {
         // Block clicks to content beneath the tour.
     }
 
-    card := Rectangle {
-        width: min(parent.width - 48px, 520px);
+    card := GlassCard {
+        width: min(parent.width - 64px, 620px);
         x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        background: Theme.surface-raised;
-        border-radius: Theme.radius-md;
-        border-width: 1px;
-        border-color: Theme.border-default;
+        // Rises into place instead of snapping in.
+        y: (parent.height - self.height) / 2 + (root.entered ? 0px : Theme.space-6);
+        elevation: 3;
+
+        animate y { duration: Theme.motion-slow; easing: ease-out; }
+
+        // Accent bloom keeps the tour card feeling like a lit stage.
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            border-radius: parent.border-radius;
+            background: Theme.gradient-hero;
+        }
 
         VerticalLayout {
-            padding: Theme.spacing-unit * 3;
-            spacing: Theme.spacing-unit * 2;
+            padding: Theme.space-8;
+            spacing: Theme.space-4;
+
+            Eyebrow {
+                text: OnboardingGlobal.step-progress-label;
+            }
 
             Text {
                 text: OnboardingGlobal.step-title;
                 color: Theme.text-primary;
-                font-size: Theme.font-size-xl;
-                font-weight: Theme.weight-semibold;
+                font-size: Theme.font-size-3xl;
+                font-weight: Theme.weight-bold;
                 wrap: word-wrap;
             }
 
             Text {
                 text: OnboardingGlobal.step-body;
                 color: Theme.text-secondary;
-                font-size: Theme.font-size-md;
+                font-size: Theme.font-size-lg;
                 wrap: word-wrap;
                 vertical-stretch: 1;
             }
 
+            // Step pips double as a progress read-out.
             HorizontalLayout {
-                spacing: Theme.spacing-unit;
+                spacing: Theme.space-1;
+                alignment: start;
+                padding-top: Theme.space-2;
 
-                Text {
-                    text: OnboardingGlobal.step-progress-label;
-                    color: Theme.text-tertiary;
-                    font-size: Theme.font-size-sm;
-                    vertical-alignment: center;
+                for step[i] in OnboardingGlobal.step-count: Rectangle {
+                    min-width: i == OnboardingGlobal.current-step ? Theme.space-6 : Theme.space-2;
+                    max-width: i == OnboardingGlobal.current-step ? Theme.space-6 : Theme.space-2;
+                    min-height: Theme.space-2;
+                    max-height: Theme.space-2;
+                    border-radius: self.height / 2;
+                    background: i == OnboardingGlobal.current-step
+                        ? Theme.accent-brand
+                        : Theme.border-strong;
+
+                    animate min-width, max-width, background {
+                        duration: Theme.motion-base;
+                        easing: ease-out;
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: Theme.space-2;
+                padding-top: Theme.space-4;
+
+                TouchButton {
+                    text: OnboardingGlobal.skip-label;
+                    tone: ButtonTone.ghost;
+                    clicked => { root.skip-clicked(); }
+                }
+
+                Rectangle {
                     horizontal-stretch: 1;
+                    background: transparent;
                 }
 
-                if OnboardingGlobal.current-step > 0: Rectangle {
-                    width: 88px;
-                    height: 40px;
-                    background: back-ta.has-hover ? Theme.surface-raised : Theme.surface-base;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: back-ta.has-hover ? Theme.accent-brand : Theme.border-default;
-
-                    back-ta := TouchArea {
-                        clicked => { root.back-clicked(); }
-                    }
-                    if back-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: back-hint.preferred-width + 12px;
-                        height: back-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        back-hint := Text {
-                            x: 6px; y: 3px;
-                            text: OnboardingGlobal.back-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-
-                    Text {
-                        text: OnboardingGlobal.back-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                if OnboardingGlobal.current-step > 0: TouchButton {
+                    text: OnboardingGlobal.back-label;
+                    icon: "chevron-left";
+                    tone: ButtonTone.neutral;
+                    clicked => { root.back-clicked(); }
                 }
 
-                Rectangle {
-                    width: 96px;
-                    height: 40px;
-                    background: skip-ta.has-hover ? Theme.surface-raised : Theme.surface-base;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: skip-ta.has-hover ? Theme.accent-brand : Theme.border-default;
-
-                    skip-ta := TouchArea {
-                        clicked => { root.skip-clicked(); }
-                    }
-                    if skip-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: skip-hint.preferred-width + 12px;
-                        height: skip-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        skip-hint := Text {
-                            x: 6px; y: 3px;
-                            text: OnboardingGlobal.skip-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-
-                    Text {
-                        text: OnboardingGlobal.skip-label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-
-                Rectangle {
-                    width: 104px;
-                    height: 40px;
-                    background: Theme.accent-brand;
-                    border-radius: Theme.radius-md;
-                    opacity: next-ta.has-hover ? 0.88 : 1.0;
-
-                    next-ta := TouchArea {
-                        clicked => { root.next-clicked(); }
-                    }
-                    if next-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: next-hint.preferred-width + 12px;
-                        height: next-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        next-hint := Text {
-                            x: 6px; y: 3px;
-                            text: OnboardingGlobal.current-step + 1 >= OnboardingGlobal.step-count
-                                ? OnboardingGlobal.finish-label
-                                : OnboardingGlobal.next-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-
-                    Text {
-                        text: OnboardingGlobal.current-step + 1 >= OnboardingGlobal.step-count
-                            ? OnboardingGlobal.finish-label
-                            : OnboardingGlobal.next-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        font-weight: Theme.weight-semibold;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                TouchButton {
+                    text: root.on-last-step
+                        ? OnboardingGlobal.finish-label
+                        : OnboardingGlobal.next-label;
+                    icon: root.on-last-step ? "check" : "chevron-right";
+                    tone: ButtonTone.filled;
+                    clicked => { root.next-clicked(); }
                 }
             }
         }

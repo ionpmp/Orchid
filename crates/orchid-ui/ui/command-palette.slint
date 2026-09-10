@@ -8,17 +8,36 @@ export component CommandPalettePanel inherits Rectangle {
     callback selection-changed(int);
     callback dismiss();
 
-    background: Theme.surface-raised;
-    border-radius: Theme.radius-md;
-    border-width: 1px;
-    border-color: Theme.border-default;
-    drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
-    drop-shadow-color: #00000060;
+    // Entrance: the panel fades up once, right after it is instantiated.
+    // (`init` fires after the first layout, so the animation has a start value.)
+    property <bool> entered: false;
+    init => { self.entered = true; }
+    opacity: self.entered ? 1.0 : 0.0;
+    animate opacity { duration: Theme.motion-base; easing: ease-out; }
+
+    background: Theme.gradient-glass;
+    border-radius: Theme.radius-xl;
+    border-width: Theme.hairline;
+    border-color: Theme.border-strong;
+    drop-shadow-blur: Theme.elev-3-blur;
+    drop-shadow-offset-y: Theme.elev-3-y;
+    drop-shadow-color: Theme.shadow-key;
     clip: true;
+
+    // Lit top edge, matching every other floating surface.
+    Rectangle {
+        y: 0;
+        width: 100%;
+        height: Theme.hairline;
+        background: Theme.border-highlight;
+        opacity: 0.6;
+    }
 
     SearchView {
         width: 100%;
         height: 100%;
+        y: root.entered ? 0px : Theme.space-4;
+        animate y { duration: Theme.motion-base; easing: ease-out; }
         model: CommandPaletteGlobal.model;
         query-changed(q) => {
             root.query-changed(q);

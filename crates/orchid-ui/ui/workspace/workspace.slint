@@ -1,4 +1,5 @@
 import { Theme } from "../theme_global.slint";
+import { Icon } from "../kit-icons.slint";
 import { NavigationGlobal } from "../navigation_global.slint";
 import { WidgetCatalog } from "../widget_catalog_global.slint";
 import { WidgetFrame } from "widget-frame.slint";
@@ -328,14 +329,14 @@ export component WorkspaceView inherits Rectangle {
     callback catalog-show();
     callback catalog-search-changed(string);
 
-    background: Theme.surface-base;
+    background: Theme.gradient-canvas;
 
     canvas := Rectangle {
         x: 0;
         y: 0;
         width: parent.width;
         height: parent.height;
-        background: Theme.surface-base;
+        background: transparent;
         clip: true;
 
         // With `for` children, Flickable does not infer viewport size (Slint #407); set it explicitly
@@ -372,7 +373,7 @@ export component WorkspaceView inherits Rectangle {
             canvas-inner := Rectangle {
                 width: max(root.workspace.canvas-content-width, canvas-flick.width);
                 height: max(root.workspace.canvas-content-height, canvas-flick.height);
-                background: Theme.surface-base;
+                background: transparent;
 
                 property <bool> long-press-armed: false;
                 property <length> long-press-content-x: 0;
@@ -884,53 +885,77 @@ export component WorkspaceView inherits Rectangle {
             y: root.workspace.snap-zone-y;
             width: root.workspace.snap-zone-width;
             height: root.workspace.snap-zone-height;
-            background: Theme.accent-brand;
-            opacity: 0.18;
+            background: Theme.accent-soft;
             border-width: 2px;
-            border-color: Theme.accent-brand;
-            border-radius: Theme.radius-md;
+            border-color: Theme.accent-muted;
+            border-radius: Theme.radius-lg;
+            drop-shadow-blur: Theme.elev-glow-blur;
+            drop-shadow-color: Theme.accent-glow;
         }
 
         // In-app window taskbar for floating + minimized widgets.
         if root.workspace.window-taskbar.length > 0 : Rectangle {
             x: 0;
-            y: parent.height - 36px;
+            y: parent.height - self.height;
             width: parent.width;
-            height: 36px;
-            background: Theme.surface-base;
-            border-width: 0;
+            height: Theme.control-md + Theme.space-2;
+            background: Theme.surface-glass-strong;
+
             Rectangle {
                 y: 0;
                 width: parent.width;
-                height: 1px;
+                height: Theme.hairline;
                 background: Theme.border-default;
             }
+
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 6px;
+                padding: Theme.space-1;
+                padding-left: Theme.space-3;
+                padding-right: Theme.space-3;
+                spacing: Theme.space-2;
                 alignment: start;
+
                 for item[i] in root.workspace.window-taskbar: TouchArea {
-                    width: 160px;
-                    height: 28px;
-                    y: 4px;
+                    width: 200px;
+                    mouse-cursor: MouseCursor.pointer;
                     clicked => { root.window-taskbar-activate(item.instance-id); }
+
                     Rectangle {
                         width: 100%;
                         height: 100%;
-                        background: item.is-active ? Theme.surface-raised : transparent;
-                        border-radius: Theme.radius-md;
-                        border-width: item.is-minimized ? 1px : 0;
-                        border-color: Theme.border-default;
+                        background: item.is-active ? Theme.accent-soft
+                            : parent.has-hover ? Theme.state-hover
+                            : Theme.surface-overlay;
+                        border-radius: Theme.radius-pill;
+                        border-width: Theme.hairline;
+                        border-color: item.is-active ? Theme.accent-muted : Theme.border-subtle;
+                        opacity: item.is-minimized ? 0.7 : 1.0;
+
+                        animate background, border-color, opacity {
+                            duration: Theme.motion-fast;
+                            easing: ease-out;
+                        }
+
                         HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 8px;
-                            spacing: 6px;
+                            padding-left: Theme.space-4;
+                            padding-right: Theme.space-4;
+                            spacing: Theme.space-2;
+
+                            Icon {
+                                name: item.is-minimized ? "minus" : "dot";
+                                size: Theme.font-size-sm;
+                                tint: item.is-active ? Theme.accent-brand : Theme.text-tertiary;
+                            }
+
                             Text {
                                 text: item.title;
-                                color: Theme.text-primary;
+                                color: item.is-active ? Theme.text-primary : Theme.text-secondary;
                                 font-size: Theme.font-size-sm;
+                                font-weight: item.is-active
+                                    ? Theme.weight-semibold
+                                    : Theme.weight-medium;
                                 vertical-alignment: center;
+                                wrap: no-wrap;
                                 overflow: elide;
                                 horizontal-stretch: 1;
                             }
@@ -950,7 +975,7 @@ export component WorkspaceView inherits Rectangle {
         width: parent.width;
         height: parent.height;
         visible: WidgetCatalog.visible;
-        background: #00000028;
+        background: Theme.scrim;
 
         // Backdrop only — must not stack above the panel.
         TouchArea {
@@ -962,8 +987,16 @@ export component WorkspaceView inherits Rectangle {
 
         WidgetCatalogPanel {
             z: 1;
+            // Narrow canvases get a bottom sheet; wide ones a centred card.
+            sheet: parent.width < 760px;
+            width: self.sheet ? parent.width : min(880px, parent.width - Theme.space-8);
+            height: self.sheet
+                ? min(660px, parent.height * 0.92)
+                : min(660px, parent.height - Theme.space-8);
             x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
+            y: self.sheet
+                ? parent.height - self.height
+                : (parent.height - self.height) / 2;
             pick(type-id) => { root.catalog-pick(type-id); }
             dismiss => { root.catalog-dismiss(); }
             search-changed(q) => { root.catalog-search-changed(q); }

@@ -1,8 +1,9 @@
 import { Theme } from "../theme_global.slint";
+import { ControlSize, IconButton, Tooltip } from "../kit.slint";
 import { Strings } from "../strings_global.slint";
 import { GroupTabModel } from "defs.slint";
 
-/// Compact tab strip for widgets stacked in a shared layout slot.
+/// Tab strip for widgets stacked in a shared layout slot.
 export component GroupTabs inherits Rectangle {
     in property <[GroupTabModel]> tabs;
 
@@ -12,206 +13,129 @@ export component GroupTabs inherits Rectangle {
     callback tab-move-right(string);
     callback dissolve-clicked();
 
-    height: 28px;
-    background: Theme.surface-raised;
+    /// Mirrors the model's active tab so swipe can step to a neighbour.
+    /// Each tab reports itself when it becomes active (the model has no index).
+    property <int> active-index: 0;
 
-    HorizontalLayout {
-        padding: 2px;
-        spacing: 2px;
+    pure function neighbour-id(step: int) -> string {
+        return tabs[clamp(root.active-index + step, 0, tabs.length - 1)].instance-id;
+    }
 
-        for tab[i] in tabs : Rectangle {
-            width: 140px;
-            height: 24px;
-            background: tab.is-active ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
-            border-width: tab.is-active ? 1px : 0px;
-            border-color: tab.is-active ? Theme.accent-brand : transparent;
+    height: Theme.control-md + Theme.space-2;
+    background: Theme.surface-sunken;
 
-            if tab-ta.has-hover : Rectangle {
-                x: 0px;
-                y: parent.height + 2px;
-                width: tab-hint.preferred-width + 12px;
-                height: tab-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                tab-hint := Text {
-                    x: 6px; y: 3px;
-                    text: tab.title;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
-            }
+    Rectangle {
+        y: parent.height - Theme.hairline;
+        width: parent.width;
+        height: Theme.hairline;
+        background: Theme.border-default;
+    }
 
-            HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 4px;
-                spacing: 4px;
+    // Swiping across the strip walks the stack, like flicking between pages.
+    // Taps still reach the tabs underneath — the handler only grabs once the
+    // finger has travelled far enough to count as a swipe.
+    swipe := SwipeGestureHandler {
+        width: 100%;
+        height: 100%;
+        handle-swipe-left: true;
+        handle-swipe-right: true;
 
-                tab-ta := TouchArea {
-                    horizontal-stretch: 1;
-                    clicked => { root.tab-clicked(tab.instance-id); }
-
-                    Text {
-                        text: tab.title;
-                        color: tab.is-active ? Theme.accent-brand : Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        font-weight: tab.is-active ? Theme.weight-medium : Theme.weight-regular;
-                        vertical-alignment: center;
-                        overflow: elide;
-                    }
-                }
-
-                if i > 0 : Rectangle {
-                    width: 16px;
-                    height: 18px;
-                    y: (parent.height - self.height) / 2;
-                    background: left-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: 8px;
-                    left-ta := TouchArea {
-                        clicked => { root.tab-move-left(tab.instance-id); }
-                    }
-                    if left-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: left-hint.preferred-width + 12px;
-                        height: left-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        left-hint := Text {
-                            x: 6px;
-                            y: 3px;
-                            text: Strings.group-tooltip-move-left;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-                    Text {
-                        text: "‹";
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-
-                if i + 1 < tabs.length : Rectangle {
-                    width: 16px;
-                    height: 18px;
-                    y: (parent.height - self.height) / 2;
-                    background: right-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: 8px;
-                    right-ta := TouchArea {
-                        clicked => { root.tab-move-right(tab.instance-id); }
-                    }
-                    if right-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: right-hint.preferred-width + 12px;
-                        height: right-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        right-hint := Text {
-                            x: 6px;
-                            y: 3px;
-                            text: Strings.group-tooltip-move-right;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-                    Text {
-                        text: "›";
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-
-                Rectangle {
-                    width: 18px;
-                    height: 18px;
-                    y: (parent.height - self.height) / 2;
-                    background: close-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: 9px;
-
-                    close-ta := TouchArea {
-                        clicked => { root.tab-closed(tab.instance-id); }
-                    }
-                    if close-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: close-hint.preferred-width + 12px;
-                        height: close-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        close-hint := Text {
-                            x: 6px;
-                            y: 3px;
-                            text: Strings.group-tooltip-close-tab;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-
-                    Text {
-                        text: "×";
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-            }
+        swiped => {
+            root.tab-clicked(root.neighbour-id(
+                self.current-position.x < self.pressed-position.x ? 1 : -1
+            ));
         }
 
-        Rectangle {
-            width: 28px;
-            height: 24px;
-            background: dissolve-ta.has-hover ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
+        HorizontalLayout {
+            width: 100%;
+            height: 100%;
+            padding: Theme.space-1;
+            spacing: Theme.space-1;
 
-            dissolve-ta := TouchArea {
-                clicked => { root.dissolve-clicked(); }
-            }
-
-            if dissolve-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: hint.preferred-width + 12px;
-                height: hint.preferred-height + 6px;
-                background: Theme.surface-raised;
+            for tab[i] in tabs : Rectangle {
+                min-width: Theme.control-lg * 2.6;
+                max-width: Theme.control-lg * 4;
                 border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
+                background: tab.is-active ? Theme.surface-raised
+                    : tab-ta.has-hover ? Theme.state-hover
+                    : Colors.transparent;
 
-                hint := Text {
-                    x: 6px;
-                    y: 3px;
-                    text: Strings.group-tooltip-dissolve;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
+                animate background { duration: Theme.motion-instant; easing: ease-out; }
+
+                // Report position so `neighbour-id` knows where the stack is.
+                property <bool> live: tab.is-active;
+                init => { if (self.live) { root.active-index = i; } }
+                changed live => { if (self.live) { root.active-index = i; } }
+
+                // Accent underline marks the live tab.
+                if tab.is-active : Rectangle {
+                    x: Theme.space-3;
+                    y: parent.height - Theme.indicator-thickness - Theme.space-1;
+                    width: parent.width - Theme.space-3 * 2;
+                    height: Theme.indicator-thickness;
+                    border-radius: self.height / 2;
+                    background: Theme.accent-brand;
+                }
+
+                Tooltip {
+                    text: tab.title;
+                    shown: tab-ta.has-hover;
+                    x: 0;
+                    y: parent.height + Theme.space-1;
+                }
+
+                HorizontalLayout {
+                    padding-left: Theme.space-3;
+                    padding-right: Theme.space-1;
+                    spacing: Theme.space-1;
+
+                    tab-ta := TouchArea {
+                        horizontal-stretch: 1;
+                        mouse-cursor: MouseCursor.pointer;
+                        clicked => { root.tab-clicked(tab.instance-id); }
+
+                        Text {
+                            width: 100%;
+                            height: 100%;
+                            text: tab.title;
+                            color: tab.is-active ? Theme.text-primary : Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            font-weight: tab.is-active ? Theme.weight-semibold : Theme.weight-medium;
+                            vertical-alignment: center;
+                            wrap: no-wrap;
+                            overflow: elide;
+                        }
+                    }
+
+                    if i > 0 : IconButton {
+                        icon: "chevron-left";
+                        size: ControlSize.sm;
+                        tooltip: Strings.group-tooltip-move-left;
+                        clicked => { root.tab-move-left(tab.instance-id); }
+                    }
+
+                    if i + 1 < tabs.length : IconButton {
+                        icon: "chevron-right";
+                        size: ControlSize.sm;
+                        tooltip: Strings.group-tooltip-move-right;
+                        clicked => { root.tab-move-right(tab.instance-id); }
+                    }
+
+                    IconButton {
+                        icon: "close";
+                        size: ControlSize.sm;
+                        tooltip: Strings.group-tooltip-close-tab;
+                        clicked => { root.tab-closed(tab.instance-id); }
+                    }
                 }
             }
 
-            Text {
-                text: "⧉";
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+            IconButton {
+                icon: "layers";
+                size: ControlSize.sm;
+                tooltip: Strings.group-tooltip-dissolve;
+                tooltip-flip: true;
+                clicked => { root.dissolve-clicked(); }
             }
         }
     }
