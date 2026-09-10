@@ -1,4 +1,6 @@
 import { Theme } from "../theme_global.slint";
+import { Badge, EmptyState, Tooltip } from "../kit.slint";
+import { Icon } from "../kit-icons.slint";
 import { Strings } from "../strings_global.slint";
 import { RssModel } from "../workspace/defs.slint";
 
@@ -10,36 +12,40 @@ export component RssView inherits Rectangle {
     background: transparent;
 
     VerticalLayout {
-        padding: 12px;
-        spacing: 8px;
+        padding: Theme.space-3;
+        spacing: Theme.space-2;
 
         if model.error-summary != "" : Rectangle {
-            background: #ef444422;
+            background: Theme.feedback-danger-soft;
             border-radius: Theme.radius-md;
+            border-width: Theme.hairline;
+            border-color: Theme.feedback-danger.with-alpha(0.4);
             horizontal-stretch: 1;
 
             HorizontalLayout {
-                padding: 8px;
+                padding: Theme.space-3;
+                spacing: Theme.space-2;
+
+                Icon {
+                    name: "warning";
+                    size: Theme.font-size-lg;
+                    tint: Theme.feedback-danger;
+                }
 
                 Text {
                     text: model.error-summary;
-                    color: #ef4444;
+                    color: Theme.feedback-danger;
                     font-size: Theme.font-size-sm;
                     vertical-alignment: center;
+                    wrap: word-wrap;
                 }
             }
         }
 
-        if !model.has-items : VerticalLayout {
-            alignment: center;
+        if !model.has-items : EmptyState {
             vertical-stretch: 1;
-
-            Text {
-                text: model.empty-state-text;
-                color: Theme.text-tertiary;
-                font-size: Theme.font-size-md;
-                horizontal-alignment: center;
-            }
+            icon: "bell";
+            title: model.empty-state-text;
         }
 
         if model.has-items : Flickable {
@@ -51,45 +57,51 @@ export component RssView inherits Rectangle {
 
             rss-list := VerticalLayout {
                 width: parent.viewport-width;
-                spacing: 0px;
+                spacing: Theme.space-2;
 
                 for item[i] in model.items : Rectangle {
-                    height: 84px;
-                    background: item-ta.has-hover
-                        ? Theme.surface-base
-                        : transparent;
-                    border-radius: Theme.radius-md;
+                    height: 96px;
+                    background: item-ta.has-hover ? Theme.surface-raised : Theme.surface-sunken;
+                    border-radius: Theme.radius-lg;
+                    border-width: Theme.hairline;
+                    border-color: item-ta.has-hover ? Theme.border-subtle : Colors.transparent;
+
+                    animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
 
                     item-ta := TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
                         clicked => {
                             root.item-clicked(item.link);
                         }
                     }
-                    if item-ta.has-hover : Rectangle {
-                        x: parent.x + 8px;
-                        y: parent.height - 2px;
-                        width: open-hint.preferred-width + 12px;
-                        height: open-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        open-hint := Text {
-                            x: 6px; y: 3px;
-                            text: item.summary != ""
-                                ? (item.title != "" ? item.title + " — " + item.summary : item.summary)
-                                : item.title != ""
-                                    ? (item.source != "" ? item.title + " — " + item.source : item.title)
-                                    : Strings.rss-open-item-hint;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
+
+                    Tooltip {
+                        x: Theme.space-3;
+                        y: parent.height - Theme.space-1;
+                        shown: item-ta.has-hover;
+                        text: item.summary != ""
+                            ? (item.title != "" ? item.title + " — " + item.summary : item.summary)
+                            : item.title != ""
+                                ? (item.source != "" ? item.title + " — " + item.source : item.title)
+                                : Strings.rss-open-item-hint;
+                    }
+
+                    // Unread rail keeps the feed scannable in a glance.
+                    Rectangle {
+                        x: 0;
+                        width: Theme.indicator-thickness;
+                        height: parent.height - Theme.space-4;
+                        y: Theme.space-2;
+                        border-radius: Theme.radius-pill;
+                        background: item-ta.has-hover ? Theme.accent-brand : Theme.accent-muted;
                     }
 
                     VerticalLayout {
-                        padding: 8px;
-                        spacing: 4px;
+                        padding-left: Theme.space-4;
+                        padding-right: Theme.space-3;
+                        padding-top: Theme.space-2;
+                        padding-bottom: Theme.space-2;
+                        spacing: Theme.space-1;
 
                         Text {
                             text: item.title;
@@ -102,19 +114,17 @@ export component RssView inherits Rectangle {
                         }
 
                         HorizontalLayout {
-                            spacing: 8px;
+                            spacing: Theme.space-2;
+                            alignment: start;
 
-                            Text {
+                            Badge {
                                 text: item.source;
-                                color: Theme.accent-brand;
-                                font-size: Theme.font-size-sm;
-                                vertical-alignment: center;
                             }
 
                             Text {
                                 text: item.published;
                                 color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
+                                font-size: Theme.font-size-xs;
                                 vertical-alignment: center;
                             }
                         }
@@ -136,7 +146,7 @@ export component RssView inherits Rectangle {
         if model.last-updated != "" : Text {
             text: model.last-updated;
             color: Theme.text-tertiary;
-            font-size: Theme.font-size-sm;
+            font-size: Theme.font-size-xs;
             horizontal-alignment: end;
         }
     }

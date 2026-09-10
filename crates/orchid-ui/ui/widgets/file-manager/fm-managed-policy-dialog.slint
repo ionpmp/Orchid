@@ -1,11 +1,18 @@
 import { Theme } from "../../theme_global.slint";
+import { ButtonTone, Divider, TouchButton } from "../../kit.slint";
+import { Icon } from "../../kit-icons.slint";
 import { FmManagedPolicyState } from "../../workspace/defs.slint";
 
 export component FmManagedPolicyDialog inherits Rectangle {
     in property <FmManagedPolicyState> state;
     callback close();
 
-    background: #00000080;
+    property <bool> entered: false;
+    init => { self.entered = true; }
+
+    background: Theme.scrim;
+    opacity: self.entered ? 1.0 : 0.0;
+    animate opacity { duration: Theme.motion-fast; easing: ease-out; }
 
     backdrop-ta := TouchArea {
         clicked => { root.close(); }
@@ -13,40 +20,77 @@ export component FmManagedPolicyDialog inherits Rectangle {
 
     Rectangle {
         x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        width: 420px;
-        height: lay.preferred-height + 16px;
-        background: Theme.surface-raised;
-        border-radius: Theme.radius-md;
-        drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
-        drop-shadow-color: #00000080;
+        y: (parent.height - self.height) / 2 + (root.entered ? 0px : Theme.space-5);
+        width: 480px;
+        height: lay.preferred-height;
+
+        animate y { duration: Theme.motion-base; easing: ease-out; }
+        background: Theme.gradient-glass;
+        border-radius: Theme.radius-xl;
+        border-width: Theme.hairline;
+        border-color: Theme.border-strong;
+        drop-shadow-blur: Theme.elev-3-blur;
+        drop-shadow-offset-y: Theme.elev-3-y;
+        drop-shadow-color: Theme.shadow-key;
+
+        TouchArea { }
 
         lay := VerticalLayout {
-            padding: 16px;
-            spacing: 10px;
+            padding: Theme.space-5;
+            spacing: Theme.space-3;
 
-            Text {
-                text: state.title;
-                color: Theme.text-primary;
-                font-size: Theme.font-size-lg;
-                font-weight: Theme.weight-semibold;
+            HorizontalLayout {
+                spacing: Theme.space-3;
+
+                Rectangle {
+                    min-width: Theme.control-md;
+                    max-width: Theme.control-md;
+                    min-height: Theme.control-md;
+                    max-height: Theme.control-md;
+                    border-radius: Theme.radius-md;
+                    background: Theme.accent-soft;
+
+                    Icon {
+                        name: "lock";
+                        size: Theme.font-size-xl;
+                        tint: Theme.accent-brand;
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: 2px;
+                    alignment: center;
+                    horizontal-stretch: 1;
+
+                    Text {
+                        text: state.title;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-lg;
+                        font-weight: Theme.weight-bold;
+                        wrap: word-wrap;
+                    }
+
+                    Text {
+                        text: state.path;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        font-family: Theme.font-family-mono;
+                        wrap: word-wrap;
+                    }
+                }
             }
 
-            Text {
-                text: state.path;
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-                wrap: word-wrap;
-            }
+            Divider { }
 
             for row[i] in state.rows : HorizontalLayout {
-                spacing: 8px;
+                spacing: Theme.space-3;
+                min-height: Theme.control-sm;
 
                 Text {
                     text: row.label;
                     color: Theme.text-tertiary;
                     font-size: Theme.font-size-sm;
-                    min-width: 120px;
+                    min-width: 140px;
                     vertical-alignment: center;
                 }
 
@@ -61,22 +105,12 @@ export component FmManagedPolicyDialog inherits Rectangle {
             }
 
             HorizontalLayout {
-                spacing: 8px;
                 alignment: end;
 
-                Rectangle {
-                    width: 96px;
-                    height: 32px;
-                    background: close-ta.has-hover ? Theme.accent-brand : #4d82ff88;
-                    border-radius: Theme.radius-md;
-                    close-ta := TouchArea { clicked => { root.close(); } }
-                    Text {
-                        text: state.close-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                TouchButton {
+                    text: state.close-label;
+                    tone: ButtonTone.filled;
+                    clicked => { root.close(); }
                 }
             }
         }

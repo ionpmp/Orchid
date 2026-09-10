@@ -1,4 +1,5 @@
 import { Theme } from "../../theme_global.slint";
+import { Eyebrow } from "../../kit.slint";
 import { FmSidebarItem } from "../../workspace/defs.slint";
 import { FmSidebarIcon } from "fm-icons.slint";
 
@@ -15,37 +16,56 @@ export component FmSidebar inherits Rectangle {
         viewport-height: vlay.preferred-height;
 
         vlay := VerticalLayout {
-            spacing: 1px;
-            padding: 4px;
+            spacing: 2px;
+            padding: Theme.space-2;
 
             for item[i] in items : Rectangle {
-                height: item.is-section-header ? 28px : 32px;
+                height: item.is-section-header ? Theme.control-sm : Theme.row-height;
                 background: item.is-active
-                    ? Theme.accent-brand
-                    : (item-ta.has-hover && !item.is-section-header ? Theme.surface-raised : transparent);
+                    ? Theme.state-selected
+                    : (item-ta.has-hover && !item.is-section-header ? Theme.state-hover : transparent);
                 border-radius: Theme.radius-md;
+
+                animate background { duration: Theme.motion-fast; easing: ease-out; }
 
                 item-ta := TouchArea {
                     enabled: !item.is-section-header;
+                    mouse-cursor: MouseCursor.pointer;
                     clicked => { root.clicked(item.id); }
                 }
 
-                HorizontalLayout {
-                    padding-left: 8px + (item.indent * 12px);
-                    padding-right: 8px;
-                    spacing: 8px;
+                // Accent rail marks the active place.
+                if item.is-active : Rectangle {
+                    x: 0;
+                    y: (parent.height - self.height) / 2;
+                    width: Theme.indicator-thickness;
+                    height: parent.height * 0.5;
+                    border-radius: Theme.radius-pill;
+                    background: Theme.accent-brand;
+                }
 
-                    FmSidebarIcon {
+                HorizontalLayout {
+                    padding-left: Theme.space-3 + (item.indent * Theme.space-3);
+                    padding-right: Theme.space-3;
+                    spacing: Theme.space-3;
+
+                    if !item.is-section-header : FmSidebarIcon {
                         y: (parent.height - self.height) / 2;
-                        icon-size: 14px;
+                        icon-size: 18px;
                         icon-id: item.icon;
                     }
 
-                    Text {
+                    if item.is-section-header : Eyebrow {
                         text: item.label;
-                        color: item.is-section-header ? Theme.text-tertiary : Theme.text-primary;
-                        font-size: item.is-section-header ? Theme.font-size-sm : Theme.font-size-md;
-                        font-weight: item.is-section-header ? Theme.weight-semibold : Theme.weight-regular;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+
+                    if !item.is-section-header : Text {
+                        text: item.label;
+                        color: item.is-active ? Theme.accent-brand : Theme.text-primary;
+                        font-size: Theme.font-size-md;
+                        font-weight: item.is-active ? Theme.weight-semibold : Theme.weight-regular;
                         vertical-alignment: center;
                         wrap: no-wrap;
                         overflow: elide;

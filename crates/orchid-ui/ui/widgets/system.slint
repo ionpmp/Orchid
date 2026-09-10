@@ -1,4 +1,5 @@
 import { Theme } from "../theme_global.slint";
+import { ProgressTrack, Tooltip } from "../kit.slint";
 import { SystemModel } from "../workspace/defs.slint";
 
 export component SystemView inherits Rectangle {
@@ -17,10 +18,10 @@ export component SystemView inherits Rectangle {
             ".";
     }
 
-    pure function status-bar-color(status: int) -> color {
+    pure function status-color(status: int) -> color {
         return
-            status == 2 ? #ef4444 :
-            status == 1 ? #eab308 :
+            status == 2 ? Theme.feedback-danger :
+            status == 1 ? Theme.feedback-warning :
             Theme.accent-brand;
     }
 
@@ -32,101 +33,106 @@ export component SystemView inherits Rectangle {
         height: 100%;
 
         VerticalLayout {
-            padding: 12px;
-            spacing: 10px;
+            padding: Theme.space-3;
+            spacing: Theme.space-2;
             width: parent.width;
 
+            // Each metric is its own card so readings stay scannable at arm's length.
             for ind[i] in model.indicators : Rectangle {
+                background: ind-ta.has-hover ? Theme.surface-raised : Theme.surface-sunken;
+                border-radius: Theme.radius-lg;
+                border-width: Theme.hairline;
+                border-color: ind-ta.has-hover ? Theme.border-subtle : Colors.transparent;
+
+                animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
+
                 VerticalLayout {
-                    spacing: 4px;
+                    padding: Theme.space-3;
+                    spacing: Theme.space-2;
                     width: 100%;
 
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: Theme.space-2;
 
-                        if ind.icon != "" : Text {
-                            text: system-icon-glyph(ind.icon);
-                            color: status-bar-color(ind.status);
-                            font-size: Theme.font-size-sm;
-                            font-weight: Theme.weight-semibold;
-                            vertical-alignment: center;
-                            min-width: 14px;
+                        if ind.icon != "" : Rectangle {
+                            min-width: Theme.control-xs;
+                            max-width: Theme.control-xs;
+                            min-height: Theme.control-xs;
+                            max-height: Theme.control-xs;
+                            border-radius: Theme.radius-sm;
+                            background: status-color(ind.status).with-alpha(0.16);
+
+                            Text {
+                                text: system-icon-glyph(ind.icon);
+                                color: status-color(ind.status);
+                                font-size: Theme.font-size-sm;
+                                font-weight: Theme.weight-bold;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                width: 100%;
+                                height: 100%;
+                            }
                         }
 
                         Text {
                             text: ind.label;
                             color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                            font-size: Theme.font-size-md;
                             vertical-alignment: center;
                             horizontal-stretch: 1;
+                            wrap: no-wrap;
+                            overflow: elide;
                         }
 
                         Text {
                             text: ind.value-text;
                             color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            font-weight: Theme.weight-medium;
+                            font-size: Theme.font-size-md;
+                            font-weight: Theme.weight-semibold;
+                            font-family: Theme.font-family-mono;
                             vertical-alignment: center;
                         }
                     }
 
-                    if ind.percent >= 0 : Rectangle {
-                        height: 4px;
-                        background: Theme.surface-base;
-                        border-radius: 2px;
-                        horizontal-stretch: 1;
-
-                        Rectangle {
-                            x: 0;
-                            y: 0;
-                            width: parent.width * ind.percent;
-                            height: parent.height;
-                            border-radius: 2px;
-                            background: status-bar-color(ind.status);
-                        }
+                    if ind.percent >= 0 : ProgressTrack {
+                        value: ind.percent;
+                        fill: status-color(ind.status);
                     }
 
+                    // Per-core / per-interface sparkline.
                     if ind.segments.length > 0 : HorizontalLayout {
                         spacing: 2px;
-                        height: 10px;
+                        height: 16px;
 
                         for seg[si] in ind.segments : Rectangle {
                             horizontal-stretch: 1;
                             background: Theme.surface-base;
-                            border-radius: 1px;
+                            border-radius: Theme.radius-xs;
+                            clip: true;
 
                             Rectangle {
                                 x: 0;
                                 y: parent.height * (1.0 - seg);
                                 width: parent.width;
                                 height: parent.height * seg;
-                                border-radius: 1px;
+                                border-radius: Theme.radius-xs;
                                 background:
-                                    seg >= 0.9 ? #ef4444 :
-                                    seg >= 0.75 ? #eab308 :
+                                    seg >= 0.9 ? Theme.feedback-danger :
+                                    seg >= 0.75 ? Theme.feedback-warning :
                                     Theme.accent-brand;
+                                animate height, y { duration: Theme.motion-base; easing: ease-out; }
                             }
                         }
                     }
                 }
 
                 ind-ta := TouchArea { }
-                if ind-ta.has-hover && ind.status-hint != "" : Rectangle {
-                    x: parent.x;
-                    y: parent.height + 2px;
-                    width: ind-hint.preferred-width + 12px;
-                    height: ind-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    ind-hint := Text {
-                        x: 6px; y: 3px;
-                        text: ind.status-hint;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                    }
+
+                Tooltip {
+                    x: 0;
+                    y: parent.height + Theme.space-1;
+                    shown: ind-ta.has-hover && ind.status-hint != "";
+                    text: ind.status-hint;
                 }
             }
         }

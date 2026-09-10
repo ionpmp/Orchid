@@ -1,4 +1,6 @@
 import { Theme } from "../theme_global.slint";
+import { ControlSize, IconButton, TouchButton } from "../kit.slint";
+import { Icon } from "../kit-icons.slint";
 import { AudioPlayerModel } from "../workspace/defs.slint";
 import { SearchField } from "search-field.slint";
 
@@ -1037,23 +1039,29 @@ export component AudioPlayerView inherits Rectangle {
             // Now-playing chrome — sized to content, never pushed outside the widget.
             Rectangle {
                 vertical-stretch: 0;
-                min-height: 108px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
+                min-height: 128px;
+                background: Theme.gradient-chrome;
+                border-radius: Theme.radius-lg;
+                border-width: Theme.hairline;
+                border-color: Theme.border-subtle;
                 clip: true;
 
                 VerticalLayout {
-                    padding: 8px;
-                    spacing: 4px;
+                    padding: Theme.space-3;
+                    spacing: Theme.space-2;
 
                     HorizontalLayout {
-                        spacing: 10px;
-                        height: 52px;
+                        spacing: Theme.space-3;
+                        height: 64px;
+                        // Cover art doubles as the widget's light source.
                         Rectangle {
-                            width: 52px;
-                            height: 52px;
-                            background: Theme.surface-base;
+                            width: 64px;
+                            height: 64px;
+                            background: root.model.has-cover ? Theme.surface-sunken : Theme.gradient-hero;
                             border-radius: Theme.radius-md;
+                            drop-shadow-blur: Theme.elev-2-blur;
+                            drop-shadow-offset-y: Theme.elev-1-y;
+                            drop-shadow-color: Theme.shadow-ambient;
                             clip: true;
                             if root.model.has-cover : Image {
                                 width: 100%; height: 100%;
@@ -1063,7 +1071,7 @@ export component AudioPlayerView inherits Rectangle {
                             if !root.model.has-cover : Text {
                                 text: "♪";
                                 color: Theme.text-tertiary;
-                                font-size: 22px;
+                                font-size: Theme.font-size-2xl;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                                 width: 100%; height: 100%;
@@ -1076,8 +1084,8 @@ export component AudioPlayerView inherits Rectangle {
                             Text {
                                 text: root.model.has-track ? root.model.title : root.model.no-track-label;
                                 color: Theme.text-primary;
-                                font-size: Theme.font-size-md;
-                                font-weight: Theme.weight-semibold;
+                                font-size: Theme.font-size-lg;
+                                font-weight: Theme.weight-bold;
                                 overflow: elide;
                             }
                             Text {
@@ -1105,18 +1113,12 @@ export component AudioPlayerView inherits Rectangle {
                                 }
                             }
                         }
-                        if root.model.has-track : Rectangle {
-                            width: 28px;
-                            height: 28px;
-                            TouchArea { clicked => { root.command("toggle-favorite-current"); } }
-                            Text {
-                                text: root.model.is-current-favorite ? "*" : "+";
-                                color: root.model.is-current-favorite ? Theme.accent-brand : Theme.text-tertiary;
-                                font-size: Theme.font-size-md;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                width: 100%; height: 100%;
-                            }
+                        if root.model.has-track : IconButton {
+                            icon: "star";
+                            size: ControlSize.sm;
+                            active: root.model.is-current-favorite;
+                            y: (parent.height - self.height) / 2;
+                            clicked => { root.command("toggle-favorite-current"); }
                         }
                     }
 
@@ -1129,11 +1131,13 @@ export component AudioPlayerView inherits Rectangle {
                             font-size: Theme.font-size-sm;
                             vertical-alignment: center;
                         }
+                        // Seek strip: a thin track with a finger-sized hit area.
                         progress-bar := Rectangle {
-                            height: 14px;
+                            height: Theme.control-xs;
                             background: transparent;
                             horizontal-stretch: 1;
                             seek-ta := TouchArea {
+                                mouse-cursor: MouseCursor.pointer;
                                 moved => {
                                     if self.pressed && progress-bar.width > 0 {
                                         root.command("seek-frac:" + (self.mouse-x / progress-bar.width));
@@ -1146,18 +1150,22 @@ export component AudioPlayerView inherits Rectangle {
                                 }
                             }
                             Rectangle {
-                                y: parent.height / 2 - 2px;
-                                height: 4px;
+                                y: (parent.height - self.height) / 2;
+                                height: seek-ta.has-hover ? Theme.track-height-lg : Theme.track-height;
                                 width: parent.width;
-                                background: Theme.surface-base;
-                                border-radius: 2px;
+                                background: Theme.surface-sunken;
+                                border-radius: self.height / 2;
+
+                                animate height { duration: Theme.motion-fast; easing: ease-out; }
                             }
                             Rectangle {
-                                y: parent.height / 2 - 2px;
-                                height: 4px;
+                                y: (parent.height - self.height) / 2;
+                                height: seek-ta.has-hover ? Theme.track-height-lg : Theme.track-height;
                                 width: parent.width * root.model.progress;
-                                background: Theme.accent-brand;
-                                border-radius: 2px;
+                                background: Theme.gradient-accent;
+                                border-radius: self.height / 2;
+
+                                animate height { duration: Theme.motion-fast; easing: ease-out; }
                             }
                         }
                         Text {
@@ -1169,94 +1177,68 @@ export component AudioPlayerView inherits Rectangle {
                     }
 
                     Flickable {
-                        height: 28px;
-                        viewport-height: 28px;
+                        height: Theme.control-lg;
+                        viewport-height: self.height;
                         viewport-width: max(self.width, transport-row.preferred-width);
 
                         transport-row := HorizontalLayout {
-                            spacing: 8px;
+                            spacing: Theme.space-2;
                             alignment: center;
-                            height: 28px;
+                            height: parent.height;
 
+                            IconButton {
+                                icon: "shuffle";
+                                size: ControlSize.sm;
+                                active: root.model.shuffle;
+                                clicked => { root.command("shuffle"); }
+                            }
+                            IconButton {
+                                icon: "skip-prev";
+                                size: ControlSize.md;
+                                clicked => { root.command("prev"); }
+                            }
+                            // Play is the hero control: bigger, filled, glowing.
                             Rectangle {
-                                width: 28px; height: 24px;
-                                TouchArea { clicked => { root.command("shuffle"); } }
-                                Text {
-                                    text: "S";
-                                    color: root.model.shuffle ? Theme.accent-brand : Theme.text-tertiary;
-                                    font-size: Theme.font-size-sm;
-                                    font-weight: Theme.weight-semibold;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    width: 100%; height: 100%;
+                                width: Theme.control-lg;
+                                height: Theme.control-lg;
+                                y: (parent.height - self.height) / 2;
+                                border-radius: self.width / 2;
+                                background: Theme.gradient-accent;
+                                drop-shadow-blur: play-ta.has-hover ? Theme.elev-glow-blur : Theme.elev-1-blur;
+                                drop-shadow-color: Theme.accent-glow;
+
+                                animate drop-shadow-blur {
+                                    duration: Theme.motion-fast;
+                                    easing: ease-out;
+                                }
+
+                                play-ta := TouchArea {
+                                    mouse-cursor: MouseCursor.pointer;
+                                    clicked => { root.command("play-pause"); }
+                                }
+                                Icon {
+                                    x: (parent.width - self.width) / 2;
+                                    y: (parent.height - self.height) / 2;
+                                    name: root.model.is-playing ? "pause" : "play";
+                                    size: Theme.font-size-2xl;
+                                    tint: Theme.accent-contrast;
                                 }
                             }
-                            Rectangle {
-                                width: 32px; height: 24px;
-                                TouchArea { clicked => { root.command("prev"); } }
-                                Text {
-                                    text: "|<";
-                                    color: Theme.text-primary;
-                                    font-size: Theme.font-size-md;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    width: 100%; height: 100%;
-                                }
+                            IconButton {
+                                icon: "skip-next";
+                                size: ControlSize.md;
+                                clicked => { root.command("next"); }
                             }
-                            Rectangle {
-                                width: 36px; height: 28px;
-                                border-radius: Theme.radius-md;
-                                background: Theme.accent-brand;
-                                TouchArea { clicked => { root.command("play-pause"); } }
-                                Text {
-                                    text: root.model.is-playing ? "||" : ">";
-                                    color: Theme.surface-base;
-                                    font-size: Theme.font-size-md;
-                                    font-weight: Theme.weight-semibold;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    width: 100%; height: 100%;
-                                }
+                            IconButton {
+                                icon: root.model.repeat == 2 ? "repeat-one" : "repeat";
+                                size: ControlSize.sm;
+                                active: root.model.repeat > 0;
+                                clicked => { root.command("repeat"); }
                             }
-                            Rectangle {
-                                width: 32px; height: 24px;
-                                TouchArea { clicked => { root.command("next"); } }
-                                Text {
-                                    text: ">|";
-                                    color: Theme.text-primary;
-                                    font-size: Theme.font-size-md;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    width: 100%; height: 100%;
-                                }
-                            }
-                            Rectangle {
-                                width: 28px; height: 24px;
-                                TouchArea { clicked => { root.command("repeat"); } }
-                                Text {
-                                    text: root.model.repeat == 2 ? "1" : (root.model.repeat == 1 ? "R" : "r");
-                                    color: root.model.repeat > 0 ? Theme.accent-brand : Theme.text-tertiary;
-                                    font-size: Theme.font-size-sm;
-                                    font-weight: Theme.weight-semibold;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    width: 100%; height: 100%;
-                                }
-                            }
-                            if root.model.has-track : Rectangle {
-                                border-radius: Theme.radius-md;
-                                background: Theme.surface-base;
-                                width: show-fm-txt.preferred-width + 12px;
-                                height: 24px;
-                                TouchArea { clicked => { root.command("show-in-fm"); } }
-                                show-fm-txt := Text {
-                                    text: root.model.show-in-fm-label;
-                                    color: Theme.text-secondary;
-                                    font-size: Theme.font-size-sm;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    width: 100%; height: 100%;
-                                }
+                            if root.model.has-track : TouchButton {
+                                text: root.model.show-in-fm-label;
+                                size: ControlSize.sm;
+                                clicked => { root.command("show-in-fm"); }
                             }
                             vol-chip := Rectangle {
                                 width: 56px;

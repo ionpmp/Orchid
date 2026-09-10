@@ -1,4 +1,5 @@
 import { Theme } from "../theme_global.slint";
+import { ControlSize, Divider, Eyebrow, IconButton } from "../kit.slint";
 import { SearchField } from "search-field.slint";
 import { ClockModel } from "../workspace/defs.slint";
 
@@ -15,104 +16,85 @@ export component ClockView inherits Rectangle {
     background: transparent;
 
     VerticalLayout {
-        padding: 12px;
-        spacing: 10px;
+        padding: Theme.space-4;
+        spacing: Theme.space-3;
         alignment: start;
 
-        // Local time hero
-        if model.cities.length > 0 : VerticalLayout {
-            spacing: 2px;
-            alignment: center;
+        // Local time hero — an oversized readout on a lit card.
+        if model.cities.length > 0 : Rectangle {
+            background: Theme.gradient-glass;
+            border-radius: Theme.radius-xl;
+            border-width: Theme.hairline;
+            border-color: Theme.border-subtle;
+            clip: true;
 
-            Text {
-                // Prefer geolocated city name for Local; fall back to "Local".
-                text: model.cities[0].is-local
-                    ? (model.cities[0].name != "" ? model.cities[0].name : model.local-label)
-                    : model.cities[0].name;
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
+            // Accent bloom behind the numerals.
+            Rectangle {
+                width: 100%;
+                height: 100%;
+                background: Theme.gradient-hero;
             }
 
-            Text {
-                text: model.cities[0].time-text;
-                color: Theme.text-primary;
-                font-size: 40px;
-                font-weight: Theme.weight-semibold;
-                horizontal-alignment: center;
-                font-family: Theme.font-family-mono;
-            }
+            VerticalLayout {
+                padding: Theme.space-4;
+                spacing: Theme.space-1;
+                alignment: center;
 
-            if model.cities[0].date-text != "" : Text {
-                text: model.cities[0].date-text;
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
-            }
+                Eyebrow {
+                    // Prefer geolocated city name for Local; fall back to "Local".
+                    text: model.cities[0].is-local
+                        ? (model.cities[0].name != "" ? model.cities[0].name : model.local-label)
+                        : model.cities[0].name;
+                    horizontal-alignment: center;
+                }
 
-            if model.cities[0].timezone != "" || model.cities[0].offset-text != "" : Text {
-                text: model.cities[0].timezone != "" && model.cities[0].offset-text != ""
-                    ? model.cities[0].timezone + " · " + model.cities[0].offset-text
-                    : (model.cities[0].timezone != "" ? model.cities[0].timezone : model.cities[0].offset-text);
-                color: Theme.text-tertiary;
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
+                Text {
+                    text: model.cities[0].time-text;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-display;
+                    font-weight: Theme.weight-bold;
+                    horizontal-alignment: center;
+                    font-family: Theme.font-family-mono;
+                }
+
+                if model.cities[0].date-text != "" : Text {
+                    text: model.cities[0].date-text;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: center;
+                }
+
+                if model.cities[0].timezone != "" || model.cities[0].offset-text != "" : Text {
+                    text: model.cities[0].timezone != "" && model.cities[0].offset-text != ""
+                        ? model.cities[0].timezone + " · " + model.cities[0].offset-text
+                        : (model.cities[0].timezone != "" ? model.cities[0].timezone : model.cities[0].offset-text);
+                    color: Theme.text-tertiary;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                }
             }
         }
 
         HorizontalLayout {
-            spacing: 8px;
+            spacing: Theme.space-2;
             alignment: space-between;
 
-            Text {
+            Eyebrow {
                 text: model.add-cities-label;
-                color: Theme.text-tertiary;
-                font-size: Theme.font-size-sm;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
             }
 
-            Rectangle {
-                width: max(28px, manage-label.preferred-width + 12px);
-                height: 24px;
-                background: manage-ta.has-hover ? Theme.accent-brand : Theme.surface-base;
-                border-radius: Theme.radius-md;
-
-                manage-ta := TouchArea {
-                    clicked => { root.open-cities(); }
-                }
-                if manage-ta.has-hover : Rectangle {
-                    x: parent.x - cities-hint.preferred-width;
-                    y: parent.height + 2px;
-                    width: cities-hint.preferred-width + 12px;
-                    height: cities-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    cities-hint := Text {
-                        x: 6px; y: 3px;
-                        text: model.cities-hint;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                    }
-                }
-                manage-label := Text {
-                    text: "+";
-                    color: Theme.text-primary;
-                    font-size: Theme.font-size-md;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
+            IconButton {
+                icon: "plus";
+                size: ControlSize.sm;
+                tooltip: model.cities-hint;
+                tooltip-flip: true;
+                clicked => { root.open-cities(); }
             }
         }
 
-        Rectangle {
-            height: 1px;
-            background: Theme.border-default;
-            horizontal-stretch: 1;
-        }
+        Divider { }
 
         Flickable {
             vertical-stretch: 1;
@@ -121,20 +103,24 @@ export component ClockView inherits Rectangle {
             interactive: true;
 
             city-list := VerticalLayout {
-                spacing: 6px;
+                spacing: Theme.space-2;
 
                 for city[i] in model.cities : Rectangle {
-                    height: city.is-local ? 0px : 52px;
+                    height: city.is-local ? 0px : Theme.control-lg;
                     visible: !city.is-local;
-                    background: row-ta.has-hover ? Theme.surface-base : transparent;
+                    background: row-ta.has-hover ? Theme.surface-raised : Theme.surface-sunken;
                     border-radius: Theme.radius-md;
+                    border-width: Theme.hairline;
+                    border-color: row-ta.has-hover ? Theme.border-subtle : Colors.transparent;
+
+                    animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
 
                     row-ta := TouchArea { }
 
                     HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        spacing: 8px;
+                        padding-left: Theme.space-3;
+                        padding-right: Theme.space-3;
+                        spacing: Theme.space-2;
 
                         VerticalLayout {
                             spacing: 1px;
@@ -144,14 +130,14 @@ export component ClockView inherits Rectangle {
                             Text {
                                 text: city.name;
                                 color: Theme.text-primary;
-                                font-size: Theme.font-size-sm;
+                                font-size: Theme.font-size-md;
                                 font-weight: Theme.weight-medium;
                                 wrap: no-wrap;
                                 overflow: elide;
                             }
 
                             HorizontalLayout {
-                                spacing: 6px;
+                                spacing: Theme.space-2;
                                 if city.date-text != "" : Text {
                                     text: city.date-text;
                                     color: Theme.text-tertiary;
@@ -173,8 +159,8 @@ export component ClockView inherits Rectangle {
                         Text {
                             text: city.time-text;
                             color: Theme.text-primary;
-                            font-size: Theme.font-size-lg;
-                            font-weight: Theme.weight-semibold;
+                            font-size: Theme.font-size-xl;
+                            font-weight: Theme.weight-bold;
                             font-family: Theme.font-family-mono;
                             vertical-alignment: center;
                         }
@@ -188,7 +174,7 @@ export component ClockView inherits Rectangle {
         x: 0; y: 0;
         width: parent.width;
         height: parent.height;
-        background: #00000088;
+        background: Theme.scrim;
         z: 50;
 
         FocusScope {
@@ -209,50 +195,43 @@ export component ClockView inherits Rectangle {
             }
 
             Rectangle {
-                x: 12px;
-                y: 12px;
-                width: parent.width - 24px;
-                height: parent.height - 24px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
+                x: Theme.space-3;
+                y: Theme.space-3;
+                width: parent.width - Theme.space-6;
+                height: parent.height - Theme.space-6;
+                background: Theme.gradient-glass;
+                border-radius: Theme.radius-xl;
+                border-width: Theme.hairline;
+                border-color: Theme.border-strong;
+                drop-shadow-blur: Theme.elev-3-blur;
+                drop-shadow-offset-y: Theme.elev-3-y;
+                drop-shadow-color: Theme.shadow-key;
 
                 TouchArea { }
 
                 VerticalLayout {
-                    padding: 12px;
-                    spacing: 8px;
+                    padding: Theme.space-4;
+                    spacing: Theme.space-3;
 
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: Theme.space-2;
                         alignment: space-between;
 
                         Text {
                             text: model.picker-title;
                             color: Theme.text-primary;
-                            font-size: Theme.font-size-md;
-                            font-weight: Theme.weight-medium;
+                            font-size: Theme.font-size-lg;
+                            font-weight: Theme.weight-semibold;
                             vertical-alignment: center;
                             horizontal-stretch: 1;
                         }
 
-                        Rectangle {
-                            width: max(56px, close-label.preferred-width + 16px);
-                            height: 28px;
-                            background: close-ta.has-hover ? Theme.accent-brand : Theme.surface-base;
-                            border-radius: Theme.radius-md;
-
-                            close-ta := TouchArea {
-                                clicked => { root.close-cities(); }
-                            }
-                            close-label := Text {
-                                text: model.close-picker-label;
-                                color: Theme.text-primary;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
+                        IconButton {
+                            icon: "close";
+                            size: ControlSize.sm;
+                            tooltip: model.close-picker-label;
+                            tooltip-flip: true;
+                            clicked => { root.close-cities(); }
                         }
                     }
 
@@ -264,7 +243,7 @@ export component ClockView inherits Rectangle {
                     }
 
                     if model.cities.length > 1 : Flickable {
-                        height: min(96px, saved-list.preferred-height);
+                        height: min(140px, saved-list.preferred-height);
                         viewport-width: self.width;
                         viewport-height: saved-list.preferred-height;
                         interactive: true;
@@ -273,90 +252,53 @@ export component ClockView inherits Rectangle {
                             spacing: 4px;
 
                             for city[i] in model.cities : Rectangle {
-                                height: city.is-local ? 0px : 32px;
+                                height: city.is-local ? 0px : Theme.row-height;
                                 visible: !city.is-local;
-                                background: saved-ta.has-hover ? Theme.surface-base : transparent;
+                                background: saved-ta.has-hover ? Theme.state-hover : transparent;
                                 border-radius: Theme.radius-md;
+                                animate background { duration: Theme.motion-fast; easing: ease-out; }
 
                                 saved-ta := TouchArea { }
 
                                 HorizontalLayout {
-                                    padding-left: 8px;
-                                    padding-right: 4px;
-                                    spacing: 4px;
+                                    padding-left: Theme.space-3;
+                                    padding-right: Theme.space-1;
+                                    spacing: Theme.space-1;
 
                                     Text {
                                         text: city.name;
                                         color: Theme.text-primary;
-                                        font-size: Theme.font-size-sm;
+                                        font-size: Theme.font-size-md;
                                         vertical-alignment: center;
                                         horizontal-stretch: 1;
                                         wrap: no-wrap;
                                         overflow: elide;
                                     }
 
-                                    Rectangle {
-                                        width: 28px;
-                                        height: 28px;
-                                        y: 2px;
-                                        background: up-ta.has-hover ? Theme.surface-raised : transparent;
-                                        border-radius: Theme.radius-md;
-                                        up-ta := TouchArea { clicked => { root.move-city(i, -1); } }
-                                        Text { text: "↑"; color: Theme.text-secondary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                                    IconButton {
+                                        icon: "chevron-up";
+                                        size: ControlSize.sm;
+                                        clicked => { root.move-city(i, -1); }
                                     }
-                                    Rectangle {
-                                        width: 28px;
-                                        height: 28px;
-                                        y: 2px;
-                                        background: down-ta.has-hover ? Theme.surface-raised : transparent;
-                                        border-radius: Theme.radius-md;
-                                        down-ta := TouchArea { clicked => { root.move-city(i, 1); } }
-                                        Text { text: "↓"; color: Theme.text-secondary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+                                    IconButton {
+                                        icon: "chevron-down";
+                                        size: ControlSize.sm;
+                                        clicked => { root.move-city(i, 1); }
                                     }
-                                    Rectangle {
-                                        width: 28px;
-                                        height: 28px;
-                                        y: 2px;
-                                        background: remove-ta.has-hover ? Theme.surface-raised : transparent;
-                                        border-radius: Theme.radius-md;
-                                        remove-ta := TouchArea {
-                                            clicked => { root.remove-city(i); }
-                                        }
-                                        if remove-ta.has-hover : Rectangle {
-                                            x: parent.x - remove-hint.preferred-width;
-                                            y: parent.height + 2px;
-                                            width: remove-hint.preferred-width + 12px;
-                                            height: remove-hint.preferred-height + 6px;
-                                            background: Theme.surface-raised;
-                                            border-radius: Theme.radius-md;
-                                            border-width: 1px;
-                                            border-color: Theme.border-default;
-                                            z: 100;
-                                            remove-hint := Text {
-                                                x: 6px; y: 3px;
-                                                text: model.remove-city-hint;
-                                                color: Theme.text-secondary;
-                                                font-size: Theme.font-size-sm;
-                                            }
-                                        }
-                                        Text {
-                                            text: "×";
-                                            color: Theme.text-secondary;
-                                            font-size: Theme.font-size-md;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                        }
+                                    IconButton {
+                                        icon: "trash";
+                                        size: ControlSize.sm;
+                                        danger: true;
+                                        tooltip: model.remove-city-hint;
+                                        tooltip-flip: true;
+                                        clicked => { root.remove-city(i); }
                                     }
                                 }
                             }
                         }
                     }
 
-                    Rectangle {
-                        height: 1px;
-                        background: Theme.border-default;
-                        horizontal-stretch: 1;
-                    }
+                    Divider { }
 
                     if model.search-busy : Text {
                         text: model.searching-label;
@@ -380,11 +322,13 @@ export component ClockView inherits Rectangle {
                             spacing: 4px;
 
                             for hit[i] in model.search-results : Rectangle {
-                                height: 48px;
-                                background: hit-ta.has-hover ? Theme.surface-base : transparent;
+                                height: Theme.control-lg;
+                                background: hit-ta.has-hover ? Theme.state-hover : transparent;
                                 border-radius: Theme.radius-md;
+                                animate background { duration: Theme.motion-fast; easing: ease-out; }
 
                                 hit-ta := TouchArea {
+                                    mouse-cursor: MouseCursor.pointer;
                                     clicked => {
                                         root.add-city(hit.name, hit.timezone);
                                     }
@@ -408,15 +352,15 @@ export component ClockView inherits Rectangle {
                                 }
 
                                 VerticalLayout {
-                                    padding-left: 8px;
-                                    padding-right: 8px;
+                                    padding-left: Theme.space-3;
+                                    padding-right: Theme.space-3;
                                     spacing: 2px;
                                     alignment: center;
 
                                     Text {
                                         text: hit.name;
                                         color: Theme.text-primary;
-                                        font-size: Theme.font-size-sm;
+                                        font-size: Theme.font-size-md;
                                         font-weight: Theme.weight-medium;
                                         wrap: no-wrap;
                                         overflow: elide;

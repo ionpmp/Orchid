@@ -1,4 +1,5 @@
 import { Theme } from "../theme_global.slint";
+import { ControlSize, IconButton, Tooltip } from "../kit.slint";
 import { BrowserModel } from "../workspace/defs.slint";
 
 component BrowserToolBtn inherits Rectangle {
@@ -7,15 +8,18 @@ component BrowserToolBtn inherits Rectangle {
     in property <bool> enabled: true;
     callback clicked();
 
-    width: max(28px, label-txt.preferred-width + 12px);
-    height: 26px;
-    border-radius: Theme.radius-md;
-    background: !root.enabled ? transparent :
-        ta.has-hover ? Theme.surface-raised : transparent;
+    width: max(Theme.control-md, label-txt.preferred-width + Theme.space-4);
+    height: Theme.control-md;
+    border-radius: Theme.radius-pill;
+    background: ta.pressed ? Theme.state-press :
+        ta.has-hover ? Theme.state-hover : Colors.transparent;
     opacity: root.enabled ? 1.0 : 0.45;
+
+    animate background { duration: Theme.motion-fast; easing: ease-out; }
 
     ta := TouchArea {
         enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
         clicked => { root.clicked(); }
     }
 
@@ -23,30 +27,19 @@ component BrowserToolBtn inherits Rectangle {
         width: 100%;
         height: 100%;
         text: root.label;
-        color: !root.enabled ? Theme.text-tertiary : Theme.text-secondary;
-        font-size: Theme.font-size-sm;
+        color: !root.enabled ? Theme.text-disabled : Theme.text-secondary;
+        font-size: Theme.font-size-md;
         font-weight: Theme.weight-medium;
         font-family: Theme.font-family-sans;
         horizontal-alignment: center;
         vertical-alignment: center;
     }
 
-    if ta.has-hover && tip != "" : Rectangle {
-        x: (parent.width - tip-box.preferred-width - 12px) / 2;
-        y: -tip-box.preferred-height - 8px;
-        width: tip-box.preferred-width + 12px;
-        height: tip-box.preferred-height + 6px;
-        background: Theme.surface-raised;
-        border-radius: Theme.radius-md;
-        border-width: 1px;
-        border-color: Theme.border-default;
-        z: 50;
-        tip-box := Text {
-            x: 6px; y: 3px;
-            text: root.tip;
-            color: Theme.text-secondary;
-            font-size: Theme.font-size-sm;
-        }
+    Tooltip {
+        text: root.tip;
+        shown: ta.has-hover && root.tip != "";
+        x: (parent.width - self.width) / 2;
+        y: parent.height + Theme.space-1;
     }
 }
 
@@ -277,13 +270,20 @@ export component BrowserView inherits Rectangle {
             spacing: 0;
 
             Rectangle {
-                height: 32px;
-                background: Theme.surface-base;
+                height: Theme.toolbar-height;
+                background: Theme.surface-sunken;
+
+                Rectangle {
+                    y: parent.height - Theme.hairline;
+                    width: parent.width;
+                    height: Theme.hairline;
+                    background: Theme.border-subtle;
+                }
 
                 HorizontalLayout {
-                    padding-left: 6px;
-                    padding-right: 6px;
-                    spacing: 2px;
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-2;
+                    spacing: Theme.space-1;
                     alignment: start;
 
                     Flickable {
@@ -296,14 +296,24 @@ export component BrowserView inherits Rectangle {
                             alignment: start;
 
                             for tab[i] in model.tabs : Rectangle {
-                                width: max(72px, min(160px, tab-label.preferred-width + (tab.has-icon ? 18px : 0) + (tab.is-active ? 36px : 20px)));
-                                height: 26px;
+                                width: max(120px, min(200px, tab-label.preferred-width + (tab.has-icon ? 22px : 0) + (tab.is-active ? 44px : 28px)));
+                                height: Theme.control-md;
                                 y: (parent.height - self.height) / 2;
                                 border-radius: Theme.radius-md;
                                 background: tab.is-active ? Theme.surface-raised
-                                    : tab-ta.has-hover ? Theme.surface-raised : transparent;
-                                border-width: tab.is-active ? 1px : 0;
-                                border-color: Theme.border-default;
+                                    : tab-ta.has-hover ? Theme.state-hover : Colors.transparent;
+
+                                animate background { duration: Theme.motion-instant; easing: ease-out; }
+
+                                // Accent underline marks the live tab.
+                                if tab.is-active : Rectangle {
+                                    x: Theme.space-3;
+                                    y: parent.height - Theme.indicator-thickness;
+                                    width: parent.width - Theme.space-3 * 2;
+                                    height: Theme.indicator-thickness;
+                                    border-radius: self.height / 2;
+                                    background: Theme.accent-brand;
+                                }
 
                                 tab-ta := TouchArea {
                                     clicked => {
@@ -341,13 +351,13 @@ export component BrowserView inherits Rectangle {
                                 }
 
                                 HorizontalLayout {
-                                    padding-left: 8px;
-                                    padding-right: 4px;
-                                    spacing: 4px;
+                                    padding-left: Theme.space-3;
+                                    padding-right: Theme.space-1;
+                                    spacing: Theme.space-2;
 
                                     if tab.has-icon : Image {
-                                        width: 14px;
-                                        height: 14px;
+                                        width: 16px;
+                                        height: 16px;
                                         y: (parent.height - self.height) / 2;
                                         source: tab.icon;
                                     }
@@ -356,30 +366,18 @@ export component BrowserView inherits Rectangle {
                                         text: tab.title == "" ? model.untitled-label : tab.title;
                                         color: tab.is-active ? Theme.text-primary : Theme.text-secondary;
                                         font-size: Theme.font-size-sm;
-                                        font-weight: tab.is-active ? Theme.weight-semibold : Theme.weight-regular;
+                                        font-weight: tab.is-active ? Theme.weight-semibold : Theme.weight-medium;
                                         font-family: Theme.font-family-sans;
                                         vertical-alignment: center;
                                         overflow: elide;
                                         horizontal-stretch: 1;
                                     }
 
-                                    if tab.is-active || tab-ta.has-hover : Rectangle {
-                                        width: 18px;
-                                        height: 18px;
+                                    if tab.is-active || tab-ta.has-hover : IconButton {
+                                        icon: "close";
+                                        size: ControlSize.xs;
                                         y: (parent.height - self.height) / 2;
-                                        border-radius: Theme.radius-md;
-                                        background: close-ta.has-hover ? Theme.surface-base : transparent;
-                                        close-ta := TouchArea {
-                                            clicked => { root.close-tab(i); }
-                                        }
-                                        Text {
-                                            width: 100%; height: 100%;
-                                            text: "×";
-                                            color: Theme.text-tertiary;
-                                            font-size: Theme.font-size-sm;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                        }
+                                        clicked => { root.close-tab(i); }
                                     }
                                 }
                             }
@@ -394,16 +392,21 @@ export component BrowserView inherits Rectangle {
                 }
             }
 
-            Rectangle { height: 1px; background: Theme.border-default; }
-
             Rectangle {
-                height: 36px;
-                background: Theme.surface-base;
+                height: Theme.toolbar-height;
+                background: Theme.gradient-chrome;
+
+                Rectangle {
+                    y: parent.height - Theme.hairline;
+                    width: parent.width;
+                    height: Theme.hairline;
+                    background: Theme.border-subtle;
+                }
 
                 HorizontalLayout {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    spacing: 6px;
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-2;
+                    spacing: Theme.space-1;
                     alignment: start;
 
                     BrowserToolBtn {
@@ -432,36 +435,42 @@ export component BrowserView inherits Rectangle {
                         clicked => { root.command("zoom-reset"); }
                     }
 
+                    // Address bar: a pill that lights up while it has focus.
                     Rectangle {
                         horizontal-stretch: 1;
-                        height: 28px;
+                        height: Theme.control-md;
                         y: (parent.height - self.height) / 2;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
+                        background: Theme.surface-sunken;
+                        border-radius: Theme.radius-pill;
+                        border-width: address.has-focus ? 2px : Theme.hairline;
+                        border-color: address.has-focus ? Theme.border-focus : Theme.border-default;
+
+                        animate border-width, border-color {
+                            duration: Theme.motion-fast;
+                            easing: ease-out;
+                        }
 
                         if root.draft-url == "" : Text {
-                            x: 8px;
-                            width: parent.width - 16px;
+                            x: Theme.space-4;
+                            width: parent.width - Theme.space-8;
                             height: 100%;
                             text: model.address-placeholder;
                             color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
+                            font-size: Theme.font-size-md;
                             font-family: Theme.font-family-sans;
                             vertical-alignment: center;
                         }
 
                         address := TextInput {
-                            x: 8px;
-                            width: parent.width - 16px;
+                            x: Theme.space-4;
+                            width: parent.width - Theme.space-8;
                             height: 100%;
                             text: root.draft-url;
                             edited => { root.draft-url = self.text; }
                             accepted => { root.navigate(root.draft-url); }
                             single-line: true;
                             color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
+                            font-size: Theme.font-size-md;
                             font-family: Theme.font-family-sans;
                             vertical-alignment: center;
                             key-pressed(event) => {

@@ -1,4 +1,6 @@
 import { Theme } from "../theme_global.slint";
+import { ControlSize, EmptyState, IconButton, ProgressTrack, Tooltip } from "../kit.slint";
+import { Icon } from "../kit-icons.slint";
 import { Strings } from "../strings_global.slint";
 import { MediaModel } from "../workspace/defs.slint";
 
@@ -11,42 +13,34 @@ export component MediaView inherits Rectangle {
 
     background: transparent;
 
-    // ASCII/BMP glyphs — color emoji and many Unicode symbols are missing in Slint's default font on Windows.
-
-    // No session placeholder
-    if !model.has-session : VerticalLayout {
-        alignment: center;
-        padding: 16px;
-
-        Text {
-            text: "♪";
-            color: Theme.text-tertiary;
-            font-size: 48px;
-            horizontal-alignment: center;
-        }
-
-        Text {
-            text: model.empty-state-text;
-            color: Theme.text-tertiary;
-            font-size: Theme.font-size-md;
-            horizontal-alignment: center;
-        }
+    if !model.has-session : EmptyState {
+        width: 100%;
+        height: 100%;
+        icon: "play";
+        title: model.empty-state-text;
     }
 
-    // Playing session
+    // Now-playing card: artwork bleeds an accent glow behind the transport.
     if model.has-session : VerticalLayout {
-        padding: 12px;
-        spacing: 8px;
+        padding: Theme.space-4;
+        spacing: Theme.space-3;
 
         HorizontalLayout {
-            spacing: 12px;
+            spacing: Theme.space-4;
 
-            // Album art — 96x96 square
+            // Album art with a soft bloom so the widget reads as media, not a form.
             Rectangle {
-                width: 96px;
-                height: 96px;
-                background: Theme.surface-base;
-                border-radius: Theme.radius-md;
+                min-width: 104px;
+                max-width: 104px;
+                min-height: 104px;
+                max-height: 104px;
+                background: Theme.surface-sunken;
+                border-radius: Theme.radius-lg;
+                border-width: Theme.hairline;
+                border-color: Theme.border-subtle;
+                drop-shadow-blur: Theme.elev-2-blur;
+                drop-shadow-offset-y: Theme.elev-2-y;
+                drop-shadow-color: Theme.shadow-key;
                 clip: true;
 
                 if model.has-thumbnail : Image {
@@ -56,53 +50,66 @@ export component MediaView inherits Rectangle {
                     image-fit: cover;
                 }
 
-                if !model.has-thumbnail : Text {
-                    text: "♪";
-                    color: Theme.text-tertiary;
-                    font-size: 32px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                if !model.has-thumbnail : Rectangle {
+                    width: 100%;
+                    height: 100%;
+                    background: Theme.gradient-hero;
+                    Icon {
+                        name: "play";
+                        size: 34px;
+                        tint: Theme.accent-brand;
+                    }
+                }
+
+                // Playing pulse in the corner of the artwork.
+                if model.is-playing : Rectangle {
+                    x: parent.width - self.width - Theme.space-2;
+                    y: parent.height - self.height - Theme.space-2;
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 5px;
+                    background: Theme.feedback-success;
                 }
             }
 
-            // Track info
+            // Track metadata.
             Rectangle {
                 horizontal-stretch: 1;
 
                 meta-ta := TouchArea { }
-                if meta-ta.has-hover && model.title != "" : Rectangle {
-                    x: parent.x;
-                    y: parent.height + 2px;
-                    width: meta-hint.preferred-width + 12px;
-                    height: meta-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    meta-hint := Text {
-                        x: 6px; y: 3px;
-                        text: model.album != ""
-                            ? model.title + " — " + model.artist + " — " + model.album
-                            : model.artist != ""
-                                ? model.title + " — " + model.artist
-                                : model.title;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                    }
+
+                Tooltip {
+                    x: 0;
+                    y: parent.height + Theme.space-1;
+                    shown: meta-ta.has-hover && model.title != "";
+                    text: model.album != ""
+                        ? model.title + " — " + model.artist + " — " + model.album
+                        : model.artist != ""
+                            ? model.title + " — " + model.artist
+                            : model.title;
                 }
 
                 VerticalLayout {
                     alignment: center;
                     width: 100%;
                     height: 100%;
-                    spacing: 4px;
+                    spacing: Theme.space-1;
+
+                    if model.source-app != "" : Text {
+                        text: model.source-app.to-uppercase();
+                        color: Theme.text-eyebrow;
+                        font-size: Theme.font-size-xs;
+                        font-weight: Theme.weight-semibold;
+                        letter-spacing: Theme.tracking-wide;
+                        wrap: no-wrap;
+                        overflow: elide;
+                    }
 
                     Text {
                         text: model.title;
                         color: Theme.text-primary;
-                        font-size: Theme.font-size-lg;
-                        font-weight: Theme.weight-semibold;
+                        font-size: Theme.font-size-xl;
+                        font-weight: Theme.weight-bold;
                         wrap: no-wrap;
                         overflow: elide;
                     }
@@ -122,168 +129,96 @@ export component MediaView inherits Rectangle {
                         wrap: no-wrap;
                         overflow: elide;
                     }
-
-                    if model.source-app != "" : Text {
-                        text: model.source-app;
-                        color: Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                    }
                 }
             }
         }
 
-        // Progress bar
-        Rectangle {
-            height: 4px;
-            background: Theme.surface-base;
-            border-radius: 2px;
-            horizontal-stretch: 1;
-
-            Rectangle {
-                x: 0;
-                y: 0;
-                width: parent.width * model.progress;
-                height: parent.height;
-                border-radius: 2px;
-                background: Theme.accent-brand;
-            }
+        ProgressTrack {
+            value: model.progress;
         }
 
-        // Position / duration
         HorizontalLayout {
-            spacing: 0px;
             alignment: space-between;
 
             Text {
                 text: model.position;
                 color: Theme.text-tertiary;
                 font-size: Theme.font-size-sm;
+                font-family: Theme.font-family-mono;
             }
 
             Text {
                 text: model.duration;
                 color: Theme.text-tertiary;
                 font-size: Theme.font-size-sm;
+                font-family: Theme.font-family-mono;
             }
         }
 
-        // Transport controls
+        // Transport: oversized play control flanked by skip buttons.
         HorizontalLayout {
-            spacing: 16px;
+            spacing: Theme.space-4;
             alignment: center;
-            padding-top: 8px;
+            padding-top: Theme.space-2;
 
-            // Previous
-            Rectangle {
-                width: 48px;
-                height: 48px;
-                background: prev-ta.has-hover ? Theme.surface-base : transparent;
-                border-radius: 24px;
-
-                prev-ta := TouchArea {
-                    clicked => { root.previous(); }
-                }
-                if prev-ta.has-hover : Rectangle {
-                    x: parent.x;
-                    y: parent.height + 2px;
-                    width: prev-hint.preferred-width + 12px;
-                    height: prev-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    prev-hint := Text {
-                        x: 6px; y: 3px;
-                        text: Strings.media_previous;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                    }
-                }
-
-                Text {
-                    text: "⏮";
-                    color: Theme.text-primary;
-                    font-size: Theme.font-size-xl;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
+            IconButton {
+                icon: "skip-prev";
+                size: ControlSize.lg;
+                tooltip: Strings.media_previous;
+                clicked => { root.previous(); }
             }
 
-            // Play/Pause
-            Rectangle {
-                width: 56px;
-                height: 56px;
-                background: Theme.accent-brand;
-                border-radius: 28px;
+            play := Rectangle {
+                min-width: Theme.control-xl;
+                max-width: Theme.control-xl;
+                min-height: Theme.control-xl;
+                max-height: Theme.control-xl;
+                border-radius: Theme.control-xl / 2;
+                background: Theme.gradient-accent;
+                drop-shadow-blur: pp-ta.pressed ? 0px : Theme.elev-glow-blur;
+                drop-shadow-offset-y: pp-ta.pressed ? 0px : Theme.elev-1-y;
+                drop-shadow-color: Theme.accent-glow;
+
+                animate drop-shadow-blur, drop-shadow-offset-y {
+                    duration: Theme.motion-instant;
+                    easing: ease-out;
+                }
 
                 pp-ta := TouchArea {
+                    mouse-cursor: MouseCursor.pointer;
                     clicked => { root.play-pause(); }
                 }
-                if pp-ta.has-hover : Rectangle {
-                    x: parent.x;
-                    y: parent.height + 2px;
-                    width: pp-hint.preferred-width + 12px;
-                    height: pp-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    pp-hint := Text {
-                        x: 6px; y: 3px;
-                        text: model.is-playing ? Strings.media_pause : Strings.media_play;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                    }
+
+                Rectangle {
+                    width: 100%;
+                    height: 100%;
+                    border-radius: parent.border-radius;
+                    background: pp-ta.pressed ? Theme.state-press
+                        : pp-ta.has-hover ? Theme.state-hover
+                        : Colors.transparent;
+                    animate background { duration: Theme.motion-instant; easing: ease-out; }
                 }
 
-                Text {
-                    text: model.is-playing ? "⏸" : "▶";
-                    color: #ffffff;
-                    font-size: Theme.font-size-2xl;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                Icon {
+                    name: model.is-playing ? "pause" : "play";
+                    size: Theme.control-xl * 0.4;
+                    tint: Theme.accent-contrast;
+                }
+
+                Tooltip {
+                    x: (parent.width - self.width) / 2;
+                    y: parent.height + Theme.space-2;
+                    shown: pp-ta.has-hover;
+                    text: model.is-playing ? Strings.media_pause : Strings.media_play;
                 }
             }
 
-            // Next
-            Rectangle {
-                width: 48px;
-                height: 48px;
-                background: next-ta.has-hover ? Theme.surface-base : transparent;
-                border-radius: 24px;
-
-                next-ta := TouchArea {
-                    clicked => { root.next(); }
-                }
-                if next-ta.has-hover : Rectangle {
-                    x: parent.x;
-                    y: parent.height + 2px;
-                    width: next-hint.preferred-width + 12px;
-                    height: next-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    next-hint := Text {
-                        x: 6px; y: 3px;
-                        text: Strings.media_next;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                    }
-                }
-
-                Text {
-                    text: "⏭";
-                    color: Theme.text-primary;
-                    font-size: Theme.font-size-xl;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
+            IconButton {
+                icon: "skip-next";
+                size: ControlSize.lg;
+                tooltip: Strings.media_next;
+                clicked => { root.next(); }
             }
         }
     }
 }
-

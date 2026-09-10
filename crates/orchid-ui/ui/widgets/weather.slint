@@ -1,4 +1,6 @@
 import { Theme } from "../theme_global.slint";
+import { Chip, ControlSize, Divider, IconButton, Tooltip } from "../kit.slint";
+import { Icon } from "../kit-icons.slint";
 import { WeatherModel } from "../workspace/defs.slint";
 import { SearchField } from "search-field.slint";
 
@@ -36,164 +38,169 @@ export component WeatherView inherits Rectangle {
     background: transparent;
 
     VerticalLayout {
-        padding: 16px;
-        spacing: 8px;
+        padding: Theme.space-4;
+        spacing: Theme.space-3;
 
         HorizontalLayout {
-            spacing: 8px;
+            spacing: Theme.space-2;
             alignment: space-between;
 
             Rectangle {
                 horizontal-stretch: 1;
-                height: 24px;
+                height: Theme.control-sm;
+                border-radius: Theme.radius-pill;
+                background: location-ta.has-hover ? Theme.state-hover : Colors.transparent;
+                animate background { duration: Theme.motion-fast; easing: ease-out; }
 
                 location-ta := TouchArea {
+                    mouse-cursor: MouseCursor.pointer;
                     clicked => { root.open-cities(); }
                 }
 
                 HorizontalLayout {
-                    spacing: 4px;
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-1;
+                    spacing: Theme.space-1;
                     width: 100%;
                     height: 100%;
 
                     Text {
                         text: model.location;
                         color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        font-weight: Theme.weight-medium;
+                        font-size: Theme.font-size-lg;
+                        font-weight: Theme.weight-semibold;
                         vertical-alignment: center;
                         horizontal-stretch: 1;
                         wrap: no-wrap;
                         overflow: elide;
                     }
 
-                    Text {
-                        text: ">";
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
+                    Icon {
+                        name: "chevron-right";
+                        size: Theme.font-size-lg;
+                        tint: Theme.text-tertiary;
                     }
                 }
             }
 
+            // Freshness dot: green live, amber stale, grey idle, red failed.
             Rectangle {
-                width: 16px;
-                height: 16px;
+                width: Theme.control-xs;
+                height: Theme.control-xs;
                 y: (parent.height - self.height) / 2;
 
                 status-ta := TouchArea { }
-                if status-ta.has-hover : Rectangle {
-                    x: parent.x + parent.width - status-hint.preferred-width - 12px;
-                    y: parent.height + 2px;
-                    width: status-hint.preferred-width + 12px;
-                    height: status-hint.preferred-height + 6px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    z: 100;
-                    status-hint := Text {
-                        x: 6px; y: 3px;
-                        text: model.status-label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                    }
+
+                Tooltip {
+                    x: parent.width - self.width;
+                    y: parent.height + Theme.space-1;
+                    shown: status-ta.has-hover;
+                    text: model.status-label;
                 }
 
                 Rectangle {
-                    width: 8px;
-                    height: 8px;
+                    width: 10px;
+                    height: 10px;
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;
-                    border-radius: 4px;
+                    border-radius: 5px;
                     background:
-                        model.status == 0 ? #22c55e :
-                        model.status == 1 ? #eab308 :
-                        model.status == 2 ? #6b7280 :
-                        #ef4444;
+                        model.status == 0 ? Theme.feedback-success :
+                        model.status == 1 ? Theme.feedback-warning :
+                        model.status == 2 ? Theme.text-tertiary :
+                        Theme.feedback-danger;
+                    drop-shadow-blur: Theme.elev-1-blur;
+                    drop-shadow-color: self.background;
                 }
             }
         }
 
         if model.cities.length > 1 : Flickable {
-            height: 28px;
+            height: Theme.control-sm;
             viewport-height: self.height;
             viewport-width: city-row.preferred-width.max(self.width);
             interactive: true;
 
             city-row := HorizontalLayout {
-                spacing: 6px;
+                spacing: Theme.space-2;
                 alignment: start;
 
-                for city[i] in model.cities : Rectangle {
-                    height: 24px;
-                    width: max(48px, city-label.preferred-width + 16px);
-                    background: city.active ? Theme.accent-brand : Theme.surface-base;
-                    border-radius: Theme.radius-md;
-
-                    city-ta := TouchArea {
-                        clicked => { root.select-city(i); }
-                    }
-
-                    city-label := Text {
-                        text: city.name;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        width: 100%;
-                        height: 100%;
-                        wrap: no-wrap;
-                        overflow: elide;
-                    }
+                for city[i] in model.cities : Chip {
+                    text: city.name;
+                    selected: city.active;
+                    clicked => { root.select-city(i); }
                 }
             }
         }
 
-        Text {
-            text: model.current-temp;
-            color: Theme.text-primary;
-            font-size: Theme.font-size-3xl;
-            font-weight: Theme.weight-semibold;
-        }
+        // Current conditions hero.
+        Rectangle {
+            background: Theme.gradient-glass;
+            border-radius: Theme.radius-xl;
+            border-width: Theme.hairline;
+            border-color: Theme.border-subtle;
+            clip: true;
 
-        HorizontalLayout {
-            spacing: 8px;
-
-            if model.condition-icon != "" : Text {
-                text: weather-icon-glyph(model.condition-icon);
-                color: Theme.accent-brand;
-                font-size: Theme.font-size-xl;
-                vertical-alignment: center;
+            Rectangle {
+                width: 100%;
+                height: 100%;
+                background: Theme.gradient-hero;
             }
 
-            Text {
-                text: model.condition-label;
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-md;
-                vertical-alignment: center;
-            }
-        }
+            HorizontalLayout {
+                padding: Theme.space-4;
+                spacing: Theme.space-4;
 
-        if model.feels-like != "" : Text {
-            text: model.feels-like;
-            color: Theme.text-tertiary;
-            font-size: Theme.font-size-sm;
+                VerticalLayout {
+                    spacing: Theme.space-1;
+                    alignment: center;
+                    horizontal-stretch: 1;
+
+                    Text {
+                        text: model.current-temp;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-4xl;
+                        font-weight: Theme.weight-bold;
+                    }
+
+                    Text {
+                        text: model.condition-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-md;
+                        wrap: no-wrap;
+                        overflow: elide;
+                    }
+
+                    if model.feels-like != "" : Text {
+                        text: model.feels-like;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+
+                if model.condition-icon != "" : Text {
+                    text: weather-icon-glyph(model.condition-icon);
+                    color: Theme.accent-brand;
+                    font-size: Theme.font-size-4xl;
+                    vertical-alignment: center;
+                }
+            }
         }
 
         if model.humidity != "" || model.wind != "" : HorizontalLayout {
-            spacing: 8px;
+            spacing: Theme.space-2;
 
             if model.humidity != "" : Rectangle {
-                background: Theme.surface-base;
-                border-radius: Theme.radius-md;
+                background: Theme.surface-sunken;
+                border-radius: Theme.radius-pill;
+                border-width: Theme.hairline;
+                border-color: Theme.border-subtle;
                 horizontal-stretch: 0;
+                min-height: Theme.control-sm;
 
                 HorizontalLayout {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    padding-top: 4px;
-                    padding-bottom: 4px;
+                    padding-left: Theme.space-3;
+                    padding-right: Theme.space-3;
 
                     Text {
                         text: model.humidity;
@@ -205,15 +212,16 @@ export component WeatherView inherits Rectangle {
             }
 
             if model.wind != "" : Rectangle {
-                background: Theme.surface-base;
-                border-radius: Theme.radius-md;
+                background: Theme.surface-sunken;
+                border-radius: Theme.radius-pill;
+                border-width: Theme.hairline;
+                border-color: Theme.border-subtle;
                 horizontal-stretch: 0;
+                min-height: Theme.control-sm;
 
                 HorizontalLayout {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    padding-top: 4px;
-                    padding-bottom: 4px;
+                    padding-left: Theme.space-3;
+                    padding-right: Theme.space-3;
 
                     Text {
                         text: model.wind;
@@ -225,11 +233,7 @@ export component WeatherView inherits Rectangle {
             }
         }
 
-        Rectangle {
-            height: 1px;
-            background: Theme.border-default;
-            horizontal-stretch: 1;
-        }
+        Divider { }
 
         if model.day-detail != "" : Text {
             text: model.day-detail;
@@ -240,61 +244,73 @@ export component WeatherView inherits Rectangle {
 
         // Swipe horizontally to see more forecast days (up to 16). Tap a day for details.
         Flickable {
-            height: 100px;
+            height: 124px;
             viewport-height: self.height;
             viewport-width: forecast-row.preferred-width.max(self.width);
             interactive: true;
 
             forecast-row := HorizontalLayout {
-                spacing: 6px;
+                spacing: Theme.space-2;
                 alignment: start;
 
                 for day[i] in model.forecast : Rectangle {
-                    width: 72px;
-                    height: 96px;
-                    background: day.selected ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-                    border-width: day.selected ? 1px : 0px;
-                    border-color: Theme.accent-brand;
+                    width: 84px;
+                    height: 116px;
+                    background: day.selected ? Theme.accent-soft
+                        : day-ta.has-hover ? Theme.surface-raised
+                        : Theme.surface-sunken;
+                    border-radius: Theme.radius-lg;
+                    border-width: Theme.hairline;
+                    border-color: day.selected ? Theme.accent-muted : Theme.border-subtle;
+                    drop-shadow-blur: day.selected ? Theme.elev-1-blur : 0px;
+                    drop-shadow-offset-y: day.selected ? Theme.elev-1-y : 0px;
+                    drop-shadow-color: Theme.shadow-ambient;
+
+                    animate background, border-color, drop-shadow-blur {
+                        duration: Theme.motion-fast;
+                        easing: ease-out;
+                    }
 
                     day-ta := TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
                         clicked => { root.select-day(i); }
                     }
 
                     VerticalLayout {
-                        padding-top: 4px;
-                        padding-bottom: 4px;
-                        spacing: 4px;
+                        padding-top: Theme.space-2;
+                        padding-bottom: Theme.space-2;
+                        spacing: Theme.space-1;
                         alignment: center;
                         width: 100%;
                         height: 100%;
 
                         Text {
                             text: day.day-label;
-                            color: day.selected ? Theme.text-primary : Theme.text-secondary;
+                            color: day.selected ? Theme.accent-brand : Theme.text-secondary;
                             font-size: Theme.font-size-sm;
-                            font-weight: day.selected ? Theme.weight-medium : Theme.weight-regular;
+                            font-weight: day.selected ? Theme.weight-semibold : Theme.weight-medium;
                             horizontal-alignment: center;
                         }
 
                         Text {
                             text: weather-icon-glyph(day.icon);
                             color: Theme.accent-brand;
-                            font-size: Theme.font-size-lg;
+                            font-size: Theme.font-size-2xl;
                             horizontal-alignment: center;
                         }
 
                         Text {
                             text: day.range-text;
                             color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
+                            font-size: Theme.font-size-md;
+                            font-weight: Theme.weight-medium;
                             horizontal-alignment: center;
                         }
 
                         if day.precip-text != "" : Text {
                             text: day.precip-text;
-                            color: Theme.accent-brand;
-                            font-size: Theme.font-size-sm;
+                            color: Theme.feedback-info;
+                            font-size: Theme.font-size-xs;
                             horizontal-alignment: center;
                         }
                     }
@@ -316,7 +332,7 @@ export component WeatherView inherits Rectangle {
         x: 0; y: 0;
         width: parent.width;
         height: parent.height;
-        background: #00000088;
+        background: Theme.scrim;
         z: 50;
 
         TouchArea {
@@ -324,51 +340,44 @@ export component WeatherView inherits Rectangle {
         }
 
         Rectangle {
-            x: 12px;
-            y: 12px;
-            width: parent.width - 24px;
-            height: parent.height - 24px;
-            background: Theme.surface-raised;
-            border-radius: Theme.radius-md;
-            border-width: 1px;
-            border-color: Theme.border-default;
+            x: Theme.space-3;
+            y: Theme.space-3;
+            width: parent.width - Theme.space-6;
+            height: parent.height - Theme.space-6;
+            background: Theme.gradient-glass;
+            border-radius: Theme.radius-xl;
+            border-width: Theme.hairline;
+            border-color: Theme.border-strong;
+            drop-shadow-blur: Theme.elev-3-blur;
+            drop-shadow-offset-y: Theme.elev-3-y;
+            drop-shadow-color: Theme.shadow-key;
 
             // Eat backdrop clicks so the panel stays open while interacting.
             TouchArea { }
 
             VerticalLayout {
-                padding: 12px;
-                spacing: 8px;
+                padding: Theme.space-4;
+                spacing: Theme.space-3;
 
                 HorizontalLayout {
-                    spacing: 8px;
+                    spacing: Theme.space-2;
                     alignment: space-between;
 
                     Text {
                         text: model.picker-title;
                         color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        font-weight: Theme.weight-medium;
+                        font-size: Theme.font-size-lg;
+                        font-weight: Theme.weight-semibold;
                         vertical-alignment: center;
                         horizontal-stretch: 1;
                     }
 
-                    Rectangle {
-                        width: max(56px, close-label.preferred-width + 16px);
-                        height: 28px;
-                        background: close-ta.has-hover ? Theme.accent-brand : Theme.surface-base;
-                        border-radius: Theme.radius-md;
-
-                        close-ta := TouchArea {
-                            clicked => { root.close-cities(); }
-                        }
-                        close-label := Text {
-                            text: model.close-picker-label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                    IconButton {
+                        icon: "close";
+                        size: ControlSize.sm;
+                        tooltip: model.close-picker-label;
+                        tooltip-flip: true;
+                        clicked => { root.close-cities(); }
                     }
                 }
 
@@ -380,83 +389,56 @@ export component WeatherView inherits Rectangle {
                 }
 
                 if model.cities.length > 0 : Flickable {
-                    height: min(96px, cities-list.preferred-height);
+                    height: min(140px, cities-list.preferred-height);
                     viewport-width: self.width;
                     viewport-height: cities-list.preferred-height;
                     interactive: true;
 
                     cities-list := VerticalLayout {
-                        spacing: 4px;
+                        spacing: Theme.space-1;
 
                         for city[i] in model.cities : Rectangle {
-                            height: 32px;
-                            background: city.active ? Theme.accent-brand : (saved-ta.has-hover ? Theme.surface-base : transparent);
+                            height: Theme.row-height;
+                            background: city.active ? Theme.state-selected
+                                : saved-ta.has-hover ? Theme.state-hover
+                                : transparent;
                             border-radius: Theme.radius-md;
+                            animate background { duration: Theme.motion-fast; easing: ease-out; }
 
                             saved-ta := TouchArea {
+                                mouse-cursor: MouseCursor.pointer;
                                 clicked => { root.select-city(i); }
                             }
 
                             HorizontalLayout {
-                                padding-left: 8px;
-                                padding-right: 4px;
-                                spacing: 4px;
+                                padding-left: Theme.space-3;
+                                padding-right: Theme.space-1;
+                                spacing: Theme.space-1;
 
                                 Text {
                                     text: city.name;
-                                    color: Theme.text-primary;
-                                    font-size: Theme.font-size-sm;
+                                    color: city.active ? Theme.accent-brand : Theme.text-primary;
+                                    font-size: Theme.font-size-md;
                                     vertical-alignment: center;
                                     horizontal-stretch: 1;
                                     wrap: no-wrap;
                                     overflow: elide;
                                 }
 
-                                if model.cities.length > 1 : Rectangle {
-                                    width: 28px;
-                                    height: 28px;
-                                    y: 2px;
-                                    background: remove-ta.has-hover ? Theme.surface-raised : transparent;
-                                    border-radius: Theme.radius-md;
-
-                                    remove-ta := TouchArea {
-                                        clicked => { root.remove-city(i); }
-                                    }
-                                    if remove-ta.has-hover : Rectangle {
-                                        x: parent.x - remove-hint.preferred-width;
-                                        y: parent.height + 2px;
-                                        width: remove-hint.preferred-width + 12px;
-                                        height: remove-hint.preferred-height + 6px;
-                                        background: Theme.surface-raised;
-                                        border-radius: Theme.radius-md;
-                                        border-width: 1px;
-                                        border-color: Theme.border-default;
-                                        z: 100;
-                                        remove-hint := Text {
-                                            x: 6px; y: 3px;
-                                            text: model.remove-city-hint;
-                                            color: Theme.text-secondary;
-                                            font-size: Theme.font-size-sm;
-                                        }
-                                    }
-                                    Text {
-                                        text: "x";
-                                        color: Theme.text-secondary;
-                                        font-size: Theme.font-size-sm;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
-                                    }
+                                if model.cities.length > 1 : IconButton {
+                                    icon: "trash";
+                                    size: ControlSize.sm;
+                                    danger: true;
+                                    tooltip: model.remove-city-hint;
+                                    tooltip-flip: true;
+                                    clicked => { root.remove-city(i); }
                                 }
                             }
                         }
                     }
                 }
 
-                Rectangle {
-                    height: 1px;
-                    background: Theme.border-default;
-                    horizontal-stretch: 1;
-                }
+                Divider { }
 
                 if model.search-busy : Text {
                     text: model.searching-label;
@@ -480,11 +462,13 @@ export component WeatherView inherits Rectangle {
                         spacing: 4px;
 
                         for hit[i] in model.search-results : Rectangle {
-                            height: 48px;
-                            background: hit-ta.has-hover ? Theme.surface-base : transparent;
+                            height: Theme.control-lg;
+                            background: hit-ta.has-hover ? Theme.state-hover : transparent;
                             border-radius: Theme.radius-md;
+                            animate background { duration: Theme.motion-fast; easing: ease-out; }
 
                             hit-ta := TouchArea {
+                                mouse-cursor: MouseCursor.pointer;
                                 clicked => {
                                     root.add-city(hit.name, hit.latitude, hit.longitude, hit.timezone);
                                 }
@@ -508,16 +492,16 @@ export component WeatherView inherits Rectangle {
                             }
 
                             VerticalLayout {
-                                padding-left: 8px;
-                                padding-right: 8px;
-                                padding-top: 6px;
-                                padding-bottom: 6px;
+                                padding-left: Theme.space-3;
+                                padding-right: Theme.space-3;
                                 spacing: 2px;
+                                alignment: center;
 
                                 Text {
                                     text: hit.name;
                                     color: Theme.text-primary;
-                                    font-size: Theme.font-size-sm;
+                                    font-size: Theme.font-size-md;
+                                    font-weight: Theme.weight-medium;
                                     wrap: no-wrap;
                                     overflow: elide;
                                 }

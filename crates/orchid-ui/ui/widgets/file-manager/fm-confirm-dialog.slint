@@ -1,4 +1,6 @@
 import { Theme } from "../../theme_global.slint";
+import { ButtonTone, TouchButton } from "../../kit.slint";
+import { Icon } from "../../kit-icons.slint";
 import { FmConfirmDialog } from "../../workspace/defs.slint";
 
 export component FmConfirmDialog inherits Rectangle {
@@ -7,8 +9,12 @@ export component FmConfirmDialog inherits Rectangle {
     callback no();
 
     property <bool> info-only: dialog.pending-action == "" && dialog.cancel-label == "";
+    property <bool> entered: false;
+    init => { self.entered = true; }
 
-    background: #00000080;
+    background: Theme.scrim;
+    opacity: self.entered ? 1.0 : 0.0;
+    animate opacity { duration: Theme.motion-fast; easing: ease-out; }
 
     backdrop-ta := TouchArea {
         clicked => { root.no(); }
@@ -16,23 +22,52 @@ export component FmConfirmDialog inherits Rectangle {
 
     Rectangle {
         x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        width: root.info-only ? min(520px, parent.width - 32px) : 360px;
-        height: min(lay.preferred-height + 16px, parent.height - 32px);
-        background: Theme.surface-raised;
-        border-radius: Theme.radius-md;
-        drop-shadow-blur: Theme.reduce-motion ? 0px : 16px;
-        drop-shadow-color: #00000080;
+        y: (parent.height - self.height) / 2 + (root.entered ? 0px : Theme.space-5);
+        width: root.info-only ? min(560px, parent.width - Theme.space-8) : 440px;
+        height: min(lay.preferred-height, parent.height - Theme.space-8);
+
+        animate y { duration: Theme.motion-base; easing: ease-out; }
+        background: Theme.gradient-glass;
+        border-radius: Theme.radius-xl;
+        border-width: Theme.hairline;
+        border-color: Theme.border-strong;
+        drop-shadow-blur: Theme.elev-3-blur;
+        drop-shadow-offset-y: Theme.elev-3-y;
+        drop-shadow-color: Theme.shadow-key;
+
+        TouchArea { }
 
         lay := VerticalLayout {
-            padding: 16px;
-            spacing: 12px;
+            padding: Theme.space-5;
+            spacing: Theme.space-4;
 
-            Text {
-                text: dialog.title;
-                color: Theme.text-primary;
-                font-size: Theme.font-size-lg;
-                font-weight: Theme.weight-semibold;
+            HorizontalLayout {
+                spacing: Theme.space-3;
+
+                Rectangle {
+                    min-width: Theme.control-md;
+                    max-width: Theme.control-md;
+                    min-height: Theme.control-md;
+                    max-height: Theme.control-md;
+                    border-radius: Theme.radius-md;
+                    background: root.info-only ? Theme.accent-soft : Theme.feedback-danger-soft;
+
+                    Icon {
+                        name: root.info-only ? "info" : "warning";
+                        size: Theme.font-size-xl;
+                        tint: root.info-only ? Theme.accent-brand : Theme.feedback-danger;
+                    }
+                }
+
+                Text {
+                    text: dialog.title;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-xl;
+                    font-weight: Theme.weight-bold;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    wrap: word-wrap;
+                }
             }
 
             Text {
@@ -43,39 +78,19 @@ export component FmConfirmDialog inherits Rectangle {
             }
 
             HorizontalLayout {
-                spacing: 8px;
+                spacing: Theme.space-2;
                 alignment: end;
 
-                if dialog.cancel-label != "" : Rectangle {
-                    width: 96px;
-                    height: 32px;
-                    background: no-ta.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-                    no-ta := TouchArea { clicked => { root.no(); } }
-                    Text {
-                        text: dialog.cancel-label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                if dialog.cancel-label != "" : TouchButton {
+                    text: dialog.cancel-label;
+                    tone: ButtonTone.ghost;
+                    clicked => { root.no(); }
                 }
 
-                Rectangle {
-                    width: 96px;
-                    height: 32px;
-                    background: root.info-only
-                        ? (yes-ta.has-hover ? Theme.accent-brand : #4d82ff88)
-                        : (yes-ta.has-hover ? #ef4444 : #ef444488);
-                    border-radius: Theme.radius-md;
-                    yes-ta := TouchArea { clicked => { root.yes(); } }
-                    Text {
-                        text: dialog.confirm-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                TouchButton {
+                    text: dialog.confirm-label;
+                    tone: root.info-only ? ButtonTone.filled : ButtonTone.danger;
+                    clicked => { root.yes(); }
                 }
             }
         }

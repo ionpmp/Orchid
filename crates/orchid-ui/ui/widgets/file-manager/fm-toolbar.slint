@@ -1,4 +1,5 @@
 import { Theme } from "../../theme_global.slint";
+import { ControlSize, IconButton, Tooltip } from "../../kit.slint";
 import { Strings } from "../../strings_global.slint";
 import { FmTab, FmVisitHistoryItem, FmPathSuggest } from "../../workspace/defs.slint";
 
@@ -30,191 +31,67 @@ export component FmToolbar inherits Rectangle {
         padding-right: 6px;
         spacing: 4px;
 
-        Rectangle {
-            width: 28px; height: 28px;
+        // Navigation cluster. Buttons stay clickable while disabled so the
+        // tooltip can explain *why* they are unavailable.
+        IconButton {
+            icon: "chevron-left";
+            size: ControlSize.sm;
             y: (parent.height - self.height) / 2;
-            background: back-ta.has-hover && tab.can-back ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
             opacity: tab.can-back ? 1.0 : 0.4;
-
-            // Keep TouchArea enabled so disabled state can still show a hover hint.
-            back-ta := TouchArea {
-                clicked => {
-                    if tab.can-back {
-                        root.back();
-                    }
-                }
-            }
-            Text { text: "◀"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
-
-            if back-ta.has-hover : Rectangle {
-                x: 0;
-                y: parent.height + 4px;
-                width: back-hint.preferred-width + 12px;
-                height: back-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                back-hint := Text {
-                    x: 6px; y: 3px;
-                    text: tab.can-back ? Strings.fm-nav-back : Strings.fm-nav-back-disabled;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
+            tooltip: tab.can-back ? Strings.fm-nav-back : Strings.fm-nav-back-disabled;
+            clicked => {
+                if tab.can-back {
+                    root.back();
                 }
             }
         }
 
-        Rectangle {
-            width: 28px; height: 28px;
+        IconButton {
+            icon: "chevron-right";
+            size: ControlSize.sm;
             y: (parent.height - self.height) / 2;
-            background: fwd-ta.has-hover && tab.can-forward ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
             opacity: tab.can-forward ? 1.0 : 0.4;
-
-            // Keep TouchArea enabled so disabled state can still show a hover hint.
-            fwd-ta := TouchArea {
-                clicked => {
-                    if tab.can-forward {
-                        root.forward();
-                    }
-                }
-            }
-            Text { text: "▶"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
-
-            if fwd-ta.has-hover : Rectangle {
-                x: 0;
-                y: parent.height + 4px;
-                width: fwd-hint.preferred-width + 12px;
-                height: fwd-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                fwd-hint := Text {
-                    x: 6px; y: 3px;
-                    text: tab.can-forward ? Strings.fm-nav-forward : Strings.fm-nav-forward-disabled;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
+            tooltip: tab.can-forward ? Strings.fm-nav-forward : Strings.fm-nav-forward-disabled;
+            clicked => {
+                if tab.can-forward {
+                    root.forward();
                 }
             }
         }
 
-        Rectangle {
-            width: 28px; height: 28px;
+        IconButton {
+            icon: "arrow-up";
+            size: ControlSize.sm;
             y: (parent.height - self.height) / 2;
-            background: up-ta.has-hover ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
-
-            up-ta := TouchArea {
-                clicked => { root.up(); }
-            }
-            Text { text: "▲"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
-
-            if up-ta.has-hover : Rectangle {
-                x: 0;
-                y: parent.height + 4px;
-                width: up-hint.preferred-width + 12px;
-                height: up-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                up-hint := Text {
-                    x: 6px; y: 3px;
-                    text: Strings.fm-nav-up;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
-            }
+            tooltip: Strings.fm-nav-up;
+            clicked => { root.up(); }
         }
 
-        Rectangle {
-            width: 28px; height: 28px;
+        IconButton {
+            icon: "home";
+            size: ControlSize.sm;
             y: (parent.height - self.height) / 2;
-            background: home-ta.has-hover ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
-
-            home-ta := TouchArea {
-                clicked => { root.home(); }
-            }
-            Text { text: "🏠"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
-
-            if home-ta.has-hover : Rectangle {
-                x: 0;
-                y: parent.height + 4px;
-                width: home-hint.preferred-width + 12px;
-                height: home-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                home-hint := Text {
-                    x: 6px; y: 3px;
-                    text: Strings.fm-nav-home;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
-            }
+            tooltip: Strings.fm-nav-home;
+            clicked => { root.home(); }
         }
 
+        // History button plus its popover, wrapped so the list can overflow.
         Rectangle {
-            width: 28px; height: 28px;
+            width: Theme.control-md;
+            height: Theme.control-md;
             y: (parent.height - self.height) / 2;
-            background: hist-ta.has-hover || root.history-open ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
+            background: transparent;
             clip: false;
             z: 50;
 
-            hist-ta := TouchArea {
+            IconButton {
+                icon: "clock";
+                size: ControlSize.sm;
+                active: root.history-open;
+                tooltip: root.history-open ? "" : Strings.fm-nav-history;
                 clicked => {
                     root.drives-open = false;
                     root.history-open = !root.history-open;
-                }
-            }
-            // Clock glyph (history) — rectangles, no emoji.
-            Rectangle {
-                width: 14px; height: 14px;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-                Rectangle {
-                    width: parent.width; height: parent.height;
-                    border-radius: parent.width;
-                    border-width: 1.5px;
-                    border-color: Theme.text-primary;
-                    background: transparent;
-                }
-                Rectangle {
-                    x: parent.width / 2 - 1px; y: 3px;
-                    width: 2px; height: parent.height * 0.35;
-                    background: Theme.text-primary;
-                }
-                Rectangle {
-                    x: parent.width / 2 - 1px; y: parent.height / 2 - 1px;
-                    width: parent.width * 0.32; height: 2px;
-                    background: Theme.text-primary;
-                }
-            }
-
-            if hist-ta.has-hover && !root.history-open : Rectangle {
-                x: 0;
-                y: parent.height + 4px;
-                width: hist-hint.preferred-width + 12px;
-                height: hist-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                hist-hint := Text {
-                    x: 6px; y: 3px;
-                    text: Strings.fm-nav-history;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
                 }
             }
 
@@ -310,45 +187,41 @@ export component FmToolbar inherits Rectangle {
             }
         }
 
+        // Drive picker plus its popover.
         Rectangle {
-            width: 28px; height: 28px;
+            width: Theme.control-md;
+            height: Theme.control-md;
             y: (parent.height - self.height) / 2;
-            background: drv-ta.has-hover || root.drives-open ? Theme.surface-base : transparent;
+            background: drv-ta.has-hover || root.drives-open ? Theme.state-hover : Colors.transparent;
             border-radius: Theme.radius-md;
             clip: false;
             z: 50;
 
+            animate background { duration: Theme.motion-fast; easing: ease-out; }
+
             drv-ta := TouchArea {
+                mouse-cursor: MouseCursor.pointer;
                 clicked => {
                     root.history-open = false;
                     root.drives-open = !root.drives-open;
                 }
             }
             Text {
+                width: 100%;
+                height: 100%;
                 text: "C:";
-                color: Theme.text-primary;
+                color: root.drives-open ? Theme.accent-brand : Theme.text-primary;
                 font-size: Theme.font-size-sm;
-                font-weight: Theme.weight-semibold;
+                font-weight: Theme.weight-bold;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
 
-            if drv-ta.has-hover && !root.drives-open : Rectangle {
+            Tooltip {
+                text: Strings.fm-nav-drives;
+                shown: drv-ta.has-hover && !root.drives-open;
                 x: 0;
-                y: parent.height + 4px;
-                width: drv-hint.preferred-width + 12px;
-                height: drv-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                drv-hint := Text {
-                    x: 6px; y: 3px;
-                    text: Strings.fm-nav-drives;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
+                y: parent.height + Theme.space-1;
             }
 
             if root.drives-open : Rectangle {
@@ -401,50 +274,34 @@ export component FmToolbar inherits Rectangle {
             }
         }
 
-        Rectangle {
-            width: 28px; height: 28px;
+        IconButton {
+            icon: "plus";
+            size: ControlSize.sm;
             y: (parent.height - self.height) / 2;
-            background: nf-ta.has-hover ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
-
-            nf-ta := TouchArea {
-                clicked => { root.new-folder(); }
-            }
-            Text { text: "📁+"; color: Theme.text-primary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
-
-            if nf-ta.has-hover : Rectangle {
-                x: 0;
-                y: parent.height + 4px;
-                width: nf-hint.preferred-width + 12px;
-                height: nf-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                nf-hint := Text {
-                    x: 6px; y: 3px;
-                    text: Strings.fm-action-new-folder;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
-            }
+            tooltip: Strings.fm-action-new-folder;
+            clicked => { root.new-folder(); }
         }
 
-        if root.selection-count > 1 : Rectangle { width: 8px; }
+        if root.selection-count > 1 : Rectangle { width: Theme.space-3; }
 
+        // Selection counter doubles as the "deselect all" affordance.
         if root.selection-count > 1 : Rectangle {
-            min-width: 28px; height: 28px;
+            min-width: Theme.control-md;
+            height: Theme.control-md;
             y: (parent.height - self.height) / 2;
-            background: desel-ta.has-hover ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
+            background: desel-ta.has-hover ? Theme.state-hover : Theme.accent-soft;
+            border-radius: Theme.radius-pill;
+
+            animate background { duration: Theme.motion-fast; easing: ease-out; }
+
             desel-ta := TouchArea {
+                mouse-cursor: MouseCursor.pointer;
                 clicked => { root.deselect-all(); }
             }
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 6px;
+                padding-left: Theme.space-3;
+                padding-right: Theme.space-3;
+                spacing: Theme.space-2;
                 Text {
                     text: "" + root.selection-count + " " + Strings.fm-select-selected;
                     color: Theme.text-secondary;
@@ -460,54 +317,54 @@ export component FmToolbar inherits Rectangle {
             }
         }
 
-        Rectangle { width: 8px; }
+        Rectangle { width: Theme.space-3; }
 
         Rectangle {
-            width: 36px; height: 28px;
+            width: 44px;
+            height: Theme.control-md;
             y: (parent.height - self.height) / 2;
-            background: Theme.surface-base;
-            border-radius: Theme.radius-md;
+            background: sort-ta.has-hover ? Theme.state-hover : Theme.surface-sunken;
+            border-radius: Theme.radius-pill;
+
+            animate background { duration: Theme.motion-fast; easing: ease-out; }
 
             sort-ta := TouchArea {
+                mouse-cursor: MouseCursor.pointer;
                 clicked => { root.sort-cycle(); }
             }
             Text {
+                width: 100%;
+                height: 100%;
                 text: tab.sort-by == 0 ? (tab.sort-descending ? "A↓" : "A↑")
                     : tab.sort-by == 1 ? (tab.sort-descending ? "S↓" : "S↑")
                     : tab.sort-by == 2 ? (tab.sort-descending ? "M↓" : "M↑")
                     : (tab.sort-descending ? "T↓" : "T↑");
                 color: Theme.accent-brand;
                 font-size: Theme.font-size-sm;
+                font-weight: Theme.weight-semibold;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
 
-            if sort-ta.has-hover : Rectangle {
+            Tooltip {
+                text: Strings.catalog-sort-default;
+                shown: sort-ta.has-hover;
                 x: 0;
-                y: parent.height + 4px;
-                width: sort-hint.preferred-width + 12px;
-                height: sort-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                sort-hint := Text {
-                    x: 6px; y: 3px;
-                    text: Strings.catalog-sort-default;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
+                y: parent.height + Theme.space-1;
             }
         }
 
         Rectangle {
-            width: 28px; height: 28px;
+            width: Theme.control-md;
+            height: Theme.control-md;
             y: (parent.height - self.height) / 2;
-            background: Theme.surface-base;
-            border-radius: Theme.radius-md;
+            background: vm-ta.has-hover ? Theme.state-hover : Theme.surface-sunken;
+            border-radius: Theme.radius-pill;
+
+            animate background { duration: Theme.motion-fast; easing: ease-out; }
 
             vm-ta := TouchArea {
+                mouse-cursor: MouseCursor.pointer;
                 clicked => { root.view-mode-cycle(); }
             }
             // Custom vector representation of the view mode
@@ -564,74 +421,66 @@ export component FmToolbar inherits Rectangle {
                 }
             }
 
-            if vm-ta.has-hover : Rectangle {
+            Tooltip {
+                text: tab.view-mode == 0 ? Strings.fm-view-icons : tab.view-mode == 1 ? Strings.fm-view-list : tab.view-mode == 2 ? Strings.fm-view-details : Strings.fm-view-gallery;
+                shown: vm-ta.has-hover;
                 x: 0;
-                y: parent.height + 4px;
-                width: vm-hint.preferred-width + 12px;
-                height: vm-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                vm-hint := Text {
-                    x: 6px; y: 3px;
-                    text: tab.view-mode == 0 ? Strings.fm-view-icons : tab.view-mode == 1 ? Strings.fm-view-list : tab.view-mode == 2 ? Strings.fm-view-details : Strings.fm-view-gallery;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
+                y: parent.height + Theme.space-1;
             }
         }
 
         Rectangle {
-            width: 28px; height: 28px;
+            width: Theme.control-md;
+            height: Theme.control-md;
             y: (parent.height - self.height) / 2;
-            background: tab.branch-view || br-ta.has-hover ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
-            border-width: tab.branch-view ? 1px : 0px;
-            border-color: Theme.accent-brand;
+            background: tab.branch-view ? Theme.accent-soft
+                : br-ta.has-hover ? Theme.state-hover
+                : Theme.surface-sunken;
+            border-radius: Theme.radius-pill;
+            border-width: tab.branch-view ? Theme.hairline : 0px;
+            border-color: Theme.accent-muted;
+
+            animate background { duration: Theme.motion-fast; easing: ease-out; }
 
             br-ta := TouchArea {
+                mouse-cursor: MouseCursor.pointer;
                 clicked => { root.branch-toggle(); }
             }
             Text {
+                width: 100%;
+                height: 100%;
                 text: "B";
                 color: tab.branch-view ? Theme.accent-brand : Theme.text-primary;
                 font-size: Theme.font-size-sm;
-                font-weight: Theme.weight-semibold;
+                font-weight: Theme.weight-bold;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
 
-            if br-ta.has-hover : Rectangle {
+            Tooltip {
+                text: Strings.fm-action-branch-view;
+                shown: br-ta.has-hover;
                 x: 0;
-                y: parent.height + 4px;
-                width: br-hint.preferred-width + 12px;
-                height: br-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                br-hint := Text {
-                    x: 6px; y: 3px;
-                    text: Strings.fm-action-branch-view;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
+                y: parent.height + Theme.space-1;
             }
         }
 
-        Rectangle { width: 8px; }
+        Rectangle { width: Theme.space-3; }
 
+        // Quick filter field.
         Rectangle {
             horizontal-stretch: 1;
-            height: 28px;
+            height: Theme.control-md;
             y: (parent.height - self.height) / 2;
-            background: Theme.surface-base;
-            border-radius: Theme.radius-md;
-            border-width: 1px;
-            border-color: filter-fs.has-focus ? Theme.accent-brand : Theme.border-default;
+            background: Theme.surface-sunken;
+            border-radius: Theme.radius-pill;
+            border-width: filter-fs.has-focus ? 2px : Theme.hairline;
+            border-color: filter-fs.has-focus ? Theme.border-focus : Theme.border-default;
+
+            animate border-width, border-color {
+                duration: Theme.motion-fast;
+                easing: ease-out;
+            }
 
             filter-fs := FocusScope {
                 width: parent.width;
@@ -639,9 +488,9 @@ export component FmToolbar inherits Rectangle {
                 TouchArea { clicked => { filter-fs.focus(); } }
 
                 HorizontalLayout {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    spacing: 6px;
+                    padding-left: Theme.space-4;
+                    padding-right: Theme.space-4;
+                    spacing: Theme.space-2;
 
                     Rectangle {
                         horizontal-stretch: 1;

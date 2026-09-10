@@ -1,4 +1,6 @@
 import { Theme } from "../theme_global.slint";
+import { EmptyState, Tooltip } from "../kit.slint";
+import { Icon } from "../kit-icons.slint";
 import { Strings } from "../strings_global.slint";
 import { RecentFilesModel } from "../workspace/defs.slint";
 
@@ -10,19 +12,13 @@ export component RecentFilesView inherits Rectangle {
     background: transparent;
 
     VerticalLayout {
-        padding: 12px;
-        spacing: 8px;
+        padding: Theme.space-3;
+        spacing: Theme.space-2;
 
-        if !model.has-items : VerticalLayout {
-            alignment: center;
+        if !model.has-items : EmptyState {
             vertical-stretch: 1;
-
-            Text {
-                text: model.empty-state-text;
-                color: Theme.text-tertiary;
-                font-size: Theme.font-size-md;
-                horizontal-alignment: center;
-            }
+            icon: "layers";
+            title: model.empty-state-text;
         }
 
         if model.has-items : Flickable {
@@ -34,61 +30,79 @@ export component RecentFilesView inherits Rectangle {
 
             list := VerticalLayout {
                 width: parent.viewport-width;
-                spacing: 0px;
+                spacing: Theme.space-2;
 
                 for item[i] in model.items : Rectangle {
-                    height: 64px;
-                    background: item-ta.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
+                    height: Theme.control-xl;
+                    background: item-ta.has-hover ? Theme.surface-raised : Theme.surface-sunken;
+                    border-radius: Theme.radius-lg;
+                    border-width: Theme.hairline;
+                    border-color: item-ta.has-hover ? Theme.border-subtle : Colors.transparent;
+
+                    animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
 
                     item-ta := TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
                         clicked => {
                             root.item-clicked(item.path);
                         }
                     }
-                    if item-ta.has-hover : Rectangle {
-                        x: parent.x + 8px;
-                        y: parent.height - 2px;
-                        width: open-hint.preferred-width + 12px;
-                        height: open-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        open-hint := Text {
-                            x: 6px; y: 3px;
-                            text: item.path != "" ? item.path : Strings.recent-files-open-hint;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
+
+                    Tooltip {
+                        x: Theme.space-3;
+                        y: parent.height - Theme.space-1;
+                        shown: item-ta.has-hover;
+                        text: item.path != "" ? item.path : Strings.recent-files-open-hint;
                     }
 
-                    VerticalLayout {
-                        padding: 8px;
-                        spacing: 4px;
+                    HorizontalLayout {
+                        padding-left: Theme.space-3;
+                        padding-right: Theme.space-3;
+                        spacing: Theme.space-3;
 
-                        Text {
-                            text: item.name;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-md;
-                            font-weight: Theme.weight-semibold;
-                            wrap: no-wrap;
-                            overflow: elide;
+                        Rectangle {
+                            min-width: Theme.control-md;
+                            max-width: Theme.control-md;
+                            min-height: Theme.control-md;
+                            max-height: Theme.control-md;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: Theme.radius-md;
+                            background: Theme.accent-soft;
+
+                            Icon {
+                                name: "layers";
+                                size: Theme.font-size-xl;
+                                tint: Theme.accent-brand;
+                            }
                         }
 
-                        Text {
-                            text: item.path;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                            wrap: no-wrap;
-                            overflow: elide;
-                        }
+                        VerticalLayout {
+                            spacing: 2px;
+                            alignment: center;
+                            horizontal-stretch: 1;
 
-                        Text {
-                            text: item.opened;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
+                            Text {
+                                text: item.name;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-size-md;
+                                font-weight: Theme.weight-semibold;
+                                wrap: no-wrap;
+                                overflow: elide;
+                            }
+
+                            Text {
+                                text: item.path;
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                wrap: no-wrap;
+                                overflow: elide;
+                            }
+
+                            Text {
+                                text: item.opened;
+                                color: Theme.text-tertiary;
+                                font-size: Theme.font-size-xs;
+                            }
                         }
                     }
                 }

@@ -1,4 +1,6 @@
 import { Theme } from "../theme_global.slint";
+import { Badge, EmptyState, Tooltip } from "../kit.slint";
+import { Icon } from "../kit-icons.slint";
 import { Strings } from "../strings_global.slint";
 import { SearchModel } from "../workspace/defs.slint";
 
@@ -35,23 +37,31 @@ export component SearchView inherits Rectangle {
     }
 
     VerticalLayout {
-        padding: 12px;
-        spacing: 8px;
+        padding: Theme.space-4;
+        spacing: Theme.space-3;
 
         Rectangle {
-            height: 40px;
-            background: Theme.surface-base;
-            border-radius: Theme.radius-md;
-            border-width: 1px;
+            height: Theme.control-lg;
+            background: Theme.surface-sunken;
+            border-radius: Theme.radius-pill;
+            border-width: Theme.hairline;
             border-color: input.has-focus
-                ? Theme.accent-brand
+                ? Theme.border-focus
                 : Theme.border-default;
             horizontal-stretch: 1;
 
+            animate border-color { duration: Theme.motion-fast; easing: ease-out; }
+
             HorizontalLayout {
-                padding-left: 12px;
-                padding-right: 12px;
-                spacing: 8px;
+                padding-left: Theme.space-5;
+                padding-right: Theme.space-5;
+                spacing: Theme.space-3;
+
+                Icon {
+                    name: "search";
+                    size: Theme.font-size-xl;
+                    tint: input.has-focus ? Theme.accent-brand : Theme.text-tertiary;
+                }
 
                 Rectangle {
                     horizontal-stretch: 1;
@@ -65,7 +75,7 @@ export component SearchView inherits Rectangle {
                         height: parent.height;
                         text: model.placeholder-text;
                         color: Theme.text-tertiary;
-                        font-size: Theme.font-size-md;
+                        font-size: Theme.font-size-lg;
                         vertical-alignment: center;
                     }
 
@@ -76,7 +86,7 @@ export component SearchView inherits Rectangle {
                         height: parent.height;
                         text: model.query;
                         color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
+                        font-size: Theme.font-size-lg;
                         vertical-alignment: center;
                         single-line: true;
                         key-pressed(event) => {
@@ -130,34 +140,22 @@ export component SearchView inherits Rectangle {
 
         if model.error != "" : Text {
             text: model.error;
-            color: #ef4444;
+            color: Theme.feedback-danger;
             font-size: Theme.font-size-sm;
             horizontal-alignment: center;
         }
 
-        if model.query == "" && model.candidates.length == 0 : VerticalLayout {
-            alignment: center;
+        if model.query == "" && model.candidates.length == 0 : EmptyState {
             vertical-stretch: 1;
-
-            Text {
-                text: model.empty-state-text;
-                color: Theme.text-tertiary;
-                font-size: Theme.font-size-md;
-                horizontal-alignment: center;
-            }
+            icon: "search";
+            title: model.empty-state-text;
         }
 
         if model.query != "" && model.candidates.length == 0 && !model.is-searching
-            : VerticalLayout {
-            alignment: center;
+            : EmptyState {
             vertical-stretch: 1;
-
-            Text {
-                text: model.no-results-text;
-                color: Theme.text-tertiary;
-                font-size: Theme.font-size-md;
-                horizontal-alignment: center;
-            }
+            icon: "info";
+            title: model.no-results-text;
         }
 
         if model.candidates.length > 0 : Flickable {
@@ -172,72 +170,64 @@ export component SearchView inherits Rectangle {
                 spacing: 2px;
 
                 for cand[i] in model.candidates : Rectangle {
-                    height: 48px;
-                    background: (i == model.selected-index)
-                        ? Theme.accent-brand
-                        : (cand-ta.has-hover ? Theme.surface-base : transparent);
+                    property <bool> is-selected: i == model.selected-index;
+
+                    height: Theme.control-lg;
+                    background: self.is-selected ? Theme.state-selected
+                        : cand-ta.has-hover ? Theme.state-hover
+                        : Colors.transparent;
                     border-radius: Theme.radius-md;
 
+                    animate background { duration: Theme.motion-instant; easing: ease-out; }
+
+                    // Accent rail on the keyboard-selected row.
+                    if self.is-selected : Rectangle {
+                        x: 0;
+                        y: (parent.height - self.height) / 2;
+                        width: Theme.indicator-thickness;
+                        height: parent.height * 0.55;
+                        border-radius: self.width / 2;
+                        background: Theme.accent-brand;
+                    }
+
                     cand-ta := TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
                         clicked => {
                             root.selection-changed(i);
                             root.candidate-activated(cand.id);
                         }
                     }
-                    if cand-ta.has-hover : Rectangle {
-                        x: parent.x + 8px;
-                        y: parent.height - 2px;
-                        width: cand-hint.preferred-width + 12px;
-                        height: cand-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        cand-hint := Text {
-                            x: 6px; y: 3px;
-                            text: cand.subtitle != ""
-                                ? cand.title + " — " + cand.subtitle
-                                : cand.title != "" ? cand.title : Strings.search-open-hint;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
+
+                    Tooltip {
+                        text: cand.subtitle != ""
+                            ? cand.title + " — " + cand.subtitle
+                            : cand.title != "" ? cand.title : Strings.search-open-hint;
+                        shown: cand-ta.has-hover;
+                        x: Theme.space-2;
+                        y: parent.height - Theme.space-1;
                     }
 
                     HorizontalLayout {
-                        padding-left: 12px;
-                        padding-right: 12px;
-                        spacing: 12px;
+                        padding-left: Theme.space-3;
+                        padding-right: Theme.space-3;
+                        spacing: Theme.space-3;
 
+                        // Source tile — a colour anchor per result kind.
                         Rectangle {
-                            width: 24px;
-                            height: 100%;
-
-                            // Use row hover so the glyph does not steal activation clicks.
-                            if cand-ta.has-hover && cand.source-name != "" : Rectangle {
-                                x: parent.x;
-                                y: -src-hint.preferred-height - 8px;
-                                width: src-hint.preferred-width + 12px;
-                                height: src-hint.preferred-height + 6px;
-                                background: Theme.surface-raised;
-                                border-radius: Theme.radius-md;
-                                border-width: 1px;
-                                border-color: Theme.border-default;
-                                z: 100;
-                                src-hint := Text {
-                                    x: 6px; y: 3px;
-                                    text: cand.source-name;
-                                    color: Theme.text-secondary;
-                                    font-size: Theme.font-size-sm;
-                                }
-                            }
+                            min-width: Theme.icon-button-sm;
+                            max-width: Theme.icon-button-sm;
+                            min-height: Theme.icon-button-sm;
+                            max-height: Theme.icon-button-sm;
+                            border-radius: Theme.radius-sm;
+                            background: Theme.accent-soft;
 
                             Text {
+                                width: 100%;
+                                height: 100%;
                                 text: source-glyph(cand.source-icon);
-                                color: (i == model.selected-index)
-                                    ? Theme.text-primary
-                                    : Theme.accent-brand;
-                                font-size: Theme.font-size-lg;
+                                color: Theme.accent-brand;
+                                font-size: Theme.font-size-md;
+                                font-weight: Theme.weight-bold;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                             }
@@ -252,38 +242,23 @@ export component SearchView inherits Rectangle {
                                 text: cand.title;
                                 color: Theme.text-primary;
                                 font-size: Theme.font-size-md;
-                                font-weight: Theme.weight-medium;
+                                font-weight: Theme.weight-semibold;
                                 wrap: no-wrap;
                                 overflow: elide;
                             }
 
                             if cand.subtitle != "" : Text {
                                 text: cand.subtitle;
-                                color: Theme.text-secondary;
+                                color: Theme.text-tertiary;
                                 font-size: Theme.font-size-sm;
                                 wrap: no-wrap;
                                 overflow: elide;
                             }
                         }
 
-                        if cand.shortcut != "" : Rectangle {
-                            background: Theme.surface-base;
-                            border-radius: Theme.radius-md;
-                            horizontal-stretch: 0;
-
-                            HorizontalLayout {
-                                padding-left: 6px;
-                                padding-right: 6px;
-                                padding-top: 2px;
-                                padding-bottom: 2px;
-
-                                Text {
-                                    text: cand.shortcut;
-                                    color: Theme.text-tertiary;
-                                    font-size: Theme.font-size-sm;
-                                    vertical-alignment: center;
-                                }
-                            }
+                        if cand.shortcut != "" : Badge {
+                            text: cand.shortcut;
+                            tint: Theme.text-tertiary;
                         }
                     }
                 }

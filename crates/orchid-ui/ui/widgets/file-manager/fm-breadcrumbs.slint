@@ -41,28 +41,34 @@ export component FmBreadcrumbs inherits Rectangle {
         viewport-height: self.height;
 
         hlay := HorizontalLayout {
-            padding-left: 8px;
-            padding-right: 8px;
-            spacing: 4px;
+            padding-left: Theme.space-3;
+            padding-right: Theme.space-3;
+            spacing: Theme.space-1;
             alignment: start;
 
             for crumb[i] in breadcrumbs : HorizontalLayout {
-                spacing: 4px;
+                spacing: Theme.space-1;
                 if i > 0 : Text {
                     text: "›";
                     color: Theme.text-tertiary;
-                    font-size: Theme.font-size-sm;
+                    font-size: Theme.font-size-md;
                     vertical-alignment: center;
                 }
 
                 Rectangle {
-                    background: crumb-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    border-width: (drag-active && crumb.path == drag-drop-target)
-                        || crumb-ta.has-hover ? 1px : 0px;
-                    border-color: Theme.accent-brand;
+                    min-height: Theme.control-sm;
+                    y: (parent.height - self.height) / 2;
+                    background: (drag-active && crumb.path == drag-drop-target) ? Theme.accent-soft
+                        : crumb-ta.has-hover ? Theme.state-hover
+                        : Colors.transparent;
+                    border-radius: Theme.radius-pill;
+                    border-width: (drag-active && crumb.path == drag-drop-target) ? Theme.hairline : 0px;
+                    border-color: Theme.accent-muted;
+
+                    animate background { duration: Theme.motion-fast; easing: ease-out; }
 
                     crumb-ta := TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
                         clicked => { root.clicked(crumb.path); }
                         pointer-event(e) => {
                             if (drag-active) {
@@ -77,13 +83,13 @@ export component FmBreadcrumbs inherits Rectangle {
                     }
 
                     HorizontalLayout {
-                        padding-left: 6px;
-                        padding-right: 6px;
+                        padding-left: Theme.space-3;
+                        padding-right: Theme.space-3;
                         Text {
                             text: crumb.label;
-                            color: i == breadcrumbs.length - 1 ? Theme.accent-brand : Theme.text-secondary;
-                            font-weight: i == breadcrumbs.length - 1 ? Theme.weight-semibold : Theme.weight-regular;
-                            font-size: Theme.font-size-sm;
+                            color: i == breadcrumbs.length - 1 ? Theme.text-primary : Theme.text-secondary;
+                            font-weight: i == breadcrumbs.length - 1 ? Theme.weight-semibold : Theme.weight-medium;
+                            font-size: Theme.font-size-md;
                             vertical-alignment: center;
                         }
                     }
@@ -104,19 +110,21 @@ export component FmBreadcrumbs inherits Rectangle {
     if root.editing : Rectangle {
         width: parent.width;
         height: parent.height;
-        border-width: 1px;
-        border-color: Theme.accent-brand;
-        border-radius: Theme.radius-md;
+        background: Theme.surface-sunken;
+        border-width: Theme.hairline;
+        border-color: Theme.border-focus;
+        border-radius: Theme.radius-pill;
         clip: false;
         z: 50;
 
         path-in := TextInput {
-            x: 8px;
-            width: parent.width - 16px;
+            x: Theme.space-4;
+            width: parent.width - Theme.space-8;
             height: parent.height;
             text: root.draft;
             color: Theme.text-primary;
-            font-size: Theme.font-size-sm;
+            font-size: Theme.font-size-md;
+            font-family: Theme.font-family-mono;
             vertical-alignment: center;
             single-line: true;
             init => { self.focus(); }
@@ -161,26 +169,29 @@ export component FmBreadcrumbs inherits Rectangle {
 
         if root.suggestions.length > 0 : Rectangle {
             x: 0;
-            y: parent.height + 2px;
+            y: parent.height + Theme.space-1;
             width: parent.width;
-            height: min(240px, suggest-lay.preferred-height + 8px);
-            background: Theme.surface-raised;
-            border-color: Theme.border-default;
-            border-width: 1px;
-            border-radius: Theme.radius-md;
-            drop-shadow-blur: Theme.reduce-motion ? 0px : 12px;
-            drop-shadow-color: #00000060;
+            height: min(320px, suggest-lay.preferred-height + Theme.space-2);
+            background: Theme.surface-floating;
+            border-color: Theme.border-strong;
+            border-width: Theme.hairline;
+            border-radius: Theme.radius-lg;
+            drop-shadow-blur: Theme.elev-2-blur;
+            drop-shadow-offset-y: Theme.elev-2-y;
+            drop-shadow-color: Theme.shadow-key;
             z: 200;
             clip: true;
 
             suggest-lay := VerticalLayout {
-                padding: 4px;
+                padding: Theme.space-1;
                 spacing: 1px;
                 for item in root.suggestions : Rectangle {
-                    height: 28px;
-                    background: item-ta.has-hover ? Theme.accent-brand : transparent;
+                    height: Theme.row-height;
+                    background: item-ta.has-hover ? Theme.state-selected : transparent;
                     border-radius: Theme.radius-md;
+                    animate background { duration: Theme.motion-instant; easing: ease-out; }
                     item-ta := TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
                         pointer-event(e) => {
                             if (e.kind == PointerEventKind.down) {
                                 root.suggest-hover = true;
@@ -193,12 +204,12 @@ export component FmBreadcrumbs inherits Rectangle {
                         }
                     }
                     Text {
-                        x: 8px;
-                        width: parent.width - 16px;
+                        x: Theme.space-3;
+                        width: parent.width - Theme.space-6;
                         height: parent.height;
                         text: item.label;
                         color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
+                        font-size: Theme.font-size-md;
                         vertical-alignment: center;
                         overflow: elide;
                     }

@@ -1,5 +1,6 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme_global.slint";
+import { ButtonTone, Chip, ControlSize, TouchButton } from "../kit.slint";
 import { ProcessesModel, ProcessRowEntry, ServiceRowEntry, StartupRowEntry, UserRowEntry } from "../workspace/defs.slint";
 import { ProcessesConfirmDialog } from "./processes-confirm-dialog.slint";
 
@@ -34,95 +35,63 @@ export component ProcessesView inherits Rectangle {
     property <string> draft-search: model.search-query;
 
     VerticalLayout {
-        padding: 8px;
-        spacing: 6px;
+        padding: Theme.space-3;
+        spacing: Theme.space-2;
 
-        // Tabs
+        // Tab chips + search
         HorizontalLayout {
-            spacing: 4px;
-            height: 28px;
+            spacing: Theme.space-1;
+            height: Theme.control-md;
 
-            tab-btn := Rectangle {
-                width: 88px;
-                height: 28px;
-                background: model.tab == 0 ? Theme.surface-raised : transparent;
-                border-radius: Theme.radius-md;
-                TouchArea { clicked => { root.tab-changed(0); } }
-                Text {
-                    width: 100%; height: 100%;
-                    text: model.tab-processes-label;
-                    color: model.tab == 0 ? Theme.accent-brand : Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
+            Chip {
+                text: model.tab-processes-label;
+                selected: model.tab == 0;
+                clicked => { root.tab-changed(0); }
             }
-            Rectangle {
-                width: 88px; height: 28px;
-                background: model.tab == 1 ? Theme.surface-raised : transparent;
-                border-radius: Theme.radius-md;
-                TouchArea { clicked => { root.tab-changed(1); } }
-                Text {
-                    width: 100%; height: 100%;
-                    text: model.tab-services-label;
-                    color: model.tab == 1 ? Theme.accent-brand : Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
+            Chip {
+                text: model.tab-services-label;
+                selected: model.tab == 1;
+                clicked => { root.tab-changed(1); }
             }
-            Rectangle {
-                width: 88px; height: 28px;
-                background: model.tab == 2 ? Theme.surface-raised : transparent;
-                border-radius: Theme.radius-md;
-                TouchArea { clicked => { root.tab-changed(2); } }
-                Text {
-                    width: 100%; height: 100%;
-                    text: model.tab-startup-label;
-                    color: model.tab == 2 ? Theme.accent-brand : Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
+            Chip {
+                text: model.tab-startup-label;
+                selected: model.tab == 2;
+                clicked => { root.tab-changed(2); }
             }
-            Rectangle {
-                width: 88px; height: 28px;
-                background: model.tab == 3 ? Theme.surface-raised : transparent;
-                border-radius: Theme.radius-md;
-                TouchArea { clicked => { root.tab-changed(3); } }
-                Text {
-                    width: 100%; height: 100%;
-                    text: model.tab-users-label;
-                    color: model.tab == 3 ? Theme.accent-brand : Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
+            Chip {
+                text: model.tab-users-label;
+                selected: model.tab == 3;
+                clicked => { root.tab-changed(3); }
             }
 
             Rectangle { horizontal-stretch: 1; }
 
             // Search
             Rectangle {
-                width: 200px;
-                height: 28px;
-                background: Theme.surface-base;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
+                width: 220px;
+                height: Theme.control-md;
+                background: Theme.surface-sunken;
+                border-radius: Theme.radius-pill;
+                border-width: search-input.has-focus ? 2px : Theme.hairline;
+                border-color: search-input.has-focus ? Theme.border-focus : Theme.border-default;
+
+                animate border-width, border-color {
+                    duration: Theme.motion-fast;
+                    easing: ease-out;
+                }
 
                 if draft-search == "" : Text {
-                    x: 8px; width: parent.width - 16px; height: 100%;
+                    x: Theme.space-4; width: parent.width - Theme.space-8; height: 100%;
                     text: model.search-placeholder;
                     color: Theme.text-tertiary;
-                    font-size: Theme.font-size-sm;
+                    font-size: Theme.font-size-md;
                     vertical-alignment: center;
                 }
-                TextInput {
-                    x: 8px; width: parent.width - 16px; height: 100%;
+                search-input := TextInput {
+                    x: Theme.space-4; width: parent.width - Theme.space-8; height: 100%;
                     text: root.draft-search;
                     color: Theme.text-primary;
-                    font-size: Theme.font-size-sm;
+                    font-size: Theme.font-size-md;
                     single-line: true;
                     edited => {
                         root.draft-search = self.text;
@@ -134,101 +103,45 @@ export component ProcessesView inherits Rectangle {
 
         // Toolbar
         HorizontalLayout {
-            spacing: 6px;
-            height: 28px;
+            spacing: Theme.space-2;
+            height: Theme.control-md;
 
-            if model.tab == 0 : Rectangle {
-                width: 96px; height: 28px;
-                background: Theme.accent-brand;
-                border-radius: Theme.radius-md;
-                opacity: model.selected-pid > 0 ? 1.0 : 0.4;
-                TouchArea {
-                    enabled: model.selected-pid > 0;
-                    clicked => { root.end-task(); }
-                }
-                Text {
-                    width: 100%; height: 100%;
-                    text: model.end-task-label;
-                    color: #ffffff;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
+            if model.tab == 0 : TouchButton {
+                text: model.end-task-label;
+                tone: ButtonTone.danger;
+                size: ControlSize.sm;
+                enabled: model.selected-pid > 0;
+                clicked => { root.end-task(); }
             }
             if model.tab == 1 : HorizontalLayout {
-                spacing: 4px;
-                Rectangle {
-                    width: 72px; height: 28px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    TouchArea { clicked => { root.service-start(); } }
-                    Text {
-                        width: 100%; height: 100%;
-                        text: model.service-start-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                spacing: Theme.space-1;
+                TouchButton {
+                    text: model.service-start-label;
+                    size: ControlSize.sm;
+                    clicked => { root.service-start(); }
                 }
-                Rectangle {
-                    width: 72px; height: 28px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    TouchArea { clicked => { root.service-stop(); } }
-                    Text {
-                        width: 100%; height: 100%;
-                        text: model.service-stop-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                TouchButton {
+                    text: model.service-stop-label;
+                    size: ControlSize.sm;
+                    clicked => { root.service-stop(); }
                 }
-                Rectangle {
-                    width: 80px; height: 28px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    TouchArea { clicked => { root.service-restart(); } }
-                    Text {
-                        width: 100%; height: 100%;
-                        text: model.service-restart-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                TouchButton {
+                    text: model.service-restart-label;
+                    size: ControlSize.sm;
+                    clicked => { root.service-restart(); }
                 }
             }
             if model.tab == 3 : HorizontalLayout {
-                spacing: 4px;
-                Rectangle {
-                    width: 96px; height: 28px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    TouchArea { clicked => { root.user-disconnect(); } }
-                    Text {
-                        width: 100%; height: 100%;
-                        text: model.user-disconnect-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                spacing: Theme.space-1;
+                TouchButton {
+                    text: model.user-disconnect-label;
+                    size: ControlSize.sm;
+                    clicked => { root.user-disconnect(); }
                 }
-                Rectangle {
-                    width: 96px; height: 28px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    TouchArea { clicked => { root.user-sign-out(); } }
-                    Text {
-                        width: 100%; height: 100%;
-                        text: model.user-sign-out-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                TouchButton {
+                    text: model.user-sign-out-label;
+                    size: ControlSize.sm;
+                    clicked => { root.user-sign-out(); }
                 }
             }
 
@@ -252,14 +165,14 @@ export component ProcessesView inherits Rectangle {
             VerticalLayout {
                 // Header
                 Rectangle {
-                    height: 28px;
+                    height: Theme.control-sm;
                     background: Theme.surface-raised;
                     HorizontalLayout {
                         padding-left: 8px;
                         padding-right: 8px;
                         spacing: 8px;
                         Rectangle {
-                            min-width: 160px; horizontal-stretch: 2; height: 28px;
+                            min-width: 160px; horizontal-stretch: 2; height: Theme.control-sm;
                             TouchArea { clicked => { root.sort-column-clicked(0); } }
                             Text {
                                 text: model.col-name-label + (model.sort-column == 0 ? (model.sort-descending ? " ↓" : " ↑") : "");
@@ -269,7 +182,7 @@ export component ProcessesView inherits Rectangle {
                             }
                         }
                         Rectangle {
-                            width: 64px; height: 28px;
+                            width: 64px; height: Theme.control-sm;
                             TouchArea { clicked => { root.sort-column-clicked(1); } }
                             Text {
                                 text: model.col-pid-label + (model.sort-column == 1 ? (model.sort-descending ? " ↓" : " ↑") : "");
@@ -279,7 +192,7 @@ export component ProcessesView inherits Rectangle {
                             }
                         }
                         Rectangle {
-                            width: 56px; height: 28px;
+                            width: 56px; height: Theme.control-sm;
                             TouchArea { clicked => { root.sort-column-clicked(2); } }
                             Text {
                                 text: model.col-cpu-label + (model.sort-column == 2 ? (model.sort-descending ? " ↓" : " ↑") : "");
@@ -290,7 +203,7 @@ export component ProcessesView inherits Rectangle {
                             }
                         }
                         Rectangle {
-                            width: 80px; height: 28px;
+                            width: 80px; height: Theme.control-sm;
                             TouchArea { clicked => { root.sort-column-clicked(3); } }
                             Text {
                                 text: model.col-memory-label + (model.sort-column == 3 ? (model.sort-descending ? " ↓" : " ↑") : "");
@@ -301,7 +214,7 @@ export component ProcessesView inherits Rectangle {
                             }
                         }
                         Rectangle {
-                            width: 120px; height: 28px;
+                            width: 120px; height: Theme.control-sm;
                             TouchArea { clicked => { root.sort-column-clicked(4); } }
                             Text {
                                 text: model.col-io-label + (model.sort-column == 4 ? (model.sort-descending ? " ↓" : " ↑") : "");
@@ -311,7 +224,7 @@ export component ProcessesView inherits Rectangle {
                             }
                         }
                         Rectangle {
-                            width: 100px; height: 28px;
+                            width: 100px; height: Theme.control-sm;
                             TouchArea { clicked => { root.sort-column-clicked(5); } }
                             Text {
                                 text: model.col-user-label + (model.sort-column == 5 ? (model.sort-descending ? " ↓" : " ↑") : "");
@@ -328,13 +241,24 @@ export component ProcessesView inherits Rectangle {
                 ListView {
                     vertical-stretch: 1;
                     for row[i] in model.processes : Rectangle {
-                        height: 26px;
+                        height: Theme.row-height;
                         width: parent.width;
-                        background: row.is-group-header ? Theme.surface-raised
-                            : (row.pid == model.selected-pid ? Theme.surface-raised
-                            : transparent);
+                        background: row.is-group-header ? Theme.surface-sunken
+                            : row.pid == model.selected-pid ? Theme.state-selected
+                            : row-ta.has-hover ? Theme.state-hover
+                            : Colors.transparent;
 
-                        TouchArea {
+                        animate background { duration: Theme.motion-instant; easing: ease-out; }
+
+                        // Accent rail on the selected process.
+                        if row.pid == model.selected-pid && !row.is-group-header : Rectangle {
+                            x: 0;
+                            width: Theme.indicator-thickness;
+                            height: parent.height;
+                            background: Theme.accent-brand;
+                        }
+
+                        row-ta := TouchArea {
                             clicked => {
                                 if (!row.is-group-header) {
                                     root.process-clicked(row.pid);
@@ -432,9 +356,14 @@ export component ProcessesView inherits Rectangle {
             svc-list := VerticalLayout {
                 spacing: 0;
                 for row[i] in model.services : Rectangle {
-                    height: 28px;
-                    background: row.name == model.selected-service ? Theme.surface-raised : transparent;
-                    TouchArea { clicked => { root.service-clicked(row.name); } }
+                    height: Theme.row-height;
+                    background: row.name == model.selected-service ? Theme.state-selected
+                        : svc-ta.has-hover ? Theme.state-hover
+                        : Colors.transparent;
+
+                    animate background { duration: Theme.motion-instant; easing: ease-out; }
+
+                    svc-ta := TouchArea { clicked => { root.service-clicked(row.name); } }
                     HorizontalLayout {
                         padding-left: 8px; padding-right: 8px; spacing: 8px;
                         Text {
@@ -527,9 +456,14 @@ export component ProcessesView inherits Rectangle {
             user-list := VerticalLayout {
                 spacing: 0;
                 for row[i] in model.users : Rectangle {
-                    height: 28px;
-                    background: row.session-id == model.selected-session ? Theme.surface-raised : transparent;
-                    TouchArea { clicked => { root.user-clicked(row.session-id); } }
+                    height: Theme.row-height;
+                    background: row.session-id == model.selected-session ? Theme.state-selected
+                        : user-ta.has-hover ? Theme.state-hover
+                        : Colors.transparent;
+
+                    animate background { duration: Theme.motion-instant; easing: ease-out; }
+
+                    user-ta := TouchArea { clicked => { root.user-clicked(row.session-id); } }
                     HorizontalLayout {
                         padding-left: 8px; padding-right: 8px; spacing: 8px;
                         Text {
@@ -595,7 +529,7 @@ export component ProcessesView inherits Rectangle {
             padding: 4px;
             spacing: 2px;
             Rectangle {
-                height: 28px;
+                height: Theme.control-sm;
                 TouchArea { clicked => { root.end-task(); } }
                 Text {
                     x: 8px; height: 100%;
@@ -606,7 +540,7 @@ export component ProcessesView inherits Rectangle {
                 }
             }
             Rectangle {
-                height: 28px;
+                height: Theme.control-sm;
                 TouchArea { clicked => { root.end-tree(); } }
                 Text {
                     x: 8px; height: 100%;
@@ -617,7 +551,7 @@ export component ProcessesView inherits Rectangle {
                 }
             }
             Rectangle {
-                height: 28px;
+                height: Theme.control-sm;
                 TouchArea { clicked => { root.open-location(); } }
                 Text {
                     x: 8px; height: 100%;
@@ -628,7 +562,7 @@ export component ProcessesView inherits Rectangle {
                 }
             }
             Rectangle {
-                height: 28px;
+                height: Theme.control-sm;
                 TouchArea { clicked => { root.copy-pid(); } }
                 Text {
                     x: 8px; height: 100%;
@@ -639,7 +573,7 @@ export component ProcessesView inherits Rectangle {
                 }
             }
             Rectangle {
-                height: 28px;
+                height: Theme.control-sm;
                 TouchArea { clicked => { root.copy-path(); } }
                 Text {
                     x: 8px; height: 100%;

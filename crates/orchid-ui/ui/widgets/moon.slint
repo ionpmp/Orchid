@@ -1,4 +1,5 @@
 import { Theme } from "../theme_global.slint";
+import { Divider, Tooltip } from "../kit.slint";
 import { MoonModel } from "../workspace/defs.slint";
 
 /// Geometric moon disk. Lit face + offset shade circle (clipped) yields the phase.
@@ -6,7 +7,7 @@ component MoonPhaseDisk inherits Rectangle {
     in property <string> phase-icon;
     in property <float> illumination-fraction;
 
-    private property <length> disk: 72px;
+    private property <length> disk: 116px;
     private property <float> frac: max(0.0, min(1.0, illumination-fraction));
     private property <bool> waxing:
         phase-icon == "moon-new" ||
@@ -24,14 +25,24 @@ component MoonPhaseDisk inherits Rectangle {
     width: disk;
     height: disk;
 
+    // Halo so the disk reads as a light source, not a flat circle.
+    Rectangle {
+        width: disk;
+        height: disk;
+        border-radius: disk / 2;
+        background: Colors.transparent;
+        drop-shadow-blur: Theme.elev-glow-blur;
+        drop-shadow-color: moon-lit.with-alpha(0.35 * frac);
+    }
+
     Rectangle {
         width: disk;
         height: disk;
         border-radius: disk / 2;
         clip: true;
         background: moon-lit;
-        border-width: 1px;
-        border-color: Theme.border-default;
+        border-width: Theme.hairline;
+        border-color: Theme.border-strong;
 
         // Soft maria under the shade so only the lit face shows them.
         if frac > 0.25 : Rectangle {
@@ -69,63 +80,76 @@ export component MoonView inherits Rectangle {
     background: transparent;
 
     VerticalLayout {
-        padding: 16px;
-        spacing: 12px;
+        padding: Theme.space-4;
+        spacing: Theme.space-3;
         alignment: start;
 
-        if model.phase-icon != "" : HorizontalLayout {
-            alignment: center;
-            MoonPhaseDisk {
-                phase-icon: model.phase-icon;
-                illumination-fraction: model.illumination-fraction;
+        // Night-sky stage for the disk.
+        Rectangle {
+            background: Theme.gradient-glass;
+            border-radius: Theme.radius-xl;
+            border-width: Theme.hairline;
+            border-color: Theme.border-subtle;
+            clip: true;
+
+            Rectangle {
+                width: 100%;
+                height: 100%;
+                background: Theme.gradient-hero;
+            }
+
+            VerticalLayout {
+                padding: Theme.space-4;
+                spacing: Theme.space-2;
+                alignment: center;
+
+                if model.phase-icon != "" : HorizontalLayout {
+                    alignment: center;
+                    MoonPhaseDisk {
+                        phase-icon: model.phase-icon;
+                        illumination-fraction: model.illumination-fraction;
+                    }
+                }
+
+                Text {
+                    text: model.phase-label;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-xl;
+                    font-weight: Theme.weight-bold;
+                    horizontal-alignment: center;
+                }
+
+                Text {
+                    text: model.illumination;
+                    color: Theme.accent-brand;
+                    font-size: Theme.font-size-md;
+                    font-weight: Theme.weight-medium;
+                    horizontal-alignment: center;
+                }
             }
         }
 
-        Text {
-            text: model.phase-label;
-            color: Theme.text-primary;
-            font-size: Theme.font-size-lg;
-            font-weight: Theme.weight-semibold;
-            horizontal-alignment: center;
-        }
-
-        Text {
-            text: model.illumination;
-            color: Theme.accent-brand;
-            font-size: Theme.font-size-md;
-            horizontal-alignment: center;
-        }
-
-        Rectangle {
-            height: 1px;
-            background: Theme.border-default;
-            horizontal-stretch: 1;
-        }
+        Divider { }
 
         for entry[i] in model.values : Rectangle {
-            height: 22px;
+            height: Theme.control-sm;
+            border-radius: Theme.radius-sm;
+            background: moon-val-ta.has-hover ? Theme.state-hover : Colors.transparent;
+            animate background { duration: Theme.motion-fast; easing: ease-out; }
 
             moon-val-ta := TouchArea { }
-            if moon-val-ta.has-hover && (entry.label != "" || entry.value != "") : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: moon-val-hint.preferred-width + 12px;
-                height: moon-val-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                moon-val-hint := Text {
-                    x: 6px; y: 3px;
-                    text: entry.label + ": " + entry.value;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
+
+            Tooltip {
+                x: 0;
+                y: parent.height + Theme.space-1;
+                shown: moon-val-ta.has-hover && (entry.label != "" || entry.value != "");
+                text: entry.label + ": " + entry.value;
             }
 
             HorizontalLayout {
-                spacing: 8px;
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
+                spacing: Theme.space-2;
                 alignment: space-between;
                 width: 100%;
                 height: 100%;
@@ -144,6 +168,7 @@ export component MoonView inherits Rectangle {
                     text: entry.value;
                     color: Theme.text-primary;
                     font-size: Theme.font-size-sm;
+                    font-weight: Theme.weight-medium;
                     vertical-alignment: center;
                     horizontal-alignment: right;
                     wrap: no-wrap;

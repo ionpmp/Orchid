@@ -1,4 +1,6 @@
 import { Theme } from "../theme_global.slint";
+import { ControlSize, IconButton } from "../kit.slint";
+import { Icon } from "../kit-icons.slint";
 import { VideoPlayerModel } from "../workspace/defs.slint";
 import { SearchField } from "search-field.slint";
 
@@ -160,25 +162,30 @@ export component VideoPlayerView inherits Rectangle {
                 overflow: elide;
             }
 
-            TouchArea {
-                height: 10px;
+            // Seek strip: thin rail, finger-sized hit area, thickens on hover.
+            seek-ta := TouchArea {
+                height: Theme.control-xs;
                 width: 100%;
+                mouse-cursor: MouseCursor.pointer;
                 clicked => {
                     if self.width > 0 {
                         root.command("seek-frac:" + (self.mouse-x / self.width));
                     }
                 }
                 Rectangle {
-                    height: 4px;
+                    height: seek-ta.has-hover ? Theme.track-height-lg : Theme.track-height;
                     y: (parent.height - self.height) / 2;
                     width: 100%;
-                    background: Theme.surface-raised;
-                    border-radius: 2px;
+                    background: Theme.surface-sunken;
+                    border-radius: self.height / 2;
+
+                    animate height { duration: Theme.motion-fast; easing: ease-out; }
+
                     Rectangle {
                         height: 100%;
                         width: parent.width * root.model.progress;
-                        background: Theme.accent-brand;
-                        border-radius: 2px;
+                        background: Theme.gradient-accent;
+                        border-radius: self.height / 2;
                     }
                 }
             }
@@ -199,66 +206,59 @@ export component VideoPlayerView inherits Rectangle {
             }
 
             HorizontalLayout {
-                spacing: 6px;
+                spacing: Theme.space-2;
                 alignment: center;
 
-                TouchArea {
-                    width: 32px; height: 28px;
+                IconButton {
+                    icon: "skip-prev";
+                    size: ControlSize.md;
                     clicked => { root.command("prev"); }
-                    Text { text: "|◀"; color: Theme.text-secondary; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
                 }
-                TouchArea {
-                    width: 40px; height: 32px;
-                    clicked => { root.command("play-pause"); }
-                    Rectangle {
-                        background: Theme.accent-brand;
-                        border-radius: Theme.radius-md;
-                        Text {
-                            text: root.model.is-playing ? "❚❚" : "▶";
-                            color: white;
-                            font-size: 12px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                // Play is the hero control: bigger, filled, glowing.
+                Rectangle {
+                    width: Theme.control-lg;
+                    height: Theme.control-lg;
+                    border-radius: self.width / 2;
+                    background: Theme.gradient-accent;
+                    drop-shadow-blur: play-ta.has-hover ? Theme.elev-glow-blur : Theme.elev-1-blur;
+                    drop-shadow-color: Theme.accent-glow;
+
+                    animate drop-shadow-blur { duration: Theme.motion-fast; easing: ease-out; }
+
+                    play-ta := TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
+                        clicked => { root.command("play-pause"); }
+                    }
+                    Icon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        name: root.model.is-playing ? "pause" : "play";
+                        size: Theme.font-size-2xl;
+                        tint: Theme.accent-contrast;
                     }
                 }
-                TouchArea {
-                    width: 32px; height: 28px;
+                IconButton {
+                    icon: "skip-next";
+                    size: ControlSize.md;
                     clicked => { root.command("next"); }
-                    Text { text: "▶|"; color: Theme.text-secondary; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
                 }
-                TouchArea {
-                    width: 36px; height: 28px;
+                IconButton {
+                    icon: "shuffle";
+                    size: ControlSize.sm;
+                    active: root.model.shuffle;
                     clicked => { root.command("shuffle"); }
-                    Text {
-                        text: "⇄";
-                        color: root.model.shuffle ? Theme.accent-brand : Theme.text-tertiary;
-                        font-size: 14px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
                 }
-                TouchArea {
-                    width: 36px; height: 28px;
+                IconButton {
+                    icon: root.model.repeat == 2 ? "repeat-one" : "repeat";
+                    size: ControlSize.sm;
+                    active: root.model.repeat > 0;
                     clicked => { root.command("repeat"); }
-                    Text {
-                        text: root.model.repeat == 2 ? "1" : "↻";
-                        color: root.model.repeat > 0 ? Theme.accent-brand : Theme.text-tertiary;
-                        font-size: 14px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
                 }
-                TouchArea {
-                    width: 36px; height: 28px;
+                IconButton {
+                    icon: root.model.muted ? "volume-off" : "volume";
+                    size: ControlSize.sm;
+                    active: root.model.muted;
                     clicked => { root.command("mute"); }
-                    Text {
-                        text: root.model.muted ? "M" : "V";
-                        color: Theme.text-secondary;
-                        font-size: 12px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
                 }
                 if root.model.speed-label != "" : Text {
                     text: root.model.speed-label;

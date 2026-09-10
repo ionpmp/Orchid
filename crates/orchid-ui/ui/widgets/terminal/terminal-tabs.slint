@@ -1,4 +1,5 @@
 import { Theme } from "../../theme_global.slint";
+import { ControlSize, IconButton, Tooltip } from "../../kit.slint";
 import { Strings } from "../../strings_global.slint";
 import { TerminalTabModel } from "../../workspace/defs.slint";
 
@@ -12,211 +13,101 @@ export component TerminalTabs inherits Rectangle {
     callback split-horizontal();
     callback split-vertical();
 
-    height: 29px;
-    background: Theme.surface-raised;
+    height: Theme.toolbar-height;
+    background: Theme.surface-sunken;
+
+    Rectangle {
+        y: parent.height - Theme.hairline;
+        width: 100%;
+        height: Theme.hairline;
+        background: Theme.border-subtle;
+    }
 
     HorizontalLayout {
-        padding: 2px;
-        spacing: 2px;
+        padding: Theme.space-1;
+        spacing: Theme.space-1;
 
         for tab[i] in tabs : Rectangle {
-            width: 140px;
-            height: 25px;
-            background: i == active-tab ? Theme.surface-base : transparent;
+            width: 170px;
+            background: i == active-tab ? Theme.surface-raised
+                : tab-ta.has-hover ? Theme.state-hover
+                : Colors.transparent;
             border-radius: Theme.radius-md;
-            border-width: i == active-tab ? 1px : 0px;
-            border-color: i == active-tab ? Theme.accent-brand : transparent;
+
+            animate background { duration: Theme.motion-fast; easing: ease-out; }
 
             tab-ta := TouchArea {
+                mouse-cursor: MouseCursor.pointer;
                 clicked => { root.tab-clicked(i); }
             }
-            if tab-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: tab-hint.preferred-width + 12px;
-                height: tab-hint.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-                tab-hint := Text {
-                    x: 6px; y: 3px;
-                    text: tab.title;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
+
+            Tooltip {
+                x: 0;
+                y: parent.height + Theme.space-1;
+                shown: tab-ta.has-hover;
+                text: tab.title;
+            }
+
+            if i == active-tab : Rectangle {
+                y: parent.height - self.height - Theme.space-1;
+                x: Theme.space-3;
+                width: parent.width - Theme.space-6;
+                height: Theme.indicator-thickness;
+                border-radius: Theme.radius-pill;
+                background: Theme.accent-brand;
             }
 
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 4px;
-                spacing: 4px;
+                padding-left: Theme.space-3;
+                padding-right: Theme.space-1;
+                spacing: Theme.space-1;
 
                 Text {
                     text: tab.title;
-                    color: i == active-tab ? Theme.accent-brand : Theme.text-secondary;
+                    color: i == active-tab ? Theme.text-primary : Theme.text-secondary;
                     font-size: Theme.font-size-sm;
+                    font-weight: i == active-tab ? Theme.weight-semibold : Theme.weight-regular;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                     wrap: no-wrap;
                     overflow: elide;
                 }
 
-                Rectangle {
-                    width: 18px;
-                    height: 18px;
+                IconButton {
+                    icon: "close";
+                    size: ControlSize.xs;
                     y: (parent.height - self.height) / 2;
-                    background: close-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: 9px;
-
-                    close-ta := TouchArea {
-                        clicked => { root.tab-closed(i); }
-                    }
-                    if close-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: close-hint.preferred-width + 12px;
-                        height: close-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        close-hint := Text {
-                            x: 6px; y: 3px;
-                            text: Strings.terminal-tooltip-tab-close;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-
-                    Text {
-                        text: "×";
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                    tooltip: Strings.terminal-tooltip-tab-close;
+                    clicked => { root.tab-closed(i); }
                 }
             }
         }
 
-        Rectangle {
-            width: 28px;
-            height: 25px;
-            background: split-h-ta.has-hover ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
-
-            split-h-ta := TouchArea {
-                clicked => { root.split-horizontal(); }
-            }
-
-            if split-h-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: hint-h.preferred-width + 12px;
-                height: hint-h.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-
-                hint-h := Text {
-                    x: 6px;
-                    y: 3px;
-                    text: Strings.terminal-tooltip-split-h;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
-            }
-
-            Text {
-                text: "▥";
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
+        IconButton {
+            icon: "grid";
+            size: ControlSize.sm;
+            y: (parent.height - self.height) / 2;
+            tooltip: Strings.terminal-tooltip-split-h;
+            tooltip-flip: true;
+            clicked => { root.split-horizontal(); }
         }
 
-        Rectangle {
-            width: 28px;
-            height: 25px;
-            background: split-v-ta.has-hover ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
-
-            split-v-ta := TouchArea {
-                clicked => { root.split-vertical(); }
-            }
-
-            if split-v-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: hint-v.preferred-width + 12px;
-                height: hint-v.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-
-                hint-v := Text {
-                    x: 6px;
-                    y: 3px;
-                    text: Strings.terminal-tooltip-split-v;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
-            }
-
-            Text {
-                text: "▤";
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
+        IconButton {
+            icon: "layers";
+            size: ControlSize.sm;
+            y: (parent.height - self.height) / 2;
+            tooltip: Strings.terminal-tooltip-split-v;
+            tooltip-flip: true;
+            clicked => { root.split-vertical(); }
         }
 
-        Rectangle {
-            width: 28px;
-            height: 25px;
-            background: new-ta.has-hover ? Theme.surface-base : transparent;
-            border-radius: Theme.radius-md;
-
-            new-ta := TouchArea {
-                clicked => { root.tab-new(); }
-            }
-
-            if new-ta.has-hover : Rectangle {
-                x: parent.x;
-                y: parent.height + 2px;
-                width: hint-n.preferred-width + 12px;
-                height: hint-n.preferred-height + 6px;
-                background: Theme.surface-raised;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-                z: 100;
-
-                hint-n := Text {
-                    x: 6px;
-                    y: 3px;
-                    text: Strings.terminal-tooltip-tab-new;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                }
-            }
-
-            Text {
-                text: "+";
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-md;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
+        IconButton {
+            icon: "plus";
+            size: ControlSize.sm;
+            y: (parent.height - self.height) / 2;
+            tooltip: Strings.terminal-tooltip-tab-new;
+            tooltip-flip: true;
+            clicked => { root.tab-new(); }
         }
     }
 }
