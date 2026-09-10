@@ -1541,6 +1541,16 @@ impl FileManagerInner {
 
     async fn hydrate_entries_metadata(&self, entries: &mut [orchid_fs::FsEntry]) {
         for e in entries.iter_mut() {
+            // Local FindFirstFile / rclone `lsjson` already filled kind, size,
+            // mtime, and often mime. Re-statting every row (especially over
+            // the network) was a sequential round-trip storm after each list.
+            // Only fill gaps left by virtual folders / catalog paths.
+            if matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory) {
+                continue;
+            }
+            if e.metadata.modified.is_some() || e.metadata.mime.is_some() {
+                continue;
+            }
             let Some(provider) = self.deps.registry.for_path(&e.path) else {
                 continue;
             };
@@ -5241,14 +5251,17 @@ pub async fn add_tag_to_paths(
         return Err(WidgetError::InvalidStateForOperation("fm-empty-tag".into()));
     }
     let inner = live_inner(instance_id)?;
-    for p in paths {
-        let fp = orchid_fs::FsPath::new(&p).map_err(map_fs_error)?;
-        inner
-            .deps
-            .tag_manager
-            .add_tag(&fp, trimmed)
-            .map_err(map_fs_error)?;
-    }
+    let fps: Result<Vec<_>, _> = paths
+        .iter()
+        .map(|p| orchid_fs::FsPath::new(p).map_err(map_fs_error))
+        .collect();
+    let fps = fps?;
+    let refs: Vec<&orchid_fs::FsPath> = fps.iter().collect();
+    inner
+        .deps
+        .tag_manager
+        .add_tag_many(&refs, trimmed)
+        .map_err(map_fs_error)?;
     inner.refresh_all_tabs().await;
     Ok(())
 }
