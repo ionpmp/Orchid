@@ -340,26 +340,73 @@ impl MainWindowController {
                     panes.set_row_data(i, pane);
                 }
             }
-            let (tabs, active) = build_terminal_tab_models(t);
-            row.terminal_tabs = tabs;
-            row.terminal_active_tab = active;
-            row.terminal_dividers = build_terminal_divider_models(t);
-            row.terminal_cols = i32::from(t.cols);
-            row.terminal_rows = i32::from(t.rows);
-            row.terminal_cursor_col = i32::from(t.cursor_col);
-            row.terminal_cursor_row = i32::from(t.cursor_row);
-            row.terminal_cursor_visible = t.cursor_visible;
-            row.title = ws.title.clone().into();
+            // Pane pixels/cursors were already written into the shared
+            // `terminal_panes` VecModel. Only rewrite the frame row when
+            // chrome that lives on the frame itself changes — otherwise a
+            // PTY tick remounts the tab strip and divider overlay.
+            let mut need_frame = false;
+            let title: SharedString = ws.title.clone().into();
+            if row.title != title {
+                row.title = title;
+                need_frame = true;
+            }
             if let Some(b) = bounds {
-                row.x = b.x;
-                row.y = b.y;
-                row.width = b.width;
-                row.height = b.height;
+                if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
+                    row.x = b.x;
+                    row.y = b.y;
+                    row.width = b.width;
+                    row.height = b.height;
+                    need_frame = true;
+                }
             }
             if let Some(z) = z_order {
-                row.z_order = z;
+                if row.z_order != z {
+                    row.z_order = z;
+                    need_frame = true;
+                }
             }
-            v.set_row_data(r, row);
+            let cols = i32::from(t.cols);
+            let rows = i32::from(t.rows);
+            let cursor_col = i32::from(t.cursor_col);
+            let cursor_row = i32::from(t.cursor_row);
+            if row.terminal_cols != cols
+                || row.terminal_rows != rows
+                || row.terminal_cursor_col != cursor_col
+                || row.terminal_cursor_row != cursor_row
+                || row.terminal_cursor_visible != t.cursor_visible
+            {
+                row.terminal_cols = cols;
+                row.terminal_rows = rows;
+                row.terminal_cursor_col = cursor_col;
+                row.terminal_cursor_row = cursor_row;
+                row.terminal_cursor_visible = t.cursor_visible;
+                need_frame = true;
+            }
+            // Tab strip / divider topology can change without a chrome
+            // scalar flipping (new split, rename). Rebuild only when we
+            // already owe a frame write, or when the active tab / count
+            // no longer match.
+            let (tabs, active) = build_terminal_tab_models(t);
+            let tab_count = tabs
+                .as_any()
+                .downcast_ref::<VecModel<crate::slint_generated::TerminalTabModel>>()
+                .map(|m| m.row_count())
+                .unwrap_or(0);
+            let old_tab_count = row
+                .terminal_tabs
+                .as_any()
+                .downcast_ref::<VecModel<crate::slint_generated::TerminalTabModel>>()
+                .map(|m| m.row_count())
+                .unwrap_or(0);
+            if tab_count != old_tab_count || row.terminal_active_tab != active {
+                need_frame = true;
+            }
+            if need_frame {
+                row.terminal_tabs = tabs;
+                row.terminal_active_tab = active;
+                row.terminal_dividers = build_terminal_divider_models(t);
+                v.set_row_data(r, row);
+            }
             return true;
         }
         false
@@ -492,8 +539,8 @@ impl MainWindowController {
                 row.title = title;
                 need_frame = true;
             }
-            let (group_id, group_tabs) = self.build_group_tab_models(id);
             if need_frame {
+                let (group_id, group_tabs) = self.build_group_tab_models(id);
                 row.group_id = group_id;
                 row.group_tabs = group_tabs;
                 v.set_row_data(r, row);
@@ -617,23 +664,42 @@ impl MainWindowController {
             if row.instance_id.as_str() != needle.as_str() {
                 continue;
             }
+            // Nested viewer ModelRcs are Arc-shared with the live row, so
+            // patching them here is already visible without set_row_data.
+            patch_viewer_model(&mut row.viewer, vp, &self.locale);
+            self.sync_html_webview_document(id, &vp.snapshot);
+
+            let mut need_frame = false;
             if let Some(b) = bounds {
-                row.x = b.x;
-                row.y = b.y;
-                row.width = b.width;
-                row.height = b.height;
+                if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
+                    row.x = b.x;
+                    row.y = b.y;
+                    row.width = b.width;
+                    row.height = b.height;
+                    need_frame = true;
+                }
             }
             if let Some(z) = z_order {
-                row.z_order = z;
+                if row.z_order != z {
+                    row.z_order = z;
+                    need_frame = true;
+                }
             }
-            row.is_floating = is_floating;
-            row.title = ws.title.clone().into();
-            patch_viewer_model(&mut row.viewer, vp, &self.locale);
-            let (group_id, group_tabs) = self.build_group_tab_models(id);
-            row.group_id = group_id;
-            row.group_tabs = group_tabs;
-            v.set_row_data(r, row);
-            self.sync_html_webview_document(id, &vp.snapshot);
+            if row.is_floating != is_floating {
+                row.is_floating = is_floating;
+                need_frame = true;
+            }
+            let title: SharedString = ws.title.clone().into();
+            if row.title != title {
+                row.title = title;
+                need_frame = true;
+            }
+            if need_frame {
+                let (group_id, group_tabs) = self.build_group_tab_models(id);
+                row.group_id = group_id;
+                row.group_tabs = group_tabs;
+                v.set_row_data(r, row);
+            }
             return true;
         }
         false
@@ -764,20 +830,37 @@ impl MainWindowController {
             if !patched {
                 return false;
             }
+            // Nested content ModelRcs are Arc-shared; only rewrite the frame
+            // when chrome scalars change. Group-tab rebuild is deferred to
+            // that same write so every content tick does not remount the
+            // tab strip.
+            let mut need_frame = false;
             if let Some(b) = bounds {
-                row.x = b.x;
-                row.y = b.y;
-                row.width = b.width;
-                row.height = b.height;
+                if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
+                    row.x = b.x;
+                    row.y = b.y;
+                    row.width = b.width;
+                    row.height = b.height;
+                    need_frame = true;
+                }
             }
             if let Some(z) = z_order {
-                row.z_order = z;
+                if row.z_order != z {
+                    row.z_order = z;
+                    need_frame = true;
+                }
             }
-            row.title = ws.title.clone().into();
-            let (group_id, group_tabs) = self.build_group_tab_models(id);
-            row.group_id = group_id;
-            row.group_tabs = group_tabs;
-            v.set_row_data(r, row);
+            let title: SharedString = ws.title.clone().into();
+            if row.title != title {
+                row.title = title;
+                need_frame = true;
+            }
+            if need_frame {
+                let (group_id, group_tabs) = self.build_group_tab_models(id);
+                row.group_id = group_id;
+                row.group_tabs = group_tabs;
+                v.set_row_data(r, row);
+            }
             if type_id == orchid_widgets::builtin::browser::TYPE_ID {
                 super::html_embed::sync_browser_from_cache(self, id);
             }
@@ -1632,11 +1715,21 @@ impl MainWindowController {
         &self,
         instance_id: Uuid,
     ) -> (SharedString, ModelRc<crate::slint_generated::GroupTabModel>) {
+        // One empty model identity for every ungrouped widget so a content
+        // tick that rebuilds chrome does not remount the group-tab repeater.
+        fn empty_tabs() -> ModelRc<crate::slint_generated::GroupTabModel> {
+            use std::sync::OnceLock;
+            static EMPTY: OnceLock<ModelRc<crate::slint_generated::GroupTabModel>> = OnceLock::new();
+            EMPTY
+                .get_or_init(|| ModelRc::new(VecModel::default()))
+                .clone()
+        }
+
         let Some(group) = self.group_manager.find_for_instance(instance_id) else {
-            return (SharedString::default(), ModelRc::new(VecModel::default()));
+            return (SharedString::default(), empty_tabs());
         };
         if group.members.len() < 2 {
-            return (SharedString::default(), ModelRc::new(VecModel::default()));
+            return (SharedString::default(), empty_tabs());
         }
         let active = group.active_instance();
         let cache = self.widget_manager.snapshot_cache();
