@@ -70,13 +70,13 @@ export global Theme {
     /// Translucent panel fill for glass chrome stacked over content.
     out property <color> surface-glass: is-dark
         ? surface-raised.brighter(0.2).with-alpha(0.72)
-        : surface-raised.with-alpha(0.78);
+        : surface-raised.with-alpha(0.9);
     /// Heavier glass for toolbars that sit directly on media.
     out property <color> surface-glass-strong: is-dark
         ? surface-base.with-alpha(0.9)
-        : surface-raised.with-alpha(0.92);
+        : surface-raised.with-alpha(0.96);
     /// Modal backdrop.
-    out property <color> scrim: is-dark ? #00000099 : #1A1B2266;
+    out property <color> scrim: is-dark ? #00000099 : #1A1B228F;
 
     // ----- Interaction states ---------------------------------------------
     out property <color> state-hover: is-dark
@@ -85,14 +85,14 @@ export global Theme {
     out property <color> state-press: is-dark
         ? text-primary.with-alpha(0.14)
         : text-primary.with-alpha(0.11);
-    out property <color> state-selected: accent-brand.with-alpha(is-dark ? 0.22 : 0.16);
+    out property <color> state-selected: accent-brand.with-alpha(is-dark ? 0.22 : 0.18);
     out property <color> state-disabled: text-primary.with-alpha(0.05);
 
     // ----- Accent ramp -----------------------------------------------------
     /// Tinted background for accented chips, active tabs, selected rows.
-    out property <color> accent-soft: accent-brand.with-alpha(is-dark ? 0.18 : 0.14);
+    out property <color> accent-soft: accent-brand.with-alpha(is-dark ? 0.18 : 0.16);
     /// Slightly stronger tint for hovered accent surfaces.
-    out property <color> accent-soft-strong: accent-brand.with-alpha(is-dark ? 0.3 : 0.24);
+    out property <color> accent-soft-strong: accent-brand.with-alpha(is-dark ? 0.3 : 0.28);
     /// Pressed / emphasised solid accent.
     out property <color> accent-strong: is-dark
         ? accent-brand.brighter(0.15)
@@ -107,7 +107,7 @@ export global Theme {
     /// gets paper — regardless of whether the theme is dark or light.
     out property <color> accent-contrast: accent-luma > 0.62 ? #0E0F14 : #FFFFFF;
     /// Bloom colour used for accent drop shadows.
-    out property <color> accent-glow: accent-brand.with-alpha(is-dark ? 0.45 : 0.28);
+    out property <color> accent-glow: accent-brand.with-alpha(is-dark ? 0.45 : 0.34);
     /// Complementary hue for two-stop cinematic gradients.
     out property <color> accent-secondary: is-dark ? #4EA8DE : #2C7BE5;
 
@@ -129,12 +129,14 @@ export global Theme {
 
     // ----- Borders ---------------------------------------------------------
     out property <color> border-subtle: border-default.with-alpha(0.5);
-    out property <color> border-strong: is-dark
-        ? text-primary.with-alpha(0.22)
-        : text-primary.with-alpha(0.18);
+    out property <color> border-strong: text-primary.with-alpha(0.22);
     out property <color> border-focus: accent-brand;
     /// Top highlight that gives glass panels their lit edge.
-    out property <color> border-highlight: is-dark ? #FFFFFF1F : #FFFFFFCC;
+    /// Light themes sit near the white ceiling, so a white specular vanishes —
+    /// use a soft ink sheen so GlassCard / chrome edges still read.
+    out property <color> border-highlight: is-dark
+        ? #FFFFFF1F
+        : text-primary.with-alpha(0.1);
 
     // ----- Typography ------------------------------------------------------
     out property <length> font-size-xs: max(9px, font-size-sm * 0.85);
@@ -195,8 +197,8 @@ export global Theme {
     out property <length> track-height-lg: 9px;
 
     // ----- Elevation -------------------------------------------------------
-    out property <color> shadow-ambient: is-dark ? #00000073 : #1A1B2226;
-    out property <color> shadow-key: is-dark ? #000000A6 : #1A1B2233;
+    out property <color> shadow-ambient: is-dark ? #00000073 : #1A1B2238;
+    out property <color> shadow-key: is-dark ? #000000A6 : #1A1B2252;
     out property <length> elev-1-blur: reduce-motion ? 0px : 10px;
     out property <length> elev-1-y: reduce-motion ? 0px : 2px;
     out property <length> elev-2-blur: reduce-motion ? 0px : 24px;
@@ -223,16 +225,18 @@ export global Theme {
         surface-base.darker(is-dark ? 0.25 : 0.05) 100%
     );
     /// Lit glass panel: brighter at the top edge, like a backlit screen.
+    /// Light themes can't climb past pure paper, so they get a soft top-to-
+    /// bottom darken instead of a no-op `brighter()` on white.
     out property <brush> gradient-glass: @linear-gradient(
         180deg,
-        surface-raised.brighter(is-dark ? 0.22 : 0.5).with-alpha(0.95) 0%,
-        surface-raised.with-alpha(is-dark ? 0.82 : 0.92) 100%
+        surface-raised.brighter(is-dark ? 0.22 : 0.0).with-alpha(is-dark ? 0.95 : 0.98) 0%,
+        surface-raised.darker(is-dark ? 0.0 : 0.03).with-alpha(is-dark ? 0.82 : 0.94) 100%
     );
     /// Chrome bars (widget headers, toolbars).
     out property <brush> gradient-chrome: @linear-gradient(
         180deg,
-        surface-raised.brighter(is-dark ? 0.3 : 0.4) 0%,
-        surface-raised.darker(is-dark ? 0.08 : 0.03) 100%
+        surface-raised.brighter(is-dark ? 0.3 : 0.02) 0%,
+        surface-raised.darker(is-dark ? 0.08 : 0.045) 100%
     );
     /// Primary call-to-action fill.
     out property <brush> gradient-accent: @linear-gradient(
@@ -263,6 +267,6 @@ export global Theme {
     out property <brush> gradient-edge-highlight: @linear-gradient(
         180deg,
         border-highlight 0%,
-        #FFFFFF00 100%
+        border-highlight.with-alpha(0.0) 100%
     );
 }

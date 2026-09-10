@@ -603,6 +603,9 @@ release yet.
   `touch()` widgets that are already Active.
 
 ### Fixed
+- Cinema design tokens on light themes: glass / scrim / shadow alphas and
+  ink-based edge highlights so panels, modals, and GlassCard edges stay
+  readable on paper (orchid-light bases tightened for the same contrast).
 - File-manager listings stop scrolling past the last entry: the list and grid
   derive their scroll extent from the rows / tiles they lay out instead of the
   backend's content height, which is computed from the last reported pane width

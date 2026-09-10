@@ -48,13 +48,17 @@ pub fn orchid_light_theme() -> Theme {
             is_dark: false,
         },
         ColorTokens {
-            surface_base: Color::rgb(0xF6, 0xF6, 0xFA),
-            surface_raised: Color::rgb(0xFF, 0xFF, 0xFF),
-            text_primary: Color::rgb(0x1A, 0x1B, 0x22),
-            text_secondary: Color::rgb(0x49, 0x4B, 0x58),
-            text_tertiary: Color::rgb(0x6D, 0x70, 0x7C),
-            accent_brand: Color::rgb(0x7A, 0x4E, 0xA8),
-            border_default: Color::rgba(0, 0, 0, 0x14),
+            // Cool lavender-grey canvas (Orchid identity, not cream/purple-on-
+            // white). Deeper than raised so elevation and glass edges read.
+            surface_base: Color::rgb(0xED, 0xED, 0xF4),
+            surface_raised: Color::rgb(0xFC, 0xFC, 0xFE),
+            text_primary: Color::rgb(0x16, 0x17, 0x1E),
+            text_secondary: Color::rgb(0x3E, 0x40, 0x4D),
+            text_tertiary: Color::rgb(0x5A, 0x5D, 0x6A),
+            // Same orchid hue family as the dark theme's #C99CFF, deepened for
+            // readable fills and text on paper.
+            accent_brand: Color::rgb(0x6E, 0x45, 0x9C),
+            border_default: Color::rgba(0x16, 0x17, 0x1E, 0x1C),
         },
     )
 }
