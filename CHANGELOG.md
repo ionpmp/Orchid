@@ -521,6 +521,10 @@ release yet.
   frame-row lookup encodes the UUID on the stack instead of `to_string()`.
 - **Search remove coalescing**: directory-tree deletes no longer force a
   Tantivy commit per file; they ride the existing 750 ms commit window.
+- **HTML webview**: skip host-thread wake when the document body is unchanged
+  across viewer content ticks.
+- **Tag multi-select**: star / unstar / colour / add-tag / remove-tag across a
+  selection commit in one redb transaction instead of one fsync per path.
 - **Processes widget**: full process census on activate and every 4th
   tick; intervening samples refresh only last-known PIDs.
 - **DOCX preview**: caret / selection paints over a cached page raster
