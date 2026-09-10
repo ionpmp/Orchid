@@ -1,0 +1,58 @@
+import { Theme } from "../../theme_global.slint";
+
+/// Compact field for document-viewer find / replace / link / comment / story strips.
+export component DocStripField inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder: "";
+
+    /// Enter pressed; `shift` is true when Shift was held (find previous).
+    callback accepted(bool);
+    callback dismissed();
+
+    height: Theme.control-xs;
+    background: Theme.surface-base;
+    border-radius: Theme.radius-md;
+    border-width: Theme.hairline;
+    border-color: input.has-focus ? Theme.border-focus : Theme.border-default;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    animate border-color { duration: Theme.motion-fast; easing: ease-out; }
+
+    if input.text == "" : Text {
+        x: Theme.space-2;
+        width: parent.width - Theme.space-4;
+        height: 100%;
+        text: root.placeholder;
+        color: Theme.text-tertiary;
+        font-size: Theme.font-size-sm;
+        vertical-alignment: center;
+    }
+
+    input := TextInput {
+        x: Theme.space-2;
+        width: parent.width - Theme.space-4;
+        height: 100%;
+        text <=> root.text;
+        single-line: true;
+        color: Theme.text-primary;
+        font-size: Theme.font-size-sm;
+        font-family: Theme.font-family-sans;
+        vertical-alignment: center;
+        key-pressed(event) => {
+            if (event.text == Key.Return) {
+                root.accepted(event.modifiers.shift);
+                return accept;
+            }
+            if (event.text == Key.Escape) {
+                root.dismissed();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    public function focus-field() {
+        input.focus();
+    }
+}

@@ -1,6 +1,7 @@
 import { Theme } from "../../theme_global.slint";
-import { Tooltip } from "../../kit.slint";
+import { ControlSize, IconButton, TouchButton, Tooltip } from "../../kit.slint";
 import { ViewerDocumentModel } from "../../workspace/defs.slint";
+import { DocStripField } from "viewer-doc-field.slint";
 import { DocToolBtn } from "viewer-doc-toolbtn.slint";
 
 export component ViewerDocumentView inherits Rectangle {
@@ -303,7 +304,7 @@ export component ViewerDocumentView inherits Rectangle {
                             root.link-open = !root.link-open;
                             if (root.link-open) {
                             root.link-query = model.link-url;
-                            link-input.focus();
+                            link-field.focus-field();
                             }
                         }
                 }
@@ -337,7 +338,7 @@ export component ViewerDocumentView inherits Rectangle {
                         root.comment-open = !root.comment-open;
                         if (root.comment-open) {
                             root.comment-query = model.comment-edit-text;
-                            comment-input.focus();
+                            comment-field.focus-field();
                         }
                     }
                 }
@@ -887,7 +888,7 @@ export component ViewerDocumentView inherits Rectangle {
                     clicked => {
                             root.find-open = !root.find-open;
                             if (root.find-open) {
-                            find-input.focus();
+                            find-field.focus-field();
                             }
                         }
                 }
@@ -912,19 +913,19 @@ export component ViewerDocumentView inherits Rectangle {
         }
 
         Rectangle {
-            height: root.find-open ? 68px : 0px;
+            height: root.find-open ? Theme.control-xs * 2 + Theme.space-4 : 0px;
             clip: false;
-            background: Theme.surface-raised;
+            background: Theme.surface-sunken;
 
             VerticalLayout {
-                padding-top: 4px;
-                padding-bottom: 4px;
-                spacing: 4px;
+                padding-top: Theme.space-1;
+                padding-bottom: Theme.space-1;
+                spacing: Theme.space-1;
 
                 HorizontalLayout {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    spacing: 6px;
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-2;
+                    spacing: Theme.space-1;
                     alignment: center;
 
                     Text {
@@ -934,52 +935,20 @@ export component ViewerDocumentView inherits Rectangle {
                         vertical-alignment: center;
                     }
 
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        height: 26px;
-                        background: Theme.surface-base;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-
-                        if find-input.text == "" : Text {
-                            x: 8px;
-                            width: parent.width - 16px;
-                            height: 100%;
-                            text: model.find-placeholder;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
+                    find-field := DocStripField {
+                        text <=> root.find-query;
+                        placeholder: model.find-placeholder;
+                        accepted(shift) => {
+                            root.find-request(root.find-query, !shift, root.find-match-case);
                         }
-
-                        find-input := TextInput {
-                            x: 8px;
-                            width: parent.width - 16px;
-                            height: 100%;
-                            text <=> root.find-query;
-                            single-line: true;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            font-family: Theme.font-family-sans;
-                            vertical-alignment: center;
-                            key-pressed(event) => {
-                                if (event.text == Key.Return) {
-                                    root.find-request(root.find-query, !event.modifiers.shift, root.find-match-case);
-                                    return accept;
-                                }
-                                if (event.text == Key.Escape) {
-                                    root.find-open = false;
-                                    return accept;
-                                }
-                                return reject;
-                            }
-                        }
+                        dismissed => { root.find-open = false; }
                     }
 
-                    DocToolBtn {
-                        label: model.find-case-label;
-                        tip: model.tip-find-case;
+                    TouchButton {
+                        text: model.find-case-label;
+                        size: ControlSize.xs;
                         active: root.find-match-case;
+                        tooltip: model.tip-find-case;
                         clicked => {
                             root.find-match-case = !root.find-match-case;
                             if (root.find-query != "") {
@@ -988,20 +957,24 @@ export component ViewerDocumentView inherits Rectangle {
                         }
                     }
 
-                    DocToolBtn {
-                        label: "^";
-                        tip: model.tip-find-prev;
+                    IconButton {
+                        icon: "chevron-up";
+                        size: ControlSize.xs;
+                        y: (parent.height - self.height) / 2;
+                        tooltip: model.tip-find-prev;
                         clicked => { root.find-request(root.find-query, false, root.find-match-case); }
                     }
 
-                    DocToolBtn {
-                        label: "v";
-                        tip: model.tip-find-next;
+                    IconButton {
+                        icon: "chevron-down";
+                        size: ControlSize.xs;
+                        y: (parent.height - self.height) / 2;
+                        tooltip: model.tip-find-next;
                         clicked => { root.find-request(root.find-query, true, root.find-match-case); }
                     }
 
                     Text {
-                        min-width: 36px;
+                        min-width: Theme.space-8 + Theme.space-1;
                         text: root.find-query == "" ? ""
                             : model.find-match-count <= 0 ? model.find-no-match-label
                             : "\{model.find-match-index}/\{model.find-match-count}";
@@ -1012,17 +985,19 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                     }
 
-                    DocToolBtn {
-                        label: "x";
-                        tip: model.tip-find-close;
+                    IconButton {
+                        icon: "close";
+                        size: ControlSize.xs;
+                        y: (parent.height - self.height) / 2;
+                        tooltip: model.tip-find-close;
                         clicked => { root.find-open = false; }
                     }
                 }
 
                 HorizontalLayout {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    spacing: 6px;
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-2;
+                    spacing: Theme.space-1;
                     alignment: center;
 
                     Text {
@@ -1032,59 +1007,28 @@ export component ViewerDocumentView inherits Rectangle {
                         vertical-alignment: center;
                     }
 
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        height: 26px;
-                        background: Theme.surface-base;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-
-                        if replace-input.text == "" : Text {
-                            x: 8px;
-                            width: parent.width - 16px;
-                            height: 100%;
-                            text: model.replace-placeholder;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
+                    DocStripField {
+                        text <=> root.replace-query;
+                        placeholder: model.replace-placeholder;
+                        accepted(_) => {
+                            root.replace-request(root.find-query, root.replace-query, false, root.find-match-case);
                         }
-
-                        replace-input := TextInput {
-                            x: 8px;
-                            width: parent.width - 16px;
-                            height: 100%;
-                            text <=> root.replace-query;
-                            single-line: true;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            font-family: Theme.font-family-sans;
-                            vertical-alignment: center;
-                            key-pressed(event) => {
-                                if (event.text == Key.Return) {
-                                    root.replace-request(root.find-query, root.replace-query, false, root.find-match-case);
-                                    return accept;
-                                }
-                                if (event.text == Key.Escape) {
-                                    root.find-open = false;
-                                    return accept;
-                                }
-                                return reject;
-                            }
-                        }
+                        dismissed => { root.find-open = false; }
                     }
 
-                    DocToolBtn {
-                        label: model.replace-one-label;
-                        tip: "";
+                    TouchButton {
+                        text: model.replace-one-label;
+                        size: ControlSize.xs;
+                        tooltip: model.replace-one-label;
                         clicked => {
                             root.replace-request(root.find-query, root.replace-query, false, root.find-match-case);
                         }
                     }
 
-                    DocToolBtn {
-                        label: model.replace-all-label;
-                        tip: "";
+                    TouchButton {
+                        text: model.replace-all-label;
+                        size: ControlSize.xs;
+                        tooltip: model.replace-all-label;
                         clicked => {
                             root.replace-request(root.find-query, root.replace-query, true, root.find-match-case);
                         }
@@ -1093,17 +1037,17 @@ export component ViewerDocumentView inherits Rectangle {
             }
         }
 
-        if root.find-open : Rectangle { height: 1px; background: Theme.border-default; }
+        if root.find-open : Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
 
         Rectangle {
-            height: root.link-open ? 36px : 0px;
+            height: root.link-open ? Theme.control-xs + Theme.space-2 : 0px;
             clip: true;
-            background: Theme.surface-raised;
+            background: Theme.surface-sunken;
 
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 6px;
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
+                spacing: Theme.space-1;
                 alignment: center;
 
                 Text {
@@ -1113,74 +1057,43 @@ export component ViewerDocumentView inherits Rectangle {
                     vertical-alignment: center;
                 }
 
-                Rectangle {
-                    horizontal-stretch: 1;
-                    height: 26px;
-                    background: Theme.surface-base;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-
-                    if link-input.text == "" : Text {
-                        x: 8px;
-                        width: parent.width - 16px;
-                        height: 100%;
-                        text: model.link-placeholder;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                    }
-
-                    link-input := TextInput {
-                        x: 8px;
-                        width: parent.width - 16px;
-                        height: 100%;
-                        text <=> root.link-query;
-                        single-line: true;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        font-family: Theme.font-family-sans;
-                        vertical-alignment: center;
-                        key-pressed(event) => {
-                            if (event.text == Key.Return) {
-                                root.link-request(root.link-query);
-                                return accept;
-                            }
-                            if (event.text == Key.Escape) {
-                                root.link-open = false;
-                                root.comment-open = false;
-                                return accept;
-                            }
-                            return reject;
-                        }
+                link-field := DocStripField {
+                    text <=> root.link-query;
+                    placeholder: model.link-placeholder;
+                    accepted(_) => { root.link-request(root.link-query); }
+                    dismissed => {
+                        root.link-open = false;
+                        root.comment-open = false;
                     }
                 }
 
-                DocToolBtn {
-                    label: model.link-apply-label;
-                    tip: "";
+                TouchButton {
+                    text: model.link-apply-label;
+                    size: ControlSize.xs;
+                    tooltip: model.link-apply-label;
                     clicked => { root.link-request(root.link-query); }
                 }
 
-                DocToolBtn {
-                    label: model.link-remove-label;
-                    tip: "";
+                TouchButton {
+                    text: model.link-remove-label;
+                    size: ControlSize.xs;
+                    tooltip: model.link-remove-label;
                     clicked => { root.link-request(""); }
                 }
             }
         }
 
-        if root.link-open : Rectangle { height: 1px; background: Theme.border-default; }
+        if root.link-open : Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
 
         Rectangle {
-            height: root.comment-open ? 36px : 0px;
+            height: root.comment-open ? Theme.control-xs + Theme.space-2 : 0px;
             clip: true;
-            background: Theme.surface-raised;
+            background: Theme.surface-sunken;
 
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 6px;
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
+                spacing: Theme.space-1;
                 alignment: center;
 
                 Text {
@@ -1190,52 +1103,20 @@ export component ViewerDocumentView inherits Rectangle {
                     vertical-alignment: center;
                 }
 
-                Rectangle {
-                    horizontal-stretch: 1;
-                    height: 26px;
-                    background: Theme.surface-base;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-
-                    if comment-input.text == "" : Text {
-                        x: 8px;
-                        width: parent.width - 16px;
-                        height: 100%;
-                        text: model.comment-placeholder;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
+                comment-field := DocStripField {
+                    text <=> root.comment-query;
+                    placeholder: model.comment-placeholder;
+                    accepted(_) => {
+                        root.comment-request(root.comment-query);
+                        root.comment-open = false;
                     }
-
-                    comment-input := TextInput {
-                        x: 8px;
-                        width: parent.width - 16px;
-                        height: 100%;
-                        text <=> root.comment-query;
-                        single-line: true;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        font-family: Theme.font-family-sans;
-                        vertical-alignment: center;
-                        key-pressed(event) => {
-                            if (event.text == Key.Return) {
-                                root.comment-request(root.comment-query);
-                                root.comment-open = false;
-                                return accept;
-                            }
-                            if (event.text == Key.Escape) {
-                                root.comment-open = false;
-                                return accept;
-                            }
-                            return reject;
-                        }
-                    }
+                    dismissed => { root.comment-open = false; }
                 }
 
-                DocToolBtn {
-                    label: model.comment-apply-label;
-                    tip: "";
+                TouchButton {
+                    text: model.comment-apply-label;
+                    size: ControlSize.xs;
+                    tooltip: model.comment-apply-label;
                     clicked => {
                         root.comment-request(root.comment-query);
                         root.comment-open = false;
@@ -1244,128 +1125,101 @@ export component ViewerDocumentView inherits Rectangle {
             }
         }
 
-        if root.comment-open : Rectangle { height: 1px; background: Theme.border-default; }
+        if root.comment-open : Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
 
-        if root.story-open != 0 : HorizontalLayout {
-            padding-left: 8px;
-            padding-right: 8px;
-            padding-top: 4px;
-            padding-bottom: 4px;
-            spacing: 6px;
-            alignment: center;
+        if root.story-open != 0 : Rectangle {
+            height: Theme.control-xs + Theme.space-2;
+            background: Theme.surface-sunken;
 
-            Text {
-                text: root.story-open == 1 ? model.header-label
-                    : root.story-open == 2 ? model.footer-label
-                    : root.story-open == 3 ? model.header-first-label
-                    : root.story-open == 4 ? model.footer-first-label
-                    : root.story-open == 5 ? model.header-even-label
-                    : model.footer-even-label;
-                color: Theme.text-secondary;
-                font-size: Theme.font-size-sm;
-                vertical-alignment: center;
-            }
+            HorizontalLayout {
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
+                spacing: Theme.space-1;
+                alignment: center;
 
-            Rectangle {
-                horizontal-stretch: 1;
-                height: 26px;
-                background: Theme.surface-base;
-                border-radius: Theme.radius-md;
-                border-width: 1px;
-                border-color: Theme.border-default;
-
-                if story-input.text == "" : Text {
-                    x: 8px;
-                    width: parent.width - 16px;
-                    height: 100%;
-                    text: root.story-open == 1 || root.story-open == 3 || root.story-open == 5 ? model.header-placeholder : model.footer-placeholder;
-                    color: Theme.text-tertiary;
+                Text {
+                    text: root.story-open == 1 ? model.header-label
+                        : root.story-open == 2 ? model.footer-label
+                        : root.story-open == 3 ? model.header-first-label
+                        : root.story-open == 4 ? model.footer-first-label
+                        : root.story-open == 5 ? model.header-even-label
+                        : model.footer-even-label;
+                    color: Theme.text-secondary;
                     font-size: Theme.font-size-sm;
                     vertical-alignment: center;
                 }
 
-                story-input := TextInput {
-                    x: 8px;
-                    width: parent.width - 16px;
-                    height: 100%;
+                DocStripField {
                     text <=> root.story-query;
-                    single-line: true;
-                    color: Theme.text-primary;
-                    font-size: Theme.font-size-sm;
-                    font-family: Theme.font-family-sans;
-                    vertical-alignment: center;
-                    key-pressed(event) => {
-                        if (event.text == Key.Return) {
-                            if (root.story-open == 1) {
-                                root.header-request(root.story-query);
-                            } else if (root.story-open == 2) {
-                                root.footer-request(root.story-query);
-                            } else if (root.story-open == 3) {
-                                root.header-first-request(root.story-query);
-                            } else if (root.story-open == 4) {
-                                root.footer-first-request(root.story-query);
-                            } else if (root.story-open == 5) {
-                                root.header-even-request(root.story-query);
-                            } else if (root.story-open == 6) {
-                                root.footer-even-request(root.story-query);
-                            }
-                            root.story-open = 0;
-                            return accept;
+                    placeholder: root.story-open == 1 || root.story-open == 3 || root.story-open == 5
+                        ? model.header-placeholder : model.footer-placeholder;
+                    accepted(_) => {
+                        if (root.story-open == 1) {
+                            root.header-request(root.story-query);
+                        } else if (root.story-open == 2) {
+                            root.footer-request(root.story-query);
+                        } else if (root.story-open == 3) {
+                            root.header-first-request(root.story-query);
+                        } else if (root.story-open == 4) {
+                            root.footer-first-request(root.story-query);
+                        } else if (root.story-open == 5) {
+                            root.header-even-request(root.story-query);
+                        } else if (root.story-open == 6) {
+                            root.footer-even-request(root.story-query);
                         }
-                        if (event.text == Key.Escape) {
-                            root.story-open = 0;
-                            return accept;
+                        root.story-open = 0;
+                    }
+                    dismissed => { root.story-open = 0; }
+                }
+
+                TouchButton {
+                    text: model.link-apply-label;
+                    size: ControlSize.xs;
+                    tooltip: model.link-apply-label;
+                    clicked => {
+                        if (root.story-open == 1) {
+                            root.header-request(root.story-query);
+                        } else if (root.story-open == 2) {
+                            root.footer-request(root.story-query);
+                        } else if (root.story-open == 3) {
+                            root.header-first-request(root.story-query);
+                        } else if (root.story-open == 4) {
+                            root.footer-first-request(root.story-query);
+                        } else if (root.story-open == 5) {
+                            root.header-even-request(root.story-query);
+                        } else if (root.story-open == 6) {
+                            root.footer-even-request(root.story-query);
                         }
-                        return reject;
+                        root.story-open = 0;
                     }
                 }
-            }
 
-            DocToolBtn {
-                label: model.link-apply-label;
-                tip: "";
-                clicked => {
-                    if (root.story-open == 1) {
-                        root.header-request(root.story-query);
-                    } else if (root.story-open == 2) {
-                        root.footer-request(root.story-query);
-                    } else if (root.story-open == 3) {
-                        root.header-first-request(root.story-query);
-                    } else if (root.story-open == 4) {
-                        root.footer-first-request(root.story-query);
-                    } else if (root.story-open == 5) {
-                        root.header-even-request(root.story-query);
-                    } else if (root.story-open == 6) {
-                        root.footer-even-request(root.story-query);
+                TouchButton {
+                    text: model.link-remove-label;
+                    size: ControlSize.xs;
+                    tooltip: model.link-remove-label;
+                    clicked => {
+                        if (root.story-open == 1) {
+                            root.header-request("");
+                        } else if (root.story-open == 2) {
+                            root.footer-request("");
+                        } else if (root.story-open == 3) {
+                            root.header-first-request("");
+                        } else if (root.story-open == 4) {
+                            root.footer-first-request("");
+                        } else if (root.story-open == 5) {
+                            root.header-even-request("");
+                        } else if (root.story-open == 6) {
+                            root.footer-even-request("");
+                        }
+                        root.story-query = "";
+                        root.story-open = 0;
                     }
-                    root.story-open = 0;
-                }
-            }
-
-            DocToolBtn {
-                label: model.link-remove-label;
-                tip: "";
-                clicked => {
-                    if (root.story-open == 1) {
-                        root.header-request("");
-                    } else if (root.story-open == 2) {
-                        root.footer-request("");
-                    } else if (root.story-open == 3) {
-                        root.header-first-request("");
-                    } else if (root.story-open == 4) {
-                        root.footer-first-request("");
-                    } else if (root.story-open == 5) {
-                        root.header-even-request("");
-                    } else if (root.story-open == 6) {
-                        root.footer-even-request("");
-                    }
-                    root.story-query = "";
-                    root.story-open = 0;
                 }
             }
         }
 
-        if root.story-open != 0 : Rectangle { height: 1px; background: Theme.border-default; }
+        if root.story-open != 0 : Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
 
         Rectangle {
             background: Theme.surface-base;
@@ -1403,7 +1257,7 @@ export component ViewerDocumentView inherits Rectangle {
                             && (event.text == "f" || event.text == "F"))
                         {
                             root.find-open = true;
-                            find-input.focus();
+                            find-field.focus-field();
                             return accept;
                         }
                         if (event.modifiers.control
@@ -1414,7 +1268,7 @@ export component ViewerDocumentView inherits Rectangle {
                             root.comment-open = false;
                             root.link-open = true;
                             root.link-query = model.link-url;
-                            link-input.focus();
+                            link-field.focus-field();
                             return accept;
                         }
                         if (event.text == Key.F3) {
@@ -1631,7 +1485,7 @@ export component ViewerDocumentView inherits Rectangle {
                                 && (event.text == "f" || event.text == "F"))
                             {
                                 root.find-open = true;
-                                find-input.focus();
+                                find-field.focus-field();
                                 return accept;
                             }
                             if (event.modifiers.control
@@ -1642,7 +1496,7 @@ export component ViewerDocumentView inherits Rectangle {
                                 root.comment-open = false;
                                 root.link-open = true;
                                 root.link-query = model.link-url;
-                                link-input.focus();
+                                link-field.focus-field();
                                 return accept;
                             }
                             if (event.text == Key.F3) {
@@ -1771,13 +1625,13 @@ export component ViewerDocumentView inherits Rectangle {
         }
 
         Rectangle {
-            height: 24px;
+            height: Theme.control-xs;
             background: Theme.surface-raised;
 
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 12px;
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
+                spacing: Theme.space-3;
 
                 Text {
                     text: model.info-text;
@@ -1789,7 +1643,7 @@ export component ViewerDocumentView inherits Rectangle {
                 }
                 if model.dirty || root.locally-dirty : Text {
                     text: "*";
-                    color: #eab308;
+                    color: Theme.feedback-warning;
                     font-size: Theme.font-size-sm;
                     vertical-alignment: center;
                 }
