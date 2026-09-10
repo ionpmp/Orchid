@@ -33,11 +33,11 @@ includes 39 exported components and 8 shared globals (47 Slint units total):
   `NotificationCenter`
 - **Window manager** — per-widget grid or floating placement; undock / dock,
   minimize / maximize / restore, edge snap, in-app taskbar, Ctrl+Tab
-- **Built-in widgets** — terminal (tabs + split view), weather, moon, system,
-  processes, calculator, world clock, notes, calendar, Jyotish, RSS, recent
-  files, universal search, media player, password manager, file manager
-  (panes, sidebar, dialogs, …), viewer (image / PDF / text / archive / **DOCX**
-  Preview+Source with Find/Replace; floating or canvas-docked)
+- **Built-in widgets** — terminal, weather, moon, system, processes,
+  calculator, clock, notes, calendar, Jyotish, RSS, recent files,
+  universal search, media / audio / video, **browser** (WebView2),
+  password manager, file manager, viewer (image / PDF / text / archive /
+  media / HTML / **DOCX** / **`.orchid`**)
 
 Every component reads design tokens from the shared [`Theme`] global and user
 strings from [`Strings`] (populated from `orchid-i18n`).

@@ -1,7 +1,20 @@
 # Agent guide for Orchid
 
-Short checklist for coding agents working in this repository. Full contributor
-docs live in [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md).
+Short checklist for coding agents. Full contributor docs:
+[`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md).
+
+## Documentation
+
+| Audience | Location |
+|----------|----------|
+| Users | [`docs/user/`](docs/user/README.md) |
+| Operators | [`docs/admin/`](docs/admin/README.md) |
+| Planned work only | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
+| Crate map | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+
+When you **ship** a feature: document it in user/admin + `CHANGELOG.md`
+Unreleased, and **remove** it from the roadmap. Do not describe future
+work in the guides.
 
 ## Build & test
 
@@ -12,51 +25,18 @@ cargo test
 python scripts/i18n_sync_keys.py
 ```
 
-Targeted crates when iterating:
+MSRV is **1.98**. See [`docs/BUILDING.md`](docs/BUILDING.md) (`pdfium.dll`,
+libmpv, WebView2).
 
-```bash
-cargo test -p orchid-search
-cargo test -p orchid-viewers
-cargo test -p orchid-widgets
-cargo test -p orchid-storage
-cargo test -p orchid-i18n
-```
+## i18n / widgets / themes
 
-MSRV is **1.98**. Windows + VS Build Tools are required for a full app build;
-see [`docs/BUILDING.md`](docs/BUILDING.md) (including `pdfium.dll` for PDF).
-
-## i18n
-
-- Source of truth: `crates/orchid-i18n/locales/en-US/main.ftl`
-- Keep key parity across all 11 locales; run `python scripts/i18n_sync_keys.py`
-- Prefer Fluent keys in payloads / errors; resolve with `LocaleManager` in UI
-- Checklist: [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md#how-to-add-a-locale)
-
-## Widgets
-
-- Logic in `crates/orchid-widgets/src/builtin/<name>/`
-- Strings in every `locales/*/main.ftl`
-- Slint surface under `crates/orchid-ui/ui/widgets/` + wiring in `main_window.rs`
-- Widget **groups** (tab stacks): drop header-on-header to stack; strip actions
-  in `ui/workspace/group-tabs.slint`; Alt+drag detaches
-- Checklist: [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md#how-to-add-a-widget)
-
-## Themes
-
-- Bundled: `crates/orchid-ui/src/theme/bundled.rs`
-- User JSON: `OrchidPaths::themes_dir`
-- Checklist: [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md#how-to-add-a-theme)
-
-## Roadmap & architecture
-
-- Backlog: [`docs/ROADMAP.md`](docs/ROADMAP.md) (`[x]` / `[~]` / `[ ]`)
-- Changelog: [`CHANGELOG.md`](CHANGELOG.md) (Keep a Changelog; update Unreleased)
-- Crate map: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- Doc index: [`docs/README.md`](docs/README.md)
-- Repo: https://github.com/ionpmp/Orchid
+- Fluent: `crates/orchid-i18n/locales/en-US/main.ftl` + 11 locales
+- Widgets: `crates/orchid-widgets/src/builtin/<name>/` + Slint +
+  `OrchidApp::bootstrap` when extra deps are required
+- Themes: `crates/orchid-ui/src/theme/bundled.rs` + JSON in `themes_dir`
+- Checklists: [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md)
 
 ## Scope hygiene
 
-- Prefer small, focused diffs; one logical task per PR
-- Do not commit secrets, local `pdfium.dll` blobs, or unrelated scaffolding
-- Match existing Rust / Slint style; avoid drive-by refactors
+Small focused diffs. Do not commit secrets or local `pdfium.dll` / libmpv
+blobs. Avoid drive-by refactors.

@@ -10,4 +10,10 @@ The engine ships with a single fixed schema (see `schema::Schema`). Tokenizers:
 
 `query::QueryBuilder` exposes a fluent surface covering text, extension, MIME, tag, colour, path prefix, size and modified-time ranges, file/directory filters, and pagination. Free-text searches attach a content snippet (via Tantivy's `SnippetGenerator`) with highlight ranges when the hit has indexed body text; filter-only queries leave `snippet: None`.
 
-PDF extraction requires pdfium at runtime; see the module docs on `extractors::pdf`.
+PDF extraction requires pdfium at runtime; see `extractors::pdf`. `.orchid`
+Clean-Text extraction lives in `extractors::orchid`.
+
+ANN + RRF hybrid search (`ann`, `hybrid`) fuses Tantivy BM25 with stub
+embeddings from `orchid-embed`. The universal-search **file** source in
+the UI still calls `SearchEngine::search` (BM25 only); wiring hybrid into
+that list is a [roadmap](../../docs/ROADMAP.md) item.

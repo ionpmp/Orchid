@@ -9,7 +9,7 @@ tree on [`main`](https://github.com/ionpmp/Orchid).
 
 ## [Unreleased]
 
-Pre-alpha snapshot as of **2026-09-05** (`0.1.0` workspace version). No tagged
+Pre-alpha snapshot as of **2026-09-10** (`0.1.0` workspace version). No tagged
 release yet.
 
 ### Added
@@ -364,7 +364,8 @@ release yet.
 
 ### Documentation
 - Rebuilt project, GitHub, [user](docs/user/README.md), and
-  [admin](docs/admin/README.md) docs from the current code. Planned work is
+  [admin](docs/admin/README.md) docs from the current tree (13 crates,
+  `.orchid` Phases 1–5, WebView2 Browser, cinema kit). Planned work is
   listed only in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ### Changed
@@ -548,6 +549,9 @@ release yet.
 - **Empty widget-frame pack**: cache the ~19 empty sibling Slint models per
   locale on the UI thread so `build_widget_frame_for_placed` clones refcounts
   instead of re-resolving ~650 Fluent labels per frame.
+- **Managed-folder config cache**: `list_folders` results stay in memory and
+  are invalidated on add/remove, so the auto-ingest loop no longer re-decodes
+  every folder config up to three times per filesystem event.
 - **Processes widget**: full process census on activate and every 4th
   tick; intervening samples refresh only last-known PIDs.
 - **DOCX preview**: caret / selection paints over a cached page raster

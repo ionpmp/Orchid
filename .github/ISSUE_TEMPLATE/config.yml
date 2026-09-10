@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussions
+    url: https://github.com/ionpmp/Orchid/discussions
+    about: Ideas, questions, and design talk
+  - name: Documentation
+    url: https://github.com/ionpmp/Orchid/blob/main/docs/README.md
+    about: User, admin, and contributor docs
+  - name: Security advisory
+    url: https://github.com/ionpmp/Orchid/security/advisories/new
+    about: Private vulnerability reports only

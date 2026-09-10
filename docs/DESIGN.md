@@ -4,9 +4,10 @@
 
 The core idea of Orchid: **a gesture, a command, and a widget are three forms of the same thing**.
 
-- Drag a file with your finger → a command appears in the log: `orc fs move ...`
-- Type a command `orc widget create weather` → a widget appears on the desktop
-- Tap an icon in a widget → a command runs → that command can be replayed as a gesture
+- Drag a file with your finger → a file-manager action runs (`fs.move` /
+  copy; not every FM action is an `orc fs …` verb today)
+- Type `orc widget create weather` in the palette → a widget appears
+- Tap a widget control → the same action path a shortcut would use
 
 This gives three levels of mastery over the system:
 1. **Beginner** — taps the screen
@@ -58,7 +59,9 @@ Gestures are invisible. This is the central problem of touch-first interfaces. S
 
 - **Calm tech.** No screaming colors, no obtrusive animations.
 - **Content over chrome.** Minimum UI frames and panels.
-- **Semantic tokens, not colors.** `accent.brand`, not "blue".
+- **Semantic tokens, not colors.** `accent.brand`, not "blue". The cinema
+  kit (`kit.slint`) derives surface ramps, control metrics, and glass cards
+  from those seven raw theme colours so every theme stays touch-first.
 - **System typography.** Segoe UI Variable on Windows 11, Segoe UI on Windows 10.
 
 ## Current shell surfaces (pre-alpha)
@@ -67,7 +70,8 @@ These are implemented today and should stay consistent with the principles above
 
 - **Workspace canvas** — 16×10 grid, widget frames, group tab stacks, dock
 - **In-app window manager** — floating overlays, edge snap, taskbar, Ctrl+Tab
-- **Floating / docked viewers** — images, PDF, text, archives, DOCX editor
+- **Viewers** — images, PDF, text, archives, media, HTML (WebView2), DOCX / `.orchid`
+- **Browser widget** — WebView2 tabs
 - **Overlays** — command palette, settings, notifications, onboarding, hints
 
 Roadmap status: [`ROADMAP.md`](ROADMAP.md). Recent product notes: [`CHANGELOG.md`](../CHANGELOG.md).

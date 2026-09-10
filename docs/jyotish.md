@@ -1,5 +1,8 @@
 # Jyotish widget
 
+Catalog **Jyotish** (`type_id` `jyotish`). See also the
+[user widget list](user/widgets.md).
+
 The Jyotish widget is a local, offline Vedic panchanga (tithi / nakshatra /
 yoga / karana / vara) with an optional personal layer, day-quality "traffic
 light" scores, and a birth-time rectification wizard. Everything is computed

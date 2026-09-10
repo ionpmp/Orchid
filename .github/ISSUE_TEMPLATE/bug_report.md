@@ -1,37 +1,37 @@
 ---
 name: Bug report
-about: Report a bug
-title: '[BUG] '
+about: Report a bug in the current Orchid tree
+title: "[BUG] "
 labels: bug
-assignees: ''
 ---
 
 ## Description
 
 A brief description of the problem.
 
-## Steps to Reproduce
+## Steps to reproduce
 
-1. ...
-2. ...
-3. ...
+1. …
+2. …
+3. …
 
-## Expected Behavior
+## Expected behavior
 
 What should happen.
 
-## Actual Behavior
+## Actual behavior
 
-What actually happens.
+What happens instead.
 
 ## Environment
 
-- Orchid version:
+- Orchid revision (`git rev-parse --short HEAD`):
 - Windows version:
 - Architecture (x64 / ARM64):
 - GPU:
-- Input type (touch / mouse / pen / keyboard):
+- Input (touch / mouse / pen / keyboard):
+- Optional runtimes present? (`pdfium.dll`, libmpv, rclone, 7-Zip, WebView2)
 
-## Screenshots / Logs
+## Screenshots / logs
 
-Attach if available.
+Logs: `%APPDATA%\Orchid\Orchid\data\logs`

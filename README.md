@@ -7,85 +7,85 @@
 [![Status: Pre-Alpha](https://img.shields.io/badge/status-pre--alpha-red.svg)](docs/ROADMAP.md)
 [![CI](https://github.com/ionpmp/Orchid/actions/workflows/ci.yml/badge.svg)](https://github.com/ionpmp/Orchid/actions/workflows/ci.yml)
 
-**Orchid** is an alternative user environment for Windows that unifies the graphical interface and command line into a single workspace. It is designed primarily for touch devices (Surface, 2-in-1 laptops, tablets) but is equally comfortable with mouse, keyboard, and pen input.
+**Orchid** is an alternative user environment for Windows. It unifies a graphical workspace, a command palette, and a file manager into one shell. It is designed first for touch devices (Surface, 2-in-1 laptops, tablets) and is equally usable with mouse, keyboard, and pen.
+
+This repository is **pre-alpha** (`0.1.0` workspace version). There is no tagged release yet. What ships is the in-tree desktop binary; planned work lives only in the [roadmap](docs/ROADMAP.md).
 
 ## Philosophy
 
-Every gesture performed with a finger has a textual representation as a command. Every command can spawn a graphical widget. Control, automation, and visualization are three forms of the same action.
+Every gesture has a textual command. Every command can spawn a graphical widget. Control, automation, and visualization are three forms of the same action.
 
-## Key Features (MVP, pre-alpha)
+## What works today
 
-- **File Manager** — dual-pane, touch-friendly; tags, virtual folders, encryption, managed folders, rclone network mounts
-- **Built-in Terminal** — PowerShell, cmd, WSL, SSH; tabs and splits (inline sixel/kitty graphics planned for v1.x)
-- **Widget System** — dashboard grid, workspaces, tab groups, in-app window manager (float / dock / snap / taskbar)
-- **Document Editor** — Tier-1 DOCX (Preview/Source, tables, images, Find/Replace); native `.orchid` format [specced](docs/ORCHID_FORMAT.md)
-- **Viewers** — images, PDF, text (Tree-sitter + MVP edit), archives
-- **Password Manager** — KDBX4, biometric unlock via Windows Hello
-- **File Encryption** — age-based encrypt / decrypt / reveal for files and folders
-- **Deduplication** — content-addressed storage via BLAKE3 + FastCDC
-- **Search** — Tantivy full-text + universal search (files, commands, settings)
-- **Built-in Widgets** — weather, moon, system, processes, calculator, world clock, notes, calendar, media, RSS, recent files, Jyotish (Vedic panchanga)
-- **Theming** — light/dark, density modes, nine bundled themes, hot-reload
-- **Internationalization** — 11 languages out of the box, RTL support
-- **Gestures** — touch, pen, mouse, and keyboard as first-class input
+- **Workspace shell** — up to nine workspaces, 16×10 widget grid, catalog, dock, tab groups, in-app window manager, cinema control kit
+- **File manager** — dual-pane, tags, virtual folders, archives, encryption, managed folders, rclone mounts (RC keep-alive for list/stat), Find, **Wrap as .orchid**
+- **Viewers** — images, PDF (pdfium), text (Tree-sitter), archives, HTML (WebView2 overlay), media (libmpv), Tier-1 DOCX / native `.orchid` editor
+- **Browser** — catalog widget with WebView2 (tabs, bookmarks, find-in-page)
+- **Terminal** — PowerShell, cmd, WSL, SSH; tabs and splits
+- **Widgets** — weather, moon, Jyotish, clock, system, processes, calculator, notes, calendar, RSS, search, passwords, audio player (synced lyrics panel), video player, now-playing, recent files
+- **Search** — Tantivy full-text + universal search; hybrid ANN exists in-crate (stub embedder) and is not the universal-search UI yet
+- **`.orchid` container** — sealed and linked (CAS) files, age encryption, C2PA, CRDT structured region, stub embeddings (`orchid-format` / `orchid-embed`)
+- **Security** — KDBX4 vault, Windows Hello, age encrypt/reveal
+- **Theming & i18n** — nine bundled themes + JSON user themes, 11 Fluent locales including RTL (`ar-SA`)
 
-## Technology Stack
+How to use it: [User guide](docs/user/README.md). How to deploy and configure it: [Admin guide](docs/admin/README.md).
+
+## Technology stack
 
 | Layer | Technology |
 |---|---|
 | Language | Rust (MSRV 1.98) |
-| GUI | Slint |
-| Rendering | Skia (Ganesh backend via Slint) |
-| Storage | redb (state) + KDBX4 (passwords) + files (chunks) |
+| GUI | Slint + Skia (Ganesh, winit-skia) |
+| Storage | redb (state) + KDBX4 (passwords) + files (CAS chunks) |
 | Terminal | portable-pty + custom vte emulator |
 | Encryption | age (rage) |
-| Content Addressing | BLAKE3 + FastCDC |
-| Search | Tantivy |
-| Documents | OOXML + parley/swash preview |
+| Content addressing | BLAKE3 + FastCDC |
+| Search | Tantivy (+ ANN/RRF in `orchid-search`, stub embedder) |
+| Documents | OOXML + parley/swash; native `.orchid` |
 | PDF | pdfium-render |
-| Network FS | rclone CLI subprocesses |
+| Media | libmpv |
+| HTML / browser | WebView2 |
+| Network FS | rclone (`rcd` keep-alive + CLI transfers) |
 | Configuration | TOML |
 
 ## Status
 
-**Pre-Alpha** (`0.1.0` workspace version). Active MVP development toward v0.1.
+**Pre-alpha.** Active development toward v0.1. Planned work (AI agents, plugins, shell replacement, ORT embeddings, …): [`docs/ROADMAP.md`](docs/ROADMAP.md). Release notes: [`CHANGELOG.md`](CHANGELOG.md).
 
-- Roadmap: [`docs/ROADMAP.md`](docs/ROADMAP.md)
-- Recent changes: [`CHANGELOG.md`](CHANGELOG.md)
-
-## System Requirements
+## System requirements
 
 - Windows 10 (1809+) or Windows 11
-- x86_64 or ARM64
+- x86_64 (CI and bundled native DLLs target x64; ARM64 is a goal)
 - 4 GB RAM minimum, 8 GB recommended
-- GPU with DirectX 11+ support (for Skia)
+- GPU with DirectX 11+ (Skia)
 - 500 MB free disk space
 
-## Building from Source
+Optional at runtime: `pdfium.dll`, libmpv, `rclone`, 7-Zip, WebView2 Evergreen (usually already installed).
+
+## Building from source
 
 ```bash
-# Requires Rust 1.98+ and Visual Studio Build Tools (C++ workload)
 git clone https://github.com/ionpmp/Orchid.git
 cd Orchid
-cargo build --release
+cargo build --release -p orchid-app
 ```
 
-Binary: `target/release/orchid.exe`. For PDF viewing, place `pdfium.dll` as described in [`docs/BUILDING.md`](docs/BUILDING.md).
+Binary: `target/release/orchid.exe`. DLLs, profiles, WebView2: [`docs/BUILDING.md`](docs/BUILDING.md). Desktop install: [`docs/admin/install.md`](docs/admin/install.md).
 
 ## Documentation
 
 Index: [`docs/README.md`](docs/README.md)
 
-| Doc | Audience |
+| Document | Audience |
 |---|---|
-| [Changelog](CHANGELOG.md) | Users & contributors |
-| [Roadmap](docs/ROADMAP.md) | Users & contributors |
+| [User guide](docs/user/README.md) | People using Orchid |
+| [Admin guide](docs/admin/README.md) | Install, config, data, operations |
+| [Roadmap](docs/ROADMAP.md) | Planned work only |
+| [Changelog](CHANGELOG.md) | What changed in the tree |
 | [Building](docs/BUILDING.md) | Developers |
-| [Architecture](docs/ARCHITECTURE.md) | Developers |
+| [Architecture](docs/ARCHITECTURE.md) | Crate map |
 | [Contributing](docs/CONTRIBUTING.md) | Contributors |
-| [Design Philosophy](docs/DESIGN.md) | Designers & contributors |
 | [`.orchid` format](docs/ORCHID_FORMAT.md) | Format implementers |
-| [Jyotish](docs/jyotish.md) | Jyotish widget users |
 | [Security](docs/SECURITY.md) | Security researchers |
 | [Code of Conduct](docs/CODE_OF_CONDUCT.md) | Community |
 
@@ -96,7 +96,7 @@ Orchid is distributed under the [GNU Affero General Public License v3.0 or later
 
 ## Community
 
-- **[Issues](https://github.com/ionpmp/Orchid/issues)** — bugs and feature requests (use the issue templates when filing)
+- **[Issues](https://github.com/ionpmp/Orchid/issues)** — bugs and feature requests
 - **[Discussions](https://github.com/ionpmp/Orchid/discussions)** — ideas and questions
 - **[Security advisories](https://github.com/ionpmp/Orchid/security/advisories)** — private vulnerability reports
 

@@ -1,22 +1,25 @@
 ---
 name: Feature request
-about: Propose a new feature
-title: '[FEAT] '
+about: Propose a feature (check the roadmap first)
+title: "[FEAT] "
 labels: enhancement
-assignees: ''
 ---
 
 ## Problem
 
 What problem does this feature solve?
 
-## Proposed Solution
+## Roadmap
 
-Describe how it should work.
+Does [docs/ROADMAP.md](../../docs/ROADMAP.md) already list this?
+
+## Proposed solution
+
+How it should work in the current shell.
 
 ## Alternatives
 
-Have you considered other approaches?
+Other approaches you considered.
 
 ## Context
 

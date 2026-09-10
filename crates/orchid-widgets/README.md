@@ -30,11 +30,15 @@ Widget framework for Orchid. Provides:
 
 ### Built-in widgets (`builtin/`)
 
-Terminal, file manager, weather, moon, system, processes, calculator, world
-clock, notes, calendar, Jyotish, media, RSS, recent files, universal search,
-password manager, viewer (bridges to `orchid-viewers`).
+Weather, moon, Jyotish, clock, system, processes, calculator, notes,
+calendar, **browser** (WebView2), RSS, universal search, now-playing
+(SMTC), **audio-player**, **video-player**, password manager, viewer,
+file manager, recent files.
 
-Product checklist: [`docs/ROADMAP.md`](../../docs/ROADMAP.md).
+**Terminal** is registered from `orchid-ui`. Catalog Document Editor /
+Media Player spawn `viewer` instances.
+
+Product how-to: [`docs/user/widgets.md`](../../docs/user/widgets.md).
 
 ## Stability
 

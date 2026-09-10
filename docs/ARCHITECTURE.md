@@ -1,91 +1,112 @@
 # Orchid Architecture
 
-## High-Level Diagram
+This document describes the **current** workspace: 13 crates, a single
+desktop process, rclone RC + CLI, PTY children, and WebView2 overlays.
+Planned systems (Ollama agents, WASM plugins, Winlogon shell) are not in
+the tree — see [ROADMAP.md](ROADMAP.md).
+
+## High-level diagram
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  UI Layer (Slint + Skia Ganesh)                     │
-│  Workspace dashboard, floating viewers, window mgr  │
-│  Widgets as native Slint components                 │
-├─────────────────────────────────────────────────────┤
-│  Orchid (Rust workspace)                            │
-│  ├─ orchid-core — event bus, actions, commands, BackgroundJobQueue │
-│  ├─ orchid-storage — redb state + TOML config       │
-│  ├─ orchid-fs — local + rclone network providers    │
-│  ├─ orchid-crypto — age, KDBX4, BLAKE3 chunks       │
-│  ├─ orchid-search — Tantivy + ANN hybrid + FS indexer │
-│  ├─ orchid-viewers — image/PDF/text/archive/DOCX    │
-│  ├─ orchid-terminal — PTY + vte emulator            │
-│  ├─ orchid-widgets — framework + builtins           │
-│  ├─ orchid-embed — sentence embedders (stub / ORT)  │
-│  ├─ orchid-format — native `.orchid` container      │
-│  ├─ orchid-i18n — Fluent catalogues (11 locales)    │
-│  └─ orchid-ui / orchid-app — composition + window   │
-├─────────────────────────────────────────────────────┤
-│  Subprocesses (no Cap'n Proto yet)                  │
-│  ├─ rclone CLI (network FS operations)              │
-│  └─ PTY children (via portable-pty)                 │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  UI Layer (Slint + Skia Ganesh, SLINT_BACKEND=winit-skia)   │
+│  Workspace canvas, cinema kit, in-app window manager       │
+│  WebView2 overlays (HTML viewer + Browser widget)          │
+├─────────────────────────────────────────────────────────────┤
+│  orchid-ui — composition root (OrchidApp) + window + themes   │
+│  orchid-app — thin binary (tracing, Tokio, mimalloc,        │
+│               single-instance named pipe)                  │
+├─────────────────────────────────────────────────────────────┤
+│  orchid-widgets — managers + builtins (incl. browser)      │
+│  orchid-viewers — image / PDF / text / archive / DOCX /      │
+│                   .orchid / media (libmpv) / HTML           │
+│  orchid-terminal — PTY + vte emulator + session/layout      │
+│  orchid-fs — local + rclone (rcd keep-alive + CLI)          │
+│  orchid-search — Tantivy + ANN/RRF (UI still BM25)          │
+│  orchid-format — native .orchid (Phases 1–5)                │
+│  orchid-embed — StubEmbedder (ORT feature reserved)            │
+│  orchid-crypto — age, KDBX4, BLAKE3 chunks, Hello / DPAPI   │
+│  orchid-storage — redb state + TOML config + OrchidPaths    │
+│  orchid-i18n — Fluent catalogues (11 locales)               │
+│  orchid-core — EventBus, actions, commands, input, jobs       │
+├─────────────────────────────────────────────────────────────┤
+│  Subprocesses                                                │
+│  ├─ rclone rcd (localhost HTTP) + per-transfer CLI         │
+│  └─ PTY children (portable-pty; Windows Job Object cleanup) │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Principles
 
-1. **Single binary, multi-process where it matters.** The core is a single Rust process. Subprocesses are used only where necessary: rclone (network code isolation), PTY (terminal nature), and in the future Ollama for LLM inference.
+1. **Single binary, subprocesses only where required.** rclone and PTY
+   children. LLM inference is planned, not present.
+2. **Event → Action → Command.** Touch, mouse, keyboard, and pen become a
+   semantic `Action`. Registered commands have an `orc …` form. File-manager
+   operations use internal action ids (`fs.copy`, …) and profile bindings;
+   they are **not** all `orc fs …` verbs.
+3. **State in one place.** redb (`state.redb`, schema **v2**). Vault:
+   `passwords.kdbx`. Chunks under `data/chunks`. Config is TOML.
+4. **No plugins in this release.** Everything is built in (v2.0 item).
 
-2. **Event → Action → Command.** Every input (touch, mouse, keyboard, pen, voice) is converted into a semantic Action. Each Action has a textual command representation and is reversible where possible.
-
-3. **State in one place.** redb is the single store for runtime state. The password vault is a KDBX4 file (`passwords.kdbx`) via the `keepass` crate — not SQLite. Files are used for chunks of the deduplicated storage.
-
-4. **Configuration is transparent.** TOML files, editable by humans. Power users should be able to share configurations easily.
-
-5. **No plugins in MVP.** Everything is built in. The plugin system is planned for v2.0, designed based on real experience.
-
-## Crate Structure
+## Crate map
 
 ```
 orchid/
-├── Cargo.toml                   # workspace root
-├── README.md                    # project overview (repo root)
-├── CHANGELOG.md                 # notable changes
-├── docs/                        # roadmap, architecture, format specs
 ├── crates/
-│   ├── orchid-core/             # event bus, command registry, types
-│   ├── orchid-storage/          # redb wrapper, config, state
-│   ├── orchid-crypto/           # age, KDBX, content addressing
-│   ├── orchid-fs/               # local FS, network providers, chunking
-│   ├── orchid-search/           # Tantivy + ANN hybrid
-│   ├── orchid-terminal/         # PTY + custom vte emulation
-│   ├── orchid-viewers/          # PDF, images, text, archives, DOCX editor
-│   ├── orchid-widgets/          # widget infrastructure + built-in widgets
-│   ├── orchid-embed/            # sentence embeddings (stub; ORT optional)
-│   ├── orchid-format/           # native .orchid container (Phases 1–5)
-│   ├── orchid-i18n/             # localization (Fluent, 11 locales)
-│   ├── orchid-ui/               # Slint UI layer + window manager
-│   └── orchid-app/              # main binary, wires everything together
-├── assets/                      # icons, fonts, branding
-└── tests/                       # reserved for future cross-crate integration tests
+│   ├── orchid-core/
+│   ├── orchid-storage/        # redb schema v2, config.toml
+│   ├── orchid-crypto/
+│   ├── orchid-fs/
+│   ├── orchid-search/         # Tantivy + hybrid helpers
+│   ├── orchid-terminal/
+│   ├── orchid-viewers/
+│   ├── orchid-widgets/
+│   ├── orchid-format/        # .orchid container + CLI
+│   ├── orchid-embed/
+│   ├── orchid-i18n/
+│   ├── orchid-ui/
+│   └── orchid-app/           # orchid.exe
+├── docs/
+├── scripts/
+└── third-party/               # pdfium, libmpv (not committed as blobs)
 ```
 
-See also: [CHANGELOG.md](../CHANGELOG.md), [ROADMAP.md](ROADMAP.md),
-[ORCHID_FORMAT.md](ORCHID_FORMAT.md) (Phases 1–5 in `orchid-format` +
-`orchid-embed` / hybrid search).
+`orchid-app` boots logging, `OrchidPaths`, and `orchid_ui::OrchidApp`.
+Composition lives in `OrchidApp::bootstrap`. A second `orchid.exe` forwards
+argv paths over a Windows named pipe and exits.
 
-## Network FS note
+## Persistence (Windows, typical)
 
-Network mounts are implemented by spawning the **rclone CLI** (`lsjson`, `cat`, `rcat`, …) per operation. A long-lived `rclone serve` process and Cap'n Proto IPC are **not** in the tree yet; treat older diagrams that mention them as aspirational.
+| Store | Path | Contents |
+|-------|-------|----------|
+| `config.toml` | `%APPDATA%\Orchid\Orchid\config\config.toml` | Settings; hot-reloaded |
+| `state.redb` | `…\data\state.redb` | Workspaces, widgets, groups, history, session, cache, tags. Schema **v2**. Extra: `crypto_chunk_refs`, `widget_groups` |
+| `passwords.kdbx` | `…\data\passwords.kdbx` | KeePass vault |
+| chunks | `…\data\chunks` | BLAKE3 + FastCDC (plaintext by design) |
+| search index | `…\data\search_index` | Tantivy |
+| logs | `…\data\logs` | Default filter `orchid=info` |
+| network bookmarks | `…\data\network-bookmarks.toml` | Runtime mounts |
 
-Prefer `rclone-remote` in `config.toml` (credentials in `rclone.conf`) over inline `password` fields — see [SECURITY.md](SECURITY.md).
+Codec for redb values: `bincode_reloaded` 3. Path table:
+[admin/data-and-operations.md](admin/data-and-operations.md).
 
-## Widget visibility, windows, and background jobs
+## Widget visibility and windows
 
-- **Visibility owns Active ↔ Sleeping.** A widget is active only when it is on the active workspace and is the active tab of its group (or not in a multi-member group). `visible_instance_ids` + `WidgetManager::apply_visibility` drive this; the UI calls sync after layout-changing actions (and once at bootstrap).
-- **In-app window manager.** Each instance has a `WindowPlacement` (grid cell or floating overlay). Users undock / dock, minimize / maximize / restore, edge-snap, and cycle with Ctrl+Tab; state persists in redb (schema v2). Floating viewers (images, PDF, text, archives, DOCX) share the same chrome; catalog **Document** can open docked on the canvas.
-- **Sleeping → Unloaded** remains an idle memory reclaim (~30 min). Idle Active → Sleeping was removed so visible widgets are not paused by `last_touched`.
-- **UI-only timers** (`PeriodicRefresh`: media, system, password, moon) stop in `on_sleep`.
-- **Always-on work** (RSS/weather network refresh; future AI agents) uses `orchid_core::BackgroundJobQueue` — interval jobs keyed by string, independent of widget visibility until the instance is closed.
+- **Active** only on the active workspace and active group tab.
+- Sleeping → Unloaded after idle (~30 min). Visible widgets are not paused
+  by `last_touched`.
+- `WindowPlacement`: grid or floating (cap 8). Undock / dock, snap,
+  taskbar, Ctrl+Tab.
+- RSS / weather fetch uses `BackgroundJobQueue` until the instance is closed.
 
-## Detailed Architecture
+## Network FS
 
-- [SECURITY.md](SECURITY.md) — security model and reporting
+List/stat prefer a long-lived **`rclone rcd`** HTTP server on localhost
+(keep-alive). Transfers and `sync` still spawn the rclone CLI. Prefer
+`rclone-remote` over inline passwords — [SECURITY.md](SECURITY.md).
 
-Additional deep-dive documents (state storage, event bus, UI layer) are planned as the implementation stabilizes; until then, see the sections above and [DESIGN.md](DESIGN.md).
+## Related
+
+- [DESIGN.md](DESIGN.md) — UX + cinema kit
+- [SECURITY.md](SECURITY.md)
+- Crate READMEs under `crates/*/README.md`

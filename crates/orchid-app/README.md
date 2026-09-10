@@ -1,5 +1,8 @@
 # orchid-app
 
-The Orchid desktop application binary. This crate is the single place that depends on every other `orchid-*` crate and stitches them into a running program: it initialises logging, constructs the runtime, mounts the Slint UI, and drives the main event loop.
+Thin `orchid.exe` entry: tracing, `OrchidPaths`, Tokio, Windows `mimalloc`,
+`SLINT_BACKEND=winit-skia`, then `orchid_ui::OrchidApp`. Composition lives in
+`orchid-ui`. A second process forwards argv paths over a named pipe.
 
-Keeping the binary thin (wiring only, no business logic) makes every subsystem independently testable from its own crate.
+Build: [`docs/BUILDING.md`](../../docs/BUILDING.md). Install:
+[`docs/admin/install.md`](../../docs/admin/install.md).

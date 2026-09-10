@@ -26,8 +26,17 @@ Be respectful. We are building a product for a diverse audience and expect the s
 3. Write code following the guidelines below
 4. Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo test`
 5. For user-visible work, update [`CHANGELOG.md`](../CHANGELOG.md) under
-   **Unreleased** (Added / Changed / Fixed / Security)
+   **Unreleased** (Added / Changed / Fixed / Security) **and** the matching
+   [user](user/README.md) / [admin](admin/README.md) page
 6. Open a Pull Request describing your changes
+
+## Documentation rules
+
+- User / admin guides describe the **current** binary. Do not list future
+  features there.
+- [ROADMAP.md](ROADMAP.md) is the only backlog. When you ship an item,
+  delete it from the roadmap and document it in the guides + changelog.
+- Crate `README.md` files must match `lib.rs` modules.
 
 ## Code Standards
 
