@@ -539,6 +539,15 @@ release yet.
   across viewer content ticks.
 - **Tag multi-select**: star / unstar / colour / add-tag / remove-tag across a
   selection commit in one redb transaction instead of one fsync per path.
+- **rclone RC keep-alive**: one persistent TCP connection to `rclone rcd` with
+  HTTP/1.1 keep-alive and `Content-Length` framed reads, so folder navigation
+  does not handshake `127.0.0.1` on every list/stat.
+- **FM metadata hydrate**: skip re-stat when listing already filled
+  kind/size/mtime/mime (directories always skipped); only bare catalog paths
+  still pay a metadata round trip.
+- **Empty widget-frame pack**: cache the ~19 empty sibling Slint models per
+  locale on the UI thread so `build_widget_frame_for_placed` clones refcounts
+  instead of re-resolving ~650 Fluent labels per frame.
 - **Processes widget**: full process census on activate and every 4th
   tick; intervening samples refresh only last-known PIDs.
 - **DOCX preview**: caret / selection paints over a cached page raster
