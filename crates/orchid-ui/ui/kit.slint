@@ -1,0 +1,688 @@
+// Orchid control kit: touch-first, expressive building blocks.
+//
+// Everything here is finger-sized by default (`Theme.control-*` metrics scale
+// with density), uses the cinematic surface ramp, and reacts with a state layer
+// plus an elevation change instead of a flat colour swap.
+//
+// Prefer these over hand-rolled `TouchArea` + `Rectangle` pairs so that touch
+// targets, radii, and motion stay consistent across widgets.
+
+import { Theme } from "theme_global.slint";
+import { Icon } from "kit-icons.slint";
+
+/// Visual weight of a button-like control.
+export enum ButtonTone {
+    /// Solid accent gradient. One per view — the primary action.
+    filled,
+    /// Accent-tinted fill. Secondary actions and active toggles.
+    tonal,
+    /// Raised neutral surface. Default toolbar action.
+    neutral,
+    /// No fill until hovered. Dense toolbars.
+    ghost,
+    /// Hairline outline only.
+    outline,
+    /// Destructive action.
+    danger,
+}
+
+export enum ControlSize {
+    /// Dense chrome only (tab close buttons); below the comfortable touch target.
+    xs,
+    sm,
+    md,
+    lg,
+}
+
+/// Hover tooltip. Place inside the control that owns the hover state.
+export component Tooltip inherits Rectangle {
+    in property <string> text;
+    in property <bool> shown: false;
+
+    visible: shown && text != "";
+    width: label.preferred-width + Theme.space-3 * 2;
+    height: label.preferred-height + Theme.space-2 * 2;
+    background: Theme.surface-floating;
+    border-radius: Theme.radius-sm;
+    border-width: Theme.hairline;
+    border-color: Theme.border-subtle;
+    drop-shadow-blur: Theme.elev-2-blur;
+    drop-shadow-offset-y: Theme.elev-2-y;
+    drop-shadow-color: Theme.shadow-key;
+    z: 1000;
+
+    label := Text {
+        x: Theme.space-3;
+        y: Theme.space-2;
+        text: root.text;
+        color: Theme.text-secondary;
+        font-size: Theme.font-size-sm;
+        font-weight: Theme.weight-medium;
+    }
+}
+
+/// Primary touch control: pill button with optional leading icon.
+export component TouchButton inherits Rectangle {
+    in property <string> text;
+    /// Optional [`Icon`] name rendered before the label.
+    in property <string> icon;
+    in property <ButtonTone> tone: ButtonTone.neutral;
+    in property <ControlSize> size: ControlSize.md;
+    in property <bool> enabled: true;
+    /// Toggle-style highlight, independent of hover.
+    in property <bool> active: false;
+    /// Stretch to fill the parent layout instead of hugging the label.
+    in property <bool> wide: false;
+    in property <string> tooltip;
+    out property <bool> hovered: touch.has-hover && root.enabled;
+    out property <bool> is-pressed: touch.pressed && root.enabled;
+
+    callback clicked();
+
+    property <length> control-height:
+        size == ControlSize.xs ? Theme.control-xs
+        : size == ControlSize.sm ? Theme.control-sm
+        : size == ControlSize.lg ? Theme.control-lg
+        : Theme.control-md;
+    property <length> pad:
+        size == ControlSize.xs ? Theme.space-2
+        : size == ControlSize.sm ? Theme.space-3
+        : size == ControlSize.lg ? Theme.space-6
+        : Theme.space-4;
+    property <length> label-size:
+        size == ControlSize.xs ? Theme.font-size-xs
+        : size == ControlSize.sm ? Theme.font-size-sm
+        : size == ControlSize.lg ? Theme.font-size-lg
+        : Theme.font-size-md;
+    property <bool> icon-only: text == "" && icon != "";
+    property <bool> emphasised: tone == ButtonTone.filled || (active && tone != ButtonTone.ghost);
+
+    property <color> foreground:
+        !enabled ? Theme.text-disabled
+        : tone == ButtonTone.filled ? Theme.accent-contrast
+        : tone == ButtonTone.danger ? Theme.feedback-danger
+        : active ? Theme.accent-brand
+        : tone == ButtonTone.ghost ? Theme.text-secondary
+        : Theme.text-primary;
+
+    min-height: control-height;
+    max-height: control-height;
+    min-width: icon-only ? control-height : control-height * 1.6;
+    horizontal-stretch: wide ? 1 : 0;
+    vertical-stretch: 0;
+    border-radius: Theme.radius-pill;
+
+    background:
+        !enabled ? Theme.state-disabled
+        : tone == ButtonTone.filled ? Theme.gradient-accent
+        : tone == ButtonTone.danger ? Theme.feedback-danger-soft
+        : active ? Theme.accent-soft
+        : tone == ButtonTone.tonal ? Theme.accent-soft
+        : tone == ButtonTone.neutral ? Theme.surface-overlay
+        : Colors.transparent;
+
+    border-width: (tone == ButtonTone.outline || tone == ButtonTone.neutral) ? Theme.hairline : 0px;
+    border-color: root.hovered ? Theme.border-strong : Theme.border-default;
+
+    // Filled buttons bloom on hover; the rest lift with a neutral shadow.
+    drop-shadow-blur: !enabled ? 0px
+        : emphasised ? (root.hovered ? Theme.elev-glow-blur : Theme.elev-1-blur)
+        : (root.hovered ? Theme.elev-1-blur : 0px);
+    drop-shadow-offset-y: root.is-pressed ? 0px : Theme.elev-1-y;
+    drop-shadow-color: emphasised ? Theme.accent-glow : Theme.shadow-ambient;
+
+    animate background, border-color, drop-shadow-blur, drop-shadow-offset-y {
+        duration: Theme.motion-fast;
+        easing: ease-out;
+    }
+
+    // State layer: one overlay handles hover + press for every tone.
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        border-radius: parent.border-radius;
+        background: root.is-pressed ? Theme.state-press
+            : root.hovered ? Theme.state-hover
+            : Colors.transparent;
+        animate background { duration: Theme.motion-instant; easing: ease-out; }
+    }
+
+    HorizontalLayout {
+        padding-left: root.icon-only ? 0px : root.pad;
+        padding-right: root.icon-only ? 0px : root.pad;
+        spacing: Theme.space-2;
+        alignment: center;
+
+        if root.icon != "" : Icon {
+            name: root.icon;
+            size: root.label-size * 1.3;
+            tint: root.foreground;
+        }
+
+        if root.text != "" : Text {
+            text: root.text;
+            color: root.foreground;
+            font-size: root.label-size;
+            font-weight: Theme.weight-semibold;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+            wrap: no-wrap;
+            overflow: elide;
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.clicked(); }
+    }
+
+    Tooltip {
+        text: root.tooltip;
+        shown: root.hovered;
+        x: 0;
+        y: root.height + Theme.space-1;
+    }
+}
+
+/// Circular icon-only action. Use in chrome where labels do not fit.
+export component IconButton inherits Rectangle {
+    in property <string> icon;
+    in property <ControlSize> size: ControlSize.md;
+    in property <bool> enabled: true;
+    in property <bool> active: false;
+    in property <bool> danger: false;
+    in property <string> tooltip;
+    /// Anchor the tooltip to the left edge when the button sits near the right border.
+    in property <bool> tooltip-flip: false;
+    in property <color> color-override: Colors.transparent;
+    out property <bool> hovered: touch.has-hover && root.enabled;
+
+    callback clicked();
+
+    property <length> button-size:
+        size == ControlSize.xs ? Theme.control-xs
+        : size == ControlSize.sm ? Theme.icon-button-sm
+        : size == ControlSize.lg ? Theme.control-lg
+        : Theme.icon-button;
+
+    min-width: button-size;
+    min-height: button-size;
+    max-width: button-size;
+    max-height: button-size;
+    border-radius: button-size / 2;
+
+    background: !enabled ? Colors.transparent
+        : root.active ? Theme.accent-soft
+        : touch.pressed ? Theme.state-press
+        : root.hovered ? Theme.state-hover
+        : Colors.transparent;
+
+    animate background { duration: Theme.motion-instant; easing: ease-out; }
+
+    Icon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        name: root.icon;
+        size: root.button-size * 0.46;
+        tint: !root.enabled ? Theme.text-disabled
+            : root.color-override != Colors.transparent ? root.color-override
+            : root.danger ? Theme.feedback-danger
+            : root.active ? Theme.accent-brand
+            : root.hovered ? Theme.text-primary
+            : Theme.text-secondary;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.clicked(); }
+    }
+
+    Tooltip {
+        text: root.tooltip;
+        shown: root.hovered;
+        x: root.tooltip-flip ? root.width - self.width : 0px;
+        y: root.height + Theme.space-1;
+    }
+}
+
+/// Selectable pill. Filters, tags, quick options.
+export component Chip inherits Rectangle {
+    in property <string> text;
+    in property <string> icon;
+    in property <bool> selected: false;
+    in property <bool> enabled: true;
+    /// Show a trailing dismiss affordance.
+    in property <bool> removable: false;
+    out property <bool> hovered: touch.has-hover && root.enabled;
+
+    callback clicked();
+    callback removed();
+
+    min-height: Theme.control-sm;
+    max-height: Theme.control-sm;
+    min-width: Theme.control-sm;
+    vertical-stretch: 0;
+    border-radius: Theme.radius-pill;
+    background: root.selected ? Theme.accent-soft
+        : touch.pressed ? Theme.state-press
+        : root.hovered ? Theme.state-hover
+        : Theme.surface-overlay;
+    border-width: Theme.hairline;
+    border-color: root.selected ? Theme.accent-muted : Theme.border-subtle;
+
+    animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.space-3;
+        padding-right: root.removable ? Theme.space-1 : Theme.space-3;
+        spacing: Theme.space-2;
+        alignment: center;
+
+        if root.icon != "" : Icon {
+            name: root.icon;
+            size: Theme.font-size-md;
+            tint: root.selected ? Theme.accent-brand : Theme.text-secondary;
+        }
+
+        Text {
+            text: root.text;
+            color: root.selected ? Theme.accent-brand : Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+            font-weight: Theme.weight-medium;
+            vertical-alignment: center;
+            wrap: no-wrap;
+            overflow: elide;
+        }
+
+        if root.removable : IconButton {
+            icon: "close";
+            size: ControlSize.sm;
+            clicked => { root.removed(); }
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+/// Two-state switch with an animated knob. Finger-sized by default.
+export component ToggleSwitch inherits Rectangle {
+    in property <bool> checked: false;
+    in property <bool> enabled: true;
+    out property <bool> hovered: touch.has-hover && root.enabled;
+
+    callback toggled();
+
+    property <length> track-height: Theme.control-sm * 0.72;
+    property <length> knob-size: track-height - Theme.space-1 * 1.5;
+
+    min-width: track-height * 1.85;
+    max-width: track-height * 1.85;
+    min-height: Theme.touch-target;
+    max-height: Theme.touch-target;
+    vertical-stretch: 0;
+    background: transparent;
+
+    track := Rectangle {
+        y: (parent.height - root.track-height) / 2;
+        width: 100%;
+        height: root.track-height;
+        border-radius: self.height / 2;
+        background: !root.enabled ? Theme.state-disabled
+            : root.checked ? Theme.accent-brand
+            : Theme.surface-sunken;
+        border-width: Theme.hairline;
+        border-color: root.checked ? Theme.accent-strong : Theme.border-default;
+
+        animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
+
+        knob := Rectangle {
+            x: root.checked
+                ? parent.width - self.width - Theme.space-1 * 0.75
+                : Theme.space-1 * 0.75;
+            y: (parent.height - self.height) / 2;
+            width: root.knob-size;
+            height: root.knob-size;
+            border-radius: self.height / 2;
+            background: root.checked ? Theme.accent-contrast : Theme.text-tertiary;
+            drop-shadow-blur: Theme.elev-1-blur;
+            drop-shadow-offset-y: Theme.elev-1-y;
+            drop-shadow-color: Theme.shadow-ambient;
+
+            animate x, background { duration: Theme.motion-fast; easing: ease-in-out; }
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.toggled(); }
+    }
+}
+
+/// Horizontal value scrubber with a large thumb. `value` is normalised 0..1.
+export component TouchSlider inherits Rectangle {
+    in property <float> value: 0;
+    in property <bool> enabled: true;
+    /// Buffered / secondary progress drawn behind the fill (0..1).
+    in property <float> buffer: 0;
+    out property <bool> hovered: touch.has-hover && root.enabled;
+    out property <bool> scrubbing: touch.pressed && root.enabled;
+
+    /// Emitted continuously while dragging and once on tap.
+    callback value-changed(float);
+
+    property <length> thumb-size: root.scrubbing || root.hovered
+        ? Theme.space-5
+        : Theme.space-4;
+    property <length> track-thickness: root.hovered || root.scrubbing ? Theme.space-2 : Theme.space-1 * 1.5;
+
+    min-height: Theme.touch-target;
+    max-height: Theme.touch-target;
+    horizontal-stretch: 1;
+    background: transparent;
+
+    track := Rectangle {
+        y: (parent.height - self.height) / 2;
+        width: 100%;
+        height: root.track-thickness;
+        border-radius: self.height / 2;
+        background: Theme.surface-sunken;
+        border-width: Theme.hairline;
+        border-color: Theme.border-subtle;
+
+        animate height { duration: Theme.motion-fast; easing: ease-out; }
+
+        Rectangle {
+            x: 0;
+            width: parent.width * clamp(root.buffer, 0.0, 1.0);
+            height: 100%;
+            border-radius: parent.border-radius;
+            background: Theme.text-tertiary.with-alpha(0.35);
+        }
+
+        Rectangle {
+            x: 0;
+            width: parent.width * clamp(root.value, 0.0, 1.0);
+            height: 100%;
+            border-radius: parent.border-radius;
+            background: root.enabled ? Theme.gradient-accent : Theme.state-disabled;
+        }
+    }
+
+    thumb := Rectangle {
+        x: (root.width - self.width) * clamp(root.value, 0.0, 1.0);
+        y: (parent.height - self.height) / 2;
+        width: root.thumb-size;
+        height: root.thumb-size;
+        border-radius: self.height / 2;
+        background: root.enabled ? Theme.accent-contrast : Theme.text-disabled;
+        border-width: max(2px, self.width * 0.16);
+        border-color: root.enabled ? Theme.accent-brand : Theme.border-default;
+        drop-shadow-blur: root.scrubbing ? Theme.elev-glow-blur : Theme.elev-1-blur;
+        drop-shadow-offset-y: Theme.elev-1-y;
+        drop-shadow-color: root.scrubbing ? Theme.accent-glow : Theme.shadow-ambient;
+
+        animate width, height, drop-shadow-blur { duration: Theme.motion-fast; easing: ease-out; }
+    }
+
+    /// Map the pointer onto the thumb's travel so the grab point tracks the
+    /// finger at both extremes.
+    function emit(px: length) {
+        root.value-changed(clamp(
+            (px - root.thumb-size / 2) / max(1px, root.width - root.thumb-size),
+            0.0,
+            1.0
+        ));
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+
+        moved => {
+            if (self.pressed) {
+                root.emit(self.mouse-x);
+            }
+        }
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down) {
+                root.emit(self.mouse-x);
+            }
+        }
+    }
+}
+
+/// Determinate progress bar (non-interactive).
+export component ProgressTrack inherits Rectangle {
+    in property <float> value: 0;
+    in property <brush> fill: Theme.gradient-accent;
+
+    min-height: Theme.space-2;
+    max-height: Theme.space-2;
+    border-radius: self.height / 2;
+    background: Theme.surface-sunken;
+    border-width: Theme.hairline;
+    border-color: Theme.border-subtle;
+    clip: true;
+
+    Rectangle {
+        x: 0;
+        width: parent.width * clamp(root.value, 0.0, 1.0);
+        height: 100%;
+        border-radius: parent.border-radius;
+        background: root.fill;
+        animate width { duration: Theme.motion-base; easing: ease-out; }
+    }
+}
+
+/// Layered content container: the default surface for panels and widget bodies.
+export component GlassCard inherits Rectangle {
+    /// 0 = flush, 1 = resting card, 2 = popover, 3 = modal.
+    in property <int> elevation: 1;
+    in property <bool> interactive: false;
+    in property <bool> selected: false;
+
+    background: Theme.gradient-glass;
+    border-radius: Theme.radius-lg;
+    border-width: Theme.hairline;
+    border-color: root.selected ? Theme.accent-muted : Theme.border-default;
+    drop-shadow-blur: elevation >= 3 ? Theme.elev-3-blur
+        : elevation == 2 ? Theme.elev-2-blur
+        : elevation == 1 ? Theme.elev-1-blur
+        : 0px;
+    drop-shadow-offset-y: elevation >= 3 ? Theme.elev-3-y
+        : elevation == 2 ? Theme.elev-2-y
+        : elevation == 1 ? Theme.elev-1-y
+        : 0px;
+    drop-shadow-color: elevation >= 2 ? Theme.shadow-key : Theme.shadow-ambient;
+
+    animate border-color, drop-shadow-blur { duration: Theme.motion-fast; easing: ease-out; }
+
+    // Lit top edge — the detail that makes stacked panels read as glass.
+    Rectangle {
+        y: 0;
+        width: 100%;
+        height: Theme.hairline;
+        background: Theme.border-highlight;
+        opacity: 0.6;
+    }
+
+    @children
+}
+
+/// Wide-tracked uppercase caption that opens a section.
+export component Eyebrow inherits Text {
+    color: Theme.text-eyebrow;
+    font-size: Theme.font-size-xs;
+    font-weight: Theme.weight-semibold;
+    letter-spacing: Theme.tracking-wider;
+}
+
+/// Hairline separator. Stretches along its layout axis; set `vertical` when
+/// used as a column rule.
+export component Divider inherits Rectangle {
+    in property <bool> vertical: false;
+
+    max-width: vertical ? Theme.hairline : 1000000px;
+    max-height: vertical ? 1000000px : Theme.hairline;
+    min-width: vertical ? Theme.hairline : 0px;
+    min-height: vertical ? 0px : Theme.hairline;
+    horizontal-stretch: vertical ? 0 : 1;
+    vertical-stretch: vertical ? 1 : 0;
+    background: Theme.border-default;
+}
+
+/// Sheet / drawer grab handle.
+export component Grabber inherits Rectangle {
+    width: Theme.grabber-width;
+    height: Theme.grabber-height;
+    border-radius: self.height / 2;
+    background: Theme.text-tertiary.with-alpha(0.5);
+}
+
+/// Small count / status badge.
+export component Badge inherits Rectangle {
+    in property <string> text;
+    in property <color> tint: Theme.accent-brand;
+
+    min-height: Theme.font-size-md * 1.5;
+    max-height: Theme.font-size-md * 1.5;
+    min-width: Theme.font-size-md * 1.5;
+    border-radius: self.height / 2;
+    background: tint.with-alpha(0.18);
+    border-width: Theme.hairline;
+    border-color: tint.with-alpha(0.4);
+
+    HorizontalLayout {
+        padding-left: Theme.space-2;
+        padding-right: Theme.space-2;
+        alignment: center;
+
+        Text {
+            text: root.text;
+            color: root.tint;
+            font-size: Theme.font-size-xs;
+            font-weight: Theme.weight-semibold;
+            vertical-alignment: center;
+        }
+    }
+}
+
+/// Tappable list row with leading icon, title, optional subtitle and trailing slot.
+export component ListTile inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <string> icon;
+    in property <bool> selected: false;
+    in property <bool> enabled: true;
+    out property <bool> hovered: touch.has-hover && root.enabled;
+
+    callback clicked();
+    callback double-clicked();
+
+    min-height: subtitle == "" ? Theme.row-height : Theme.control-lg;
+    border-radius: Theme.radius-md;
+    background: root.selected ? Theme.state-selected
+        : touch.pressed ? Theme.state-press
+        : root.hovered ? Theme.state-hover
+        : Colors.transparent;
+
+    animate background { duration: Theme.motion-instant; easing: ease-out; }
+
+    // Accent rail marks the selected row without shouting.
+    if root.selected : Rectangle {
+        x: 0;
+        y: (parent.height - self.height) / 2;
+        width: Theme.indicator-thickness;
+        height: parent.height * 0.55;
+        border-radius: self.width / 2;
+        background: Theme.accent-brand;
+    }
+
+    HorizontalLayout {
+        padding-left: Theme.space-3;
+        padding-right: Theme.space-3;
+        spacing: Theme.space-3;
+
+        if root.icon != "" : Icon {
+            name: root.icon;
+            size: Theme.font-size-lg;
+            tint: root.selected ? Theme.accent-brand : Theme.text-secondary;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+
+            Text {
+                text: root.title;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-md;
+                font-weight: root.selected ? Theme.weight-semibold : Theme.weight-medium;
+                wrap: no-wrap;
+                overflow: elide;
+            }
+
+            if root.subtitle != "" : Text {
+                text: root.subtitle;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                wrap: no-wrap;
+                overflow: elide;
+            }
+        }
+
+        @children
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.clicked(); }
+        double-clicked => { root.double-clicked(); }
+    }
+}
+
+/// Centred placeholder for empty lists and unavailable content.
+export component EmptyState inherits Rectangle {
+    in property <string> icon;
+    in property <string> title;
+    in property <string> hint;
+
+    background: transparent;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: Theme.space-3;
+
+        if root.icon != "" : Icon {
+            name: root.icon;
+            size: Theme.font-size-3xl;
+            tint: Theme.text-tertiary.with-alpha(0.6);
+        }
+
+        Text {
+            text: root.title;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-md;
+            font-weight: Theme.weight-medium;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+
+        if root.hint != "" : Text {
+            text: root.hint;
+            color: Theme.text-tertiary;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+}

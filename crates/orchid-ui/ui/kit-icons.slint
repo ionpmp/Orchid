@@ -1,0 +1,130 @@
+// Stroke icon set for app chrome.
+//
+// Every glyph is drawn on a 24x24 viewbox with a single `Path`, so icons stay
+// crisp at any density and inherit the theme colour. Widget-specific pictograms
+// (file types, viewer tools) keep living next to their widget.
+
+import { Theme } from "theme_global.slint";
+
+/// Named stroke icon. Unknown names render nothing.
+export component Icon inherits Rectangle {
+    in property <string> name;
+    in property <length> size: 20px;
+    /// Ink colour. Named `tint` because `color` is reserved on `Rectangle`.
+    in property <color> tint: Theme.text-secondary;
+    /// Stroke weight; scales with the icon so small sizes stay legible.
+    in property <length> weight: max(1.25px, size * 0.085);
+
+    width: size;
+    height: size;
+    background: transparent;
+
+    // Two-part glyphs (search, bell, restore) are composed from a stroked path
+    // plus an optional filled path below.
+    property <string> stroke-commands:
+        name == "close" ? "M 6 6 L 18 18 M 18 6 L 6 18" :
+        name == "plus" ? "M 12 5 L 12 19 M 5 12 L 19 12" :
+        name == "minus" ? "M 5 12 L 19 12" :
+        name == "check" ? "M 5 12.5 L 10 17.5 L 19 6.5" :
+        name == "chevron-left" ? "M 15 5 L 8 12 L 15 19" :
+        name == "chevron-right" ? "M 9 5 L 16 12 L 9 19" :
+        name == "chevron-up" ? "M 5 15 L 12 8 L 19 15" :
+        name == "chevron-down" ? "M 5 9 L 12 16 L 19 9" :
+        name == "arrow-left" ? "M 19 12 L 5 12 M 11 6 L 5 12 L 11 18" :
+        name == "arrow-right" ? "M 5 12 L 19 12 M 13 6 L 19 12 L 13 18" :
+        name == "arrow-up" ? "M 12 19 L 12 5 M 6 11 L 12 5 L 18 11" :
+        name == "search"
+            ? "M 17 10.5 A 6.5 6.5 0 1 1 4 10.5 A 6.5 6.5 0 1 1 17 10.5 M 15.4 15.4 L 20 20"
+            :
+        name == "settings"
+            ? "M 15 12 A 3 3 0 1 1 9 12 A 3 3 0 1 1 15 12"
+              + " M 12 3 L 12 6 M 12 18 L 12 21 M 3 12 L 6 12 M 18 12 L 21 12"
+              + " M 5.6 5.6 L 7.8 7.8 M 16.2 16.2 L 18.4 18.4"
+              + " M 18.4 5.6 L 16.2 7.8 M 7.8 16.2 L 5.6 18.4"
+            :
+        name == "sliders"
+            ? "M 4 7 L 20 7 M 4 12 L 20 12 M 4 17 L 20 17"
+              + " M 9 4.5 L 9 9.5 M 16 9.5 L 16 14.5 M 7 14.5 L 7 19.5"
+            :
+        name == "maximize" ? "M 6 6 L 18 6 L 18 18 L 6 18 Z" :
+        name == "restore" ? "M 9 8 L 9 6 L 18 6 L 18 15 L 16 15 M 6 9 L 15 9 L 15 18 L 6 18 Z" :
+        name == "undock" ? "M 14 5 L 19 5 L 19 10 M 19 5 L 11.5 12.5 M 17 14 L 17 19 L 5 19 L 5 7 L 10 7" :
+        name == "dock" ? "M 4 6 L 20 6 L 20 18 L 4 18 Z M 4 10 L 20 10" :
+        name == "bell"
+            ? "M 12 4 A 5.5 5.5 0 0 1 17.5 9.5 L 17.5 13.5 L 19.5 16.5 L 4.5 16.5 L 6.5 13.5"
+              + " L 6.5 9.5 A 5.5 5.5 0 0 1 12 4 Z M 9.8 19.2 A 2.4 2.4 0 0 0 14.2 19.2"
+            :
+        name == "grid" ? "M 4 4 L 10 4 L 10 10 L 4 10 Z M 14 4 L 20 4 L 20 10 L 14 10 Z"
+              + " M 4 14 L 10 14 L 10 20 L 4 20 Z M 14 14 L 20 14 L 20 20 L 14 20 Z" :
+        name == "layers" ? "M 12 3.5 L 21 8 L 12 12.5 L 3 8 Z M 3 12.5 L 12 17 L 21 12.5 M 3 17 L 12 21.5 L 21 17" :
+        name == "pause" ? "M 9.5 5 L 9.5 19 M 14.5 5 L 14.5 19" :
+        name == "skip-next" ? "M 17 5 L 17 19" :
+        name == "skip-prev" ? "M 7 5 L 7 19" :
+        name == "star" ? "M 12 3.5 L 14.6 9.2 L 20.5 9.9 L 16.1 14 L 17.3 20 L 12 17 L 6.7 20"
+              + " L 7.9 14 L 3.5 9.9 L 9.4 9.2 Z" :
+        name == "lock" ? "M 7 11 L 17 11 L 17 20 L 7 20 Z M 9 11 L 9 8 A 3 3 0 0 1 15 8 L 15 11" :
+        name == "trash" ? "M 5 7 L 19 7 M 9.5 7 L 9.5 4.5 L 14.5 4.5 L 14.5 7"
+              + " M 6.5 7 L 7.5 20 L 16.5 20 L 17.5 7 M 10 10.5 L 10 16.5 M 14 10.5 L 14 16.5" :
+        name == "refresh" ? "M 19.5 12 A 7.5 7.5 0 1 1 17 6.3 M 19.5 3.5 L 19.5 8 L 15 8" :
+        name == "info" ? "M 20 12 A 8 8 0 1 1 4 12 A 8 8 0 1 1 20 12 M 12 11 L 12 16.5" :
+        name == "warning" ? "M 12 4 L 21 19.5 L 3 19.5 Z M 12 9.5 L 12 14.5" :
+        name == "home" ? "M 4 11 L 12 4 L 20 11 M 6.5 9.5 L 6.5 20 L 17.5 20 L 17.5 9.5" :
+        name == "clock" ? "M 20 12 A 8 8 0 1 1 4 12 A 8 8 0 1 1 20 12 M 12 7 L 12 12.5 L 15.5 14.5" :
+        name == "volume"
+            ? "M 4 9.5 L 7.5 9.5 L 12 5.5 L 12 18.5 L 7.5 14.5 L 4 14.5 Z"
+            + " M 15.5 9 A 4 4 0 0 1 15.5 15"
+            :
+        name == "volume-off"
+            ? "M 4 9.5 L 7.5 9.5 L 12 5.5 L 12 18.5 L 7.5 14.5 L 4 14.5 Z"
+            + " M 15.5 10 L 20 14 M 20 10 L 15.5 14"
+            :
+        name == "shuffle"
+            ? "M 4 7 L 8 7 L 16 17 L 20 17 M 4 17 L 8 17 L 11 13 M 14 9 L 16 7 L 20 7"
+            + " M 17 4 L 20 7 L 17 10 M 17 14 L 20 17 L 17 20"
+            :
+        name == "repeat"
+            ? "M 7 6 L 17 6 L 20 9 M 17 18 L 7 18 L 4 15 M 20 9 L 20 15 L 17 18 M 4 15 L 4 9 L 7 6"
+            :
+        name == "repeat-one"
+            ? "M 7 6 L 17 6 L 20 9 M 17 18 L 7 18 L 4 15 M 20 9 L 20 15 L 17 18 M 4 15 L 4 9 L 7 6"
+            + " M 11 11 L 12.5 10 L 12.5 15"
+            :
+        "";
+
+    property <string> fill-commands:
+        name == "play" ? "M 8.5 5 L 19 12 L 8.5 19 Z" :
+        name == "skip-next" ? "M 5 5 L 15 12 L 5 19 Z" :
+        name == "skip-prev" ? "M 19 5 L 9 12 L 19 19 Z" :
+        name == "more" ? "M 6 10.4 A 1.6 1.6 0 1 1 6 13.6 A 1.6 1.6 0 1 1 6 10.4 Z"
+              + " M 12 10.4 A 1.6 1.6 0 1 1 12 13.6 A 1.6 1.6 0 1 1 12 10.4 Z"
+              + " M 18 10.4 A 1.6 1.6 0 1 1 18 13.6 A 1.6 1.6 0 1 1 18 10.4 Z" :
+        name == "grip" ? "M 9 6 A 1.4 1.4 0 1 1 9 8.8 A 1.4 1.4 0 1 1 9 6 Z"
+              + " M 15 6 A 1.4 1.4 0 1 1 15 8.8 A 1.4 1.4 0 1 1 15 6 Z"
+              + " M 9 10.6 A 1.4 1.4 0 1 1 9 13.4 A 1.4 1.4 0 1 1 9 10.6 Z"
+              + " M 15 10.6 A 1.4 1.4 0 1 1 15 13.4 A 1.4 1.4 0 1 1 15 10.6 Z"
+              + " M 9 15.2 A 1.4 1.4 0 1 1 9 18 A 1.4 1.4 0 1 1 9 15.2 Z"
+              + " M 15 15.2 A 1.4 1.4 0 1 1 15 18 A 1.4 1.4 0 1 1 15 15.2 Z" :
+        name == "dot" ? "M 12 8 A 4 4 0 1 1 12 16 A 4 4 0 1 1 12 8 Z" :
+        name == "info" ? "M 12 7 A 1.2 1.2 0 1 1 12 9.4 A 1.2 1.2 0 1 1 12 7 Z" :
+        name == "warning" ? "M 12 16.2 A 1.2 1.2 0 1 1 12 18.6 A 1.2 1.2 0 1 1 12 16.2 Z" :
+        "";
+
+    if stroke-commands != "" : Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: root.stroke-commands;
+        stroke: root.tint;
+        stroke-width: root.weight;
+    }
+
+    if fill-commands != "" : Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: root.fill-commands;
+        fill: root.tint;
+    }
+}
