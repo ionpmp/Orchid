@@ -43,6 +43,24 @@ use crate::window::models::{
 
 use super::{sync_vec_model, MainWindowController};
 
+/// Locate a frame row by instance id without heap-allocating the UUID string.
+///
+/// Slint's `row_data` still clones the matched row; this only removes the
+/// per-call `id.to_string()` allocation that every patch path was paying.
+fn find_frame_row(v: &VecModel<WidgetFrameModel>, id: Uuid) -> Option<(usize, WidgetFrameModel)> {
+    let mut buf = [0u8; uuid::fmt::Hyphenated::LENGTH];
+    let needle = id.as_hyphenated().encode_lower(&mut buf);
+    for r in 0..v.row_count() {
+        let Some(row) = v.row_data(r) else {
+            continue;
+        };
+        if row.instance_id.as_str() == needle {
+            return Some((r, row));
+        }
+    }
+    None
+}
+
 impl MainWindowController {
     /// Patch Slint `WidgetFrameModel` rows for instances whose [`WidgetSnapshotCache`] data changed
     /// without a layout canvas / scale / workspace event (e.g. terminal text at ~30Hz).
@@ -234,15 +252,8 @@ impl MainWindowController {
                 continue;
             }
             let new_row = self.build_widget_frame_for_placed(pl, idx as i32, bounds, &iref);
-            let needle = id.to_string();
-            for r in 0..v.row_count() {
-                let Some(row) = v.row_data(r) else {
-                    continue;
-                };
-                if row.instance_id.as_str() == needle.as_str() {
-                    v.set_row_data(r, new_row);
-                    break;
-                }
+            if let Some((r, _)) = find_frame_row(v, *id) {
+                v.set_row_data(r, new_row);
             }
         }
         if need_floating_sync {
@@ -270,146 +281,139 @@ impl MainWindowController {
         let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
             return false;
         };
-        let needle = id.to_string();
-        for r in 0..v.row_count() {
-            let Some(mut row) = v.row_data(r) else {
-                continue;
-            };
-            if row.instance_id.as_str() != needle.as_str() {
-                continue;
+        let Some((r, mut row)) = find_frame_row(v, id) else {
+            return false;
+        };
+        let Some(panes) = row
+            .terminal_panes
+            .as_any()
+            .downcast_ref::<VecModel<TerminalPaneModel>>()
+        else {
+            return false;
+        };
+        if t.panes.is_empty() {
+            if panes.row_count() != 1 {
+                return false;
             }
-            let Some(panes) = row
-                .terminal_panes
-                .as_any()
-                .downcast_ref::<VecModel<TerminalPaneModel>>()
-            else {
+            let Some(mut pane) = panes.row_data(0) else {
                 return false;
             };
-            if t.panes.is_empty() {
-                if panes.row_count() != 1 {
-                    return false;
-                }
-                let Some(mut pane) = panes.row_data(0) else {
+            pane.pixels = self.raster_terminal_payload(t);
+            pane.cols = i32::from(t.cols);
+            pane.rows = i32::from(t.rows);
+            pane.cursor_col = i32::from(t.cursor_col);
+            pane.cursor_row = i32::from(t.cursor_row);
+            pane.cursor_visible = t.cursor_visible;
+            panes.set_row_data(0, pane);
+        } else {
+            if panes.row_count() != t.panes.len() {
+                return false;
+            }
+            for (i, p) in t.panes.iter().enumerate() {
+                let Some(mut pane) = panes.row_data(i) else {
                     return false;
                 };
-                pane.pixels = self.raster_terminal_payload(t);
-                pane.cols = i32::from(t.cols);
-                pane.rows = i32::from(t.rows);
-                pane.cursor_col = i32::from(t.cursor_col);
-                pane.cursor_row = i32::from(t.cursor_row);
-                pane.cursor_visible = t.cursor_visible;
-                panes.set_row_data(0, pane);
-            } else {
-                if panes.row_count() != t.panes.len() {
+                if pane.session_id.as_str() != p.session_id {
                     return false;
                 }
-                for (i, p) in t.panes.iter().enumerate() {
-                    let Some(mut pane) = panes.row_data(i) else {
-                        return false;
-                    };
-                    if pane.session_id.as_str() != p.session_id {
-                        return false;
-                    }
-                    let key = if p.session_id.is_empty() {
-                        "root"
-                    } else {
-                        p.session_id.as_str()
-                    };
-                    pane.pixels = self.raster_terminal_cells(
-                        key,
-                        p.cols,
-                        p.rows,
-                        &p.cells,
-                        p.cursor_col,
-                        p.cursor_row,
-                        p.cursor_visible,
-                        &p.dirty_lines,
-                        p.full_redraw,
-                    );
-                    pane.left = p.left;
-                    pane.top = p.top;
-                    pane.right = p.right;
-                    pane.bottom = p.bottom;
-                    pane.is_focused = p.is_focused;
-                    pane.show_close = p.show_close;
-                    pane.cols = i32::from(p.cols);
-                    pane.rows = i32::from(p.rows);
-                    pane.cursor_col = i32::from(p.cursor_col);
-                    pane.cursor_row = i32::from(p.cursor_row);
-                    pane.cursor_visible = p.cursor_visible;
-                    panes.set_row_data(i, pane);
-                }
+                let key = if p.session_id.is_empty() {
+                    "root"
+                } else {
+                    p.session_id.as_str()
+                };
+                pane.pixels = self.raster_terminal_cells(
+                    key,
+                    p.cols,
+                    p.rows,
+                    &p.cells,
+                    p.cursor_col,
+                    p.cursor_row,
+                    p.cursor_visible,
+                    &p.dirty_lines,
+                    p.full_redraw,
+                );
+                pane.left = p.left;
+                pane.top = p.top;
+                pane.right = p.right;
+                pane.bottom = p.bottom;
+                pane.is_focused = p.is_focused;
+                pane.show_close = p.show_close;
+                pane.cols = i32::from(p.cols);
+                pane.rows = i32::from(p.rows);
+                pane.cursor_col = i32::from(p.cursor_col);
+                pane.cursor_row = i32::from(p.cursor_row);
+                pane.cursor_visible = p.cursor_visible;
+                panes.set_row_data(i, pane);
             }
-            // Pane pixels/cursors were already written into the shared
-            // `terminal_panes` VecModel. Only rewrite the frame row when
-            // chrome that lives on the frame itself changes — otherwise a
-            // PTY tick remounts the tab strip and divider overlay.
-            let mut need_frame = false;
-            let title: SharedString = ws.title.clone().into();
-            if row.title != title {
-                row.title = title;
-                need_frame = true;
-            }
-            if let Some(b) = bounds {
-                if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
-                    row.x = b.x;
-                    row.y = b.y;
-                    row.width = b.width;
-                    row.height = b.height;
-                    need_frame = true;
-                }
-            }
-            if let Some(z) = z_order {
-                if row.z_order != z {
-                    row.z_order = z;
-                    need_frame = true;
-                }
-            }
-            let cols = i32::from(t.cols);
-            let rows = i32::from(t.rows);
-            let cursor_col = i32::from(t.cursor_col);
-            let cursor_row = i32::from(t.cursor_row);
-            if row.terminal_cols != cols
-                || row.terminal_rows != rows
-                || row.terminal_cursor_col != cursor_col
-                || row.terminal_cursor_row != cursor_row
-                || row.terminal_cursor_visible != t.cursor_visible
-            {
-                row.terminal_cols = cols;
-                row.terminal_rows = rows;
-                row.terminal_cursor_col = cursor_col;
-                row.terminal_cursor_row = cursor_row;
-                row.terminal_cursor_visible = t.cursor_visible;
-                need_frame = true;
-            }
-            // Tab strip / divider topology can change without a chrome
-            // scalar flipping (new split, rename). Rebuild only when we
-            // already owe a frame write, or when the active tab / count
-            // no longer match.
-            let (tabs, active) = build_terminal_tab_models(t);
-            let tab_count = tabs
-                .as_any()
-                .downcast_ref::<VecModel<crate::slint_generated::TerminalTabModel>>()
-                .map(|m| m.row_count())
-                .unwrap_or(0);
-            let old_tab_count = row
-                .terminal_tabs
-                .as_any()
-                .downcast_ref::<VecModel<crate::slint_generated::TerminalTabModel>>()
-                .map(|m| m.row_count())
-                .unwrap_or(0);
-            if tab_count != old_tab_count || row.terminal_active_tab != active {
-                need_frame = true;
-            }
-            if need_frame {
-                row.terminal_tabs = tabs;
-                row.terminal_active_tab = active;
-                row.terminal_dividers = build_terminal_divider_models(t);
-                v.set_row_data(r, row);
-            }
-            return true;
         }
-        false
+        // Pane pixels/cursors were already written into the shared
+        // `terminal_panes` VecModel. Only rewrite the frame row when
+        // chrome that lives on the frame itself changes — otherwise a
+        // PTY tick remounts the tab strip and divider overlay.
+        let mut need_frame = false;
+        let title: SharedString = ws.title.clone().into();
+        if row.title != title {
+            row.title = title;
+            need_frame = true;
+        }
+        if let Some(b) = bounds {
+            if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
+                row.x = b.x;
+                row.y = b.y;
+                row.width = b.width;
+                row.height = b.height;
+                need_frame = true;
+            }
+        }
+        if let Some(z) = z_order {
+            if row.z_order != z {
+                row.z_order = z;
+                need_frame = true;
+            }
+        }
+        let cols = i32::from(t.cols);
+        let rows = i32::from(t.rows);
+        let cursor_col = i32::from(t.cursor_col);
+        let cursor_row = i32::from(t.cursor_row);
+        if row.terminal_cols != cols
+            || row.terminal_rows != rows
+            || row.terminal_cursor_col != cursor_col
+            || row.terminal_cursor_row != cursor_row
+            || row.terminal_cursor_visible != t.cursor_visible
+        {
+            row.terminal_cols = cols;
+            row.terminal_rows = rows;
+            row.terminal_cursor_col = cursor_col;
+            row.terminal_cursor_row = cursor_row;
+            row.terminal_cursor_visible = t.cursor_visible;
+            need_frame = true;
+        }
+        // Tab strip / divider topology can change without a chrome
+        // scalar flipping (new split, rename). Rebuild only when we
+        // already owe a frame write, or when the active tab / count
+        // no longer match.
+        let (tabs, active) = build_terminal_tab_models(t);
+        let tab_count = tabs
+            .as_any()
+            .downcast_ref::<VecModel<crate::slint_generated::TerminalTabModel>>()
+            .map(|m| m.row_count())
+            .unwrap_or(0);
+        let old_tab_count = row
+            .terminal_tabs
+            .as_any()
+            .downcast_ref::<VecModel<crate::slint_generated::TerminalTabModel>>()
+            .map(|m| m.row_count())
+            .unwrap_or(0);
+        if tab_count != old_tab_count || row.terminal_active_tab != active {
+            need_frame = true;
+        }
+        if need_frame {
+            row.terminal_tabs = tabs;
+            row.terminal_active_tab = active;
+            row.terminal_dividers = build_terminal_divider_models(t);
+            v.set_row_data(r, row);
+        }
+        true
     }
 
     /// Patch an existing system frame row without replacing nested ModelRcs.
@@ -430,45 +434,38 @@ impl MainWindowController {
         let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
             return false;
         };
-        let needle = id.to_string();
-        for r in 0..v.row_count() {
-            let Some(mut row) = v.row_data(r) else {
-                continue;
-            };
-            if row.instance_id.as_str() != needle.as_str() {
-                continue;
-            }
-            patch_system_model(&mut row.system, p, &self.locale);
-            let mut need_frame = false;
-            if let Some(b) = bounds {
-                if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
-                    row.x = b.x;
-                    row.y = b.y;
-                    row.width = b.width;
-                    row.height = b.height;
-                    need_frame = true;
-                }
-            }
-            if let Some(z) = z_order {
-                if row.z_order != z {
-                    row.z_order = z;
-                    need_frame = true;
-                }
-            }
-            let title: SharedString = ws.title.clone().into();
-            if row.title != title {
-                row.title = title;
+        let Some((r, mut row)) = find_frame_row(v, id) else {
+            return false;
+        };
+        patch_system_model(&mut row.system, p, &self.locale);
+        let mut need_frame = false;
+        if let Some(b) = bounds {
+            if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
+                row.x = b.x;
+                row.y = b.y;
+                row.width = b.width;
+                row.height = b.height;
                 need_frame = true;
             }
-            if need_frame {
-                let (group_id, group_tabs) = self.build_group_tab_models(id);
-                row.group_id = group_id;
-                row.group_tabs = group_tabs;
-                v.set_row_data(r, row);
-            }
-            return true;
         }
-        false
+        if let Some(z) = z_order {
+            if row.z_order != z {
+                row.z_order = z;
+                need_frame = true;
+            }
+        }
+        let title: SharedString = ws.title.clone().into();
+        if row.title != title {
+            row.title = title;
+            need_frame = true;
+        }
+        if need_frame {
+            let (group_id, group_tabs) = self.build_group_tab_models(id);
+            row.group_id = group_id;
+            row.group_tabs = group_tabs;
+            v.set_row_data(r, row);
+        }
+        true
     }
 
     /// Patch an existing processes frame row without rebuilding sibling models.
@@ -489,65 +486,58 @@ impl MainWindowController {
         let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
             return false;
         };
-        let needle = id.to_string();
-        for r in 0..v.row_count() {
-            let Some(mut row) = v.row_data(r) else {
-                continue;
-            };
-            if row.instance_id.as_str() != needle.as_str() {
-                continue;
-            }
-            let (ctx_vis, ctx_x, ctx_y) = self
-                .processes_context
-                .read()
-                .get(&id)
-                .copied()
-                .unwrap_or((false, 0.0, 0.0));
-            let confirm = self
-                .processes_confirm
-                .read()
-                .get(&id)
-                .cloned()
-                .unwrap_or_else(empty_processes_confirm);
-            let patch = patch_processes_model(
-                &mut row.processes,
-                p,
-                &self.locale,
-                ctx_vis,
-                ctx_x,
-                ctx_y,
-                confirm,
-            );
-            let mut need_frame = patch.needs_frame_write;
-            if let Some(b) = bounds {
-                if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
-                    row.x = b.x;
-                    row.y = b.y;
-                    row.width = b.width;
-                    row.height = b.height;
-                    need_frame = true;
-                }
-            }
-            if let Some(z) = z_order {
-                if row.z_order != z {
-                    row.z_order = z;
-                    need_frame = true;
-                }
-            }
-            let title: SharedString = ws.title.clone().into();
-            if row.title != title {
-                row.title = title;
+        let Some((r, mut row)) = find_frame_row(v, id) else {
+            return false;
+        };
+        let (ctx_vis, ctx_x, ctx_y) = self
+            .processes_context
+            .read()
+            .get(&id)
+            .copied()
+            .unwrap_or((false, 0.0, 0.0));
+        let confirm = self
+            .processes_confirm
+            .read()
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(empty_processes_confirm);
+        let patch = patch_processes_model(
+            &mut row.processes,
+            p,
+            &self.locale,
+            ctx_vis,
+            ctx_x,
+            ctx_y,
+            confirm,
+        );
+        let mut need_frame = patch.needs_frame_write;
+        if let Some(b) = bounds {
+            if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
+                row.x = b.x;
+                row.y = b.y;
+                row.width = b.width;
+                row.height = b.height;
                 need_frame = true;
             }
-            if need_frame {
-                let (group_id, group_tabs) = self.build_group_tab_models(id);
-                row.group_id = group_id;
-                row.group_tabs = group_tabs;
-                v.set_row_data(r, row);
-            }
-            return true;
         }
-        false
+        if let Some(z) = z_order {
+            if row.z_order != z {
+                row.z_order = z;
+                need_frame = true;
+            }
+        }
+        let title: SharedString = ws.title.clone().into();
+        if row.title != title {
+            row.title = title;
+            need_frame = true;
+        }
+        if need_frame {
+            let (group_id, group_tabs) = self.build_group_tab_models(id);
+            row.group_id = group_id;
+            row.group_tabs = group_tabs;
+            v.set_row_data(r, row);
+        }
+        true
     }
 
     pub(super) fn try_patch_file_manager_instance(&self, id: Uuid) -> bool {
@@ -576,65 +566,58 @@ impl MainWindowController {
         let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
             return false;
         };
-        let needle = id.to_string();
-        for r in 0..v.row_count() {
-            let Some(mut row) = v.row_data(r) else {
-                continue;
-            };
-            if row.instance_id.as_str() != needle.as_str() {
-                continue;
-            }
-            let overlays = self
-                .fm_overlays
-                .read()
-                .get(&id)
-                .cloned()
-                .unwrap_or_else(empty_fm_overlays);
-            let mut need_frame = patch_file_manager_model(
-                &mut row.file_manager,
-                p,
-                overlays,
-                id,
-                &self.locale,
-                false,
-                &self.fm_viewport.lock(),
-            );
-            if let Some(b) = bounds {
-                if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
-                    row.x = b.x;
-                    row.y = b.y;
-                    row.width = b.width;
-                    row.height = b.height;
-                    need_frame = true;
-                }
-            }
-            if let Some(z) = z_order {
-                if row.z_order != z {
-                    row.z_order = z;
-                    need_frame = true;
-                }
-            }
-            let title: SharedString = ws.title.clone().into();
-            if row.title != title {
-                row.title = title;
+        let Some((r, mut row)) = find_frame_row(v, id) else {
+            return false;
+        };
+        let overlays = self
+            .fm_overlays
+            .read()
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(empty_fm_overlays);
+        let mut need_frame = patch_file_manager_model(
+            &mut row.file_manager,
+            p,
+            overlays,
+            id,
+            &self.locale,
+            false,
+            &self.fm_viewport.lock(),
+        );
+        if let Some(b) = bounds {
+            if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
+                row.x = b.x;
+                row.y = b.y;
+                row.width = b.width;
+                row.height = b.height;
                 need_frame = true;
             }
-            if need_frame {
-                let (group_id, group_tabs) = self.build_group_tab_models(id);
-                row.group_id = group_id;
-                row.group_tabs = group_tabs;
-                v.set_row_data(r, row);
-            }
-            // Selecting mutates widget state without publishing a snapshot, so
-            // the cache read above can carry a selection older than the pointer
-            // and repaint stale highlights over a live marquee. The widget is
-            // the only authority here, so re-assert it.
-            for pane in 0..p.panes.len() as u8 {
-                self.try_patch_fm_selection(id, pane);
-            }
-            return true;
         }
-        false
+        if let Some(z) = z_order {
+            if row.z_order != z {
+                row.z_order = z;
+                need_frame = true;
+            }
+        }
+        let title: SharedString = ws.title.clone().into();
+        if row.title != title {
+            row.title = title;
+            need_frame = true;
+        }
+        if need_frame {
+            let (group_id, group_tabs) = self.build_group_tab_models(id);
+            row.group_id = group_id;
+            row.group_tabs = group_tabs;
+            v.set_row_data(r, row);
+        }
+        // Selecting mutates widget state without publishing a snapshot, so
+        // the cache read above can carry a selection older than the pointer
+        // and repaint stale highlights over a live marquee. The widget is
+        // the only authority here, so re-assert it.
+        for pane in 0..p.panes.len() as u8 {
+            self.try_patch_fm_selection(id, pane);
+        }
+        true
     }
 
     /// Patch an existing viewer frame row without rebuilding empty sibling models.
@@ -656,53 +639,46 @@ impl MainWindowController {
         let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
             return false;
         };
-        let needle = id.to_string();
-        for r in 0..v.row_count() {
-            let Some(mut row) = v.row_data(r) else {
-                continue;
-            };
-            if row.instance_id.as_str() != needle.as_str() {
-                continue;
-            }
-            // Nested viewer ModelRcs are Arc-shared with the live row, so
-            // patching them here is already visible without set_row_data.
-            patch_viewer_model(&mut row.viewer, vp, &self.locale);
-            self.sync_html_webview_document(id, &vp.snapshot);
+        let Some((r, mut row)) = find_frame_row(v, id) else {
+            return false;
+        };
+        // Nested viewer ModelRcs are Arc-shared with the live row, so
+        // patching them here is already visible without set_row_data.
+        patch_viewer_model(&mut row.viewer, vp, &self.locale);
+        self.sync_html_webview_document(id, &vp.snapshot);
 
-            let mut need_frame = false;
-            if let Some(b) = bounds {
-                if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
-                    row.x = b.x;
-                    row.y = b.y;
-                    row.width = b.width;
-                    row.height = b.height;
-                    need_frame = true;
-                }
-            }
-            if let Some(z) = z_order {
-                if row.z_order != z {
-                    row.z_order = z;
-                    need_frame = true;
-                }
-            }
-            if row.is_floating != is_floating {
-                row.is_floating = is_floating;
+        let mut need_frame = false;
+        if let Some(b) = bounds {
+            if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
+                row.x = b.x;
+                row.y = b.y;
+                row.width = b.width;
+                row.height = b.height;
                 need_frame = true;
             }
-            let title: SharedString = ws.title.clone().into();
-            if row.title != title {
-                row.title = title;
-                need_frame = true;
-            }
-            if need_frame {
-                let (group_id, group_tabs) = self.build_group_tab_models(id);
-                row.group_id = group_id;
-                row.group_tabs = group_tabs;
-                v.set_row_data(r, row);
-            }
-            return true;
         }
-        false
+        if let Some(z) = z_order {
+            if row.z_order != z {
+                row.z_order = z;
+                need_frame = true;
+            }
+        }
+        if row.is_floating != is_floating {
+            row.is_floating = is_floating;
+            need_frame = true;
+        }
+        let title: SharedString = ws.title.clone().into();
+        if row.title != title {
+            row.title = title;
+            need_frame = true;
+        }
+        if need_frame {
+            let (group_id, group_tabs) = self.build_group_tab_models(id);
+            row.group_id = group_id;
+            row.group_tabs = group_tabs;
+            v.set_row_data(r, row);
+        }
+        true
     }
 
     /// In-place content patch for high-frequency widgets (clock / media / password /
@@ -722,151 +698,144 @@ impl MainWindowController {
         let Some(v) = model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>() else {
             return false;
         };
-        let needle = id.to_string();
-        for r in 0..v.row_count() {
-            let Some(mut row) = v.row_data(r) else {
-                continue;
-            };
-            if row.instance_id.as_str() != needle.as_str() {
-                continue;
+        let Some((r, mut row)) = find_frame_row(v, id) else {
+            return false;
+        };
+        let patched = match (type_id, &ws.payload) {
+            (orchid_widgets::builtin::clock::TYPE_ID, WidgetPayload::Clock(p)) => {
+                patch_clock_model(&mut row.clock, p, &self.locale);
+                true
             }
-            let patched = match (type_id, &ws.payload) {
-                (orchid_widgets::builtin::clock::TYPE_ID, WidgetPayload::Clock(p)) => {
-                    patch_clock_model(&mut row.clock, p, &self.locale);
-                    true
-                }
-                (orchid_widgets::builtin::media::TYPE_ID, WidgetPayload::MediaPlayer(p)) => {
-                    patch_media_model(&mut row.media, p, &self.locale);
-                    true
-                }
-                (orchid_widgets::builtin::password::TYPE_ID, WidgetPayload::PasswordManager(p)) => {
-                    let toast = self.password_toasts.read().get(&id).cloned();
-                    let autofocus = self
-                        .password_autofocus_pending
-                        .read()
-                        .get(&id)
-                        .copied()
-                        .unwrap_or(false);
-                    if autofocus {
-                        self.password_autofocus_pending.write().remove(&id);
-                    }
-                    let add_dialog = self
-                        .password_add_dialogs
-                        .read()
-                        .get(&id)
-                        .cloned()
-                        .unwrap_or_default();
-                    patch_password_model(
-                        &mut row.password,
-                        p,
-                        toast,
-                        autofocus,
-                        add_dialog,
-                        &self.locale,
-                    );
-                    true
-                }
-                (orchid_widgets::builtin::search::TYPE_ID, WidgetPayload::UniversalSearch(p)) => {
-                    let selected = self.search_selection.read().get(&id).copied().unwrap_or(-1);
-                    let request_autofocus = matches!(
-                        *self.search_autofocus_pending.lock(),
-                        Some(pending) if pending == id
-                    );
-                    patch_search_model(
-                        &mut row.search,
-                        p,
-                        &self.locale,
-                        selected,
-                        request_autofocus,
-                    );
-                    true
-                }
-                (orchid_widgets::builtin::recent_files::TYPE_ID, WidgetPayload::RecentFiles(p)) => {
-                    patch_recent_files_model(&mut row.recent_files, p);
-                    true
-                }
-                (orchid_widgets::builtin::calculator::TYPE_ID, WidgetPayload::Calculator(p)) => {
-                    patch_calculator_model(&mut row.calculator, p, &self.locale);
-                    true
-                }
-                (orchid_widgets::builtin::weather::TYPE_ID, WidgetPayload::Weather(p)) => {
-                    patch_weather_model(&mut row.weather, p, &self.locale);
-                    true
-                }
-                (orchid_widgets::builtin::notes::TYPE_ID, WidgetPayload::Notes(p)) => {
-                    patch_notes_model(&mut row.notes, p, &self.locale);
-                    true
-                }
-                (orchid_widgets::builtin::browser::TYPE_ID, WidgetPayload::Browser(p)) => {
-                    patch_browser_model(&mut row.browser, p, &self.locale);
-                    true
-                }
-                (orchid_widgets::builtin::calendar::TYPE_ID, WidgetPayload::Calendar(p)) => {
-                    patch_calendar_model(&mut row.calendar, p, &self.locale);
-                    true
-                }
-                (orchid_widgets::builtin::jyotish::TYPE_ID, WidgetPayload::Jyotish(p)) => {
-                    patch_jyotish_model(&mut row.jyotish, p, &self.locale);
-                    true
-                }
-                (orchid_widgets::builtin::moon::TYPE_ID, WidgetPayload::Moon(p)) => {
-                    patch_moon_model(&mut row.moon, p, &self.locale);
-                    true
-                }
-                (orchid_widgets::builtin::rss::TYPE_ID, WidgetPayload::RssFeed(p)) => {
-                    patch_rss_model(&mut row.rss, p, &self.locale);
-                    true
-                }
-                (orchid_widgets::builtin::audio_player::TYPE_ID, WidgetPayload::AudioPlayer(p)) => {
-                    patch_audio_player_model(&mut row.audio_player, p, &self.locale);
-                    true
-                }
-                (orchid_widgets::builtin::video_player::TYPE_ID, WidgetPayload::VideoPlayer(p)) => {
-                    patch_video_player_model(&mut row.video_player, p, &self.locale);
-                    true
-                }
-                _ => false,
-            };
-            if !patched {
-                return false;
+            (orchid_widgets::builtin::media::TYPE_ID, WidgetPayload::MediaPlayer(p)) => {
+                patch_media_model(&mut row.media, p, &self.locale);
+                true
             }
-            // Nested content ModelRcs are Arc-shared; only rewrite the frame
-            // when chrome scalars change. Group-tab rebuild is deferred to
-            // that same write so every content tick does not remount the
-            // tab strip.
-            let mut need_frame = false;
-            if let Some(b) = bounds {
-                if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
-                    row.x = b.x;
-                    row.y = b.y;
-                    row.width = b.width;
-                    row.height = b.height;
-                    need_frame = true;
+            (orchid_widgets::builtin::password::TYPE_ID, WidgetPayload::PasswordManager(p)) => {
+                let toast = self.password_toasts.read().get(&id).cloned();
+                let autofocus = self
+                    .password_autofocus_pending
+                    .read()
+                    .get(&id)
+                    .copied()
+                    .unwrap_or(false);
+                if autofocus {
+                    self.password_autofocus_pending.write().remove(&id);
                 }
+                let add_dialog = self
+                    .password_add_dialogs
+                    .read()
+                    .get(&id)
+                    .cloned()
+                    .unwrap_or_default();
+                patch_password_model(
+                    &mut row.password,
+                    p,
+                    toast,
+                    autofocus,
+                    add_dialog,
+                    &self.locale,
+                );
+                true
             }
-            if let Some(z) = z_order {
-                if row.z_order != z {
-                    row.z_order = z;
-                    need_frame = true;
-                }
+            (orchid_widgets::builtin::search::TYPE_ID, WidgetPayload::UniversalSearch(p)) => {
+                let selected = self.search_selection.read().get(&id).copied().unwrap_or(-1);
+                let request_autofocus = matches!(
+                    *self.search_autofocus_pending.lock(),
+                    Some(pending) if pending == id
+                );
+                patch_search_model(
+                    &mut row.search,
+                    p,
+                    &self.locale,
+                    selected,
+                    request_autofocus,
+                );
+                true
             }
-            let title: SharedString = ws.title.clone().into();
-            if row.title != title {
-                row.title = title;
+            (orchid_widgets::builtin::recent_files::TYPE_ID, WidgetPayload::RecentFiles(p)) => {
+                patch_recent_files_model(&mut row.recent_files, p);
+                true
+            }
+            (orchid_widgets::builtin::calculator::TYPE_ID, WidgetPayload::Calculator(p)) => {
+                patch_calculator_model(&mut row.calculator, p, &self.locale);
+                true
+            }
+            (orchid_widgets::builtin::weather::TYPE_ID, WidgetPayload::Weather(p)) => {
+                patch_weather_model(&mut row.weather, p, &self.locale);
+                true
+            }
+            (orchid_widgets::builtin::notes::TYPE_ID, WidgetPayload::Notes(p)) => {
+                patch_notes_model(&mut row.notes, p, &self.locale);
+                true
+            }
+            (orchid_widgets::builtin::browser::TYPE_ID, WidgetPayload::Browser(p)) => {
+                patch_browser_model(&mut row.browser, p, &self.locale);
+                true
+            }
+            (orchid_widgets::builtin::calendar::TYPE_ID, WidgetPayload::Calendar(p)) => {
+                patch_calendar_model(&mut row.calendar, p, &self.locale);
+                true
+            }
+            (orchid_widgets::builtin::jyotish::TYPE_ID, WidgetPayload::Jyotish(p)) => {
+                patch_jyotish_model(&mut row.jyotish, p, &self.locale);
+                true
+            }
+            (orchid_widgets::builtin::moon::TYPE_ID, WidgetPayload::Moon(p)) => {
+                patch_moon_model(&mut row.moon, p, &self.locale);
+                true
+            }
+            (orchid_widgets::builtin::rss::TYPE_ID, WidgetPayload::RssFeed(p)) => {
+                patch_rss_model(&mut row.rss, p, &self.locale);
+                true
+            }
+            (orchid_widgets::builtin::audio_player::TYPE_ID, WidgetPayload::AudioPlayer(p)) => {
+                patch_audio_player_model(&mut row.audio_player, p, &self.locale);
+                true
+            }
+            (orchid_widgets::builtin::video_player::TYPE_ID, WidgetPayload::VideoPlayer(p)) => {
+                patch_video_player_model(&mut row.video_player, p, &self.locale);
+                true
+            }
+            _ => false,
+        };
+        if !patched {
+            return false;
+        }
+        // Nested content ModelRcs are Arc-shared; only rewrite the frame
+        // when chrome scalars change. Group-tab rebuild is deferred to
+        // that same write so every content tick does not remount the
+        // tab strip.
+        let mut need_frame = false;
+        if let Some(b) = bounds {
+            if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
+                row.x = b.x;
+                row.y = b.y;
+                row.width = b.width;
+                row.height = b.height;
                 need_frame = true;
             }
-            if need_frame {
-                let (group_id, group_tabs) = self.build_group_tab_models(id);
-                row.group_id = group_id;
-                row.group_tabs = group_tabs;
-                v.set_row_data(r, row);
-            }
-            if type_id == orchid_widgets::builtin::browser::TYPE_ID {
-                super::html_embed::sync_browser_from_cache(self, id);
-            }
-            return true;
         }
-        false
+        if let Some(z) = z_order {
+            if row.z_order != z {
+                row.z_order = z;
+                need_frame = true;
+            }
+        }
+        let title: SharedString = ws.title.clone().into();
+        if row.title != title {
+            row.title = title;
+            need_frame = true;
+        }
+        if need_frame {
+            let (group_id, group_tabs) = self.build_group_tab_models(id);
+            row.group_id = group_id;
+            row.group_tabs = group_tabs;
+            v.set_row_data(r, row);
+        }
+        if type_id == orchid_widgets::builtin::browser::TYPE_ID {
+            super::html_embed::sync_browser_from_cache(self, id);
+        }
+        true
     }
 
     pub(super) fn build_widget_frame_for_placed(
