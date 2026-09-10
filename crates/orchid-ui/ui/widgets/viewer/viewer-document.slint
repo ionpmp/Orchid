@@ -1,36 +1,7 @@
 import { Theme } from "../../theme_global.slint";
+import { Tooltip } from "../../kit.slint";
 import { ViewerDocumentModel } from "../../workspace/defs.slint";
-
-/// Hover tip overlay (same pattern as NotesToolBtn).
-component DocHoverTip inherits Rectangle {
-    in property <string> tip;
-    in property <bool> show;
-    /// When true, tip appears below the parent; otherwise above.
-    in property <bool> below: false;
-
-    width: 0px;
-    height: 0px;
-
-    if show && tip != "" : Rectangle {
-        x: (parent.width - tip-box.preferred-width - 12px) / 2;
-        y: root.below ? parent.height + 4px : -tip-box.preferred-height - 8px;
-        width: tip-box.preferred-width + 12px;
-        height: tip-box.preferred-height + 6px;
-        background: Theme.surface-raised;
-        border-radius: Theme.radius-md;
-        border-width: 1px;
-        border-color: Theme.border-default;
-        z: 50;
-        tip-box := Text {
-            x: 6px;
-            y: 3px;
-            text: root.tip;
-            color: Theme.text-secondary;
-            font-size: Theme.font-size-sm;
-            font-family: Theme.font-family-sans;
-        }
-    }
-}
+import { DocToolBtn } from "viewer-doc-toolbtn.slint";
 
 export component ViewerDocumentView inherits Rectangle {
     in property <ViewerDocumentModel> model;
@@ -93,933 +64,319 @@ export component ViewerDocumentView inherits Rectangle {
         }
     }
 
-    function tool-btn(active: bool) -> color {
-        return active ? Theme.accent-brand : Theme.text-primary;
-    }
-
-    function tool-bg(active: bool, hover: bool) -> color {
-        if (active) {
-            return Theme.surface-raised;
-        }
-        return hover ? Theme.surface-raised : transparent;
-    }
-
     VerticalLayout {
         spacing: 0;
 
         Rectangle {
-            height: 36px;
+            height: Theme.control-xs + Theme.space-2;
             background: Theme.surface-base;
             clip: false;
             z: 20;
 
             HorizontalLayout {
-                padding-left: 6px;
-                padding-right: 6px;
-                spacing: 2px;
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
+                spacing: Theme.space-1;
                 alignment: start;
 
-                Rectangle {
-                    width: max(52px, save-label.preferred-width + 12px);
-                    height: 28px;
-                    background: (model.dirty || root.locally-dirty) ? Theme.surface-raised
-                        : save-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    save-ta := TouchArea { clicked => { root.action("save"); } }
-                    save-label := Text {
-                        text: model.save-label;
-                        color: (model.dirty || root.locally-dirty)
-                            ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-save;
-                        show: save-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.save-label;
+                    tip: model.tip-save;
+                    active: (model.dirty || root.locally-dirty);
+                    clicked => { root.action("save"); }
+                }
+
+                DocToolBtn {
+                    label: model.save-as-label;
+                    tip: model.tip-save-as;
+                    clicked => { root.action("save-as"); }
+                }
+
+                DocToolBtn {
+                    label: model.print-label;
+                    tip: model.tip-print;
+                    clicked => { root.action("print"); }
+                }
+
+                DocToolBtn {
+                    label: "Un";
+                    tip: model.undo-label;
+                    enabled: model.can-undo;
+                    clicked => { root.action("undo"); }
+                }
+
+                DocToolBtn {
+                    label: "Re";
+                    tip: model.redo-label;
+                    enabled: model.can-redo;
+                    clicked => { root.action("redo"); }
                 }
 
                 Rectangle {
-                    width: max(64px, save-as-label.preferred-width + 12px);
-                    height: 28px;
-                    background: save-as-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    save-as-ta := TouchArea { clicked => { root.action("save-as"); } }
-                    save-as-label := Text {
-                        text: model.save-as-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-save-as;
-                        show: save-as-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: max(52px, print-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(false, print-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    print-ta := TouchArea { clicked => { root.action("print"); } }
-                    print-btn-label := Text {
-                        text: model.print-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-print;
-                        show: print-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, undo-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    opacity: model.can-undo ? 1.0 : 0.35;
-                    undo-ta := TouchArea {
-                        enabled: model.can-undo;
-                        clicked => { root.action("undo"); }
-                    }
-                    Text {
-                        text: "Un";
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-
-                    if undo-ta.has-hover : Rectangle {
-                        x: 0;
-                        y: -undo-hint.preferred-height - 8px;
-                        width: undo-hint.preferred-width + 12px;
-                        height: undo-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        undo-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.undo-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-                }
-
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, redo-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    opacity: model.can-redo ? 1.0 : 0.35;
-                    redo-ta := TouchArea {
-                        enabled: model.can-redo;
-                        clicked => { root.action("redo"); }
-                    }
-                    Text {
-                        text: "Re";
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-
-                    if redo-ta.has-hover : Rectangle {
-                        x: 0;
-                        y: -redo-hint.preferred-height - 8px;
-                        width: redo-hint.preferred-width + 12px;
-                        height: redo-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        redo-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.redo-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-                }
-
-                Rectangle {
-                    width: 1px;
-                    height: 18px;
+                    width: Theme.hairline;
+                    height: Theme.space-8;
                     y: (parent.height - self.height) / 2;
                     background: Theme.border-default;
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.bold, bold-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    bold-ta := TouchArea { clicked => { root.action("bold"); } }
-                    Text {
-                        text: model.bold-label;
-                        color: tool-btn(model.bold);
-                        font-size: Theme.font-size-sm;
-                        font-weight: Theme.weight-semibold;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-bold;
-                        show: bold-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.bold-label;
+                    tip: model.tip-bold;
+                    active: model.bold;
+                    clicked => { root.action("bold"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.italic, italic-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    italic-ta := TouchArea { clicked => { root.action("italic"); } }
-                    Text {
-                        text: model.italic-label;
-                        color: tool-btn(model.italic);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-italic;
-                        show: italic-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.italic-label;
+                    tip: model.tip-italic;
+                    active: model.italic;
+                    clicked => { root.action("italic"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.underline, underline-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    underline-ta := TouchArea { clicked => { root.action("underline"); } }
-                    Text {
-                        text: model.underline-label;
-                        color: tool-btn(model.underline);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-underline;
-                        show: underline-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.underline-label;
+                    tip: model.tip-underline;
+                    active: model.underline;
+                    clicked => { root.action("underline"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.strikethrough, strike-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    strike-ta := TouchArea { clicked => { root.action("strikethrough"); } }
-                    Text {
-                        text: model.strikethrough-label;
-                        color: tool-btn(model.strikethrough);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-strikethrough;
-                        show: strike-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.strikethrough-label;
+                    tip: model.tip-strikethrough;
+                    active: model.strikethrough;
+                    clicked => { root.action("strikethrough"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.double-strikethrough, dstrike-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    dstrike-ta := TouchArea { clicked => { root.action("double-strikethrough"); } }
-                    Text {
-                        text: model.double-strikethrough-label;
-                        color: tool-btn(model.double-strikethrough);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-double-strikethrough;
-                        show: dstrike-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.double-strikethrough-label;
+                    tip: model.tip-double-strikethrough;
+                    active: model.double-strikethrough;
+                    clicked => { root.action("double-strikethrough"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.all-caps, caps-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    caps-ta := TouchArea { clicked => { root.action("all-caps"); } }
-                    Text {
-                        text: model.all-caps-label;
-                        color: tool-btn(model.all-caps);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-all-caps;
-                        show: caps-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.all-caps-label;
+                    tip: model.tip-all-caps;
+                    active: model.all-caps;
+                    clicked => { root.action("all-caps"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.small-caps, scaps-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    scaps-ta := TouchArea { clicked => { root.action("small-caps"); } }
-                    Text {
-                        text: model.small-caps-label;
-                        color: tool-btn(model.small-caps);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-small-caps;
-                        show: scaps-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.small-caps-label;
+                    tip: model.tip-small-caps;
+                    active: model.small-caps;
+                    clicked => { root.action("small-caps"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.vanish, vanish-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    vanish-ta := TouchArea { clicked => { root.action("vanish"); } }
-                    Text {
-                        text: model.vanish-label;
-                        color: tool-btn(model.vanish);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-vanish;
-                        show: vanish-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.vanish-label;
+                    tip: model.tip-vanish;
+                    active: model.vanish;
+                    clicked => { root.action("vanish"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.shadow, shadow-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    shadow-ta := TouchArea { clicked => { root.action("shadow"); } }
-                    Text {
-                        text: model.shadow-label;
-                        color: tool-btn(model.shadow);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-shadow;
-                        show: shadow-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.shadow-label;
+                    tip: model.tip-shadow;
+                    active: model.shadow;
+                    clicked => { root.action("shadow"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.emboss, emboss-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    emboss-ta := TouchArea { clicked => { root.action("emboss"); } }
-                    Text {
-                        text: model.emboss-label;
-                        color: tool-btn(model.emboss);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-emboss;
-                        show: emboss-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.emboss-label;
+                    tip: model.tip-emboss;
+                    active: model.emboss;
+                    clicked => { root.action("emboss"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.imprint, imprint-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    imprint-ta := TouchArea { clicked => { root.action("imprint"); } }
-                    Text {
-                        text: model.imprint-label;
-                        color: tool-btn(model.imprint);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-imprint;
-                        show: imprint-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.imprint-label;
+                    tip: model.tip-imprint;
+                    active: model.imprint;
+                    clicked => { root.action("imprint"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.highlight, hl-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    hl-ta := TouchArea { clicked => { root.action("highlight"); } }
-                    Text {
-                        text: model.highlight-label;
-                        color: tool-btn(model.highlight);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-highlight;
-                        show: hl-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.highlight-label;
+                    tip: model.tip-highlight;
+                    active: model.highlight;
+                    clicked => { root.action("highlight"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.shade, shade-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    shade-ta := TouchArea { clicked => { root.action("shade"); } }
-                    Text {
-                        text: model.shade-label;
-                        color: tool-btn(model.shade);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-shade;
-                        show: shade-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.shade-label;
+                    tip: model.tip-shade;
+                    active: model.shade;
+                    clicked => { root.action("shade"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.border-bottom, bdr-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    bdr-ta := TouchArea { clicked => { root.action("border-bottom"); } }
-                    Text {
-                        text: model.border-bottom-label;
-                        color: tool-btn(model.border-bottom);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-border-bottom;
-                        show: bdr-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.border-bottom-label;
+                    tip: model.tip-border-bottom;
+                    active: model.border-bottom;
+                    clicked => { root.action("border-bottom"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.keep-next, kn-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    kn-ta := TouchArea { clicked => { root.action("keep-next"); } }
-                    Text {
-                        text: model.keep-next-label;
-                        color: tool-btn(model.keep-next);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-keep-next;
-                        show: kn-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.keep-next-label;
+                    tip: model.tip-keep-next;
+                    active: model.keep-next;
+                    clicked => { root.action("keep-next"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.keep-lines, kl-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    kl-ta := TouchArea { clicked => { root.action("keep-lines"); } }
-                    Text {
-                        text: model.keep-lines-label;
-                        color: tool-btn(model.keep-lines);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-keep-lines;
-                        show: kl-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.keep-lines-label;
+                    tip: model.tip-keep-lines;
+                    active: model.keep-lines;
+                    clicked => { root.action("keep-lines"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.widow-control, wc-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    wc-ta := TouchArea { clicked => { root.action("widow-control"); } }
-                    Text {
-                        text: model.widow-control-label;
-                        color: tool-btn(model.widow-control);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-widow-control;
-                        show: wc-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.widow-control-label;
+                    tip: model.tip-widow-control;
+                    active: model.widow-control;
+                    clicked => { root.action("widow-control"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.contextual-spacing, cs-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    cs-ta := TouchArea { clicked => { root.action("contextual-spacing"); } }
-                    Text {
-                        text: model.contextual-spacing-label;
-                        color: tool-btn(model.contextual-spacing);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-contextual-spacing;
-                        show: cs-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.contextual-spacing-label;
+                    tip: model.tip-contextual-spacing;
+                    active: model.contextual-spacing;
+                    clicked => { root.action("contextual-spacing"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.bidi, bi-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    bi-ta := TouchArea { clicked => { root.action("bidi"); } }
-                    Text {
-                        text: model.bidi-label;
-                        color: tool-btn(model.bidi);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-bidi;
-                        show: bi-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.bidi-label;
+                    tip: model.tip-bidi;
+                    active: model.bidi;
+                    clicked => { root.action("bidi"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.suppress-auto-hyphens, hy-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    hy-ta := TouchArea { clicked => { root.action("suppress-auto-hyphens"); } }
-                    Text {
-                        text: model.suppress-auto-hyphens-label;
-                        color: tool-btn(model.suppress-auto-hyphens);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-suppress-auto-hyphens;
-                        show: hy-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.suppress-auto-hyphens-label;
+                    tip: model.tip-suppress-auto-hyphens;
+                    active: model.suppress-auto-hyphens;
+                    clicked => { root.action("suppress-auto-hyphens"); }
                 }
 
-                Rectangle {
-                    width: 32px;
-                    height: 28px;
-                    background: tool-bg(model.outline-level >= 0, ol-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ol-ta := TouchArea { clicked => { root.action("outline-level-cycle"); } }
-                    Text {
-                        text: model.outline-level-label;
-                        color: tool-btn(model.outline-level >= 0);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-outline-level;
-                        show: ol-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.outline-level-label;
+                    tip: model.tip-outline-level;
+                    active: model.outline-level >= 0;
+                    clicked => { root.action("outline-level-cycle"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.superscript, super-ta.has-hover);
-                    DocHoverTip {
-                        tip: model.tip-outline-level;
-                        show: ol-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.character-style-label;
+                    tip: model.tip-character-style;
+                    active: model.character-style-id != "";
+                    clicked => { root.action("character-style-cycle"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.character-style-id != "", ch-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ch-ta := TouchArea { clicked => { root.action("character-style-cycle"); } }
-                    Text {
-                        text: model.character-style-label;
-                        color: tool-btn(model.character-style-id != "");
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-character-style;
-                        show: ch-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.superscript-label;
+                    tip: model.tip-superscript;
+                    active: model.superscript;
+                    clicked => { root.action("superscript"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.superscript, super-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    super-ta := TouchArea { clicked => { root.action("superscript"); } }
-                    Text {
-                        text: model.superscript-label;
-                        color: tool-btn(model.superscript);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-superscript;
-                        show: super-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.subscript-label;
+                    tip: model.tip-subscript;
+                    active: model.subscript;
+                    clicked => { root.action("subscript"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.subscript, sub-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    sub-ta := TouchArea { clicked => { root.action("subscript"); } }
-                    Text {
-                        text: model.subscript-label;
-                        color: tool-btn(model.subscript);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-subscript;
-                        show: sub-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.clear-formatting-label;
+                    tip: model.tip-clear-formatting;
+                    clicked => { root.action("clear-formatting"); }
                 }
 
-                Rectangle {
-                    width: max(28px, clear-fmt-label.preferred-width + 8px);
-                    height: 28px;
-                    background: tool-bg(false, clear-fmt-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    clear-fmt-ta := TouchArea { clicked => { root.action("clear-formatting"); } }
-                    clear-fmt-label := Text {
-                        text: model.clear-formatting-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-clear-formatting;
-                        show: clear-fmt-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: max(36px, link-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(root.link-open || model.link-url != "", link-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    link-ta := TouchArea {
-                        clicked => {
+                DocToolBtn {
+                    label: model.link-label;
+                    tip: model.tip-link;
+                    active: root.link-open || model.link-url != "";
+                    clicked => {
                             root.story-open = 0;
                             root.comment-open = false;
                             root.link-open = !root.link-open;
                             if (root.link-open) {
-                                root.link-query = model.link-url;
-                                link-input.focus();
+                            root.link-query = model.link-url;
+                            link-input.focus();
                             }
                         }
-                    }
-                    link-btn-label := Text {
-                        text: model.link-label;
-                        color: tool-btn(root.link-open || model.link-url != "");
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-link;
-                        show: link-ta.has-hover;
-                        below: false;
-                    }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, bm-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    bm-ta := TouchArea { clicked => { root.action("insert-bookmark"); } }
-                    Text {
-                        text: model.bookmark-label;
-                        color: tool-btn(false);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-bookmark;
-                        show: bm-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.bookmark-label;
+                    tip: model.tip-bookmark;
+                    clicked => { root.action("insert-bookmark"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, cm-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    cm-ta := TouchArea { clicked => { root.action("insert-comment"); } }
-                    Text {
-                        text: model.comment-label;
-                        color: tool-btn(false);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-comment;
-                        show: cm-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.comment-label;
+                    tip: model.tip-comment;
+                    clicked => { root.action("insert-comment"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.comment-active, cx-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    cx-ta := TouchArea { clicked => { root.action("delete-comment"); } }
-                    Text {
-                        text: model.comment-delete-label;
-                        color: tool-btn(model.comment-active);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-comment-delete;
-                        show: cx-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.comment-delete-label;
+                    tip: model.tip-comment-delete;
+                    active: model.comment-active;
+                    clicked => { root.action("delete-comment"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(root.comment-open || model.comment-active, ce-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ce-ta := TouchArea {
-                        clicked => {
-                            root.story-open = 0;
-                            root.link-open = false;
-                            root.comment-open = !root.comment-open;
-                            if (root.comment-open) {
-                                root.comment-query = model.comment-edit-text;
-                                comment-input.focus();
-                            }
+                DocToolBtn {
+                    label: model.comment-edit-label;
+                    tip: model.tip-comment-edit;
+                    active: root.comment-open || model.comment-active;
+                    clicked => {
+                        root.story-open = 0;
+                        root.link-open = false;
+                        root.comment-open = !root.comment-open;
+                        if (root.comment-open) {
+                            root.comment-query = model.comment-edit-text;
+                            comment-input.focus();
                         }
                     }
-                    Text {
-                        text: model.comment-edit-label;
-                        color: tool-btn(root.comment-open || model.comment-active);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-comment-edit;
-                        show: ce-ta.has-hover;
-                        below: false;
-                    }
                 }
 
                 Rectangle {
-                    width: 1px;
-                    height: 18px;
+                    width: Theme.hairline;
+                    height: Theme.space-8;
                     y: (parent.height - self.height) / 2;
                     background: Theme.border-default;
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, fs-ta.has-hover);
-                    DocHoverTip {
-                        tip: model.tip-comment-edit;
-                        show: ce-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.comment-next-label;
+                    tip: model.tip-comment-next;
+                    clicked => { root.action("comment-next"); }
+                }
+
+                DocToolBtn {
+                    label: model.comment-prev-label;
+                    tip: model.tip-comment-prev;
+                    clicked => { root.action("comment-prev"); }
                 }
 
                 Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, cn-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    cn-ta := TouchArea { clicked => { root.action("comment-next"); } }
-                    Text {
-                        text: model.comment-next-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-comment-next;
-                        show: cn-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, cp-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    cp-ta := TouchArea { clicked => { root.action("comment-prev"); } }
-                    Text {
-                        text: model.comment-prev-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-comment-prev;
-                        show: cp-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 1px;
-                    height: 18px;
+                    width: Theme.hairline;
+                    height: Theme.space-8;
                     y: (parent.height - self.height) / 2;
                     background: Theme.border-default;
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, fs-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    fs-ta := TouchArea { clicked => { root.action("font-smaller"); } }
-                    Text {
-                        text: model.font-smaller-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-font-smaller;
-                        show: fs-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.font-smaller-label;
+                    tip: model.tip-font-smaller;
+                    clicked => { root.action("font-smaller"); }
                 }
 
                 Rectangle {
-                    width: max(28px, size-label.preferred-width + 8px);
-                    height: 28px;
+                    width: max(Theme.control-xs, size-label.preferred-width + Theme.space-2);
+                    height: Theme.control-xs;
                     background: Theme.surface-raised;
                     border-radius: Theme.radius-md;
                     y: (parent.height - self.height) / 2;
@@ -1032,1336 +389,514 @@ export component ViewerDocumentView inherits Rectangle {
                     }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, fl-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    fl-ta := TouchArea { clicked => { root.action("font-larger"); } }
-                    Text {
-                        text: model.font-larger-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-font-larger;
-                        show: fl-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.font-larger-label;
+                    tip: model.tip-font-larger;
+                    clicked => { root.action("font-larger"); }
                 }
 
-                Rectangle {
-                    width: 22px;
-                    height: 28px;
-                    background: tool-bg(false, ff-prev-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ff-prev-ta := TouchArea { clicked => { root.action("font-family-prev"); } }
-                    Text {
-                        text: model.font-family-prev-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-font-family-prev;
-                        show: ff-prev-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.font-family-prev-label;
+                    tip: model.tip-font-family-prev;
+                    clicked => { root.action("font-family-prev"); }
                 }
 
-                Rectangle {
-                    width: max(64px, min(120px, family-label.preferred-width + 12px));
-                    height: 28px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    clip: false;
-                    ff-label-ta := TouchArea { clicked => { root.action("font-family-next"); } }
-                    family-label := Text {
-                        text: model.font-family-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        overflow: elide;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-font-family-next;
-                        show: ff-label-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.font-family-label;
+                    tip: model.tip-font-family-next;
+                    clicked => { root.action("font-family-next"); }
                 }
 
-                Rectangle {
-                    width: 22px;
-                    height: 28px;
-                    background: tool-bg(false, ff-next-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ff-next-ta := TouchArea { clicked => { root.action("font-family-next"); } }
-                    Text {
-                        text: model.font-family-next-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-font-family-next;
-                        show: ff-next-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.font-family-next-label;
+                    tip: model.tip-font-family-next;
+                    clicked => { root.action("font-family-next"); }
                 }
+// Colour swatches: compare against decimal `0xRRGGBB` values.
 
-                // Colour swatches: compare against decimal `0xRRGGBB` values.
                 Rectangle {
-                    width: 16px;
-                    height: 16px;
-                    border-radius: 3px;
+                    width: Theme.space-6;
+                    height: Theme.space-6;
+                    border-radius: Theme.radius-xs;
                     y: (parent.height - self.height) / 2;
                     background: #111111;
                     border-width: model.color-rgb == 1118481 || model.color-rgb == 0 ? 2px : 1px;
-                    border-color: model.color-rgb == 1118481 || model.color-rgb == 0
-                        ? Theme.accent-brand : Theme.border-default;
+                    border-color: model.color-rgb == 1118481 || model.color-rgb == 0 ? Theme.accent-brand : Theme.border-default;
                     color-black-ta := TouchArea { clicked => { root.action("color-111111"); } }
-                    DocHoverTip {
-                        tip: model.tip-color-black;
-                        show: color-black-ta.has-hover;
-                        below: false;
+                    Tooltip {
+                        text: model.tip-color-black;
+                        shown: color-black-ta.has-hover;
+                        x: (parent.width - self.width) / 2;
+                        y: -self.height - Theme.space-2;
                     }
                 }
+
                 Rectangle {
-                    width: 16px;
-                    height: 16px;
-                    border-radius: 3px;
+                    width: Theme.space-6;
+                    height: Theme.space-6;
+                    border-radius: Theme.radius-xs;
                     y: (parent.height - self.height) / 2;
                     background: #dc2626;
                     border-width: model.color-rgb == 14423142 ? 2px : 1px;
-                    border-color: model.color-rgb == 14423142
-                        ? Theme.accent-brand : Theme.border-default;
+                    border-color: model.color-rgb == 14423142 ? Theme.accent-brand : Theme.border-default;
                     color-red-ta := TouchArea { clicked => { root.action("color-dc2626"); } }
-                    DocHoverTip {
-                        tip: model.tip-color-red;
-                        show: color-red-ta.has-hover;
-                        below: false;
+                    Tooltip {
+                        text: model.tip-color-red;
+                        shown: color-red-ta.has-hover;
+                        x: (parent.width - self.width) / 2;
+                        y: -self.height - Theme.space-2;
                     }
                 }
+
                 Rectangle {
-                    width: 16px;
-                    height: 16px;
-                    border-radius: 3px;
+                    width: Theme.space-6;
+                    height: Theme.space-6;
+                    border-radius: Theme.radius-xs;
                     y: (parent.height - self.height) / 2;
                     background: #2563eb;
                     border-width: model.color-rgb == 2442219 ? 2px : 1px;
-                    border-color: model.color-rgb == 2442219
-                        ? Theme.accent-brand : Theme.border-default;
+                    border-color: model.color-rgb == 2442219 ? Theme.accent-brand : Theme.border-default;
                     color-blue-ta := TouchArea { clicked => { root.action("color-2563eb"); } }
-                    DocHoverTip {
-                        tip: model.tip-color-blue;
-                        show: color-blue-ta.has-hover;
-                        below: false;
+                    Tooltip {
+                        text: model.tip-color-blue;
+                        shown: color-blue-ta.has-hover;
+                        x: (parent.width - self.width) / 2;
+                        y: -self.height - Theme.space-2;
                     }
                 }
+
                 Rectangle {
-                    width: 16px;
-                    height: 16px;
-                    border-radius: 3px;
+                    width: Theme.space-6;
+                    height: Theme.space-6;
+                    border-radius: Theme.radius-xs;
                     y: (parent.height - self.height) / 2;
                     background: #16a34a;
                     border-width: model.color-rgb == 1483594 ? 2px : 1px;
-                    border-color: model.color-rgb == 1483594
-                        ? Theme.accent-brand : Theme.border-default;
+                    border-color: model.color-rgb == 1483594 ? Theme.accent-brand : Theme.border-default;
                     color-green-ta := TouchArea { clicked => { root.action("color-16a34a"); } }
-                    DocHoverTip {
-                        tip: model.tip-color-green;
-                        show: color-green-ta.has-hover;
-                        below: false;
+                    Tooltip {
+                        text: model.tip-color-green;
+                        shown: color-green-ta.has-hover;
+                        x: (parent.width - self.width) / 2;
+                        y: -self.height - Theme.space-2;
                     }
                 }
 
                 Rectangle {
-                    width: 1px;
-                    height: 18px;
+                    width: Theme.hairline;
+                    height: Theme.space-8;
                     y: (parent.height - self.height) / 2;
                     background: Theme.border-default;
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.alignment == 0, al-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    al-ta := TouchArea { clicked => { root.action("align-left"); } }
-                    Text {
-                        text: model.align-left-label;
-                        color: tool-btn(model.alignment == 0);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-align-left;
-                        show: al-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.align-left-label;
+                    tip: model.tip-align-left;
+                    active: model.alignment == 0;
+                    clicked => { root.action("align-left"); }
+                }
+
+                DocToolBtn {
+                    label: model.align-center-label;
+                    tip: model.tip-align-center;
+                    active: model.alignment == 1;
+                    clicked => { root.action("align-center"); }
+                }
+
+                DocToolBtn {
+                    label: model.align-right-label;
+                    tip: model.tip-align-right;
+                    active: model.alignment == 2;
+                    clicked => { root.action("align-right"); }
+                }
+
+                DocToolBtn {
+                    label: model.align-justify-label;
+                    tip: model.tip-align-justify;
+                    active: model.alignment == 3;
+                    clicked => { root.action("align-justify"); }
                 }
 
                 Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.alignment == 1, ac-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ac-ta := TouchArea { clicked => { root.action("align-center"); } }
-                    Text {
-                        text: model.align-center-label;
-                        color: tool-btn(model.alignment == 1);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-align-center;
-                        show: ac-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.alignment == 2, ar-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ar-ta := TouchArea { clicked => { root.action("align-right"); } }
-                    Text {
-                        text: model.align-right-label;
-                        color: tool-btn(model.alignment == 2);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-align-right;
-                        show: ar-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.alignment == 3, aj-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    aj-ta := TouchArea { clicked => { root.action("align-justify"); } }
-                    Text {
-                        text: model.align-justify-label;
-                        color: tool-btn(model.alignment == 3);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-align-justify;
-                        show: aj-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 1px;
-                    height: 18px;
+                    width: Theme.hairline;
+                    height: Theme.space-8;
                     y: (parent.height - self.height) / 2;
                     background: Theme.border-default;
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.list-kind == 1, bullet-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    bullet-ta := TouchArea { clicked => { root.action("list-bullet"); } }
-                    Text {
-                        text: model.list-bullet-label;
-                        color: tool-btn(model.list-kind == 1);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-list-bullet;
-                        show: bullet-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.list-bullet-label;
+                    tip: model.tip-list-bullet;
+                    active: model.list-kind == 1;
+                    clicked => { root.action("list-bullet"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(model.list-kind == 2, num-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    num-ta := TouchArea { clicked => { root.action("list-numbered"); } }
-                    Text {
-                        text: model.list-numbered-label;
-                        color: tool-btn(model.list-kind == 2);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-list-numbered;
-                        show: num-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.list-numbered-label;
+                    tip: model.tip-list-numbered;
+                    active: model.list-kind == 2;
+                    clicked => { root.action("list-numbered"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, sb-less.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    sb-less := TouchArea { clicked => { root.action("space-before-less"); } }
-                    Text {
-                        text: model.space-before-less-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-space-before-less;
-                        show: sb-less.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.space-before-less-label;
+                    tip: model.tip-space-before-less;
+                    clicked => { root.action("space-before-less"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, sb-more.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    sb-more := TouchArea { clicked => { root.action("space-before-more"); } }
-                    Text {
-                        text: model.space-before-more-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-space-before-more;
-                        show: sb-more.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.space-before-more-label;
+                    tip: model.tip-space-before-more;
+                    clicked => { root.action("space-before-more"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, sp-less.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    sp-less := TouchArea { clicked => { root.action("space-after-less"); } }
-                    Text {
-                        text: model.space-after-less-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-space-after-less;
-                        show: sp-less.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.space-after-less-label;
+                    tip: model.tip-space-after-less;
+                    clicked => { root.action("space-after-less"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, sp-more.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    sp-more := TouchArea { clicked => { root.action("space-after-more"); } }
-                    Text {
-                        text: model.space-after-more-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-space-after-more;
-                        show: sp-more.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.space-after-more-label;
+                    tip: model.tip-space-after-more;
+                    clicked => { root.action("space-after-more"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, ln-less.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ln-less := TouchArea { clicked => { root.action("line-spacing-less"); } }
-                    Text {
-                        text: model.line-spacing-less-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-line-spacing-less;
-                        show: ln-less.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.line-spacing-less-label;
+                    tip: model.tip-line-spacing-less;
+                    clicked => { root.action("line-spacing-less"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, ln-more.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ln-more := TouchArea { clicked => { root.action("line-spacing-more"); } }
-                    Text {
-                        text: model.line-spacing-more-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-line-spacing-more;
-                        show: ln-more.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.line-spacing-more-label;
+                    tip: model.tip-line-spacing-more;
+                    clicked => { root.action("line-spacing-more"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, mar-less.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    mar-less := TouchArea { clicked => { root.action("margin-less"); } }
-                    Text {
-                        text: model.margin-less-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-margin-less;
-                        show: mar-less.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.margin-less-label;
+                    tip: model.tip-margin-less;
+                    clicked => { root.action("margin-less"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, mar-more.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    mar-more := TouchArea { clicked => { root.action("margin-more"); } }
-                    Text {
-                        text: model.margin-more-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-margin-more;
-                        show: mar-more.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.margin-more-label;
+                    tip: model.tip-margin-more;
+                    clicked => { root.action("margin-more"); }
                 }
 
-                Rectangle {
-                    width: max(36px, hd-less-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(false, hd-less.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    hd-less := TouchArea { clicked => { root.action("header-distance-less"); } }
-                    hd-less-label := Text {
-                        text: model.header-distance-less-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-header-distance-less;
-                        show: hd-less.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.header-distance-less-label;
+                    tip: model.tip-header-distance-less;
+                    clicked => { root.action("header-distance-less"); }
                 }
 
-                Rectangle {
-                    width: max(36px, hd-more-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(false, hd-more.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    hd-more := TouchArea { clicked => { root.action("header-distance-more"); } }
-                    hd-more-label := Text {
-                        text: model.header-distance-more-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-header-distance-more;
-                        show: hd-more.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.header-distance-more-label;
+                    tip: model.tip-header-distance-more;
+                    clicked => { root.action("header-distance-more"); }
                 }
 
-                Rectangle {
-                    width: max(36px, fd-less-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(false, fd-less.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    fd-less := TouchArea { clicked => { root.action("footer-distance-less"); } }
-                    fd-less-label := Text {
-                        text: model.footer-distance-less-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-footer-distance-less;
-                        show: fd-less.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.footer-distance-less-label;
+                    tip: model.tip-footer-distance-less;
+                    clicked => { root.action("footer-distance-less"); }
                 }
 
-                Rectangle {
-                    width: max(36px, fd-more-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(false, fd-more.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    fd-more := TouchArea { clicked => { root.action("footer-distance-more"); } }
-                    fd-more-label := Text {
-                        text: model.footer-distance-more-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-footer-distance-more;
-                        show: fd-more.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.footer-distance-more-label;
+                    tip: model.tip-footer-distance-more;
+                    clicked => { root.action("footer-distance-more"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, ind-less.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ind-less := TouchArea { clicked => { root.action("indent-less"); } }
-                    Text {
-                        text: model.indent-less-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-indent-less;
-                        show: ind-less.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.indent-less-label;
+                    tip: model.tip-indent-less;
+                    clicked => { root.action("indent-less"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, ind-more.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ind-more := TouchArea { clicked => { root.action("indent-more"); } }
-                    Text {
-                        text: model.indent-more-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-indent-more;
-                        show: ind-more.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.indent-more-label;
+                    tip: model.tip-indent-more;
+                    clicked => { root.action("indent-more"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, ir-less.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ir-less := TouchArea { clicked => { root.action("indent-right-less"); } }
-                    Text {
-                        text: model.indent-right-less-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-indent-right-less;
-                        show: ir-less.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.indent-right-less-label;
+                    tip: model.tip-indent-right-less;
+                    clicked => { root.action("indent-right-less"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, ir-more.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ir-more := TouchArea { clicked => { root.action("indent-right-more"); } }
-                    Text {
-                        text: model.indent-right-more-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-indent-right-more;
-                        show: ir-more.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.indent-right-more-label;
+                    tip: model.tip-indent-right-more;
+                    clicked => { root.action("indent-right-more"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, fl-less.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    fl-less := TouchArea { clicked => { root.action("first-line-less"); } }
-                    Text {
-                        text: model.first-line-less-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-first-line-less;
-                        show: fl-less.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.first-line-less-label;
+                    tip: model.tip-first-line-less;
+                    clicked => { root.action("first-line-less"); }
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, fl-more.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    fl-more := TouchArea { clicked => { root.action("first-line-more"); } }
-                    Text {
-                        text: model.first-line-more-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-first-line-more;
-                        show: fl-more.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.first-line-more-label;
+                    tip: model.tip-first-line-more;
+                    clicked => { root.action("first-line-more"); }
                 }
 
-                Rectangle {
-                    width: max(28px, pg-label.preferred-width + 8px);
-                    height: 28px;
-                    background: tool-bg(false, pg-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    pg-ta := TouchArea { clicked => { root.action("page-size-cycle"); } }
-                    pg-label := Text {
-                        text: model.page-size-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-page-size;
-                        show: pg-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.page-size-label;
+                    tip: model.tip-page-size;
+                    clicked => { root.action("page-size-cycle"); }
                 }
 
-                Rectangle {
-                    width: max(28px, or-label.preferred-width + 8px);
-                    height: 28px;
-                    background: tool-bg(false, or-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    or-ta := TouchArea { clicked => { root.action("page-orientation-toggle"); } }
-                    or-label := Text {
-                        text: model.page-orientation-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-page-orientation;
-                        show: or-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.page-orientation-label;
+                    tip: model.tip-page-orientation;
+                    clicked => { root.action("page-orientation-toggle"); }
                 }
 
-                Rectangle {
-                    width: max(28px, tp-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(model.title-page, tp-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    tp-ta := TouchArea { clicked => { root.action("title-page"); } }
-                    tp-btn-label := Text {
-                        text: model.title-page-label;
-                        color: tool-btn(model.title-page);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-title-page;
-                        show: tp-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.title-page-label;
+                    tip: model.tip-title-page;
+                    active: model.title-page;
+                    clicked => { root.action("title-page"); }
                 }
 
-                Rectangle {
-                    width: max(28px, ee-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(model.even-and-odd-headers, ee-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ee-ta := TouchArea { clicked => { root.action("even-and-odd-headers"); } }
-                    ee-btn-label := Text {
-                        text: model.even-and-odd-headers-label;
-                        color: tool-btn(model.even-and-odd-headers);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-even-and-odd-headers;
-                        show: ee-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.even-and-odd-headers-label;
+                    tip: model.tip-even-and-odd-headers;
+                    active: model.even-and-odd-headers;
+                    clicked => { root.action("even-and-odd-headers"); }
                 }
 
-                Rectangle {
-                    width: max(36px, hdr-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(root.story-open == 1 || model.header-text != "", hdr-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    hdr-ta := TouchArea {
-                        clicked => {
+                DocToolBtn {
+                    label: model.header-label;
+                    tip: model.tip-header;
+                    active: root.story-open == 1 || model.header-text != "";
+                    clicked => {
                             root.link-open = false;
                             root.comment-open = false;
                             if (root.story-open == 1) {
-                                root.story-open = 0;
+                            root.story-open = 0;
                             } else {
-                                root.story-open = 1;
-                                root.story-query = model.header-text;
+                            root.story-open = 1;
+                            root.story-query = model.header-text;
                             }
                         }
-                    }
-                    hdr-btn-label := Text {
-                        text: model.header-label;
-                        color: tool-btn(root.story-open == 1 || model.header-text != "");
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-header;
-                        show: hdr-ta.has-hover;
-                        below: false;
-                    }
                 }
 
-                Rectangle {
-                    width: max(36px, ftr-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(root.story-open == 2 || model.footer-text != "", ftr-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ftr-ta := TouchArea {
-                        clicked => {
+                DocToolBtn {
+                    label: model.footer-label;
+                    tip: model.tip-footer;
+                    active: root.story-open == 2 || model.footer-text != "";
+                    clicked => {
                             root.link-open = false;
                             root.comment-open = false;
                             if (root.story-open == 2) {
-                                root.story-open = 0;
+                            root.story-open = 0;
                             } else {
-                                root.story-open = 2;
-                                root.story-query = model.footer-text;
+                            root.story-open = 2;
+                            root.story-query = model.footer-text;
                             }
                         }
-                    }
-                    ftr-btn-label := Text {
-                        text: model.footer-label;
-                        color: tool-btn(root.story-open == 2 || model.footer-text != "");
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-footer;
-                        show: ftr-ta.has-hover;
-                        below: false;
-                    }
                 }
 
-
-                Rectangle {
-                    width: max(36px, hf-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(root.story-open == 3 || model.header-first-text != "", hf-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    hf-ta := TouchArea {
-                        clicked => {
+                DocToolBtn {
+                    label: model.header-first-label;
+                    tip: model.tip-header-first;
+                    active: root.story-open == 3 || model.header-first-text != "";
+                    clicked => {
                             root.link-open = false;
                             root.comment-open = false;
                             if (root.story-open == 3) {
-                                root.story-open = 0;
+                            root.story-open = 0;
                             } else {
-                                root.story-open = 3;
-                                root.story-query = model.header-first-text;
+                            root.story-open = 3;
+                            root.story-query = model.header-first-text;
                             }
                         }
-                    }
-                    hf-btn-label := Text {
-                        text: model.header-first-label;
-                        color: tool-btn(root.story-open == 3 || model.header-first-text != "");
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-header-first;
-                        show: hf-ta.has-hover;
-                        below: false;
-                    }
                 }
 
-                Rectangle {
-                    width: max(36px, ff-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(root.story-open == 4 || model.footer-first-text != "", ff-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ff-ta := TouchArea {
-                        clicked => {
+                DocToolBtn {
+                    label: model.footer-first-label;
+                    tip: model.tip-footer-first;
+                    active: root.story-open == 4 || model.footer-first-text != "";
+                    clicked => {
                             root.link-open = false;
                             root.comment-open = false;
                             if (root.story-open == 4) {
-                                root.story-open = 0;
+                            root.story-open = 0;
                             } else {
-                                root.story-open = 4;
-                                root.story-query = model.footer-first-text;
+                            root.story-open = 4;
+                            root.story-query = model.footer-first-text;
                             }
                         }
-                    }
-                    ff-btn-label := Text {
-                        text: model.footer-first-label;
-                        color: tool-btn(root.story-open == 4 || model.footer-first-text != "");
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-footer-first;
-                        show: ff-ta.has-hover;
-                        below: false;
-                    }
                 }
 
-                Rectangle {
-                    width: max(36px, he-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(root.story-open == 5 || model.header-even-text != "", he-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    he-ta := TouchArea {
-                        clicked => {
+                DocToolBtn {
+                    label: model.header-even-label;
+                    tip: model.tip-header-even;
+                    active: root.story-open == 5 || model.header-even-text != "";
+                    clicked => {
                             root.link-open = false;
                             root.comment-open = false;
                             if (root.story-open == 5) {
-                                root.story-open = 0;
+                            root.story-open = 0;
                             } else {
-                                root.story-open = 5;
-                                root.story-query = model.header-even-text;
+                            root.story-open = 5;
+                            root.story-query = model.header-even-text;
                             }
                         }
-                    }
-                    he-btn-label := Text {
-                        text: model.header-even-label;
-                        color: tool-btn(root.story-open == 5 || model.header-even-text != "");
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-header-even;
-                        show: he-ta.has-hover;
-                        below: false;
-                    }
                 }
 
-                Rectangle {
-                    width: max(36px, fe-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(root.story-open == 6 || model.footer-even-text != "", fe-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    fe-ta := TouchArea {
-                        clicked => {
+                DocToolBtn {
+                    label: model.footer-even-label;
+                    tip: model.tip-footer-even;
+                    active: root.story-open == 6 || model.footer-even-text != "";
+                    clicked => {
                             root.link-open = false;
                             root.comment-open = false;
                             if (root.story-open == 6) {
-                                root.story-open = 0;
+                            root.story-open = 0;
                             } else {
-                                root.story-open = 6;
-                                root.story-query = model.footer-even-text;
+                            root.story-open = 6;
+                            root.story-query = model.footer-even-text;
                             }
                         }
-                    }
-                    fe-btn-label := Text {
-                        text: model.footer-even-label;
-                        color: tool-btn(root.story-open == 6 || model.footer-even-text != "");
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-footer-even;
-                        show: fe-ta.has-hover;
-                        below: false;
-                    }
+                }
+
+                DocToolBtn {
+                    label: model.page-field-label;
+                    tip: model.tip-page-field;
+                    clicked => { root.action("insert-page-field"); }
+                }
+
+                DocToolBtn {
+                    label: model.section-break-label;
+                    tip: model.tip-section-break;
+                    active: model.section-break-continuous;
+                    clicked => { root.action("insert-section-break"); }
+                }
+
+                DocToolBtn {
+                    label: model.date-field-label;
+                    tip: model.tip-date-field;
+                    clicked => { root.action("insert-date-field"); }
+                }
+
+                DocToolBtn {
+                    label: model.filename-field-label;
+                    tip: model.tip-filename-field;
+                    clicked => { root.action("insert-filename-field"); }
                 }
 
                 Rectangle {
-                    width: max(36px, pg-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(false, pg-field-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    pg-field-ta := TouchArea { clicked => { root.action("insert-page-field"); } }
-                    pg-btn-label := Text {
-                        text: model.page-field-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-page-field;
-                        show: pg-field-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: max(36px, sec-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(model.section-break-continuous, sec-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    sec-ta := TouchArea { clicked => { root.action("insert-section-break"); } }
-                    sec-btn-label := Text {
-                        text: model.section-break-label;
-                        color: tool-btn(model.section-break-continuous);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-section-break;
-                        show: sec-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: max(36px, date-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(false, date-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    date-ta := TouchArea { clicked => { root.action("insert-date-field"); } }
-                    date-btn-label := Text {
-                        text: model.date-field-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-date-field;
-                        show: date-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: max(36px, fn-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(false, fn-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    fn-ta := TouchArea { clicked => { root.action("insert-filename-field"); } }
-                    fn-btn-label := Text {
-                        text: model.filename-field-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-filename-field;
-                        show: fn-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 1px;
-                    height: 18px;
+                    width: Theme.hairline;
+                    height: Theme.space-8;
                     y: (parent.height - self.height) / 2;
                     background: Theme.border-default;
                 }
 
-                Rectangle {
-                    width: max(36px, img-ins-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(false, img-ins.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    img-ins := TouchArea { clicked => { root.action("image-insert"); } }
-                    img-ins-label := Text {
-                        text: model.image-insert-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-image-insert;
-                        show: img-ins.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.image-insert-label;
+                    tip: model.tip-image-insert;
+                    clicked => { root.action("image-insert"); }
+                }
+
+                DocToolBtn {
+                    label: model.table-insert-label;
+                    tip: model.tip-table-insert;
+                    clicked => { root.action("table-insert"); }
+                }
+
+                DocToolBtn {
+                    label: model.table-row-insert-label;
+                    tip: model.tip-table-row-insert;
+                    clicked => { root.action("table-row-insert"); }
+                }
+
+                DocToolBtn {
+                    label: model.table-row-delete-label;
+                    tip: model.tip-table-row-delete;
+                    clicked => { root.action("table-row-delete"); }
+                }
+
+                DocToolBtn {
+                    label: model.table-col-insert-label;
+                    tip: model.tip-table-col-insert;
+                    clicked => { root.action("table-col-insert"); }
+                }
+
+                DocToolBtn {
+                    label: model.table-col-delete-label;
+                    tip: model.tip-table-col-delete;
+                    clicked => { root.action("table-col-delete"); }
+                }
+
+                DocToolBtn {
+                    label: model.table-merge-label;
+                    tip: model.tip-table-merge;
+                    clicked => { root.action("table-merge"); }
+                }
+
+                DocToolBtn {
+                    label: model.table-unmerge-label;
+                    tip: model.tip-table-unmerge;
+                    clicked => { root.action("table-unmerge"); }
                 }
 
                 Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, t-ins.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    t-ins := TouchArea { clicked => { root.action("table-insert"); } }
-                    Text {
-                        text: model.table-insert-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-table-insert;
-                        show: t-ins.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, tr-ins.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    tr-ins := TouchArea { clicked => { root.action("table-row-insert"); } }
-                    Text {
-                        text: model.table-row-insert-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-table-row-insert;
-                        show: tr-ins.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, tr-del.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    tr-del := TouchArea { clicked => { root.action("table-row-delete"); } }
-                    Text {
-                        text: model.table-row-delete-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-table-row-delete;
-                        show: tr-del.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, tc-ins.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    tc-ins := TouchArea { clicked => { root.action("table-col-insert"); } }
-                    Text {
-                        text: model.table-col-insert-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-table-col-insert;
-                        show: tc-ins.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, tc-del.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    tc-del := TouchArea { clicked => { root.action("table-col-delete"); } }
-                    Text {
-                        text: model.table-col-delete-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-table-col-delete;
-                        show: tc-del.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, t-merge.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    t-merge := TouchArea { clicked => { root.action("table-merge"); } }
-                    Text {
-                        text: model.table-merge-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-table-merge;
-                        show: t-merge.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, t-unmerge.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    t-unmerge := TouchArea { clicked => { root.action("table-unmerge"); } }
-                    Text {
-                        text: model.table-unmerge-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-table-unmerge;
-                        show: t-unmerge.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 1px;
-                    height: 18px;
+                    width: Theme.hairline;
+                    height: Theme.space-8;
                     y: (parent.height - self.height) / 2;
                     background: Theme.border-default;
                 }
 
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, zoom-out-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    zoom-out-ta := TouchArea { clicked => { root.action("zoom-out"); } }
-                    Text {
-                        text: model.zoom-out-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-zoom-out;
-                        show: zoom-out-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.zoom-out-label;
+                    tip: model.tip-zoom-out;
+                    clicked => { root.action("zoom-out"); }
+                }
+
+                DocToolBtn {
+                    label: "\{model.preview-zoom-percent}%";
+                    tip: model.tip-zoom-reset;
+                    clicked => { root.action("zoom-reset"); }
+                }
+
+                DocToolBtn {
+                    label: model.zoom-in-label;
+                    tip: model.tip-zoom-in;
+                    clicked => { root.action("zoom-in"); }
                 }
 
                 Rectangle {
-                    width: max(36px, zoom-pct.preferred-width + 8px);
-                    height: 28px;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    zoom-pct-ta := TouchArea { clicked => { root.action("zoom-reset"); } }
-                    zoom-pct := Text {
-                        text: "\{model.preview-zoom-percent}%";
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-zoom-reset;
-                        show: zoom-pct-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    background: tool-bg(false, zoom-in-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    zoom-in-ta := TouchArea { clicked => { root.action("zoom-in"); } }
-                    Text {
-                        text: model.zoom-in-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-zoom-in;
-                        show: zoom-in-ta.has-hover;
-                        below: false;
-                    }
-                }
-
-                Rectangle {
-                    width: 1px;
-                    height: 18px;
+                    width: Theme.hairline;
+                    height: Theme.space-8;
                     y: (parent.height - self.height) / 2;
                     background: Theme.border-default;
                 }
 
-                Rectangle {
-                    width: max(44px, find-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: tool-bg(root.find-open, find-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    find-ta := TouchArea {
-                        clicked => {
+                DocToolBtn {
+                    label: model.find-label;
+                    tip: model.tip-find;
+                    active: root.find-open;
+                    clicked => {
                             root.find-open = !root.find-open;
                             if (root.find-open) {
-                                find-input.focus();
+                            find-input.focus();
                             }
                         }
-                    }
-                    find-btn-label := Text {
-                        text: model.find-label;
-                        color: tool-btn(root.find-open);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-find;
-                        show: find-ta.has-hover;
-                        below: false;
-                    }
                 }
 
-                Rectangle {
-                    width: max(64px, mode-label.preferred-width + 14px);
-                    height: 28px;
-                    background: tool-bg(model.source-mode, mode-ta.has-hover);
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    mode-ta := TouchArea { clicked => { root.action("toggle-source"); } }
-                    mode-label := Text {
-                        text: model.source-mode ? model.source-label : model.preview-label;
-                        color: tool-btn(model.source-mode);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    DocHoverTip {
-                        tip: model.tip-toggle-source;
-                        show: mode-ta.has-hover;
-                        below: false;
-                    }
+                DocToolBtn {
+                    label: model.source-mode ? model.source-label : model.preview-label;
+                    tip: model.tip-toggle-source;
+                    active: model.source-mode;
+                    clicked => { root.action("toggle-source"); }
                 }
 
                 Rectangle { horizontal-stretch: 1; }
@@ -2372,6 +907,7 @@ export component ViewerDocumentView inherits Rectangle {
                     font-size: Theme.font-size-sm;
                     vertical-alignment: center;
                 }
+
             }
         }
 
@@ -2440,73 +976,28 @@ export component ViewerDocumentView inherits Rectangle {
                         }
                     }
 
-                    Rectangle {
-                        width: max(28px, case-label.preferred-width + 8px);
-                        height: 26px;
-                        background: root.find-match-case ? Theme.surface-base
-                            : case-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        case-ta := TouchArea {
-                            clicked => {
-                                root.find-match-case = !root.find-match-case;
-                                if (root.find-query != "") {
-                                    root.find-request(root.find-query, true, root.find-match-case);
-                                }
+                    DocToolBtn {
+                        label: model.find-case-label;
+                        tip: model.tip-find-case;
+                        active: root.find-match-case;
+                        clicked => {
+                            root.find-match-case = !root.find-match-case;
+                            if (root.find-query != "") {
+                                root.find-request(root.find-query, true, root.find-match-case);
                             }
                         }
-                        case-label := Text {
-                            text: model.find-case-label;
-                            color: root.find-match-case ? Theme.accent-brand : Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                        DocHoverTip {
-                            tip: model.tip-find-case;
-                            show: case-ta.has-hover;
-                        }
                     }
 
-                    Rectangle {
-                        width: 28px;
-                        height: 26px;
-                        background: find-prev-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        find-prev-ta := TouchArea {
-                            clicked => { root.find-request(root.find-query, false, root.find-match-case); }
-                        }
-                        Text {
-                            text: "^";
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                        DocHoverTip {
-                            tip: model.tip-find-prev;
-                            show: find-prev-ta.has-hover;
-                        }
+                    DocToolBtn {
+                        label: "^";
+                        tip: model.tip-find-prev;
+                        clicked => { root.find-request(root.find-query, false, root.find-match-case); }
                     }
 
-                    Rectangle {
-                        width: 28px;
-                        height: 26px;
-                        background: find-next-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        find-next-ta := TouchArea {
-                            clicked => { root.find-request(root.find-query, true, root.find-match-case); }
-                        }
-                        Text {
-                            text: "v";
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                        DocHoverTip {
-                            tip: model.tip-find-next;
-                            show: find-next-ta.has-hover;
-                        }
+                    DocToolBtn {
+                        label: "v";
+                        tip: model.tip-find-next;
+                        clicked => { root.find-request(root.find-query, true, root.find-match-case); }
                     }
 
                     Text {
@@ -2521,25 +1012,10 @@ export component ViewerDocumentView inherits Rectangle {
                         horizontal-alignment: center;
                     }
 
-                    Rectangle {
-                        width: 28px;
-                        height: 26px;
-                        background: find-close-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        find-close-ta := TouchArea {
-                            clicked => { root.find-open = false; }
-                        }
-                        Text {
-                            text: "x";
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                        DocHoverTip {
-                            tip: model.tip-find-close;
-                            show: find-close-ta.has-hover;
-                        }
+                    DocToolBtn {
+                        label: "x";
+                        tip: model.tip-find-close;
+                        clicked => { root.find-open = false; }
                     }
                 }
 
@@ -2598,41 +1074,19 @@ export component ViewerDocumentView inherits Rectangle {
                         }
                     }
 
-                    Rectangle {
-                        width: max(52px, replace-one-label.preferred-width + 12px);
-                        height: 26px;
-                        background: replace-one-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        replace-one-ta := TouchArea {
-                            clicked => {
-                                root.replace-request(root.find-query, root.replace-query, false, root.find-match-case);
-                            }
-                        }
-                        replace-one-label := Text {
-                            text: model.replace-one-label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                    DocToolBtn {
+                        label: model.replace-one-label;
+                        tip: "";
+                        clicked => {
+                            root.replace-request(root.find-query, root.replace-query, false, root.find-match-case);
                         }
                     }
 
-                    Rectangle {
-                        width: max(40px, replace-all-label.preferred-width + 12px);
-                        height: 26px;
-                        background: replace-all-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        replace-all-ta := TouchArea {
-                            clicked => {
-                                root.replace-request(root.find-query, root.replace-query, true, root.find-match-case);
-                            }
-                        }
-                        replace-all-label := Text {
-                            text: model.replace-all-label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                    DocToolBtn {
+                        label: model.replace-all-label;
+                        tip: "";
+                        clicked => {
+                            root.replace-request(root.find-query, root.replace-query, true, root.find-match-case);
                         }
                     }
                 }
@@ -2702,38 +1156,16 @@ export component ViewerDocumentView inherits Rectangle {
                     }
                 }
 
-                Rectangle {
-                    width: max(48px, link-apply-label.preferred-width + 12px);
-                    height: 26px;
-                    background: link-apply-ta.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-                    link-apply-ta := TouchArea {
-                        clicked => { root.link-request(root.link-query); }
-                    }
-                    link-apply-label := Text {
-                        text: model.link-apply-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                DocToolBtn {
+                    label: model.link-apply-label;
+                    tip: "";
+                    clicked => { root.link-request(root.link-query); }
                 }
 
-                Rectangle {
-                    width: max(56px, link-remove-label.preferred-width + 12px);
-                    height: 26px;
-                    background: link-remove-ta.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-                    link-remove-ta := TouchArea {
-                        clicked => { root.link-request(""); }
-                    }
-                    link-remove-label := Text {
-                        text: model.link-remove-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                DocToolBtn {
+                    label: model.link-remove-label;
+                    tip: "";
+                    clicked => { root.link-request(""); }
                 }
             }
         }
@@ -2801,23 +1233,12 @@ export component ViewerDocumentView inherits Rectangle {
                     }
                 }
 
-                Rectangle {
-                    width: max(48px, comment-apply-label.preferred-width + 12px);
-                    height: 26px;
-                    background: comment-apply-ta.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-                    comment-apply-ta := TouchArea {
-                        clicked => {
-                            root.comment-request(root.comment-query);
-                            root.comment-open = false;
-                        }
-                    }
-                    comment-apply-label := Text {
-                        text: model.comment-apply-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                DocToolBtn {
+                    label: model.comment-apply-label;
+                    tip: "";
+                    clicked => {
+                        root.comment-request(root.comment-query);
+                        root.comment-open = false;
                     }
                 }
             }
@@ -2900,68 +1321,46 @@ export component ViewerDocumentView inherits Rectangle {
                 }
             }
 
-            Rectangle {
-                width: max(48px, story-apply-label.preferred-width + 12px);
-                height: 26px;
-                background: story-apply-ta.has-hover ? Theme.surface-base : transparent;
-                border-radius: Theme.radius-md;
-                story-apply-ta := TouchArea {
-                    clicked => {
-                        if (root.story-open == 1) {
-                            root.header-request(root.story-query);
-                        } else if (root.story-open == 2) {
-                            root.footer-request(root.story-query);
-                        } else if (root.story-open == 3) {
-                            root.header-first-request(root.story-query);
-                        } else if (root.story-open == 4) {
-                            root.footer-first-request(root.story-query);
-                        } else if (root.story-open == 5) {
-                            root.header-even-request(root.story-query);
-                        } else if (root.story-open == 6) {
-                            root.footer-even-request(root.story-query);
-                        }
-                        root.story-open = 0;
+            DocToolBtn {
+                label: model.link-apply-label;
+                tip: "";
+                clicked => {
+                    if (root.story-open == 1) {
+                        root.header-request(root.story-query);
+                    } else if (root.story-open == 2) {
+                        root.footer-request(root.story-query);
+                    } else if (root.story-open == 3) {
+                        root.header-first-request(root.story-query);
+                    } else if (root.story-open == 4) {
+                        root.footer-first-request(root.story-query);
+                    } else if (root.story-open == 5) {
+                        root.header-even-request(root.story-query);
+                    } else if (root.story-open == 6) {
+                        root.footer-even-request(root.story-query);
                     }
-                }
-                story-apply-label := Text {
-                    text: model.link-apply-label;
-                    color: Theme.text-primary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                    root.story-open = 0;
                 }
             }
 
-            Rectangle {
-                width: max(56px, story-clear-label.preferred-width + 12px);
-                height: 26px;
-                background: story-clear-ta.has-hover ? Theme.surface-base : transparent;
-                border-radius: Theme.radius-md;
-                story-clear-ta := TouchArea {
-                    clicked => {
-                        if (root.story-open == 1) {
-                            root.header-request("");
-                        } else if (root.story-open == 2) {
-                            root.footer-request("");
-                        } else if (root.story-open == 3) {
-                            root.header-first-request("");
-                        } else if (root.story-open == 4) {
-                            root.footer-first-request("");
-                        } else if (root.story-open == 5) {
-                            root.header-even-request("");
-                        } else if (root.story-open == 6) {
-                            root.footer-even-request("");
-                        }
-                        root.story-query = "";
-                        root.story-open = 0;
+            DocToolBtn {
+                label: model.link-remove-label;
+                tip: "";
+                clicked => {
+                    if (root.story-open == 1) {
+                        root.header-request("");
+                    } else if (root.story-open == 2) {
+                        root.footer-request("");
+                    } else if (root.story-open == 3) {
+                        root.header-first-request("");
+                    } else if (root.story-open == 4) {
+                        root.footer-first-request("");
+                    } else if (root.story-open == 5) {
+                        root.header-even-request("");
+                    } else if (root.story-open == 6) {
+                        root.footer-even-request("");
                     }
-                }
-                story-clear-label := Text {
-                    text: model.link-remove-label;
-                    color: Theme.text-primary;
-                    font-size: Theme.font-size-sm;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                    root.story-query = "";
+                    root.story-open = 0;
                 }
             }
         }
