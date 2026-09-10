@@ -1,6 +1,9 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../../theme_global.slint";
+import { ControlSize, IconButton, Tooltip } from "../../kit.slint";
+import { Icon } from "../../kit-icons.slint";
 import { ViewerMediaModel } from "../../workspace/defs.slint";
+import { DocToolBtn } from "viewer-doc-toolbtn.slint";
 
 export component ViewerMediaView inherits Rectangle {
     in property <ViewerMediaModel> model;
@@ -252,11 +255,11 @@ export component ViewerMediaView inherits Rectangle {
 
             if !model.has-video : VerticalLayout {
                 alignment: center;
-                padding: 24px;
-                spacing: 10px;
+                padding: Theme.space-4;
+                spacing: Theme.space-2;
                 if model.has-cover : Image {
-                    width: min(220px, parent.width - 48px);
-                    height: min(220px, parent.width - 48px);
+                    width: min(220px, parent.width - Theme.space-8);
+                    height: min(220px, parent.width - Theme.space-8);
                     source: model.cover;
                     image-fit: contain;
                 }
@@ -343,14 +346,14 @@ export component ViewerMediaView inherits Rectangle {
 
             if model.osd-text != "" : Rectangle {
                 x: parent.width / 2 - self.width / 2;
-                y: 16px;
-                width: max(80px, osd-lab.preferred-width + 24px);
-                height: max(28px, osd-lab.preferred-height + 12px);
+                y: Theme.space-3;
+                width: max(80px, osd-lab.preferred-width + Theme.space-4);
+                height: max(Theme.control-xs, osd-lab.preferred-height + Theme.space-3);
                 border-radius: Theme.radius-md;
-                background: #000000aa;
+                background: Theme.scrim;
                 osd-lab := Text {
                     text: model.osd-text;
-                    color: #ffffff;
+                    color: Theme.text-primary;
                     font-size: Theme.font-size-md;
                     horizontal-alignment: center;
                     vertical-alignment: center;
@@ -361,29 +364,30 @@ export component ViewerMediaView inherits Rectangle {
             if model.playlist-panel-open && model.playlist-items.length > 0 : HorizontalLayout {
                 spacing: 0;
                 Rectangle {
-                    width: 1px;
-                    background: Theme.border-default;
+                    width: Theme.hairline;
+                    background: Theme.border-subtle;
                 }
                 Rectangle {
                     width: 200px;
-                    background: Theme.surface-base;
+                    background: Theme.surface-sunken;
 
                     ListView {
                         width: parent.width;
                         height: parent.height;
                         for item in model.playlist-items : Rectangle {
-                            height: 28px;
-                            background: item.selected ? Theme.surface-raised
-                                : row-ta.has-hover ? Theme.surface-raised : transparent;
+                            height: Theme.control-xs - Theme.space-2;
+                            background: item.selected ? Theme.accent-soft
+                                : row-ta.has-hover ? Theme.state-hover : Colors.transparent;
                             row-ta := TouchArea {
+                                mouse-cursor: MouseCursor.pointer;
                                 clicked => {
                                     root.command("goto:" + (item.index + 1));
                                 }
                             }
                             HorizontalLayout {
-                                padding-left: 8px;
-                                padding-right: 8px;
-                                spacing: 6px;
+                                padding-left: Theme.space-2;
+                                padding-right: Theme.space-2;
+                                spacing: Theme.space-2;
                                 Text {
                                     text: (item.index + 1);
                                     color: Theme.text-tertiary;
@@ -408,8 +412,10 @@ export component ViewerMediaView inherits Rectangle {
 
         // Transport chrome (collapses when auto-hidden so the video can expand)
         if root.chrome-on : Rectangle {
-            height: root.chapters-open && model.chapter-items.length > 0 ? 192px : 72px;
-            background: Theme.surface-base;
+            height: root.chapters-open && model.chapter-items.length > 0
+                ? Theme.control-xs * 5 + Theme.space-4
+                : Theme.control-xs * 2 + Theme.space-4;
+            background: Theme.surface-sunken;
             chrome-ta := TouchArea {
                 changed has-hover => {
                     root.chrome-hover = self.has-hover;
@@ -420,19 +426,20 @@ export component ViewerMediaView inherits Rectangle {
             }
 
             VerticalLayout {
-                padding-left: 12px;
-                padding-right: 12px;
-                padding-top: 6px;
-                padding-bottom: 6px;
-                spacing: 6px;
+                padding-left: Theme.space-3;
+                padding-right: Theme.space-3;
+                padding-top: Theme.space-1;
+                padding-bottom: Theme.space-1;
+                spacing: Theme.space-1;
 
                 if root.chapters-open && model.chapter-items.length > 0 : ListView {
-                    height: 114px;
+                    height: Theme.control-xs * 3 + Theme.space-2;
                     for item in model.chapter-items : Rectangle {
-                        height: 26px;
-                        background: item.selected ? Theme.surface-raised
-                            : ch-ta.has-hover ? Theme.surface-raised : transparent;
+                        height: Theme.control-xs - Theme.space-2;
+                        background: item.selected ? Theme.accent-soft
+                            : ch-ta.has-hover ? Theme.state-hover : Colors.transparent;
                         ch-ta := TouchArea {
+                            mouse-cursor: MouseCursor.pointer;
                             clicked => {
                                 root.command("chapter:" + item.index);
                                 root.chapters-open = false;
@@ -440,9 +447,9 @@ export component ViewerMediaView inherits Rectangle {
                             }
                         }
                         HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 8px;
-                            spacing: 6px;
+                            padding-left: Theme.space-2;
+                            padding-right: Theme.space-2;
+                            spacing: Theme.space-2;
                             Text {
                                 text: (item.index + 1);
                                 color: Theme.text-tertiary;
@@ -462,93 +469,87 @@ export component ViewerMediaView inherits Rectangle {
                     }
                 }
 
-                // Scrubber
-                Rectangle {
-                    height: 14px;
-                    background: transparent;
-                    scrub := TouchArea {
-                        moved => {
-                            root.bump-chrome();
-                            if self.pressed && self.width > 0 {
-                                root.seek-frac((self.mouse-x / self.width));
-                            }
+                // Scrubber — finger-sized hit area, rail thickens on hover
+                scrub := TouchArea {
+                    height: Theme.control-xs - Theme.space-2;
+                    mouse-cursor: MouseCursor.pointer;
+                    moved => {
+                        root.bump-chrome();
+                        if self.pressed && self.width > 0 {
+                            root.seek-frac((self.mouse-x / self.width));
                         }
-                        clicked => {
-                            root.bump-chrome();
-                            if self.width > 0 {
-                                root.seek-frac((self.mouse-x / self.width));
-                            }
+                    }
+                    clicked => {
+                        root.bump-chrome();
+                        if self.width > 0 {
+                            root.seek-frac((self.mouse-x / self.width));
                         }
                     }
                     Rectangle {
-                        y: parent.height / 2 - 2px;
-                        height: 4px;
+                        height: scrub.has-hover || scrub.pressed ? Theme.track-height-lg : Theme.track-height;
+                        y: (parent.height - self.height) / 2;
                         width: parent.width;
-                        background: Theme.border-default;
-                        border-radius: 2px;
-                    }
-                    Rectangle {
-                        y: parent.height / 2 - 2px;
-                        height: 4px;
-                        width: parent.width * model.progress;
-                        background: Theme.accent-brand;
-                        border-radius: 2px;
+                        background: Theme.surface-base;
+                        border-radius: self.height / 2;
+                        border-width: Theme.hairline;
+                        border-color: Theme.border-subtle;
+                        animate height { duration: Theme.motion-fast; easing: ease-out; }
+
+                        Rectangle {
+                            height: 100%;
+                            width: parent.width * model.progress;
+                            background: Theme.gradient-accent;
+                            border-radius: self.height / 2;
+                        }
                     }
                 }
 
                 HorizontalLayout {
-                    spacing: 8px;
+                    spacing: Theme.space-1;
                     alignment: stretch;
 
                     Text {
                         text: model.position-label;
                         color: Theme.text-secondary;
                         font-size: Theme.font-size-sm;
+                        font-family: Theme.font-family-mono;
                         vertical-alignment: center;
                     }
 
                     // Transport buttons
                     HorizontalLayout {
-                        spacing: 4px;
+                        spacing: Theme.space-1;
                         horizontal-stretch: 1;
                         alignment: center;
 
-                        btn-prev := Rectangle {
-                            width: max(28px, prev-lab.preferred-width + 8px);
-                            height: 28px;
-                            border-radius: Theme.radius-md;
-                            background: prev-ta.has-hover ? Theme.surface-raised : transparent;
-                            prev-ta := TouchArea { clicked => { root.command("prev"); } }
-                            prev-lab := Text {
-                                text: model.prev-label;
-                                color: Theme.text-primary;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
+                        IconButton {
+                            icon: "skip-prev";
+                            size: ControlSize.xs;
+                            y: (parent.height - self.height) / 2;
+                            tooltip: model.prev-label;
+                            clicked => { root.command("prev"); }
                         }
-                        btn-back := Rectangle {
-                            width: max(28px, back-lab.preferred-width + 8px);
-                            height: 28px;
-                            border-radius: Theme.radius-md;
-                            background: back-ta.has-hover ? Theme.surface-raised : transparent;
-                            back-ta := TouchArea { clicked => { root.command("seek-back-5"); } }
-                            back-lab := Text {
-                                text: model.seek-back-label;
-                                color: Theme.text-primary;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
+                        IconButton {
+                            icon: "arrow-left";
+                            size: ControlSize.xs;
+                            y: (parent.height - self.height) / 2;
+                            tooltip: model.seek-back-label;
+                            clicked => { root.command("seek-back-5"); }
                         }
-                        btn-play := Rectangle {
-                            width: max(36px, play-lab.preferred-width + 12px);
-                            height: 28px;
-                            border-radius: Theme.radius-md;
-                            background: play-ta.has-hover ? Theme.surface-raised : Theme.surface-raised;
-                            border-width: 1px;
-                            border-color: Theme.border-default;
+
+                        // Hero play control
+                        Rectangle {
+                            width: Theme.control-sm;
+                            height: Theme.control-sm;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: self.width / 2;
+                            background: Theme.gradient-accent;
+                            drop-shadow-blur: play-ta.has-hover ? Theme.elev-glow-blur : Theme.elev-1-blur;
+                            drop-shadow-color: Theme.accent-glow;
+                            animate drop-shadow-blur { duration: Theme.motion-fast; easing: ease-out; }
+
                             play-ta := TouchArea {
+                                mouse-cursor: MouseCursor.pointer;
                                 clicked => {
                                     if model.available {
                                         root.command("play-pause");
@@ -557,41 +558,36 @@ export component ViewerMediaView inherits Rectangle {
                                     }
                                 }
                             }
-                            play-lab := Text {
-                                text: model.available ? (model.playing ? model.pause-label : model.play-label) : model.play-label;
-                                color: Theme.accent-brand;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
+                            Icon {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                name: model.available && model.playing ? "pause" : "play";
+                                size: Theme.font-size-lg;
+                                tint: Theme.accent-contrast;
+                            }
+                            Tooltip {
+                                text: model.available
+                                    ? (model.playing ? model.pause-label : model.play-label)
+                                    : model.play-label;
+                                shown: play-ta.has-hover;
+                                x: (parent.width - self.width) / 2;
+                                y: -self.height - Theme.space-2;
                             }
                         }
-                        btn-fwd := Rectangle {
-                            width: max(28px, fwd-lab.preferred-width + 8px);
-                            height: 28px;
-                            border-radius: Theme.radius-md;
-                            background: fwd-ta.has-hover ? Theme.surface-raised : transparent;
-                            fwd-ta := TouchArea { clicked => { root.command("seek-fwd-5"); } }
-                            fwd-lab := Text {
-                                text: model.seek-fwd-label;
-                                color: Theme.text-primary;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
+
+                        IconButton {
+                            icon: "arrow-right";
+                            size: ControlSize.xs;
+                            y: (parent.height - self.height) / 2;
+                            tooltip: model.seek-fwd-label;
+                            clicked => { root.command("seek-fwd-5"); }
                         }
-                        btn-next := Rectangle {
-                            width: max(28px, next-lab.preferred-width + 8px);
-                            height: 28px;
-                            border-radius: Theme.radius-md;
-                            background: next-ta.has-hover ? Theme.surface-raised : transparent;
-                            next-ta := TouchArea { clicked => { root.command("next"); } }
-                            next-lab := Text {
-                                text: model.next-label;
-                                color: Theme.text-primary;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
+                        IconButton {
+                            icon: "skip-next";
+                            size: ControlSize.xs;
+                            y: (parent.height - self.height) / 2;
+                            tooltip: model.next-label;
+                            clicked => { root.command("next"); }
                         }
                     }
 
@@ -599,15 +595,17 @@ export component ViewerMediaView inherits Rectangle {
                         text: model.duration-label;
                         color: Theme.text-secondary;
                         font-size: Theme.font-size-sm;
+                        font-family: Theme.font-family-mono;
                         vertical-alignment: center;
                     }
 
                     vol-chip := Rectangle {
                         width: 72px;
-                        height: 24px;
-                        background: transparent;
+                        height: Theme.control-xs;
+                        y: (parent.height - self.height) / 2;
+                        background: Colors.transparent;
                         VerticalLayout {
-                            spacing: 2px;
+                            spacing: Theme.space-1;
                             alignment: center;
                             vol-lab := Text {
                                 text: model.volume-label;
@@ -616,19 +614,22 @@ export component ViewerMediaView inherits Rectangle {
                                 horizontal-alignment: center;
                             }
                             Rectangle {
-                                height: 4px;
+                                height: Theme.track-height;
                                 width: parent.width;
-                                background: Theme.border-default;
-                                border-radius: 2px;
+                                background: Theme.surface-base;
+                                border-radius: self.height / 2;
+                                border-width: Theme.hairline;
+                                border-color: Theme.border-subtle;
                                 Rectangle {
                                     height: parent.height;
                                     width: parent.width * model.volume-frac;
-                                    background: Theme.accent-brand;
-                                    border-radius: 2px;
+                                    background: Theme.gradient-accent;
+                                    border-radius: self.height / 2;
                                 }
                             }
                         }
                         vol-ta := TouchArea {
+                            mouse-cursor: MouseCursor.pointer;
                             clicked => {
                                 if self.width > 0 {
                                     root.command("volume:" + (self.mouse-x / self.width * 150));
@@ -651,133 +652,86 @@ export component ViewerMediaView inherits Rectangle {
                             }
                         }
                     }
-                    Text {
-                        text: model.speed-label;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        TouchArea {
-                            clicked => { root.command("pitch-toggle"); }
+
+                    DocToolBtn {
+                        label: model.speed-label;
+                        tip: model.speed-label;
+                        clicked => { root.command("pitch-toggle"); }
+                    }
+                    if model.playlist-label != "" : DocToolBtn {
+                        label: model.playlist-label;
+                        tip: model.playlist-label;
+                        active: model.playlist-panel-open;
+                        clicked => { root.command("playlist-toggle"); }
+                    }
+                    if model.sub-label != "" : DocToolBtn {
+                        label: model.sub-label;
+                        tip: model.sub-label;
+                        clicked => { root.command("cycle-sub-style"); }
+                    }
+                    if model.sub-style-label != "" : DocToolBtn {
+                        label: model.sub-style-label;
+                        tip: model.sub-style-label;
+                        active: true;
+                        clicked => { root.command("cycle-sub-style"); }
+                    }
+                    if model.audio-label != "" : DocToolBtn {
+                        label: model.audio-label;
+                        tip: model.audio-label;
+                        clicked => { root.command("cycle-audio"); }
+                    }
+                    if model.chapter-label != "" : DocToolBtn {
+                        label: model.chapter-label;
+                        tip: model.chapter-label;
+                        active: root.chapters-open;
+                        clicked => {
+                            root.chapters-open = !root.chapters-open;
+                            root.bump-chrome();
                         }
                     }
-                    if model.playlist-label != "" : Text {
-                        text: model.playlist-label;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        TouchArea {
-                            clicked => { root.command("playlist-toggle"); }
-                        }
+                    if model.ab-label != "" : DocToolBtn {
+                        label: model.ab-label;
+                        tip: model.ab-label;
+                        active: true;
                     }
-                    if model.sub-label != "" : Text {
-                        text: model.sub-label;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        TouchArea {
-                            clicked => { root.command("cycle-sub-style"); }
-                        }
+                    if model.eq-label != "" : DocToolBtn {
+                        label: model.eq-label;
+                        tip: model.eq-label;
+                        active: true;
+                        clicked => { root.command("cycle-eq"); }
                     }
-                    if model.sub-style-label != "" : Text {
-                        text: model.sub-style-label;
-                        color: Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        TouchArea {
-                            clicked => { root.command("cycle-sub-style"); }
-                        }
+                    if model.replaygain-label != "" : DocToolBtn {
+                        label: model.replaygain-label;
+                        tip: model.replaygain-label;
+                        active: true;
+                        clicked => { root.command("cycle-replaygain"); }
                     }
-                    if model.audio-label != "" : Text {
-                        text: model.audio-label;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        TouchArea {
-                            clicked => { root.command("cycle-audio"); }
-                        }
+                    if model.hwdec-label != "" : DocToolBtn {
+                        label: model.hwdec-label;
+                        tip: model.hwdec-label;
                     }
-                    if model.chapter-label != "" : Text {
-                        text: model.chapter-label;
-                        color: root.chapters-open ? Theme.accent-brand : Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        TouchArea {
-                            clicked => {
-                                root.chapters-open = !root.chapters-open;
-                                root.bump-chrome();
-                            }
-                        }
+                    if model.sleep-label != "" : DocToolBtn {
+                        label: model.sleep-label;
+                        tip: model.sleep-label;
+                        active: true;
                     }
-                    if model.ab-label != "" : Text {
-                        text: model.ab-label;
-                        color: Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
+                    if model.aspect-label != "" : DocToolBtn {
+                        label: model.aspect-label;
+                        tip: model.aspect-label;
                     }
-                    if model.eq-label != "" : Text {
-                        text: model.eq-label;
-                        color: Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        TouchArea {
-                            clicked => { root.command("cycle-eq"); }
-                        }
+                    if model.rotate-label != "" : DocToolBtn {
+                        label: model.rotate-label;
+                        tip: model.rotate-label;
                     }
-                    if model.replaygain-label != "" : Text {
-                        text: model.replaygain-label;
-                        color: Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        TouchArea {
-                            clicked => { root.command("cycle-replaygain"); }
-                        }
-                    }
-                    if model.hwdec-label != "" : Text {
-                        text: model.hwdec-label;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                    }
-                    if model.sleep-label != "" : Text {
-                        text: model.sleep-label;
-                        color: Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                    }
-                    if model.aspect-label != "" : Text {
-                        text: model.aspect-label;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                    }
-                    if model.rotate-label != "" : Text {
-                        text: model.rotate-label;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                    }
-                    if model.audio-delay-label != "" : Text {
-                        text: model.audio-delay-label;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
+                    if model.audio-delay-label != "" : DocToolBtn {
+                        label: model.audio-delay-label;
+                        tip: model.audio-delay-label;
                     }
 
-                    Rectangle {
-                        width: max(64px, ext-label.preferred-width + 16px);
-                        height: 24px;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        background: ext-ta.has-hover ? Theme.surface-raised : transparent;
-                        ext-ta := TouchArea { clicked => { root.open-external(); } }
-                        ext-label := Text {
-                            text: model.open-external-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                    DocToolBtn {
+                        label: model.open-external-label;
+                        tip: model.open-external-label;
+                        clicked => { root.open-external(); }
                     }
                 }
             }

@@ -1,5 +1,7 @@
 import { Theme } from "../../theme_global.slint";
+import { ControlSize, IconButton, Tooltip } from "../../kit.slint";
 import { ViewerTextModel } from "../../workspace/defs.slint";
+import { DocToolBtn } from "viewer-doc-toolbtn.slint";
 
 export component ViewerTextView inherits Rectangle {
     in property <ViewerTextModel> model;
@@ -45,211 +47,141 @@ export component ViewerTextView inherits Rectangle {
     VerticalLayout {
         spacing: 0;
 
+        // Main chrome
         Rectangle {
-            height: 36px;
-            background: Theme.surface-base;
+            height: Theme.control-xs + Theme.space-2;
+            background: Theme.surface-sunken;
+            clip: false;
+            z: 20;
 
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 4px;
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
+                spacing: Theme.space-1;
                 alignment: start;
 
-                Rectangle {
-                    width: max(72px, mode-label.preferred-width + 16px);
-                    height: 28px;
-                    background: !model.read-only ? Theme.surface-raised
-                        : mode-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    mode-ta := TouchArea { clicked => { root.toggle-edit(); } }
-                    mode-label := Text {
-                        text: model.mode-label;
-                        color: model.read-only ? Theme.text-secondary : Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                DocToolBtn {
+                    label: model.mode-label;
+                    tip: model.mode-label;
+                    active: !model.read-only;
+                    clicked => { root.toggle-edit(); }
                 }
 
-                if !model.read-only : Rectangle {
-                    width: max(56px, save-label.preferred-width + 16px);
-                    height: 28px;
-                    background: (model.dirty || root.locally-dirty) ? Theme.surface-raised
-                        : save-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    save-ta := TouchArea { clicked => { root.save(); } }
-                    save-label := Text {
-                        text: model.save-label;
-                        color: (model.dirty || root.locally-dirty)
-                            ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                if !model.read-only : DocToolBtn {
+                    label: model.save-label;
+                    tip: model.save-label;
+                    active: model.dirty || root.locally-dirty;
+                    clicked => { root.save(); }
                 }
 
                 Rectangle {
-                    width: max(40px, text-mode-label.preferred-width + 12px);
-                    height: 28px;
-                    background: model.display-mode == 0 ? Theme.surface-raised
-                        : text-mode-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
+                    width: Theme.hairline;
+                    height: Theme.space-8;
                     y: (parent.height - self.height) / 2;
-                    text-mode-ta := TouchArea { clicked => { root.text-action("text"); } }
-                    text-mode-label := Text {
-                        text: model.mode-text-label;
-                        color: model.display-mode == 0 ? Theme.accent-brand : Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                    background: Theme.border-default;
                 }
-                Rectangle {
-                    width: max(40px, hex-mode-label.preferred-width + 12px);
-                    height: 28px;
-                    background: model.display-mode == 1 ? Theme.surface-raised
-                        : hex-mode-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    hex-mode-ta := TouchArea { clicked => { root.text-action("hex"); } }
-                    hex-mode-label := Text {
-                        text: model.mode-hex-label;
-                        color: model.display-mode == 1 ? Theme.accent-brand : Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+
+                DocToolBtn {
+                    label: model.mode-text-label;
+                    tip: model.mode-text-label;
+                    active: model.display-mode == 0;
+                    clicked => { root.text-action("text"); }
                 }
-                Rectangle {
-                    width: max(40px, bin-mode-label.preferred-width + 12px);
-                    height: 28px;
-                    background: model.display-mode == 2 ? Theme.surface-raised
-                        : bin-mode-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    bin-mode-ta := TouchArea { clicked => { root.text-action("bin"); } }
-                    bin-mode-label := Text {
-                        text: model.mode-bin-label;
-                        color: model.display-mode == 2 ? Theme.accent-brand : Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                DocToolBtn {
+                    label: model.mode-hex-label;
+                    tip: model.mode-hex-label;
+                    active: model.display-mode == 1;
+                    clicked => { root.text-action("hex"); }
+                }
+                DocToolBtn {
+                    label: model.mode-bin-label;
+                    tip: model.mode-bin-label;
+                    active: model.display-mode == 2;
+                    clicked => { root.text-action("bin"); }
                 }
 
                 Rectangle {
-                    width: max(48px, wrap-label.preferred-width + 12px);
-                    height: 28px;
-                    background: root.wrap-on ? Theme.surface-raised
-                        : wrap-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
+                    width: Theme.hairline;
+                    height: Theme.space-8;
                     y: (parent.height - self.height) / 2;
-                    wrap-ta := TouchArea { clicked => { root.wrap-on = !root.wrap-on; } }
-                    wrap-label := Text {
-                        text: root.wrap-on ? model.wrap-label : model.no-wrap-label;
-                        color: root.wrap-on ? Theme.accent-brand : Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                    background: Theme.border-default;
                 }
 
-                Rectangle {
-                    width: max(40px, find-btn-label.preferred-width + 12px);
-                    height: 28px;
-                    background: root.find-open ? Theme.surface-raised
-                        : find-btn-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    find-btn-ta := TouchArea { clicked => { root.find-open = !root.find-open; } }
-                    find-btn-label := Text {
-                        text: model.find-label;
-                        color: root.find-open ? Theme.accent-brand : Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                DocToolBtn {
+                    label: root.wrap-on ? model.wrap-label : model.no-wrap-label;
+                    tip: root.wrap-on ? model.wrap-label : model.no-wrap-label;
+                    active: root.wrap-on;
+                    clicked => { root.wrap-on = !root.wrap-on; }
                 }
 
-                if !model.read-only : Rectangle {
-                    width: max(40px, undo-label.preferred-width + 12px);
-                    height: 28px;
-                    background: undo-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    undo-ta := TouchArea { clicked => { root.text-action("undo"); } }
-                    undo-label := Text {
-                        text: model.undo-label;
-                        color: model.can-undo ? Theme.text-primary : Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-                if !model.read-only : Rectangle {
-                    width: max(40px, redo-label.preferred-width + 12px);
-                    height: 28px;
-                    background: redo-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    redo-ta := TouchArea { clicked => { root.text-action("redo"); } }
-                    redo-label := Text {
-                        text: model.redo-label;
-                        color: model.can-redo ? Theme.text-primary : Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                DocToolBtn {
+                    label: model.find-label;
+                    tip: model.find-label;
+                    active: root.find-open;
+                    clicked => { root.find-open = !root.find-open; }
                 }
 
-                Rectangle {
-                    width: max(40px, print-label.preferred-width + 12px);
-                    height: 28px;
-                    background: print-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    print-ta := TouchArea { clicked => { root.text-action("print"); } }
-                    print-label := Text {
-                        text: model.print-label;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                if !model.read-only : DocToolBtn {
+                    label: model.undo-label;
+                    tip: model.undo-label;
+                    enabled: model.can-undo;
+                    clicked => { root.text-action("undo"); }
+                }
+                if !model.read-only : DocToolBtn {
+                    label: model.redo-label;
+                    tip: model.redo-label;
+                    enabled: model.can-redo;
+                    clicked => { root.text-action("redo"); }
+                }
+
+                DocToolBtn {
+                    label: model.print-label;
+                    tip: model.print-label;
+                    clicked => { root.text-action("print"); }
                 }
 
                 Rectangle { horizontal-stretch: 1; }
 
                 if model.dirty || root.locally-dirty : Rectangle {
-                    width: 18px;
-                    height: 18px;
+                    width: Theme.space-4;
+                    height: Theme.space-4;
                     y: (parent.height - self.height) / 2;
+                    dirty-ta := TouchArea { }
                     Text {
                         text: "●";
-                        color: #eab308;
+                        color: Theme.feedback-warning;
                         font-size: Theme.font-size-sm;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                    Tooltip {
+                        text: model.save-label;
+                        shown: dirty-ta.has-hover;
+                        x: (parent.width - self.width) / 2;
+                        y: -self.height - Theme.space-2;
                     }
                 }
             }
         }
 
+        Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
+
+        // Find / replace bar
         if root.find-open : Rectangle {
-            height: root.find-multiline ? 92px : 68px;
-            background: Theme.surface-raised;
+            height: root.find-multiline
+                ? Theme.control-xs * 2 + Theme.space-6
+                : Theme.control-xs * 2 + Theme.space-4;
+            background: Theme.surface-sunken;
 
             VerticalLayout {
-                padding-top: 4px;
-                padding-bottom: 4px;
-                spacing: 4px;
+                padding-top: Theme.space-1;
+                padding-bottom: Theme.space-1;
+                spacing: Theme.space-1;
 
                 HorizontalLayout {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    spacing: 6px;
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-2;
+                    spacing: Theme.space-1;
                     alignment: center;
 
                     Text {
@@ -261,15 +193,16 @@ export component ViewerTextView inherits Rectangle {
 
                     Rectangle {
                         horizontal-stretch: 1;
-                        height: root.find-multiline ? 40px : 26px;
+                        height: root.find-multiline ? Theme.control-sm + Theme.space-2 : Theme.control-xs;
+                        y: (parent.height - self.height) / 2;
                         background: Theme.surface-base;
                         border-radius: Theme.radius-md;
-                        border-width: 1px;
+                        border-width: Theme.hairline;
                         border-color: Theme.border-default;
 
                         if find-input.text == "" : Text {
-                            x: 8px;
-                            width: parent.width - 16px;
+                            x: Theme.space-2;
+                            width: parent.width - Theme.space-4;
                             height: 100%;
                             text: model.find-placeholder;
                             color: Theme.text-tertiary;
@@ -278,8 +211,8 @@ export component ViewerTextView inherits Rectangle {
                         }
 
                         find-input := TextInput {
-                            x: 8px;
-                            width: parent.width - 16px;
+                            x: Theme.space-2;
+                            width: parent.width - Theme.space-4;
                             height: 100%;
                             text <=> root.find-query;
                             single-line: !root.find-multiline;
@@ -302,37 +235,19 @@ export component ViewerTextView inherits Rectangle {
                         }
                     }
 
-                    Rectangle {
-                        width: 28px;
-                        height: 26px;
-                        background: find-prev-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        find-prev-ta := TouchArea {
-                            clicked => { root.text-find-request(root.find-query, false, root.find-regex, root.find-multiline); }
-                        }
-                        Text {
-                            text: "↑";
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                    IconButton {
+                        icon: "chevron-up";
+                        size: ControlSize.xs;
+                        y: (parent.height - self.height) / 2;
+                        tooltip: model.find-label;
+                        clicked => { root.text-find-request(root.find-query, false, root.find-regex, root.find-multiline); }
                     }
-                    Rectangle {
-                        width: 28px;
-                        height: 26px;
-                        background: find-next-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        find-next-ta := TouchArea {
-                            clicked => { root.text-find-request(root.find-query, true, root.find-regex, root.find-multiline); }
-                        }
-                        Text {
-                            text: "↓";
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                    IconButton {
+                        icon: "chevron-down";
+                        size: ControlSize.xs;
+                        y: (parent.height - self.height) / 2;
+                        tooltip: model.find-label;
+                        clicked => { root.text-find-request(root.find-query, true, root.find-regex, root.find-multiline); }
                     }
 
                     Text {
@@ -346,57 +261,32 @@ export component ViewerTextView inherits Rectangle {
                         vertical-alignment: center;
                     }
 
-                    Rectangle {
-                        width: max(44px, regex-label.preferred-width + 10px);
-                        height: 26px;
-                        background: root.find-regex ? Theme.surface-base
-                            : regex-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        regex-ta := TouchArea { clicked => { root.find-regex = !root.find-regex; } }
-                        regex-label := Text {
-                            text: model.regex-label;
-                            color: root.find-regex ? Theme.accent-brand : Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                    DocToolBtn {
+                        label: model.regex-label;
+                        tip: model.regex-label;
+                        active: root.find-regex;
+                        clicked => { root.find-regex = !root.find-regex; }
                     }
-                    Rectangle {
-                        width: max(56px, multi-label.preferred-width + 10px);
-                        height: 26px;
-                        background: root.find-multiline ? Theme.surface-base
-                            : multi-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        multi-ta := TouchArea { clicked => { root.find-multiline = !root.find-multiline; } }
-                        multi-label := Text {
-                            text: model.multiline-label;
-                            color: root.find-multiline ? Theme.accent-brand : Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                    DocToolBtn {
+                        label: model.multiline-label;
+                        tip: model.multiline-label;
+                        active: root.find-multiline;
+                        clicked => { root.find-multiline = !root.find-multiline; }
                     }
 
-                    Rectangle {
-                        width: 28px;
-                        height: 26px;
-                        background: find-close-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        find-close-ta := TouchArea { clicked => { root.find-open = false; } }
-                        Text {
-                            text: "×";
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                    IconButton {
+                        icon: "close";
+                        size: ControlSize.xs;
+                        y: (parent.height - self.height) / 2;
+                        tooltip: model.find-label;
+                        clicked => { root.find-open = false; }
                     }
                 }
 
                 HorizontalLayout {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    spacing: 6px;
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-2;
+                    spacing: Theme.space-1;
                     alignment: center;
 
                     Text {
@@ -408,15 +298,16 @@ export component ViewerTextView inherits Rectangle {
 
                     Rectangle {
                         horizontal-stretch: 1;
-                        height: root.find-multiline ? 40px : 26px;
+                        height: root.find-multiline ? Theme.control-sm + Theme.space-2 : Theme.control-xs;
+                        y: (parent.height - self.height) / 2;
                         background: Theme.surface-base;
                         border-radius: Theme.radius-md;
-                        border-width: 1px;
+                        border-width: Theme.hairline;
                         border-color: Theme.border-default;
 
                         if replace-input.text == "" : Text {
-                            x: 8px;
-                            width: parent.width - 16px;
+                            x: Theme.space-2;
+                            width: parent.width - Theme.space-4;
                             height: 100%;
                             text: model.replace-placeholder;
                             color: Theme.text-tertiary;
@@ -425,8 +316,8 @@ export component ViewerTextView inherits Rectangle {
                         }
 
                         replace-input := TextInput {
-                            x: 8px;
-                            width: parent.width - 16px;
+                            x: Theme.space-2;
+                            width: parent.width - Theme.space-4;
                             height: 100%;
                             text <=> root.replace-query;
                             single-line: !root.find-multiline;
@@ -449,47 +340,25 @@ export component ViewerTextView inherits Rectangle {
                         }
                     }
 
-                    Rectangle {
-                        width: max(52px, replace-one-label.preferred-width + 12px);
-                        height: 26px;
-                        background: replace-one-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        replace-one-ta := TouchArea {
-                            clicked => {
-                                root.text-replace-request(root.find-query, root.replace-query, false, root.find-regex, root.find-multiline);
-                            }
-                        }
-                        replace-one-label := Text {
-                            text: model.replace-one-label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                    DocToolBtn {
+                        label: model.replace-one-label;
+                        tip: model.replace-one-label;
+                        clicked => {
+                            root.text-replace-request(root.find-query, root.replace-query, false, root.find-regex, root.find-multiline);
                         }
                     }
-                    Rectangle {
-                        width: max(40px, replace-all-label.preferred-width + 12px);
-                        height: 26px;
-                        background: replace-all-ta.has-hover ? Theme.surface-base : transparent;
-                        border-radius: Theme.radius-md;
-                        replace-all-ta := TouchArea {
-                            clicked => {
-                                root.text-replace-request(root.find-query, root.replace-query, true, root.find-regex, root.find-multiline);
-                            }
-                        }
-                        replace-all-label := Text {
-                            text: model.replace-all-label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                    DocToolBtn {
+                        label: model.replace-all-label;
+                        tip: model.replace-all-label;
+                        clicked => {
+                            root.text-replace-request(root.find-query, root.replace-query, true, root.find-regex, root.find-multiline);
                         }
                     }
                 }
             }
         }
 
-        if root.find-open : Rectangle { height: 1px; background: Theme.border-default; }
+        if root.find-open : Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
 
         Rectangle {
             background: Theme.surface-base;
@@ -503,13 +372,13 @@ export component ViewerTextView inherits Rectangle {
                 viewport-height: max(self.height, edit-pad.preferred-height);
 
                 edit-pad := HorizontalLayout {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    padding-top: 4px;
-                    padding-bottom: 4px;
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-2;
+                    padding-top: Theme.space-1;
+                    padding-bottom: Theme.space-1;
 
                     edit-input := TextInput {
-                        width: parent.width - 16px;
+                        width: parent.width - Theme.space-4;
                         text: root.draft-text;
                         single-line: false;
                         wrap: root.wrap-on ? word-wrap : no-wrap;
@@ -561,25 +430,22 @@ export component ViewerTextView inherits Rectangle {
             }
         }
 
+        Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
+
         Rectangle {
-            height: 24px;
-            background: Theme.surface-raised;
+            height: Theme.control-xs - Theme.space-1;
+            background: Theme.surface-sunken;
 
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 12px;
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
+                spacing: Theme.space-3;
 
-                Rectangle {
-                    width: max(48px, enc-label.preferred-width + 8px);
-                    height: 100%;
-                    enc-ta := TouchArea { clicked => { root.encoding-open = !root.encoding-open; } }
-                    enc-label := Text {
-                        text: model.encoding;
-                        color: Theme.accent-brand;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                    }
+                DocToolBtn {
+                    label: model.encoding;
+                    tip: model.encoding;
+                    active: root.encoding-open;
+                    clicked => { root.encoding-open = !root.encoding-open; }
                 }
                 Text {
                     text: model.line-ending;
@@ -602,7 +468,7 @@ export component ViewerTextView inherits Rectangle {
                 }
                 if model.dirty || root.locally-dirty : Text {
                     text: "●";
-                    color: #eab308;
+                    color: Theme.feedback-warning;
                     font-size: Theme.font-size-sm;
                     vertical-alignment: center;
                 }
@@ -611,32 +477,36 @@ export component ViewerTextView inherits Rectangle {
     }
 
     if root.encoding-open : Rectangle {
-        x: 8px;
-        y: parent.height - 24px - enc-flyout.preferred-height - 4px;
+        x: Theme.space-2;
+        y: parent.height - (Theme.control-xs - Theme.space-1) - enc-flyout.preferred-height - Theme.space-1;
         width: max(140px, enc-flyout.preferred-width);
         height: min(220px, enc-flyout.preferred-height);
         background: Theme.surface-raised;
         border-radius: Theme.radius-md;
-        border-width: 1px;
+        border-width: Theme.hairline;
         border-color: Theme.border-default;
+        drop-shadow-blur: Theme.elev-2-blur;
+        drop-shadow-offset-y: Theme.elev-2-y;
+        drop-shadow-color: Theme.shadow-key;
         z: 200;
         clip: true;
 
         enc-flyout := VerticalLayout {
-            padding: 4px;
-            spacing: 2px;
+            padding: Theme.space-1;
+            spacing: Theme.space-1;
             for enc in model.encodings : Rectangle {
-                height: 22px;
-                background: enc-item-ta.has-hover ? Theme.surface-base : transparent;
+                height: Theme.control-xs - Theme.space-2;
+                background: enc-item-ta.has-hover ? Theme.state-hover : Colors.transparent;
                 border-radius: Theme.radius-md;
                 enc-item-ta := TouchArea {
+                    mouse-cursor: MouseCursor.pointer;
                     clicked => {
                         root.text-set-encoding(enc);
                         root.encoding-open = false;
                     }
                 }
                 Text {
-                    x: 8px;
+                    x: Theme.space-2;
                     text: enc;
                     color: Theme.text-primary;
                     font-size: Theme.font-size-sm;
