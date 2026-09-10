@@ -1,6 +1,8 @@
 import { Theme } from "../../theme_global.slint";
 import { Strings } from "../../strings_global.slint";
+import { ControlSize, IconButton, Tooltip } from "../../kit.slint";
 import { ViewerPdfModel } from "../../workspace/defs.slint";
+import { DocToolBtn } from "viewer-doc-toolbtn.slint";
 
 export component ViewerPdfView inherits Rectangle {
     in property <ViewerPdfModel> model;
@@ -37,8 +39,8 @@ export component ViewerPdfView inherits Rectangle {
 
     if !model.available : VerticalLayout {
         alignment: center;
-        padding: 16px;
-        spacing: 8px;
+        padding: Theme.space-4;
+        spacing: Theme.space-2;
         Text {
             text: model.unavailable-reason;
             color: Theme.text-secondary;
@@ -84,270 +86,127 @@ export component ViewerPdfView inherits Rectangle {
         }
 
         VerticalLayout {
-        spacing: 0;
+            spacing: 0;
 
-        Rectangle {
-            height: 36px;
-            background: Theme.surface-base;
+            // Main chrome
+            Rectangle {
+                height: Theme.control-xs + Theme.space-2;
+                background: Theme.surface-sunken;
+                clip: false;
+                z: 20;
 
-            HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 6px;
-                alignment: start;
+                HorizontalLayout {
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-2;
+                    spacing: Theme.space-1;
+                    alignment: start;
 
-                Rectangle {
-                    width: 28px; height: 28px;
-                    background: prev-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    prev-ta := TouchArea { clicked => { root.prev-page(); pdf-keys.focus(); } }
-                    if prev-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: prev-hint.preferred-width + 12px;
-                        height: prev-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
+                    IconButton {
+                        icon: "chevron-left";
+                        size: ControlSize.xs;
+                        y: (parent.height - self.height) / 2;
+                        tooltip: Strings.viewer-pdf-prev-page;
+                        clicked => { root.prev-page(); pdf-keys.focus(); }
+                    }
+
+                    Rectangle {
+                        width: 44px;
+                        height: Theme.control-xs;
+                        y: (parent.height - self.height) / 2;
+                        background: Theme.surface-base;
                         border-radius: Theme.radius-md;
-                        border-width: 1px;
+                        border-width: Theme.hairline;
                         border-color: Theme.border-default;
-                        z: 100;
-                        prev-hint := Text {
-                            x: 6px; y: 3px;
-                            text: Strings.viewer-pdf-prev-page;
+                        clip: true;
+
+                        page-input := TextInput {
+                            x: Theme.space-1;
+                            width: parent.width - Theme.space-2;
+                            height: parent.height;
+                            text: root.page-draft;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            single-line: true;
+                            edited => {
+                                root.page-editing = true;
+                                root.page-draft = self.text;
+                            }
+                            accepted => {
+                                root.commit-page-jump();
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: Theme.control-xs;
+                        y: (parent.height - self.height) / 2;
+                        width: max(Theme.control-xs, page-total.preferred-width + Theme.space-2);
+                        clip: false;
+
+                        page-total-ta := TouchArea { }
+                        page-total := Text {
+                            text: "/ " + model.page-count;
                             color: Theme.text-secondary;
                             font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
                         }
-                    }
-                    Text { text: "◀"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
-                }
-
-                Rectangle {
-                    width: 44px;
-                    height: 28px;
-                    y: (parent.height - self.height) / 2;
-                    background: Theme.surface-raised;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
-                    clip: true;
-
-                    page-input := TextInput {
-                        x: 4px;
-                        width: parent.width - 8px;
-                        height: parent.height;
-                        text: root.page-draft;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        single-line: true;
-                        edited => {
-                            root.page-editing = true;
-                            root.page-draft = self.text;
-                        }
-                        accepted => {
-                            root.commit-page-jump();
-                        }
-                    }
-                }
-
-                Rectangle {
-                    height: 28px;
-                    y: (parent.height - self.height) / 2;
-                    width: max(28px, page-total.preferred-width + 8px);
-
-                    page-total-ta := TouchArea { }
-                    if page-total-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: page-of-hint.preferred-width + 12px;
-                        height: page-of-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        page-of-hint := Text {
-                            x: 6px; y: 3px;
+                        Tooltip {
                             text: model.page-of-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
+                            shown: page-total-ta.has-hover && model.page-of-label != "";
+                            x: (parent.width - self.width) / 2;
+                            y: -self.height - Theme.space-2;
                         }
                     }
 
-                    page-total := Text {
-                        text: "/ " + model.page-count;
-                        color: Theme.text-secondary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-
-                Rectangle {
-                    width: 40px; height: 28px;
-                    background: go-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    go-ta := TouchArea {
+                    DocToolBtn {
+                        label: model.go-label;
+                        tip: model.go-label;
                         clicked => {
                             root.commit-page-jump();
                             pdf-keys.focus();
                         }
                     }
-                    if go-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: go-hint.preferred-width + 12px;
-                        height: go-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        go-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.go-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
-                    }
-                    Text {
-                        text: model.go-label;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
 
-                Rectangle {
-                    width: 28px; height: 28px;
-                    background: next-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    next-ta := TouchArea { clicked => { root.next-page(); pdf-keys.focus(); } }
-                    if next-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: next-hint.preferred-width + 12px;
-                        height: next-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        next-hint := Text {
-                            x: 6px; y: 3px;
-                            text: Strings.viewer-pdf-next-page;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
+                    IconButton {
+                        icon: "chevron-right";
+                        size: ControlSize.xs;
+                        y: (parent.height - self.height) / 2;
+                        tooltip: Strings.viewer-pdf-next-page;
+                        clicked => { root.next-page(); pdf-keys.focus(); }
                     }
-                    Text { text: "▶"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
-                }
 
-                Rectangle { width: 8px; }
+                    Rectangle {
+                        width: Theme.hairline;
+                        height: Theme.space-8;
+                        y: (parent.height - self.height) / 2;
+                        background: Theme.border-default;
+                    }
 
-                Rectangle {
-                    min-width: 72px; height: 28px;
-                    background: copy-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    copy-ta := TouchArea { clicked => { root.copy-text(); pdf-keys.focus(); } }
-                    if copy-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: copy-hint.preferred-width + 12px;
-                        height: copy-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        copy-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.copy-text-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
+                    DocToolBtn {
+                        label: model.copy-text-label;
+                        tip: model.copy-text-label;
+                        clicked => { root.copy-text(); pdf-keys.focus(); }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.copy-text-label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
 
-                Rectangle {
-                    min-width: 72px; height: 28px;
-                    background: extract-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    extract-ta := TouchArea { clicked => { root.extract-page(); pdf-keys.focus(); } }
-                    if extract-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: extract-hint.preferred-width + 12px;
-                        height: extract-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        extract-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.extract-page-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
+                    DocToolBtn {
+                        label: model.extract-page-label;
+                        tip: model.extract-page-label;
+                        clicked => { root.extract-page(); pdf-keys.focus(); }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.extract-page-label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
 
-                Rectangle {
-                    min-width: 56px; height: 28px;
-                    background: root.outline-open ? Theme.surface-raised
-                        : ol-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    ol-ta := TouchArea { clicked => { root.outline-open = !root.outline-open; pdf-keys.focus(); } }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.outline-label;
-                            color: root.outline-open ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                    DocToolBtn {
+                        label: model.outline-label;
+                        tip: model.outline-label;
+                        active: root.outline-open;
+                        clicked => { root.outline-open = !root.outline-open; pdf-keys.focus(); }
                     }
-                }
 
-                Rectangle {
-                    min-width: 56px; height: 28px;
-                    background: root.find-open ? Theme.surface-raised
-                        : find-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    find-ta := TouchArea {
+                    DocToolBtn {
+                        label: model.find-label;
+                        tip: model.find-label;
+                        active: root.find-open;
                         clicked => {
                             root.find-open = !root.find-open;
                             if (root.find-open) {
@@ -357,417 +216,291 @@ export component ViewerPdfView inherits Rectangle {
                             }
                         }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.find-label;
-                            color: root.find-open ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
 
-                Rectangle {
-                    min-width: 56px; height: 28px;
-                    background: print-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    print-ta := TouchArea { clicked => { root.print(); pdf-keys.focus(); } }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.print-label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                    DocToolBtn {
+                        label: model.print-label;
+                        tip: model.print-label;
+                        clicked => { root.print(); pdf-keys.focus(); }
                     }
-                }
 
-                Rectangle {
-                    min-width: 56px; height: 28px;
-                    background: hl-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    hl-ta := TouchArea { clicked => { root.highlight(); pdf-keys.focus(); } }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.highlight-label;
-                            color: model.has-selection ? Theme.text-primary : Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                    DocToolBtn {
+                        label: model.highlight-label;
+                        tip: model.highlight-label;
+                        enabled: model.has-selection;
+                        clicked => { root.highlight(); pdf-keys.focus(); }
                     }
-                }
 
-                Rectangle { width: 8px; }
+                    Rectangle {
+                        width: Theme.hairline;
+                        height: Theme.space-8;
+                        y: (parent.height - self.height) / 2;
+                        background: Theme.border-default;
+                    }
 
-                Rectangle {
-                    min-width: 72px; height: 28px;
-                    background: model.fit-mode == 0 ? Theme.surface-raised
-                        : fw-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    fw-ta := TouchArea { clicked => { root.fit-width(); } }
-                    if fw-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: fw-hint.preferred-width + 12px;
-                        height: fw-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        fw-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.fit-width-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
+                    DocToolBtn {
+                        label: model.fit-width-label;
+                        tip: model.fit-width-label;
+                        active: model.fit-mode == 0;
+                        clicked => { root.fit-width(); }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.fit-width-label;
-                            color: model.fit-mode == 0 ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
 
-                Rectangle {
-                    min-width: 72px; height: 28px;
-                    background: model.fit-mode == 1 ? Theme.surface-raised
-                        : fp-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    fp-ta := TouchArea { clicked => { root.fit-page(); } }
-                    if fp-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: fp-hint.preferred-width + 12px;
-                        height: fp-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        fp-hint := Text {
-                            x: 6px; y: 3px;
-                            text: model.fit-page-label;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
+                    DocToolBtn {
+                        label: model.fit-page-label;
+                        tip: model.fit-page-label;
+                        active: model.fit-mode == 1;
+                        clicked => { root.fit-page(); }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.fit-page-label;
-                            color: model.fit-mode == 1 ? Theme.accent-brand : Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
 
-                Rectangle { width: 8px; }
-
-                Rectangle {
-                    width: 28px; height: 28px;
-                    background: zi-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    zi-ta := TouchArea { clicked => { root.zoom-in(); } }
-                    if zi-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: zi-hint.preferred-width + 12px;
-                        height: zi-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        zi-hint := Text {
-                            x: 6px; y: 3px;
-                            text: Strings.viewer-image-zoom-in;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
+                    Rectangle {
+                        width: Theme.hairline;
+                        height: Theme.space-8;
+                        y: (parent.height - self.height) / 2;
+                        background: Theme.border-default;
                     }
-                    Text { text: "+"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
-                }
 
-                Rectangle {
-                    width: 28px; height: 28px;
-                    background: zo-ta.has-hover ? Theme.surface-raised : transparent;
-                    border-radius: Theme.radius-md;
-                    y: (parent.height - self.height) / 2;
-                    zo-ta := TouchArea { clicked => { root.zoom-out(); } }
-                    if zo-ta.has-hover : Rectangle {
-                        x: parent.x;
-                        y: parent.height + 2px;
-                        width: zo-hint.preferred-width + 12px;
-                        height: zo-hint.preferred-height + 6px;
-                        background: Theme.surface-raised;
-                        border-radius: Theme.radius-md;
-                        border-width: 1px;
-                        border-color: Theme.border-default;
-                        z: 100;
-                        zo-hint := Text {
-                            x: 6px; y: 3px;
-                            text: Strings.viewer-image-zoom-out;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                        }
+                    IconButton {
+                        icon: "plus";
+                        size: ControlSize.xs;
+                        y: (parent.height - self.height) / 2;
+                        tooltip: Strings.viewer-image-zoom-in;
+                        clicked => { root.zoom-in(); }
                     }
-                    Text { text: "−"; color: Theme.text-primary; font-size: Theme.font-size-md; horizontal-alignment: center; vertical-alignment: center; }
+
+                    IconButton {
+                        icon: "minus";
+                        size: ControlSize.xs;
+                        y: (parent.height - self.height) / 2;
+                        tooltip: Strings.viewer-image-zoom-out;
+                        clicked => { root.zoom-out(); }
+                    }
                 }
             }
-        }
 
-        Rectangle {
-            height: root.find-open ? 36px : 0px;
-            clip: true;
-            background: Theme.surface-raised;
+            Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
 
-            HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 6px;
-                alignment: center;
+            // Find bar
+            Rectangle {
+                height: root.find-open ? Theme.control-xs + Theme.space-2 : 0px;
+                clip: true;
+                background: Theme.surface-sunken;
 
-                Text {
-                    text: model.find-label;
-                    color: Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    vertical-alignment: center;
-                }
+                animate height { duration: Theme.motion-fast; easing: ease-out; }
 
-                Rectangle {
-                    horizontal-stretch: 1;
-                    height: 26px;
-                    background: Theme.surface-base;
-                    border-radius: Theme.radius-md;
-                    border-width: 1px;
-                    border-color: Theme.border-default;
+                HorizontalLayout {
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-2;
+                    spacing: Theme.space-1;
+                    alignment: center;
 
-                    if root.find-query == "" : Text {
-                        x: 8px;
-                        width: parent.width - 16px;
-                        height: 100%;
-                        text: model.find-placeholder;
+                    Text {
+                        text: model.find-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: Theme.control-xs;
+                        y: (parent.height - self.height) / 2;
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        border-width: Theme.hairline;
+                        border-color: Theme.border-default;
+
+                        if root.find-query == "" : Text {
+                            x: Theme.space-2;
+                            width: parent.width - Theme.space-4;
+                            height: 100%;
+                            text: model.find-placeholder;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+
+                        find-input := TextInput {
+                            x: Theme.space-2;
+                            width: parent.width - Theme.space-4;
+                            height: 100%;
+                            text <=> root.find-query;
+                            single-line: true;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            key-pressed(event) => {
+                                if (event.text == Key.Return) {
+                                    root.find(root.find-query, root.find-match-case, event.modifiers.shift ? -1 : 0);
+                                    return accept;
+                                }
+                                if (event.text == Key.Escape) {
+                                    root.find-open = false;
+                                    pdf-keys.focus();
+                                    return accept;
+                                }
+                                return reject;
+                            }
+                        }
+                    }
+
+                    IconButton {
+                        icon: "chevron-up";
+                        size: ControlSize.xs;
+                        y: (parent.height - self.height) / 2;
+                        tooltip: model.find-label;
+                        clicked => { root.find(root.find-query, root.find-match-case, -1); }
+                    }
+
+                    IconButton {
+                        icon: "chevron-down";
+                        size: ControlSize.xs;
+                        y: (parent.height - self.height) / 2;
+                        tooltip: model.find-label;
+                        clicked => { root.find(root.find-query, root.find-match-case, 1); }
+                    }
+
+                    Text {
+                        min-width: 36px;
+                        text: root.find-query == "" ? ""
+                            : model.find-match-count <= 0 ? model.find-no-match-label
+                            : "\{model.find-match-index}/\{model.find-match-count}";
                         color: Theme.text-tertiary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
                     }
 
-                    find-input := TextInput {
-                        x: 8px;
-                        width: parent.width - 16px;
-                        height: 100%;
-                        text <=> root.find-query;
-                        single-line: true;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        key-pressed(event) => {
-                            if (event.text == Key.Return) {
-                                root.find(root.find-query, root.find-match-case, event.modifiers.shift ? -1 : 0);
-                                return accept;
-                            }
-                            if (event.text == Key.Escape) {
-                                root.find-open = false;
-                                pdf-keys.focus();
-                                return accept;
-                            }
-                            return reject;
-                        }
-                    }
-                }
-
-                Rectangle {
-                    width: 28px; height: 26px;
-                    background: find-prev-ta.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-                    find-prev-ta := TouchArea {
-                        clicked => { root.find(root.find-query, root.find-match-case, -1); }
-                    }
-                    Text {
-                        text: "↑";
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-                Rectangle {
-                    width: 28px; height: 26px;
-                    background: find-next-ta.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-                    find-next-ta := TouchArea {
-                        clicked => { root.find(root.find-query, root.find-match-case, 1); }
-                    }
-                    Text {
-                        text: "↓";
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-
-                Text {
-                    min-width: 36px;
-                    text: root.find-query == "" ? ""
-                        : model.find-match-count <= 0 ? model.find-no-match-label
-                        : "\{model.find-match-index}/\{model.find-match-count}";
-                    color: Theme.text-tertiary;
-                    font-size: Theme.font-size-sm;
-                    vertical-alignment: center;
-                }
-
-                Rectangle {
-                    height: 26px;
-                    background: root.find-match-case ? Theme.surface-base
-                        : case-ta.has-hover ? Theme.surface-base : transparent;
-                    border-radius: Theme.radius-md;
-                    case-ta := TouchArea {
+                    DocToolBtn {
+                        label: model.match-case-label;
+                        tip: model.match-case-label;
+                        active: root.find-match-case;
                         clicked => { root.find-match-case = !root.find-match-case; }
                     }
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: model.match-case-label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                        }
-                    }
                 }
             }
-        }
 
-        Rectangle {
-            background: #80808020;
-            vertical-stretch: 1;
-            clip: true;
+            if root.find-open : Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
 
-            HorizontalLayout {
-                spacing: 0;
+            // Page canvas + outline
+            Rectangle {
+                background: #80808020;
+                vertical-stretch: 1;
+                clip: true;
 
-                if root.outline-open : Rectangle {
-                    width: 200px;
-                    background: Theme.surface-base;
-                    border-width: 0px;
+                HorizontalLayout {
+                    spacing: 0;
+
+                    if root.outline-open : Rectangle {
+                        width: 200px;
+                        background: Theme.surface-sunken;
+                        border-width: 0px;
+
+                        Rectangle {
+                            x: parent.width - Theme.hairline;
+                            width: Theme.hairline;
+                            height: 100%;
+                            background: Theme.border-subtle;
+                        }
+
+                        Flickable {
+                            width: 100%;
+                            height: 100%;
+                            viewport-width: self.width;
+                            VerticalLayout {
+                                padding: Theme.space-2;
+                                spacing: Theme.space-1;
+                                for row in model.outline : TouchArea {
+                                    height: Theme.control-xs - Theme.space-2;
+                                    mouse-cursor: MouseCursor.pointer;
+                                    clicked => { root.outline-goto(row.page); }
+                                    Text {
+                                        x: Theme.space-2 + row.depth * Theme.space-3;
+                                        width: parent.width - Theme.space-4;
+                                        height: 100%;
+                                        text: row.title == "" ? "…" : row.title;
+                                        color: Theme.text-primary;
+                                        font-size: Theme.font-size-sm;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Flickable {
+                        horizontal-stretch: 1;
                         width: 100%;
                         height: 100%;
-                        viewport-width: self.width;
-                        VerticalLayout {
-                            padding: 6px;
-                            spacing: 2px;
-                            for row in model.outline : TouchArea {
-                                height: 22px;
-                                clicked => { root.outline-goto(row.page); }
-                                Text {
-                                    x: 8px + row.depth * 12px;
-                                    width: parent.width - 16px;
-                                    height: 100%;
-                                    text: row.title == "" ? "…" : row.title;
-                                    color: Theme.text-primary;
-                                    font-size: Theme.font-size-sm;
-                                    overflow: elide;
-                                    vertical-alignment: center;
+                        viewport-width: model.page-width-px * 1px;
+                        viewport-height: model.page-height-px * 1px;
+
+                        Image {
+                            source: model.page-image;
+                            width: model.page-width-px * 1px;
+                            height: model.page-height-px * 1px;
+                            image-fit: fill;
+                        }
+                        for ov in model.overlays : Rectangle {
+                            x: ov.x * 1px;
+                            y: ov.y * 1px;
+                            width: ov.w * 1px;
+                            height: ov.h * 1px;
+                            background: ov.kind == 1 ? #ff980080
+                                : ov.kind == 2 ? #4c8dff80
+                                : ov.kind == 3 ? #ffe00066
+                                : #ffe00055;
+                        }
+                        TouchArea {
+                            width: model.page-width-px * 1px;
+                            height: model.page-height-px * 1px;
+                            mouse-cursor: text;
+                            moved => {
+                                if (self.pressed) {
+                                    root.pointer(1, self.mouse-x / 1px, self.mouse-y / 1px);
                                 }
+                            }
+                            double-clicked => {
+                                root.pointer(3, self.mouse-x / 1px, self.mouse-y / 1px);
+                            }
+                            pointer-event(e) => {
+                                if (e.kind == PointerEventKind.down) {
+                                    root.pointer(0, self.mouse-x / 1px, self.mouse-y / 1px);
+                                }
+                                if (e.kind == PointerEventKind.up) {
+                                    root.pointer(2, self.mouse-x / 1px, self.mouse-y / 1px);
+                                }
+                            }
+                            scroll-event(event) => {
+                                if (event.modifiers.control) {
+                                    if (event.delta-y < 0) {
+                                        root.zoom-out();
+                                    } else {
+                                        root.zoom-in();
+                                    }
+                                    return accept;
+                                }
+                                return reject;
                             }
                         }
                     }
                 }
+            }
 
-                Flickable {
-                    horizontal-stretch: 1;
-                    width: 100%;
-                    height: 100%;
-                    viewport-width: model.page-width-px * 1px;
-                    viewport-height: model.page-height-px * 1px;
+            if model.info-text != "" : Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
 
-                    Image {
-                        source: model.page-image;
-                        width: model.page-width-px * 1px;
-                        height: model.page-height-px * 1px;
-                        image-fit: fill;
-                    }
-                    for ov in model.overlays : Rectangle {
-                        x: ov.x * 1px;
-                        y: ov.y * 1px;
-                        width: ov.w * 1px;
-                        height: ov.h * 1px;
-                        background: ov.kind == 1 ? #ff980080
-                            : ov.kind == 2 ? #4c8dff80
-                            : ov.kind == 3 ? #ffe00066
-                            : #ffe00055;
-                    }
-                    TouchArea {
-                        width: model.page-width-px * 1px;
-                        height: model.page-height-px * 1px;
-                        mouse-cursor: text;
-                        moved => {
-                            if (self.pressed) {
-                                root.pointer(1, self.mouse-x / 1px, self.mouse-y / 1px);
-                            }
-                        }
-                        double-clicked => {
-                            root.pointer(3, self.mouse-x / 1px, self.mouse-y / 1px);
-                        }
-                        pointer-event(e) => {
-                            if (e.kind == PointerEventKind.down) {
-                                root.pointer(0, self.mouse-x / 1px, self.mouse-y / 1px);
-                            }
-                            if (e.kind == PointerEventKind.up) {
-                                root.pointer(2, self.mouse-x / 1px, self.mouse-y / 1px);
-                            }
-                        }
-                        scroll-event(event) => {
-                            if (event.modifiers.control) {
-                                if (event.delta-y < 0) {
-                                    root.zoom-out();
-                                } else {
-                                    root.zoom-in();
-                                }
-                                return accept;
-                            }
-                            return reject;
-                        }
+            if model.info-text != "" : Rectangle {
+                height: Theme.control-xs - Theme.space-1;
+                background: Theme.surface-sunken;
+                HorizontalLayout {
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-2;
+                    Text {
+                        text: model.info-text;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
                     }
                 }
             }
-        }
-
-        if model.info-text != "" : Rectangle {
-            height: 24px;
-            background: Theme.surface-base;
-            HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                Text { text: model.info-text; color: Theme.text-tertiary; font-size: Theme.font-size-sm; vertical-alignment: center; }
-            }
-        }
         } // VerticalLayout
     } // FocusScope
 
