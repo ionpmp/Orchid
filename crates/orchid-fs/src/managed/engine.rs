@@ -79,6 +79,10 @@ struct ManagedEngineInner {
     running: AtomicBool,
     loop_task: parking_lot::Mutex<Option<JoinHandle<()>>>,
     watch_handles: parking_lot::Mutex<Vec<crate::watcher::WatchHandle>>,
+    /// Cached `list_folders` result. The auto-ingest loop used to re-decode
+    /// every folder config (and, via `folder_stats`, every manifest) on each
+    /// filesystem event; this keeps the hot path on an Arc clone.
+    folders_cache: parking_lot::RwLock<Option<Arc<[ManagedFolderConfig]>>>,
 }
 
 impl std::fmt::Debug for ManagedFolderEngine {
@@ -118,6 +122,7 @@ impl ManagedFolderEngine {
                 running: AtomicBool::new(false),
                 loop_task: parking_lot::Mutex::new(None),
                 watch_handles: parking_lot::Mutex::new(Vec::new()),
+                folders_cache: parking_lot::RwLock::new(None),
             }),
         }
     }
@@ -140,6 +145,7 @@ impl ManagedFolderEngine {
                 .map_err(|e| FsError::Storage(e.into()))?;
         }
         txn.commit().map_err(|e| FsError::Storage(e.into()))?;
+        *self.inner.folders_cache.write() = None;
         Ok(())
     }
 
@@ -160,6 +166,7 @@ impl ManagedFolderEngine {
                 .map_err(|e| FsError::Storage(e.into()))?;
         }
         txn.commit().map_err(|e| FsError::Storage(e.into()))?;
+        *self.inner.folders_cache.write() = None;
         Ok(())
     }
 
@@ -169,11 +176,17 @@ impl ManagedFolderEngine {
     ///
     /// Propagates storage errors.
     pub async fn list_folders(&self) -> Result<Vec<ManagedFolderConfig>> {
+        if let Some(cached) = self.inner.folders_cache.read().as_ref() {
+            return Ok(cached.to_vec());
+        }
         let db = self.inner.storage.raw_database();
         let txn = db.begin_read().map_err(|e| FsError::Storage(e.into()))?;
         let table = match txn.open_table(MANAGED_FOLDERS) {
             Ok(t) => t,
-            Err(redb::TableError::TableDoesNotExist(_)) => return Ok(Vec::new()),
+            Err(redb::TableError::TableDoesNotExist(_)) => {
+                *self.inner.folders_cache.write() = Some(Arc::from(Vec::new()));
+                return Ok(Vec::new());
+            }
             Err(e) => return Err(FsError::Storage(e.into())),
         };
         let mut out = Vec::new();
@@ -181,6 +194,7 @@ impl ManagedFolderEngine {
             let (_, v) = item.map_err(|e| FsError::Storage(e.into()))?;
             out.push(v.value());
         }
+        *self.inner.folders_cache.write() = Some(Arc::from(out.as_slice()));
         Ok(out)
     }
 
