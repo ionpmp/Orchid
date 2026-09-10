@@ -1715,14 +1715,15 @@ impl MainWindowController {
         &self,
         instance_id: Uuid,
     ) -> (SharedString, ModelRc<crate::slint_generated::GroupTabModel>) {
-        // One empty model identity for every ungrouped widget so a content
-        // tick that rebuilds chrome does not remount the group-tab repeater.
+        // One empty model identity per UI thread for every ungrouped widget
+        // so a chrome rewrite does not remount the group-tab repeater.
+        // `ModelRc` is `Rc`-backed and therefore !Sync — thread_local, not OnceLock.
         fn empty_tabs() -> ModelRc<crate::slint_generated::GroupTabModel> {
-            use std::sync::OnceLock;
-            static EMPTY: OnceLock<ModelRc<crate::slint_generated::GroupTabModel>> = OnceLock::new();
-            EMPTY
-                .get_or_init(|| ModelRc::new(VecModel::default()))
-                .clone()
+            thread_local! {
+                static EMPTY: ModelRc<crate::slint_generated::GroupTabModel> =
+                    ModelRc::new(VecModel::default());
+            }
+            EMPTY.with(Clone::clone)
         }
 
         let Some(group) = self.group_manager.find_for_instance(instance_id) else {
