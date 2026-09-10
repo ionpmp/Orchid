@@ -513,6 +513,14 @@ release yet.
   locale switch. Building one widget frame resolves ~650 Fluent patterns, so
   this lands on every workspace rebuild — resize, workspace switch, and the
   flush at the end of every drag / resize gesture.
+- **UI frame remount pass**: viewer / terminal / processes / common-content
+  patches skip `set_row_data` when only nested ModelRc content changed
+  (Arc-shared with the live row); group-tab rebuilds are gated the same way;
+  ungrouped widgets share one empty group-tab ModelRc per UI thread; PDF
+  outline/overlay ModelRc identities are preserved across page changes;
+  frame-row lookup encodes the UUID on the stack instead of `to_string()`.
+- **Search remove coalescing**: directory-tree deletes no longer force a
+  Tantivy commit per file; they ride the existing 750 ms commit window.
 - **Processes widget**: full process census on activate and every 4th
   tick; intervening samples refresh only last-known PIDs.
 - **DOCX preview**: caret / selection paints over a cached page raster
