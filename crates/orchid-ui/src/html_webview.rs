@@ -279,6 +279,11 @@ impl HtmlWebViewHost {
         {
             let mut st = self.state.lock();
             let slot = st.slots.entry(key).or_default();
+            // Viewer content ticks call this on every patch with an unchanged
+            // body; skipping the kick avoids waking the host thread.
+            if slot.document == document && slot.browser == browser {
+                return;
+            }
             slot.document = document;
             slot.browser = browser;
         }
