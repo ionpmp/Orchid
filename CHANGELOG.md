@@ -399,6 +399,15 @@ release yet.
   (`1d0ca83a`). Tab strips (group, FM, terminal, notes) match the same
   density with `Theme.toolbar-height` / `Theme.control-sm` while keeping
   finger-sized close / action targets (`490959cb`).
+- **File-manager breadcrumbs**: densified to match compact chrome
+  (`cf1b9415`).
+- **Browser find bar**: densified to match compact chrome (`d49a4f69`).
+- **Audio/video player chrome**: densified to Theme tokens (`b32475a5`).
+- **LongPressArea** `forward-pointer-events` opt-in forwards inner
+  `pointer-event` / `moved` when nested controls still need clicks
+  (`5797fb9c`).
+- **Workspace orb**: swipe left/right to cycle workspaces; tap still
+  toggles the menu (`cc0ca3fd`).
 - **Touch-first "cinema" redesign of the whole interface.** `Theme` in
   `theme_global.slint` now derives a full design system from the seven raw
   theme colours: surface ramp (sunken → glass → floating), hover / press /
