@@ -21,7 +21,7 @@ export component GroupTabs inherits Rectangle {
         return tabs[clamp(root.active-index + step, 0, tabs.length - 1)].instance-id;
     }
 
-    height: Theme.control-md + Theme.space-2;
+    height: Theme.toolbar-height;
     background: Theme.surface-sunken;
 
     Rectangle {
@@ -49,12 +49,15 @@ export component GroupTabs inherits Rectangle {
         HorizontalLayout {
             width: 100%;
             height: 100%;
-            padding: Theme.space-1;
+            padding-left: Theme.space-1;
+            padding-right: Theme.space-1;
             spacing: Theme.space-1;
+            alignment: center;
 
             for tab[i] in tabs : Rectangle {
                 min-width: Theme.control-lg * 2.6;
                 max-width: Theme.control-lg * 4;
+                height: Theme.control-sm;
                 border-radius: Theme.radius-md;
                 background: tab.is-active ? Theme.surface-raised
                     : tab-ta.has-hover ? Theme.state-hover

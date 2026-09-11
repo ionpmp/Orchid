@@ -24,11 +24,14 @@ export component TerminalTabs inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding: Theme.space-1;
+        padding-left: Theme.space-1;
+        padding-right: Theme.space-1;
         spacing: Theme.space-1;
+        alignment: center;
 
         for tab[i] in tabs : Rectangle {
             width: 170px;
+            height: Theme.control-sm;
             background: i == active-tab ? Theme.surface-raised
                 : tab-ta.has-hover ? Theme.state-hover
                 : Colors.transparent;

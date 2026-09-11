@@ -286,7 +286,6 @@ export component FmPane inherits Rectangle {
         spacing: 0;
 
         FmTabs {
-            height: 32px;
             tabs: pane.tabs;
             active-tab: pane.active-tab;
             tab-clicked(idx, id) => { root.tab-clicked(idx, id); }

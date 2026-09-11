@@ -118,7 +118,7 @@ export component NotesView inherits Rectangle {
 
                         for tab[i] in model.tabs : Rectangle {
                             width: max(96px, min(190px, tab-label.preferred-width + (tab.is-active ? 56px : 32px)));
-                            height: Theme.control-md;
+                            height: Theme.control-sm;
                             y: (parent.height - self.height) / 2;
                             border-radius: Theme.radius-md;
                             background: tab.is-active ? Theme.surface-raised
