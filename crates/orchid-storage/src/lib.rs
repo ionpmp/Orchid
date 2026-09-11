@@ -30,17 +30,21 @@
 // error path is the cold path.
 #![allow(clippy::result_large_err)]
 
+pub mod backup;
 pub mod config;
+pub mod diagnostics;
 pub mod error;
 pub mod paths;
 pub mod state;
 
+pub use backup::{default_backup_filename, write_backup_zip};
 pub use config::{
     load_network_bookmarks, merge_network_places, save_network_bookmarks, AppearanceConfig, Config,
     ConfigLoader, ConfigWatcher, Density, FileManagerSectionConfig, GeneralConfig, Hand,
     InputConfig, LocaleConfig, NetworkMountConfig, OnboardingConfig, OrchidConfig,
     PenDoubleTapAction, PrivacyConfig, SearchConfig, ShortcutsConfig, DEFAULT_CONFIG_TOML,
 };
+pub use diagnostics::{default_support_filename, write_support_bundle, SupportBundleExtras};
 pub use error::{Result, StorageError};
 pub use paths::OrchidPaths;
 pub use state::{

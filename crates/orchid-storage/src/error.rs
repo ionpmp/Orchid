@@ -102,6 +102,10 @@ pub enum StorageError {
     /// A filesystem watcher error bubbled up from [`notify`].
     #[error("file watcher error: {0}")]
     Watcher(#[from] ::notify::Error),
+
+    /// Building or writing a zip archive failed.
+    #[error("archive error: {0}")]
+    Archive(String),
 }
 
 /// `Result` alias with [`StorageError`] as the default error type.

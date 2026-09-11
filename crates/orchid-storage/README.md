@@ -10,6 +10,11 @@ Storage layer for Orchid. Owns two independent subsystems:
 
 OS-appropriate filesystem locations for both live on [`OrchidPaths`], resolved via the [`directories`](https://docs.rs/directories) crate.
 
+**Backup / diagnostics** — `write_backup_zip` and `write_support_bundle` build
+zip archives for in-app export (`orc data export backup`,
+`orc diagnostics export`). The support bundle redacts network-mount passwords
+and never copies the vault.
+
 ## Scope
 
 Only storage primitives live here. Business logic that uses the tables — action-history pruning schedulers, widget lifecycle, cache eviction policies beyond simple age-based eviction — belongs in consuming crates (`orchid-widgets`, `orchid-fs`, `orchid-app`, ...).

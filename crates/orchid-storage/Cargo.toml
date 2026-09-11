@@ -22,6 +22,7 @@ parking_lot.workspace = true
 bincode_reloaded.workspace = true
 uuid.workspace = true
 chrono.workspace = true
+zip.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
