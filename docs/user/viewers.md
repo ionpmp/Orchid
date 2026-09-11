@@ -16,8 +16,15 @@ edits. **People view** is not implemented. No HDR framebuffer (8-bit RGBA).
 
 ## PDF
 
-Needs `pdfium.dll`. Page nav, fit, zoom. No forms/annotations/text selection
-in this release.
+Needs `pdfium.dll`. Page nav, fit width / page, zoom, outline sidebar,
+in-document find (`Ctrl+F`, match case), print (`Ctrl+P`).
+
+Drag to select text (double-click a word, `Ctrl+A` the page). `Ctrl+C`
+copies the selection, or the whole page when nothing is selected.
+**Highlight** writes a sibling `*-hl.pdf` with highlight annotations over
+the selection — it does not edit the open file.
+
+No AcroForm fill-in, no in-place annotation save, no comments.
 
 ## Text
 

@@ -372,6 +372,9 @@ release yet.
 - Universal-search **files** use ANN + BM25 reciprocal rank fusion
   (`SearchEngine::search_hybrid`, stub embeddings). Semantic hits work
   after the indexer extracts text; the ANN is in-memory.
+- PDF: `Ctrl+A` selects the current page’s extracted text (copy / highlight
+  then use the selection). User guide matches find, drag-select, and sibling
+  highlight export.
 
 ### Documentation
 - Rebuilt project, GitHub, [user](docs/user/README.md), and

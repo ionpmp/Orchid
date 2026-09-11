@@ -497,9 +497,33 @@ impl PdfViewer {
         Ok(())
     }
 
+    /// Select every extracted glyph on the current page.
+    pub fn select_page_text(&self) {
+        let Some(layer) = self.layer.read().clone() else {
+            *self.selection.write() = None;
+            *self.drag_anchor.write() = None;
+            return;
+        };
+        if layer.chars.is_empty() {
+            *self.selection.write() = None;
+            *self.drag_anchor.write() = None;
+            return;
+        }
+        let last = layer.chars.len() - 1;
+        *self.drag_anchor.write() = Some(0);
+        *self.selection.write() = Some(PdfSelection {
+            text: layer.text_range(0, last),
+            rects: layer.rects_range(0, last),
+        });
+    }
+
     /// Pointer interaction on the page image (`x`/`y` in page-image pixels).
-    /// `phase`: `0` press, `1` drag, `2` release, `3` double-click.
+    /// `phase`: `0` press, `1` drag, `2` release, `3` double-click word, `4` select page.
     pub fn pointer(&self, phase: i32, x: f32, y: f32) {
+        if phase == 4 {
+            self.select_page_text();
+            return;
+        }
         let Some(layer) = self.layer.read().clone() else {
             return;
         };

@@ -66,6 +66,10 @@ export component ViewerPdfView inherits Rectangle {
                 find-input.focus();
                 return accept;
             }
+            if (event.modifiers.control && (event.text == "a" || event.text == "A")) {
+                root.pointer(4, 0, 0);
+                return accept;
+            }
             if (event.modifiers.control && (event.text == "c" || event.text == "C")) {
                 root.copy-text();
                 return accept;
