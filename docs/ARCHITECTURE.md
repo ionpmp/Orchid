@@ -84,7 +84,7 @@ argv paths over a Windows named pipe and exits.
 | `state.redb` | `…\data\state.redb` | Workspaces, widgets, groups, history, session, cache, tags. Schema **v2**. Extra: `crypto_chunk_refs`, `widget_groups` |
 | `passwords.kdbx` | `…\data\passwords.kdbx` | KeePass vault |
 | chunks | `…\data\chunks` | BLAKE3 + FastCDC (plaintext by design) |
-| search index | `…\data\search_index` | Tantivy |
+| search index | `…\data\search_index` | Tantivy + `ann.stub.v1` |
 | logs | `…\data\logs` | Default filter `orchid=info` |
 | network bookmarks | `…\data\network-bookmarks.toml` | Runtime mounts |
 

@@ -21,6 +21,7 @@ fn mk_doc(
         mime: None,
         kind: DocumentKind::File,
         in_archive: None,
+        embedding: None,
     }
 }
 

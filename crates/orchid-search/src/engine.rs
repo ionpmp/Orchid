@@ -62,6 +62,8 @@ pub struct IndexDocument {
     pub kind: DocumentKind,
     /// Outer archive path, if any.
     pub in_archive: Option<String>,
+    /// Document-level vector from a `.orchid` Embedding region, when present.
+    pub embedding: Option<Vec<f32>>,
 }
 
 /// Handle to a live search index.
@@ -401,6 +403,17 @@ fn upsert_ann(inner: &SearchEngineInner, docs: &[IndexDocument]) {
     let embedder = StubEmbedder::new();
     let mut ann = inner.ann.write();
     for d in docs {
+        if let Some(vector) = d
+            .embedding
+            .as_ref()
+            .filter(|v| v.len() == ann.dims())
+            .cloned()
+        {
+            if let Err(e) = ann.upsert(&d.path, vector) {
+                tracing::debug!(error = %e, path = %d.path, "ann upsert skipped");
+            }
+            continue;
+        }
         let Some(content) = d.content.as_deref().filter(|c| !c.trim().is_empty()) else {
             ann.remove(&d.path);
             continue;

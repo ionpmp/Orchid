@@ -59,6 +59,7 @@ async fn semantic_query_finds_orchid_that_bm25_misses() {
             mime: Some(MIME_TYPE.into()),
             kind: DocumentKind::File,
             in_archive: None,
+            embedding: Some(vector.clone()),
         })
         .await
         .unwrap();

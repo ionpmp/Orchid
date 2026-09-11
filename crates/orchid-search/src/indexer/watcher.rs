@@ -237,6 +237,16 @@ impl IndexFsSubscriber {
             DocumentKind::File
         };
 
+        let embedding = if extension.as_deref().is_some_and(|e| e.eq_ignore_ascii_case("orchid"))
+            && path.is_local()
+        {
+            path.to_local()
+                .ok()
+                .and_then(|os| crate::extractors::orchid::document_vector_local(&os))
+        } else {
+            None
+        };
+
         let doc = IndexDocument {
             path: path.as_str().to_string(),
             name,
@@ -249,6 +259,7 @@ impl IndexFsSubscriber {
             mime: meta.mime,
             kind,
             in_archive: None,
+            embedding,
         };
         self.inner.scheduler.enqueue_upsert(doc).await?;
         Ok(())

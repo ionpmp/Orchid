@@ -1,7 +1,7 @@
 //! `.orchid` Clean-Text extractor for Tantivy ingest.
 
 use async_trait::async_trait;
-use orchid_format::{MIME_TYPE, SealedFile};
+use orchid_format::{SealedFile, MIME_TYPE};
 
 use crate::error::{Result, SearchError};
 use crate::extractors::text::MAX_CONTENT_BYTES;
@@ -61,6 +61,16 @@ fn extract_bytes(bytes: &[u8]) -> Result<String> {
     let path = dir.path().join("remote.orchid");
     std::fs::write(&path, bytes).map_err(SearchError::from)?;
     extract_local(&path)
+}
+
+/// Document-level vector from a sealed `.orchid` Embedding region, if any.
+#[must_use]
+pub fn document_vector_local(path: &std::path::Path) -> Option<Vec<f32>> {
+    let file = SealedFile::open(path).ok()?;
+    file.embeddings(None)
+        .ok()?
+        .document_vector()
+        .map(|v| v.to_vec())
 }
 
 fn clean_text_truncated(file: &SealedFile) -> Result<String> {

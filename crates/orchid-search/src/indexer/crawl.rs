@@ -134,6 +134,8 @@ async fn build_document(
         None
     };
 
+    let embedding = orchid_embedding(path, extension.as_deref());
+
     Ok(IndexDocument {
         path: path.as_str().to_string(),
         name,
@@ -146,7 +148,16 @@ async fn build_document(
         mime: meta.mime.clone(),
         kind: DocumentKind::File,
         in_archive: None,
+        embedding,
     })
+}
+
+fn orchid_embedding(path: &FsPath, extension: Option<&str>) -> Option<Vec<f32>> {
+    if !extension.is_some_and(|e| e.eq_ignore_ascii_case("orchid")) || !path.is_local() {
+        return None;
+    }
+    let os = path.to_local().ok()?;
+    crate::extractors::orchid::document_vector_local(&os)
 }
 
 fn path_in_scope(scope: &IndexScope, path: &FsPath) -> bool {

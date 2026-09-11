@@ -59,6 +59,7 @@ async fn orchid_extractor_feeds_search_content() {
             mime: Some(MIME_TYPE.into()),
             kind: DocumentKind::File,
             in_archive: None,
+            embedding: None,
         })
         .await
         .unwrap();

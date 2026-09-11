@@ -11,7 +11,7 @@ Qualifier `com` / org `Orchid` / app `Orchid` (`directories` crate).
 | `state.redb` | `…\data\state.redb` (schema **v2**) |
 | Vault | `…\data\passwords.kdbx` + `passwords.master.dpapi` |
 | Chunks | `…\data\chunks\` |
-| Search index | `…\data\search_index\` |
+| Search index | `…\data\search_index\` (Tantivy + `ann.stub.v1`) |
 | Network bookmarks | `…\data\network-bookmarks.toml` |
 | Logs | `…\data\logs\` (Roaming `data_dir`, not LocalAppData) |
 | Cache | `%LOCALAPPDATA%\Orchid\Orchid\cache` |
