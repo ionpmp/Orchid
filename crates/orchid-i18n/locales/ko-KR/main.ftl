@@ -413,6 +413,7 @@ settings-value-monday = 월요일
 settings-field-auto-update = 자동 업데이트
 settings-field-telemetry = 원격 분석
 settings-field-open-on-startup = 시작 시 열기
+settings-field-os-notifications = Windows 알림
 settings-field-theme = 테마
 settings-field-density = 밀도
 settings-field-font-family = 글꼴

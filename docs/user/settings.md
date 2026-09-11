@@ -9,7 +9,7 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 
 | Section | You can change | Shown but not wired |
 |---------|----------------|---------------------|
-| General | Open on startup | Auto-update, telemetry (Disabled) |
+| General | Open on startup, Windows notifications | Auto-update, telemetry (Disabled) |
 | Appearance | Theme, density, font, reduce motion, follow system | — |
 | Input | Primary hand, mirror edge swipes | Haptics, palm, pen double-tap (TOML only; hidden here) |
 | Shortcuts | Profile, remaps, leader key/timeout | Leader **binding map** (TOML only) |

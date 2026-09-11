@@ -413,6 +413,7 @@ settings-value-monday = 月曜日
 settings-field-auto-update = 自動更新
 settings-field-telemetry = テレメトリ
 settings-field-open-on-startup = 起動時に開く
+settings-field-os-notifications = Windows の通知
 settings-field-theme = テーマ
 settings-field-density = 密度
 settings-field-font-family = フォントファミリー

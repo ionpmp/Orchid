@@ -381,6 +381,9 @@ release yet.
   (dock, undock, min, max, restore) were missing.
 - Property-style tests: `.orchid` framing / embeddings / zstd / CRDT wire,
   `orc` command tokenizer, OOXML core-props XML and pack line.
+- Opt-in **Windows notifications** (`[general].os-notifications`): each
+  in-app alert also goes to Action Center. Off by default; unpackaged
+  builds write Start Menu `Orchid.lnk` with AppUserModelID `IonPmp.Orchid`.
 
 ### Documentation
 - Rebuilt project, GitHub, [user](docs/user/README.md), and

@@ -724,6 +724,8 @@ impl OrchidApp {
         apply_command_shortcut_overrides(&command_registry, &config.read().shortcuts);
 
         crate::autostart::sync_open_on_startup(&config.read().general);
+        crate::os_notify::prepare();
+        crate::os_notify::sync(config.read().general.os_notifications);
 
         info!(
             theme = %theme.current().meta.id,

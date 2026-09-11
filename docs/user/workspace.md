@@ -42,8 +42,11 @@ leader-key `n` / `b`. Hidden workspaces sleep their widgets.
 Three-finger swipe up → `widget show all`. Four-finger left/right switches
 workspaces. Sides swap for left-hand / `mirror-edge-swipes`.
 
-In-app notifications persist in redb (soft cap ~50). OS toasts are not
-implemented.
+In-app notifications persist in redb (soft cap ~50). Settings → **Windows
+notifications** (`[general].os-notifications`, off by default) also sends
+each new item to the Windows Action Center. Unpackaged builds register a
+Start Menu shortcut so the toast can carry Orchid’s AppUserModelID. If the
+OS rejects the toast, the in-app center still keeps it.
 
 ## Keyboard and accessibility
 

@@ -10,6 +10,7 @@ hot-reloaded). Keys are kebab-case.
 | `auto-update` | `true` | **Not implemented.** Settings: Disabled |
 | `telemetry` | `false` | **Not implemented.** Settings: Disabled |
 | `open-on-startup` | `false` | Autostart helper |
+| `os-notifications` | `false` | Mirror in-app alerts as Windows Action Center toasts. Writes a Start Menu `Orchid.lnk` with AppUserModelID `IonPmp.Orchid` when enabled. Failures stay in the in-app center. |
 
 ## `[appearance]`
 

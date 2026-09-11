@@ -413,6 +413,7 @@ settings-value-monday = Montag
 settings-field-auto-update = Automatische Updates
 settings-field-telemetry = Telemetrie
 settings-field-open-on-startup = Beim Start öffnen
+settings-field-os-notifications = Windows-Benachrichtigungen
 settings-field-theme = Design
 settings-field-density = Dichte
 settings-field-font-family = Schriftart

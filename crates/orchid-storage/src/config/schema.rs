@@ -55,6 +55,8 @@ pub struct GeneralConfig {
     pub telemetry: bool,
     /// Whether Orchid should start automatically on user login.
     pub open_on_startup: bool,
+    /// Mirror in-app notifications as Windows Action Center toasts. Off by default.
+    pub os_notifications: bool,
 }
 
 impl Default for GeneralConfig {
@@ -63,6 +65,7 @@ impl Default for GeneralConfig {
             auto_update: true,
             telemetry: false,
             open_on_startup: false,
+            os_notifications: false,
         }
     }
 }
@@ -483,6 +486,7 @@ mod tests {
     fn missing_sections_fall_back_to_defaults() {
         let cfg: OrchidConfig = toml::from_str("").unwrap();
         assert!(cfg.general.auto_update);
+        assert!(!cfg.general.os_notifications);
         assert!((cfg.appearance.font_scale - 1.0).abs() < f32::EPSILON);
         assert_eq!(cfg.locale.language, "en-US");
     }

@@ -413,6 +413,7 @@ settings-value-monday = الاثنين
 settings-field-auto-update = التحديث التلقائي
 settings-field-telemetry = القياس عن بُعد
 settings-field-open-on-startup = الفتح عند بدء التشغيل
+settings-field-os-notifications = إشعارات Windows
 settings-field-theme = السمة
 settings-field-density = الكثافة
 settings-field-font-family = عائلة الخط

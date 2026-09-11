@@ -45,7 +45,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 
 ### Notifications & storage
 
-- [ ] OS (Windows) toasts — in-app center already exists
 - [ ] Reflink / NTFS hardlink ingest for managed folders
 
 ### i18n
@@ -64,7 +63,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 - [ ] Theme and widget marketplace
 - [ ] Terminal sixel + kitty; optional `alacritty_terminal`
 - [ ] Auto-update; opt-in telemetry (off by default)
-- [ ] OS notification toasts
 - [ ] In-app cloud OAuth wizard
 - [ ] ORT embeddings in production search
 - [ ] Managed-folder reflink / hardlink ingest

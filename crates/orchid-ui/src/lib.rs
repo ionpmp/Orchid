@@ -11,6 +11,7 @@ mod commands;
 pub mod error;
 mod html_webview;
 pub mod http;
+mod os_notify;
 mod single_instance;
 mod slint_generated;
 mod system_theme;

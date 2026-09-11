@@ -40,3 +40,5 @@ Do not commit DLL blobs. Uninstall the exe folder; user data stays under
 `%APPDATA%\Orchid\Orchid\` until deleted.
 
 Start on login: Settings → Open on startup / `[general].open-on-startup`.
+Windows Action Center toasts: Settings → Windows notifications /
+`[general].os-notifications` (opt-in).

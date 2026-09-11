@@ -853,6 +853,7 @@ impl MainWindowController {
             );
         }
         crate::autostart::sync_open_on_startup(&cfg.general);
+        crate::os_notify::sync(cfg.general.os_notifications);
         drop(cfg);
         if retention_changed {
             self.last_history_retention_days

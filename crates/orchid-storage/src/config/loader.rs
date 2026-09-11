@@ -26,6 +26,8 @@ auto-update = true
 telemetry = false
 # Start Orchid on user login.
 open-on-startup = false
+# Mirror in-app alerts as Windows Action Center toasts (opt-in).
+os-notifications = false
 
 [appearance]
 theme = "orchid-dark"

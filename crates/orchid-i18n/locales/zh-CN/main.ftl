@@ -413,6 +413,7 @@ settings-value-monday = 星期一
 settings-field-auto-update = 自动更新
 settings-field-telemetry = 遥测
 settings-field-open-on-startup = 启动时打开
+settings-field-os-notifications = Windows 通知
 settings-field-theme = 主题
 settings-field-density = 密度
 settings-field-font-family = 字体

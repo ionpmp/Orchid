@@ -250,6 +250,8 @@ impl MainWindowController {
         }
         self.sync_notification_global();
         self.persist_notifications();
+        let os_toasts = self.config.read().general.os_notifications;
+        crate::os_notify::show_if_enabled(os_toasts, title, body);
     }
 
     pub(super) fn clear_notifications(self: &Arc<Self>) {
@@ -662,6 +664,9 @@ fn apply_settings_field(
     match (section, key) {
         ("general", "open-on-startup") => {
             cfg.general.open_on_startup = parse_settings_bool(value)?;
+        }
+        ("general", "os-notifications") => {
+            cfg.general.os_notifications = parse_settings_bool(value)?;
         }
         ("appearance", "theme") => {
             if value.is_empty() {

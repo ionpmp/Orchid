@@ -257,6 +257,13 @@ pub(crate) fn build_settings_fields(
                 "settings-field-open-on-startup",
                 cfg.general.open_on_startup,
             );
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "os-notifications",
+                "settings-field-os-notifications",
+                cfg.general.os_notifications,
+            );
         }
         "appearance" => {
             let theme_options = theme_combo_options(themes, locale);
