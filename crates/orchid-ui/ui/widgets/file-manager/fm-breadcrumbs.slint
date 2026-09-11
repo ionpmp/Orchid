@@ -17,6 +17,7 @@ export component FmBreadcrumbs inherits Rectangle {
     property <string> draft: "";
     property <bool> suggest-hover: false;
 
+    height: Theme.control-xs;
     background: Theme.surface-base;
     clip: false;
 
@@ -56,7 +57,7 @@ export component FmBreadcrumbs inherits Rectangle {
                 }
 
                 Rectangle {
-                    min-height: Theme.control-sm;
+                    height: Theme.control-xs;
                     y: (parent.height - self.height) / 2;
                     background: (drag-active && crumb.path == drag-drop-target) ? Theme.accent-soft
                         : crumb-ta.has-hover ? Theme.state-hover
@@ -98,7 +99,7 @@ export component FmBreadcrumbs inherits Rectangle {
 
             Rectangle {
                 horizontal-stretch: 1;
-                min-width: 24px;
+                min-width: Theme.space-6;
                 height: 100%;
                 TouchArea {
                     clicked => { root.editing = true; }
@@ -184,7 +185,7 @@ export component FmBreadcrumbs inherits Rectangle {
 
             suggest-lay := VerticalLayout {
                 padding: Theme.space-1;
-                spacing: 1px;
+                spacing: Theme.hairline;
                 for item in root.suggestions : Rectangle {
                     height: Theme.row-height;
                     background: item-ta.has-hover ? Theme.state-selected : transparent;
