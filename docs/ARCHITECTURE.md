@@ -43,7 +43,8 @@ the tree — see [ROADMAP.md](ROADMAP.md).
 2. **Event → Action → Command.** Touch, mouse, keyboard, and pen become a
    semantic `Action`. Registered commands have an `orc …` form. File-manager
    operations use internal action ids (`fs.copy`, …) and profile bindings;
-   they are **not** all `orc fs …` verbs.
+   they are **not** all `orc fs …` verbs. Inventory:
+   [commands.md](commands.md).
 3. **State in one place.** redb (`state.redb`, schema **v2**). Vault:
    `passwords.kdbx`. Chunks under `data/chunks`. Config is TOML.
 4. **No plugins in this release.** Everything is built in (v2.0 item).

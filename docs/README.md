@@ -31,6 +31,7 @@ lives in the user and admin guides. **Planned** work lives only in
 |----------|-------------|
 | [ROADMAP.md](ROADMAP.md) | Planned features only |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 13-crate map, runtime, persistence |
+| [commands.md](commands.md) | `orc` verbs vs `fs.*` action ids |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 | [BUILDING.md](BUILDING.md) | Toolchain, pdfium, libmpv, WebView2, CI |
 | [SECURITY.md](SECURITY.md) | Reporting and threat model |
