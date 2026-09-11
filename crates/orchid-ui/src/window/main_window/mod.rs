@@ -64,6 +64,7 @@ mod calendar;
 mod canvas;
 mod catalog;
 mod clock;
+mod diagnostics;
 mod floating;
 mod fm;
 mod html_embed;
@@ -797,6 +798,9 @@ impl MainWindowController {
         g.set_password_unlock_submit(mgr.tr("password-unlock-submit").into());
         g.set_password_unlock_biometric(mgr.tr("password-unlock-biometric").into());
         g.set_password_action_add(mgr.tr("password-action-add").into());
+        g.set_password_action_edit(mgr.tr("password-action-edit").into());
+        g.set_password_action_generate(mgr.tr("password-action-generate").into());
+        g.set_password_group_all(mgr.tr("password-group-all").into());
         Ok(())
     }
 
@@ -1254,6 +1258,14 @@ impl MainWindowController {
         }
         if cmd_id == "password.lock" {
             self.on_password_lock_vault();
+            return;
+        }
+        if cmd_id == "diagnostics.export_bundle" {
+            self.on_export_support_bundle();
+            return;
+        }
+        if cmd_id == "data.export_backup" {
+            self.on_export_backup();
             return;
         }
         if cmd_id == "navigation.show_workspace_panel" {

@@ -1,9 +1,8 @@
 # cargo-deny configuration for Orchid (AGPL-3.0-or-later).
 # Docs: https://embarkstudios.github.io/cargo-deny/
 #
-# CI gates on `licenses` + `sources` (see `.github/workflows/ci.yml`).
-# `cargo deny check advisories` still surfaces RustSec hits locally; ignore
-# entries can be added here as the tree is audited.
+# CI gates on `licenses` + `sources` + `advisories` (see `.github/workflows/ci.yml`).
+# Ignore entries can be added here as the tree is audited.
 
 [graph]
 targets = [

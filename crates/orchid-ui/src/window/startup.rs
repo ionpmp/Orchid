@@ -225,6 +225,9 @@ fn apply_strings_to(window: &StartupWindow, mgr: &LocaleManager) {
     g.set_password_unlock_submit(mgr.tr("password-unlock-submit").into());
     g.set_password_unlock_biometric(mgr.tr("password-unlock-biometric").into());
     g.set_password_action_add(mgr.tr("password-action-add").into());
+    g.set_password_action_edit(mgr.tr("password-action-edit").into());
+    g.set_password_action_generate(mgr.tr("password-action-generate").into());
+    g.set_password_group_all(mgr.tr("password-group-all").into());
 }
 
 fn apply_app_state_to(

@@ -3,9 +3,11 @@ use slint::{Model, ModelRc, SharedString, VecModel};
 
 use super::super::errors::password_localized_error;
 use crate::slint_generated::{
-    PasswordAddDialogState, PasswordDetail, PasswordEntryItem, PasswordModel, PasswordTagChip,
+    PasswordAddDialogState, PasswordDetail, PasswordEntryItem, PasswordGroupChip, PasswordModel,
+    PasswordTagChip,
 };
 
+/// Overlay for add / edit / generate password dialogs.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct PasswordAddDialogOverlay {
     pub visible: bool,
@@ -13,6 +15,15 @@ pub(crate) struct PasswordAddDialogOverlay {
     pub request_autofocus: bool,
     pub generated_password: Option<String>,
     pub generation_seq: u32,
+    /// 0 = add, 1 = edit, 2 = generate-only.
+    pub mode: u8,
+    pub entry_id: Option<String>,
+    pub initial_title: String,
+    pub initial_username: String,
+    pub initial_url: String,
+    pub initial_notes: String,
+    pub initial_group_id: String,
+    pub seed_seq: u32,
 }
 
 fn empty_password_detail() -> PasswordDetail {
@@ -27,22 +38,35 @@ fn empty_password_detail() -> PasswordDetail {
         totp_remaining: 0,
         totp_remaining_label: SharedString::new(),
         tags: ModelRc::new(VecModel::default()),
+        group_id: SharedString::new(),
     }
 }
 
 fn empty_password_add_dialog(locale: &LocaleManager) -> PasswordAddDialogState {
     PasswordAddDialogState {
         visible: false,
+        mode: 0,
         title: locale.tr("password-add-title").into(),
         title_label: locale.tr("password-label-title").into(),
         username_label: locale.tr("password-label-username").into(),
         password_label: locale.tr("password-label-password").into(),
         url_label: locale.tr("password-label-url").into(),
+        notes_label: locale.tr("password-label-notes").into(),
+        group_label: locale.tr("password-group-label").into(),
+        new_group_label: locale.tr("password-new-group-label").into(),
+        password_hint: SharedString::new(),
         submit_label: locale.tr("password-add-submit").into(),
         cancel_label: locale.tr("password-add-cancel").into(),
         generate_label: locale.tr("password-generate").into(),
         gen_password: SharedString::new(),
         gen_seq: 0,
+        seed_seq: 0,
+        initial_title: SharedString::new(),
+        initial_username: SharedString::new(),
+        initial_url: SharedString::new(),
+        initial_notes: SharedString::new(),
+        initial_group_id: SharedString::new(),
+        groups: ModelRc::new(VecModel::default()),
         error: SharedString::new(),
         request_autofocus: false,
     }
@@ -60,6 +84,8 @@ pub(crate) fn empty_password_model(locale: &LocaleManager) -> PasswordModel {
         toast_message: SharedString::new(),
         toast_visible: false,
         request_autofocus: false,
+        groups: ModelRc::new(VecModel::default()),
+        selected_group_id: SharedString::new(),
         add_dialog: empty_password_add_dialog(locale),
     }
 }
@@ -107,12 +133,41 @@ pub(crate) fn patch_password_model(
     model.toast_message = toast_msg.into();
     model.toast_visible = toast_vis;
     model.request_autofocus = autofocus;
+    model.selected_group_id = p.selected_group_id.clone().unwrap_or_default().into();
+    sync_group_chips(&model.groups, &p.groups, p.selected_group_id.as_deref());
 
     model.add_dialog.visible = add_dialog.visible;
+    model.add_dialog.mode = i32::from(add_dialog.mode);
+    model.add_dialog.title = match add_dialog.mode {
+        1 => locale.tr("password-edit-title").into(),
+        2 => locale.tr("password-generate-title").into(),
+        _ => locale.tr("password-add-title").into(),
+    };
+    model.add_dialog.submit_label = if add_dialog.mode == 2 {
+        locale.tr("password-generate-copy").into()
+    } else {
+        locale.tr("password-add-submit").into()
+    };
+    model.add_dialog.password_hint = if add_dialog.mode == 1 {
+        locale.tr("password-password-keep-hint").into()
+    } else {
+        SharedString::new()
+    };
     model.add_dialog.error = add_dialog.error.unwrap_or_default().into();
     model.add_dialog.request_autofocus = add_dialog.request_autofocus;
     model.add_dialog.gen_password = add_dialog.generated_password.unwrap_or_default().into();
     model.add_dialog.gen_seq = add_dialog.generation_seq as i32;
+    model.add_dialog.seed_seq = add_dialog.seed_seq as i32;
+    model.add_dialog.initial_title = add_dialog.initial_title.into();
+    model.add_dialog.initial_username = add_dialog.initial_username.into();
+    model.add_dialog.initial_url = add_dialog.initial_url.into();
+    model.add_dialog.initial_notes = add_dialog.initial_notes.into();
+    model.add_dialog.initial_group_id = add_dialog.initial_group_id.clone().into();
+    sync_group_chips(
+        &model.add_dialog.groups,
+        &p.groups,
+        Some(add_dialog.initial_group_id.as_str()).filter(|s| !s.is_empty()),
+    );
 }
 
 fn sync_entries(model: &ModelRc<PasswordEntryItem>, entries: &[orchid_widgets::PasswordEntryView]) {
@@ -133,6 +188,7 @@ fn sync_entries(model: &ModelRc<PasswordEntryItem>, entries: &[orchid_widgets::P
             tags: ModelRc::new(VecModel::from(tags)),
             color_label: e.color_label.clone().unwrap_or_default().into(),
             modified: e.modified_text.clone().into(),
+            group_name: e.group_name.clone().into(),
         };
         if i < v.row_count() {
             if let Some(old) = v.row_data(i) {
@@ -143,6 +199,7 @@ fn sync_entries(model: &ModelRc<PasswordEntryItem>, entries: &[orchid_widgets::P
                     && old.has_totp == row.has_totp
                     && old.color_label == row.color_label
                     && old.modified == row.modified
+                    && old.group_name == row.group_name
                 {
                     // Tags rarely change on the 1Hz TOTP tick; skip full replace.
                     continue;
@@ -197,6 +254,7 @@ fn patch_selected(
     selected.totp_code = d.totp_code.clone().unwrap_or_default().into();
     selected.totp_remaining = totp_remaining;
     selected.totp_remaining_label = totp_remaining_label;
+    selected.group_id = d.group_id.clone().into();
 
     let chips: Vec<PasswordTagChip> = d
         .tags
@@ -227,5 +285,30 @@ fn patch_selected(
         }
     } else {
         selected.tags = ModelRc::new(VecModel::from(chips));
+    }
+}
+
+fn sync_group_chips(
+    model: &ModelRc<PasswordGroupChip>,
+    groups: &[orchid_widgets::PasswordGroupView],
+    selected: Option<&str>,
+) {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<PasswordGroupChip>>() else {
+        return;
+    };
+    while v.row_count() > groups.len() {
+        v.remove(v.row_count() - 1);
+    }
+    for (i, g) in groups.iter().enumerate() {
+        let row = PasswordGroupChip {
+            id: g.id.clone().into(),
+            name: g.name.clone().into(),
+            selected: selected == Some(g.id.as_str()),
+        };
+        if i < v.row_count() {
+            v.set_row_data(i, row);
+        } else {
+            v.push(row);
+        }
     }
 }

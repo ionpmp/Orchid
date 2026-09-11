@@ -14,6 +14,8 @@ pub fn build_ui_command_set() -> Vec<(CommandDescriptor, ActionFactory)> {
         settings_open_command(),
         settings_open_config_file_command(),
         password_lock_command(),
+        diagnostics_export_command(),
+        data_export_backup_command(),
         navigation_show_workspace_panel_command(),
         notification_show_center_command(),
         dock_show_command(),
@@ -73,6 +75,42 @@ fn password_lock_command() -> (CommandDescriptor, ActionFactory) {
     };
     let factory: ActionFactory =
         Arc::new(|_: ParsedCommand| Ok(Box::new(PasswordLockAction) as Box<dyn Action>));
+    (descriptor, factory)
+}
+
+fn diagnostics_export_command() -> (CommandDescriptor, ActionFactory) {
+    let descriptor = CommandDescriptor {
+        id: "diagnostics.export_bundle".into(),
+        display_name_key: "command-diagnostics-export-name".into(),
+        description_key: Some("command-diagnostics-export-desc".into()),
+        category: CommandCategory::Developer,
+        default_shortcut: None,
+        terminal_invocation: Some(TerminalInvocation {
+            verb: "diagnostics export".into(),
+            args: Vec::new(),
+        }),
+        icon_name: Some("settings".into()),
+    };
+    let factory: ActionFactory =
+        Arc::new(|_: ParsedCommand| Ok(Box::new(DiagnosticsExportAction) as Box<dyn Action>));
+    (descriptor, factory)
+}
+
+fn data_export_backup_command() -> (CommandDescriptor, ActionFactory) {
+    let descriptor = CommandDescriptor {
+        id: "data.export_backup".into(),
+        display_name_key: "command-data-export-backup-name".into(),
+        description_key: Some("command-data-export-backup-desc".into()),
+        category: CommandCategory::Settings,
+        default_shortcut: None,
+        terminal_invocation: Some(TerminalInvocation {
+            verb: "data export backup".into(),
+            args: Vec::new(),
+        }),
+        icon_name: Some("settings".into()),
+    };
+    let factory: ActionFactory =
+        Arc::new(|_: ParsedCommand| Ok(Box::new(DataExportBackupAction) as Box<dyn Action>));
     (descriptor, factory)
 }
 
@@ -194,6 +232,42 @@ impl Action for SettingsOpenConfigFileAction {
     }
     fn command_text(&self) -> String {
         "orc settings open config file".into()
+    }
+    async fn execute(&self, _ctx: &ActionContext) -> orchid_core::Result<ActionOutcome> {
+        Ok(ActionOutcome::ok())
+    }
+}
+
+struct DiagnosticsExportAction;
+
+#[async_trait]
+impl Action for DiagnosticsExportAction {
+    fn id(&self) -> &'static str {
+        "diagnostics.export_bundle"
+    }
+    fn display_name_key(&self) -> &'static str {
+        "command-diagnostics-export-name"
+    }
+    fn command_text(&self) -> String {
+        "orc diagnostics export".into()
+    }
+    async fn execute(&self, _ctx: &ActionContext) -> orchid_core::Result<ActionOutcome> {
+        Ok(ActionOutcome::ok())
+    }
+}
+
+struct DataExportBackupAction;
+
+#[async_trait]
+impl Action for DataExportBackupAction {
+    fn id(&self) -> &'static str {
+        "data.export_backup"
+    }
+    fn display_name_key(&self) -> &'static str {
+        "command-data-export-backup-name"
+    }
+    fn command_text(&self) -> String {
+        "orc data export backup".into()
     }
     async fn execute(&self, _ctx: &ActionContext) -> orchid_core::Result<ActionOutcome> {
         Ok(ActionOutcome::ok())

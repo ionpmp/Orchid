@@ -1066,10 +1066,17 @@ export struct PasswordEntryItem {
     tags: [string],
     color-label: string,
     modified: string,
+    group-name: string,
 }
 
 export struct PasswordTagChip {
     label: string,
+}
+
+export struct PasswordGroupChip {
+    id: string,
+    name: string,
+    selected: bool,
 }
 
 export struct PasswordDetail {
@@ -1083,20 +1090,33 @@ export struct PasswordDetail {
     totp-remaining: int,
     totp-remaining-label: string,
     tags: [PasswordTagChip],
+    group-id: string,
 }
 
 export struct PasswordAddDialogState {
     visible: bool,
+    mode: int,
     title: string,
     title-label: string,
     username-label: string,
     password-label: string,
     url-label: string,
+    notes-label: string,
+    group-label: string,
+    new-group-label: string,
+    password-hint: string,
     submit-label: string,
     cancel-label: string,
     generate-label: string,
     gen-password: string,
     gen-seq: int,
+    seed-seq: int,
+    initial-title: string,
+    initial-username: string,
+    initial-url: string,
+    initial-notes: string,
+    initial-group-id: string,
+    groups: [PasswordGroupChip],
     error: string,
     request-autofocus: bool,
 }
@@ -1112,6 +1132,8 @@ export struct PasswordModel {
     toast-message: string,
     toast-visible: bool,
     request-autofocus: bool,
+    groups: [PasswordGroupChip],
+    selected-group-id: string,
     add-dialog: PasswordAddDialogState,
 }
 

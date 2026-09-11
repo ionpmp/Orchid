@@ -36,6 +36,7 @@ orchid-viewers.workspace = true
 orchid-widgets.workspace = true
 orchid-search.workspace = true
 opener.workspace = true
+rfd.workspace = true
 reqwest.workspace = true
 directories.workspace = true
 url.workspace = true

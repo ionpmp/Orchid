@@ -277,9 +277,12 @@ export component MainWindow inherits Window {
     callback password-unlock-biometric();
     callback password-lock-vault();
     callback password-add-entry-request();
-    callback password-add-entry-commit(string, string, string, string);
+    callback password-add-entry-commit(string, string, string, string, string, string);
     callback password-add-entry-cancel();
     callback password-add-entry-generate-password();
+    callback password-edit-entry-request();
+    callback password-generate-request();
+    callback password-group-clicked(string);
     callback viewer-image-zoom-in(string);
     callback viewer-image-zoom-out(string);
     callback viewer-image-fit(string);
@@ -735,13 +738,16 @@ export component MainWindow inherits Window {
             password-unlock-biometric => { root.password-unlock-biometric(); }
             password-lock-vault => { root.password-lock-vault(); }
             password-add-entry-request => { root.password-add-entry-request(); }
-            password-add-entry-commit(title, username, password, url) => {
-                root.password-add-entry-commit(title, username, password, url);
+            password-add-entry-commit(title, username, password, url, notes, group) => {
+                root.password-add-entry-commit(title, username, password, url, notes, group);
             }
             password-add-entry-cancel => { root.password-add-entry-cancel(); }
             password-add-entry-generate-password => {
                 root.password-add-entry-generate-password();
             }
+            password-edit-entry-request => { root.password-edit-entry-request(); }
+            password-generate-request => { root.password-generate-request(); }
+            password-group-clicked(id) => { root.password-group-clicked(id); }
             viewer-image-zoom-in(id) => { root.viewer-image-zoom-in(id); }
             viewer-image-zoom-out(id) => { root.viewer-image-zoom-out(id); }
             viewer-image-fit(id) => { root.viewer-image-fit(id); }

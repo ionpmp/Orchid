@@ -238,9 +238,12 @@ export component WidgetFrame inherits Rectangle {
     callback password-unlock-biometric();
     callback password-lock-vault();
     callback password-add-entry-request();
-    callback password-add-entry-commit(string, string, string, string);
+    callback password-add-entry-commit(string, string, string, string, string, string);
     callback password-add-entry-cancel();
     callback password-add-entry-generate-password();
+    callback password-edit-entry-request();
+    callback password-generate-request();
+    callback password-group-clicked(string);
 
     callback viewer-image-zoom-in(string);
     callback viewer-image-zoom-out(string);
@@ -936,11 +939,14 @@ export component WidgetFrame inherits Rectangle {
                     unlock-biometric => { root.password-unlock-biometric(); }
                     lock-vault => { root.password-lock-vault(); }
                     add-entry-request => { root.password-add-entry-request(); }
-                    add-entry-commit(title, username, password, url) => {
-                        root.password-add-entry-commit(title, username, password, url);
+                    add-entry-commit(title, username, password, url, notes, group) => {
+                        root.password-add-entry-commit(title, username, password, url, notes, group);
                     }
                     add-entry-cancel => { root.password-add-entry-cancel(); }
                     add-entry-generate-password => { root.password-add-entry-generate-password(); }
+                    edit-entry-request => { root.password-edit-entry-request(); }
+                    generate-request => { root.password-generate-request(); }
+                    group-clicked(id) => { root.password-group-clicked(id); }
                 }
 
                 if model.type-id == "viewer" : Rectangle {

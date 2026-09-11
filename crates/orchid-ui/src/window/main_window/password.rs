@@ -204,15 +204,92 @@ impl MainWindowController {
             return;
         };
         self.touch_vault_activity();
+        let seed = self
+            .password_add_dialogs
+            .read()
+            .get(&inst_id)
+            .map(|o| o.seed_seq.saturating_add(1))
+            .unwrap_or(1);
         self.password_add_dialogs.write().insert(
             inst_id,
             PasswordAddDialogOverlay {
                 visible: true,
                 error: None,
                 request_autofocus: true,
+                mode: 0,
+                seed_seq: seed,
                 ..Default::default()
             },
         );
+        self.schedule_rebuild_after_password_unlock();
+    }
+    pub(super) fn on_password_edit_entry_request(self: &Arc<Self>) {
+        let Some(inst_id) = self.find_active_password_widget() else {
+            return;
+        };
+        self.touch_vault_activity();
+        let Some(detail) = orchid_widgets::builtin::password::selected_edit_fields(inst_id) else {
+            return;
+        };
+        let seed = self
+            .password_add_dialogs
+            .read()
+            .get(&inst_id)
+            .map(|o| o.seed_seq.saturating_add(1))
+            .unwrap_or(1);
+        self.password_add_dialogs.write().insert(
+            inst_id,
+            PasswordAddDialogOverlay {
+                visible: true,
+                error: None,
+                request_autofocus: true,
+                mode: 1,
+                entry_id: Some(detail.id),
+                initial_title: detail.title,
+                initial_username: detail.username,
+                initial_url: detail.url.unwrap_or_default(),
+                initial_notes: detail.notes.unwrap_or_default(),
+                initial_group_id: detail.group_id,
+                seed_seq: seed,
+                ..Default::default()
+            },
+        );
+        self.schedule_rebuild_after_password_unlock();
+    }
+    pub(super) fn on_password_generate_request(self: &Arc<Self>) {
+        let Some(inst_id) = self.find_active_password_widget() else {
+            return;
+        };
+        self.touch_vault_activity();
+        let password = orchid_crypto::generate_password(orchid_crypto::DEFAULT_PASSWORD_LENGTH)
+            .unwrap_or_default();
+        let seed = self
+            .password_add_dialogs
+            .read()
+            .get(&inst_id)
+            .map(|o| o.seed_seq.saturating_add(1))
+            .unwrap_or(1);
+        self.password_add_dialogs.write().insert(
+            inst_id,
+            PasswordAddDialogOverlay {
+                visible: true,
+                error: None,
+                request_autofocus: false,
+                mode: 2,
+                generated_password: Some(password),
+                generation_seq: 1,
+                seed_seq: seed,
+                ..Default::default()
+            },
+        );
+        self.schedule_rebuild_after_password_unlock();
+    }
+    pub(super) fn on_password_group_clicked(self: &Arc<Self>, group_id: &SharedString) {
+        let Some(inst_id) = self.find_active_password_widget() else {
+            return;
+        };
+        self.touch_vault_activity();
+        orchid_widgets::builtin::password::select_group(inst_id, group_id.to_string());
         self.schedule_rebuild_after_password_unlock();
     }
     pub(super) fn on_password_add_entry_commit(
@@ -221,27 +298,90 @@ impl MainWindowController {
         username: &SharedString,
         password: &SharedString,
         url: &SharedString,
+        notes: &SharedString,
+        group: &SharedString,
     ) {
         let Some(inst_id) = self.find_active_password_widget() else {
             return;
         };
         self.touch_vault_activity();
+        let mode = self
+            .password_add_dialogs
+            .read()
+            .get(&inst_id)
+            .map(|o| o.mode)
+            .unwrap_or(0);
+        if mode == 2 {
+            let clear = self.config.read().privacy.clear_clipboard_seconds;
+            let secret = password.to_string();
+            let t = Arc::downgrade(self);
+            spawn::spawn_local_compat(async move {
+                match orchid_widgets::builtin::password::copy_generated(inst_id, secret, clear)
+                    .await
+                {
+                    Ok(()) => {
+                        if let Some(c) = t.upgrade() {
+                            c.password_add_dialogs.write().remove(&inst_id);
+                            let msg = c.locale.tr("password-generate-copied");
+                            c.password_toasts.write().insert(inst_id, (msg, true));
+                            c.schedule_rebuild_after_password_unlock();
+                        }
+                    }
+                    Err(e) => warn!(?e, "copy generated password"),
+                }
+            });
+            return;
+        }
         let url_opt = if url.is_empty() {
             None
         } else {
             Some(url.to_string())
         };
-        match orchid_widgets::builtin::password::create_entry(
-            inst_id,
-            self.password_vault.clone(),
-            title.to_string(),
-            username.to_string(),
-            password.to_string(),
-            url_opt,
-        ) {
-            Ok(_) => {
+        let notes_opt = if notes.is_empty() {
+            None
+        } else {
+            Some(notes.to_string())
+        };
+        let group = group.to_string();
+        let result = if mode == 1 {
+            let entry_id = self
+                .password_add_dialogs
+                .read()
+                .get(&inst_id)
+                .and_then(|o| o.entry_id.clone())
+                .unwrap_or_default();
+            orchid_widgets::builtin::password::update_entry(
+                inst_id,
+                self.password_vault.clone(),
+                &entry_id,
+                title.to_string(),
+                username.to_string(),
+                password.to_string(),
+                url_opt,
+                notes_opt,
+                group,
+            )
+        } else {
+            orchid_widgets::builtin::password::create_entry(
+                inst_id,
+                self.password_vault.clone(),
+                title.to_string(),
+                username.to_string(),
+                password.to_string(),
+                url_opt,
+                notes_opt,
+                group,
+            )
+            .map(|_| ())
+        };
+        match result {
+            Ok(()) => {
                 self.password_add_dialogs.write().remove(&inst_id);
-                let msg = self.locale.tr("password-entry-added");
+                let msg = if mode == 1 {
+                    self.locale.tr("password-entry-updated")
+                } else {
+                    self.locale.tr("password-entry-added")
+                };
                 self.password_toasts.write().insert(inst_id, (msg, true));
                 self.schedule_rebuild_after_password_unlock();
                 let t = Arc::downgrade(self);

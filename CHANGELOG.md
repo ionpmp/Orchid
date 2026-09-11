@@ -362,11 +362,22 @@ release yet.
   shortcut overrides, `BackgroundJobQueue` for always-on fetch work.
 - redb state store + TOML config with hot-reload; history / cache eviction.
 
+#### Maturity (0.1)
+- Password widget: **edit** existing entries, **group** chips + picker /
+  new group, dedicated **generate** sheet (copy without saving).
+- In-app **backup** (`orc data export backup`) and **support bundle**
+  (`orc diagnostics export`) — zip via a save dialog.
+- Settings: first day of week is a combo and drives the calendar. Dead
+  haptics / palm / pen rows are hidden (keys stay in `config.toml`).
+
 ### Documentation
 - Rebuilt project, GitHub, [user](docs/user/README.md), and
   [admin](docs/admin/README.md) docs from the current tree (13 crates,
   `.orchid` Phases 1–5, WebView2 Browser, cinema kit). Planned work is
   listed only in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- Command inventory: [`docs/commands.md`](docs/commands.md) (`orc` verbs vs
+  `fs.*` actions). Lua scripting is not planned.
+- Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
 - **Touch-first "cinema" redesign of the whole interface.** `Theme` in
