@@ -397,7 +397,7 @@ release yet.
   shells to `icon-button-sm` so the filter field keeps a usable min-width
   (`1d0ca83a`). Tab strips (group, FM, terminal, notes) match the same
   density with `Theme.toolbar-height` / `Theme.control-sm` while keeping
-  finger-sized close / action targets.
+  finger-sized close / action targets (`490959cb`).
 - **Touch-first "cinema" redesign of the whole interface.** `Theme` in
   `theme_global.slint` now derives a full design system from the seven raw
   theme colours: surface ramp (sunken → glass → floating), hover / press /
