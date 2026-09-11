@@ -546,16 +546,92 @@ export component Grabber inherits Rectangle {
     background: Theme.text-tertiary.with-alpha(0.5);
 }
 
+/// Transparent press-and-hold hit target (`TouchArea` + `Timer`).
+///
+/// Use as a full-bleed gesture layer (workspace canvas) or wrap chrome that
+/// needs tablet press-and-hold. Fires `long-pressed` after `press-duration`
+/// if the pointer stays within `move-slop` of the press point. `clicked`
+/// fires on release only when a long-press did **not** fire.
+///
+/// Live pointer position: `mouse-x` / `mouse-y`. Press snapshot: `press-x` /
+/// `press-y`. Use `press-started` to capture parent-owned state (e.g. a
+/// Flickable viewport) at pointer-down.
+///
+/// Default hold is ~450ms. Prefer a fixed gesture duration — do not bind
+/// `Theme.motion-slow` here (that token collapses to 0ms under reduce-motion).
+/// Not wired into every `ListTile` / `IconButton`; opt in where needed.
+export component LongPressArea inherits Rectangle {
+    callback clicked();
+    callback long-pressed();
+    /// Fired on pointer-down once the hold is armed (before `long-pressed`).
+    callback press-started();
+
+    /// Hold duration before `long-pressed`.
+    in property <duration> press-duration: 450ms;
+    /// Cancel the hold if the pointer drifts farther than this.
+    in property <length> move-slop: 8px;
+    in property <bool> enabled: true;
+
+    out property <length> mouse-x: touch.mouse-x;
+    out property <length> mouse-y: touch.mouse-y;
+    out property <length> press-x: 0px;
+    out property <length> press-y: 0px;
+    out property <bool> pressed: touch.pressed && root.enabled;
+    out property <bool> has-hover: touch.has-hover && root.enabled;
+    out property <bool> armed: false;
+
+    property <bool> did-long-press: false;
+
+    background: transparent;
+
+    hold-timer := Timer {
+        interval: root.press-duration;
+        running: root.armed;
+        triggered => {
+            root.armed = false;
+            root.did-long-press = true;
+            root.long-pressed();
+        }
+    }
+
+    touch := TouchArea {
+        width: 100%;
+        height: 100%;
+        enabled: root.enabled;
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down) {
+                root.press-x = self.mouse-x;
+                root.press-y = self.mouse-y;
+                root.did-long-press = false;
+                root.armed = true;
+                root.press-started();
+            } else if (event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel) {
+                root.armed = false;
+            }
+        }
+        moved => {
+            if (root.armed
+                && (abs(self.mouse-x - root.press-x) > root.move-slop
+                    || abs(self.mouse-y - root.press-y) > root.move-slop)) {
+                root.armed = false;
+            }
+        }
+        clicked => {
+            if (!root.did-long-press) {
+                root.clicked();
+            }
+        }
+    }
+}
+
 /// Modal bottom sheet for tablet / touch overlays.
 ///
 /// Fill the parent (typically a widget or window overlay). The glass card
 /// slides up from the bottom over `Theme.scrim`; backdrop taps emit
 /// `dismissed`. Put the sheet body in `@children`.
 ///
-/// Long-press is **not** wired into `ListTile` / `IconButton`: Slint has no
-/// first-class long-press on `TouchArea`, and the Timer + `pointer-event`
-/// pattern used by the workspace canvas is too heavy for every kit control.
-/// Prefer a parent-owned Timer when press-and-hold is required.
+/// For press-and-hold gestures, use [`LongPressArea`] rather than embedding
+/// a Timer in every kit control.
 export component BottomSheet inherits Rectangle {
     callback dismissed();
     /// Cap the glass card height. `0px` means ~92% of the parent.
