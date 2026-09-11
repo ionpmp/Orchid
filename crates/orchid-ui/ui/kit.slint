@@ -653,12 +653,17 @@ export component LongPressArea inherits Rectangle {
     callback long-pressed();
     /// Fired on pointer-down once the hold is armed (before `long-pressed`).
     callback press-started();
+    /// Opt-in mirrors of the inner `TouchArea` events (off by default).
+    callback pointer-event(PointerEvent);
+    callback moved();
 
     /// Hold duration before `long-pressed`.
     in property <duration> press-duration: 450ms;
     /// Cancel the hold if the pointer drifts farther than this.
     in property <length> move-slop: 8px;
     in property <bool> enabled: true;
+    /// When true, forward inner `pointer-event` / `moved` to the matching callbacks.
+    in property <bool> forward-pointer-events: false;
 
     out property <length> mouse-x: touch.mouse-x;
     out property <length> mouse-y: touch.mouse-y;
@@ -696,12 +701,18 @@ export component LongPressArea inherits Rectangle {
             } else if (event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel) {
                 root.armed = false;
             }
+            if (root.forward-pointer-events) {
+                root.pointer-event(event);
+            }
         }
         moved => {
             if (root.armed
                 && (abs(self.mouse-x - root.press-x) > root.move-slop
                     || abs(self.mouse-y - root.press-y) > root.move-slop)) {
                 root.armed = false;
+            }
+            if (root.forward-pointer-events) {
+                root.moved();
             }
         }
         clicked => {
