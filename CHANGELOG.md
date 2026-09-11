@@ -377,7 +377,8 @@ release yet.
   `control-*` metrics so every tap target stays finger-sized under any theme.
   A new control kit (`kit.slint`, `kit-icons.slint`) provides `TouchButton`,
   `IconButton`, `Chip`, `ToggleSwitch`, `TouchSlider`, `ProgressTrack`,
-  `GlassCard`, `BottomSheet`, `ListTile`, `Badge`, `Tooltip`, `EmptyState`, and a stroked
+  `GlassCard`, `BottomSheet`, `LongPressArea`, `ListTile`, `Badge`, `Tooltip`,
+  `EmptyState`, and a stroked
   vector icon set that replaces the ASCII and emoji glyph buttons. Shell
   (welcome screen, widget frames, group tabs, workspace orb, dock), overlays
   (command palette, settings, notification centre, widget catalog, onboarding),
@@ -417,6 +418,14 @@ release yet.
   toolbars).
 - **File-manager dialogs**: find, rename, conflict, passphrase, and tag
   dialogs restyled on the cinema control kit.
+- **File-manager pane chrome**: restyled on the cinema control kit
+  (`fm-pane` status / path / selection chrome on Theme tokens).
+- **File-manager list / grid views**: entry rows and tiles restyled with
+  cinema tokens (`fm-entry-list`, `fm-entry-grid`).
+- **Workspace taskbar**: restyled on the cinema kit (GlassCard strip,
+  Chip-like pills) with swipe to step through floating / minimized windows.
+- **LongPressArea** kit control for tablet press-and-hold interactions
+  (shared by workspace chrome instead of ad-hoc timers).
 - **Password widget**: restyled on the cinema control kit to match the
   touch-first shell.
 - **Jyotish widget**: restyled on the cinema control kit to match the
