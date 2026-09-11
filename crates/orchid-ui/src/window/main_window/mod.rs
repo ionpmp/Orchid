@@ -709,6 +709,11 @@ impl MainWindowController {
         g.set_widget_fm_desc(mgr.tr("widget-fm-desc").into());
         g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
         g.set_widget_settings_tooltip(mgr.tr("widget-settings-tooltip").into());
+        g.set_widget_dock_tooltip(mgr.tr("widget-dock-tooltip").into());
+        g.set_widget_undock_tooltip(mgr.tr("widget-undock-tooltip").into());
+        g.set_widget_minimize_tooltip(mgr.tr("widget-minimize-tooltip").into());
+        g.set_widget_maximize_tooltip(mgr.tr("widget-maximize-tooltip").into());
+        g.set_widget_restore_tooltip(mgr.tr("widget-restore-tooltip").into());
         g.set_widget_resize_tooltip(mgr.tr("widget-resize-tooltip").into());
         g.set_viewer_text_dirty_indicator(mgr.tr("viewer-text-dirty-indicator").into());
         g.set_recent_files_open_hint(mgr.tr("recent-files-open-hint").into());

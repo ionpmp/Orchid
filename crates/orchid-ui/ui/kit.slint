@@ -79,6 +79,11 @@ export component TouchButton inherits Rectangle {
 
     callback clicked();
 
+    accessible-role: AccessibleRole.button;
+    accessible-label: tooltip != "" ? tooltip : (text != "" ? text : icon);
+    accessible-enabled: enabled;
+    accessible-action-default => { root.clicked(); }
+
     property <length> control-height:
         size == ControlSize.xs ? Theme.control-xs
         : size == ControlSize.sm ? Theme.control-sm
@@ -121,8 +126,8 @@ export component TouchButton inherits Rectangle {
         : tone == ButtonTone.neutral ? Theme.surface-overlay
         : Colors.transparent;
 
-    border-width: (tone == ButtonTone.outline || tone == ButtonTone.neutral) ? Theme.hairline : 0px;
-    border-color: root.hovered ? Theme.border-strong : Theme.border-default;
+    border-width: keys.has-focus ? 2px : ((tone == ButtonTone.outline || tone == ButtonTone.neutral) ? Theme.hairline : 0px);
+    border-color: keys.has-focus ? Theme.border-focus : (root.hovered ? Theme.border-strong : Theme.border-default);
 
     // Filled buttons bloom on hover; the rest lift with a neutral shadow.
     drop-shadow-blur: !enabled ? 0px
@@ -171,6 +176,19 @@ export component TouchButton inherits Rectangle {
         }
     }
 
+    keys := FocusScope {
+        width: 100%;
+        height: 100%;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: MouseCursor.pointer;
@@ -199,6 +217,11 @@ export component IconButton inherits Rectangle {
     out property <bool> hovered: touch.has-hover && root.enabled;
 
     callback clicked();
+
+    accessible-role: AccessibleRole.button;
+    accessible-label: tooltip != "" ? tooltip : icon;
+    accessible-enabled: enabled;
+    accessible-action-default => { root.clicked(); }
 
     property <length> button-size:
         size == ControlSize.xs ? Theme.control-xs
@@ -233,6 +256,28 @@ export component IconButton inherits Rectangle {
             : Theme.text-secondary;
     }
 
+    keys := FocusScope {
+        width: 100%;
+        height: 100%;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    if keys.has-focus : Rectangle {
+        width: 100%;
+        height: 100%;
+        border-radius: parent.border-radius;
+        border-width: 2px;
+        border-color: Theme.border-focus;
+        background: transparent;
+    }
+
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: MouseCursor.pointer;
@@ -260,6 +305,13 @@ export component Chip inherits Rectangle {
     callback clicked();
     callback removed();
 
+    accessible-role: AccessibleRole.button;
+    accessible-label: text;
+    accessible-enabled: enabled;
+    accessible-checkable: true;
+    accessible-checked: selected;
+    accessible-action-default => { root.clicked(); }
+
     min-height: Theme.control-sm;
     max-height: Theme.control-sm;
     min-width: Theme.control-sm;
@@ -269,8 +321,8 @@ export component Chip inherits Rectangle {
         : touch.pressed ? Theme.state-press
         : root.hovered ? Theme.state-hover
         : Theme.surface-overlay;
-    border-width: Theme.hairline;
-    border-color: root.selected ? Theme.accent-muted : Theme.border-subtle;
+    border-width: chip-keys.has-focus ? 2px : Theme.hairline;
+    border-color: chip-keys.has-focus ? Theme.border-focus : (root.selected ? Theme.accent-muted : Theme.border-subtle);
 
     animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
 
@@ -303,6 +355,19 @@ export component Chip inherits Rectangle {
         }
     }
 
+    chip-keys := FocusScope {
+        width: 100%;
+        height: 100%;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: MouseCursor.pointer;
@@ -314,9 +379,18 @@ export component Chip inherits Rectangle {
 export component ToggleSwitch inherits Rectangle {
     in property <bool> checked: false;
     in property <bool> enabled: true;
+    /// Screen-reader / tooltip name; the visual label usually sits beside the switch.
+    in property <string> label;
     out property <bool> hovered: touch.has-hover && root.enabled;
 
     callback toggled();
+
+    accessible-role: AccessibleRole.checkbox;
+    accessible-label: label;
+    accessible-enabled: enabled;
+    accessible-checkable: true;
+    accessible-checked: checked;
+    accessible-action-default => { root.toggled(); }
 
     property <length> track-height: Theme.control-sm * 0.72;
     property <length> knob-size: track-height - Theme.space-1 * 1.5;
@@ -328,6 +402,19 @@ export component ToggleSwitch inherits Rectangle {
     vertical-stretch: 0;
     background: transparent;
 
+    switch-keys := FocusScope {
+        width: 100%;
+        height: 100%;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == Key.Return) {
+                root.toggled();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     track := Rectangle {
         y: (parent.height - root.track-height) / 2;
         width: 100%;
@@ -336,8 +423,9 @@ export component ToggleSwitch inherits Rectangle {
         background: !root.enabled ? Theme.state-disabled
             : root.checked ? Theme.accent-brand
             : Theme.surface-sunken;
-        border-width: Theme.hairline;
-        border-color: root.checked ? Theme.accent-strong : Theme.border-default;
+        border-width: switch-keys.has-focus ? 2px : Theme.hairline;
+        border-color: switch-keys.has-focus ? Theme.border-focus
+            : (root.checked ? Theme.accent-strong : Theme.border-default);
 
         animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
 

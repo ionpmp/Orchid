@@ -90,6 +90,7 @@ export component WidgetSettingsDialog inherits Rectangle {
                                 x: 0;
                                 y: (parent.height - self.height) / 2;
                                 checked: row.bool-value;
+                                label: row.label;
                                 toggled => {
                                     root.field-changed(row.key, row.bool-value ? "false" : "true");
                                 }

@@ -44,3 +44,12 @@ workspaces. Sides swap for left-hand / `mirror-edge-swipes`.
 
 In-app notifications persist in redb (soft cap ~50). OS toasts are not
 implemented.
+
+## Keyboard and accessibility
+
+Cinema kit buttons (`TouchButton`, `IconButton`, chips, switches, document
+toolbar) take **Tab** focus, show a focus ring, and activate with
+**Space** or **Enter**. Icon-only chrome uses the same string as the
+tooltip for the accessible name (dock / undock / minimize / maximize /
+restore / close / settings). Screen-reader support follows Slint’s
+`accessible-*` roles on those controls.

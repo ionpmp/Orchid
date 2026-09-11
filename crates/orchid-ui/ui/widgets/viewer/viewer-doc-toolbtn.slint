@@ -9,6 +9,24 @@ export component DocToolBtn inherits Rectangle {
     in property <bool> enabled: true;
     callback clicked();
 
+    accessible-role: AccessibleRole.button;
+    accessible-label: tip != "" ? tip : label;
+    accessible-enabled: enabled;
+    accessible-action-default => { root.clicked(); }
+
+    keys := FocusScope {
+        width: 100%;
+        height: 100%;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     width: max(Theme.control-xs, label-txt.preferred-width + Theme.space-3);
     height: Theme.control-xs;
     border-radius: Theme.radius-md;
@@ -16,8 +34,8 @@ export component DocToolBtn inherits Rectangle {
         root.active ? Theme.accent-soft :
         ta.pressed ? Theme.state-press :
         ta.has-hover ? Theme.state-hover : Colors.transparent;
-    border-width: root.active ? Theme.hairline : 0px;
-    border-color: Theme.accent-muted;
+    border-width: keys.has-focus ? 2px : (root.active ? Theme.hairline : 0px);
+    border-color: keys.has-focus ? Theme.border-focus : Theme.accent-muted;
     opacity: root.enabled ? 1.0 : 0.35;
 
     animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }

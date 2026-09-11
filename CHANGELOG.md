@@ -375,6 +375,9 @@ release yet.
 - PDF: `Ctrl+A` selects the current page’s extracted text (copy / highlight
   then use the selection). User guide matches find, drag-select, and sibling
   highlight export.
+- Cinema kit: focus rings, Space/Enter activation, and `accessible-*`
+  names on buttons / chips / switches. Floating-window chrome tooltips
+  (dock, undock, min, max, restore) were missing.
 
 ### Documentation
 - Rebuilt project, GitHub, [user](docs/user/README.md), and

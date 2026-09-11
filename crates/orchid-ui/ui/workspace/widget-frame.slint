@@ -550,24 +550,28 @@ export component WidgetFrame inherits Rectangle {
                 if model.is-floating : IconButton {
                     icon: "dock";
                     size: ControlSize.sm;
+                    tooltip: Strings.widget-dock-tooltip;
                     clicked => { root.dock-clicked(); }
                 }
 
                 if !model.is-floating : IconButton {
                     icon: "undock";
                     size: ControlSize.sm;
+                    tooltip: Strings.widget-undock-tooltip;
                     clicked => { root.undock-clicked(); }
                 }
 
                 if model.is-floating : IconButton {
                     icon: "minus";
                     size: ControlSize.sm;
+                    tooltip: Strings.widget-minimize-tooltip;
                     clicked => { root.minimize-clicked(); }
                 }
 
                 if model.is-floating : IconButton {
                     icon: model.window-state == 1 ? "restore" : "maximize";
                     size: ControlSize.sm;
+                    tooltip: model.window-state == 1 ? Strings.widget-restore-tooltip : Strings.widget-maximize-tooltip;
                     clicked => { root.maximize-clicked(); }
                 }
 

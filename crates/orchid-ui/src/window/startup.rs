@@ -209,6 +209,11 @@ fn apply_strings_to(window: &StartupWindow, mgr: &LocaleManager) {
     g.set_workspace_new_label(mgr.tr("workspace-new").into());
     g.set_widget_close_tooltip(mgr.tr("widget-close-tooltip").into());
     g.set_widget_settings_tooltip(mgr.tr("widget-settings-tooltip").into());
+    g.set_widget_dock_tooltip(mgr.tr("widget-dock-tooltip").into());
+    g.set_widget_undock_tooltip(mgr.tr("widget-undock-tooltip").into());
+    g.set_widget_minimize_tooltip(mgr.tr("widget-minimize-tooltip").into());
+    g.set_widget_maximize_tooltip(mgr.tr("widget-maximize-tooltip").into());
+    g.set_widget_restore_tooltip(mgr.tr("widget-restore-tooltip").into());
 
     g.set_password_locked(mgr.tr("password-locked").into());
     g.set_password_no_entries(mgr.tr("password-no-entries").into());
