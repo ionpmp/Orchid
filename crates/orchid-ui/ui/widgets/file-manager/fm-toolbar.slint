@@ -77,8 +77,8 @@ export component FmToolbar inherits Rectangle {
 
         // History button plus its popover, wrapped so the list can overflow.
         Rectangle {
-            width: Theme.control-md;
-            height: Theme.control-md;
+            width: Theme.icon-button-sm;
+            height: Theme.icon-button-sm;
             y: (parent.height - self.height) / 2;
             background: transparent;
             clip: false;
@@ -189,8 +189,8 @@ export component FmToolbar inherits Rectangle {
 
         // Drive picker plus its popover.
         Rectangle {
-            width: Theme.control-md;
-            height: Theme.control-md;
+            width: Theme.icon-button-sm;
+            height: Theme.icon-button-sm;
             y: (parent.height - self.height) / 2;
             background: drv-ta.has-hover || root.drives-open ? Theme.state-hover : Colors.transparent;
             border-radius: Theme.radius-md;
@@ -282,12 +282,12 @@ export component FmToolbar inherits Rectangle {
             clicked => { root.new-folder(); }
         }
 
-        if root.selection-count > 1 : Rectangle { width: Theme.space-3; }
+        if root.selection-count > 1 : Rectangle { width: Theme.space-2; }
 
         // Selection counter doubles as the "deselect all" affordance.
         if root.selection-count > 1 : Rectangle {
-            min-width: Theme.control-md;
-            height: Theme.control-md;
+            min-width: Theme.icon-button-sm;
+            height: Theme.icon-button-sm;
             y: (parent.height - self.height) / 2;
             background: desel-ta.has-hover ? Theme.state-hover : Theme.accent-soft;
             border-radius: Theme.radius-pill;
@@ -299,8 +299,8 @@ export component FmToolbar inherits Rectangle {
                 clicked => { root.deselect-all(); }
             }
             HorizontalLayout {
-                padding-left: Theme.space-3;
-                padding-right: Theme.space-3;
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
                 spacing: Theme.space-2;
                 Text {
                     text: "" + root.selection-count + " " + Strings.fm-select-selected;
@@ -317,11 +317,11 @@ export component FmToolbar inherits Rectangle {
             }
         }
 
-        Rectangle { width: Theme.space-3; }
+        Rectangle { width: Theme.space-2; }
 
         Rectangle {
-            width: 44px;
-            height: Theme.control-md;
+            width: Theme.icon-button-sm;
+            height: Theme.icon-button-sm;
             y: (parent.height - self.height) / 2;
             background: sort-ta.has-hover ? Theme.state-hover : Theme.surface-sunken;
             border-radius: Theme.radius-pill;
@@ -355,8 +355,8 @@ export component FmToolbar inherits Rectangle {
         }
 
         Rectangle {
-            width: Theme.control-md;
-            height: Theme.control-md;
+            width: Theme.icon-button-sm;
+            height: Theme.icon-button-sm;
             y: (parent.height - self.height) / 2;
             background: vm-ta.has-hover ? Theme.state-hover : Theme.surface-sunken;
             border-radius: Theme.radius-pill;
@@ -430,8 +430,8 @@ export component FmToolbar inherits Rectangle {
         }
 
         Rectangle {
-            width: Theme.control-md;
-            height: Theme.control-md;
+            width: Theme.icon-button-sm;
+            height: Theme.icon-button-sm;
             y: (parent.height - self.height) / 2;
             background: tab.branch-view ? Theme.accent-soft
                 : br-ta.has-hover ? Theme.state-hover
@@ -465,12 +465,13 @@ export component FmToolbar inherits Rectangle {
             }
         }
 
-        Rectangle { width: Theme.space-3; }
+        Rectangle { width: Theme.space-2; }
 
         // Quick filter field.
         Rectangle {
             horizontal-stretch: 1;
-            height: Theme.control-md;
+            min-width: 120px;
+            height: Theme.icon-button-sm;
             y: (parent.height - self.height) / 2;
             background: Theme.surface-sunken;
             border-radius: Theme.radius-pill;
@@ -488,8 +489,8 @@ export component FmToolbar inherits Rectangle {
                 TouchArea { clicked => { filter-fs.focus(); } }
 
                 HorizontalLayout {
-                    padding-left: Theme.space-4;
-                    padding-right: Theme.space-4;
+                    padding-left: Theme.space-3;
+                    padding-right: Theme.space-3;
                     spacing: Theme.space-2;
 
                     Rectangle {

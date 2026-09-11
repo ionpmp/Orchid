@@ -1,5 +1,5 @@
 import { Theme } from "../theme_global.slint";
-import { IconButton, Tooltip } from "../kit.slint";
+import { ControlSize, IconButton, Tooltip } from "../kit.slint";
 import { Strings } from "../strings_global.slint";
 import { WidgetFrameModel, TerminalCellModel } from "defs.slint";
 import { TerminalView } from "terminal-view.slint";
@@ -511,7 +511,7 @@ export component WidgetFrame inherits Rectangle {
                 Text {
                     text: model.title;
                     color: Theme.text-primary;
-                    font-size: Theme.font-size-md;
+                    font-size: Theme.font-size-sm;
                     font-weight: Theme.weight-semibold;
                     vertical-alignment: center;
                     wrap: no-wrap;
@@ -527,7 +527,7 @@ export component WidgetFrame inherits Rectangle {
             property <int> count:
                 (model.has-settings ? 1 : 0) + (model.is-floating ? 4 : 2);
 
-            width: self.count * (Theme.icon-button + Theme.space-1) + Theme.space-2;
+            width: self.count * (Theme.icon-button-sm + Theme.space-1) + Theme.space-2;
             height: parent.height;
             x: parent.width - self.width;
             y: 0;
@@ -542,32 +542,38 @@ export component WidgetFrame inherits Rectangle {
 
                 if model.has-settings : IconButton {
                     icon: "settings";
+                    size: ControlSize.sm;
                     tooltip: Strings.widget-settings-tooltip;
                     clicked => { root.settings-clicked(); }
                 }
 
                 if model.is-floating : IconButton {
                     icon: "dock";
+                    size: ControlSize.sm;
                     clicked => { root.dock-clicked(); }
                 }
 
                 if !model.is-floating : IconButton {
                     icon: "undock";
+                    size: ControlSize.sm;
                     clicked => { root.undock-clicked(); }
                 }
 
                 if model.is-floating : IconButton {
                     icon: "minus";
+                    size: ControlSize.sm;
                     clicked => { root.minimize-clicked(); }
                 }
 
                 if model.is-floating : IconButton {
                     icon: model.window-state == 1 ? "restore" : "maximize";
+                    size: ControlSize.sm;
                     clicked => { root.maximize-clicked(); }
                 }
 
                 IconButton {
                     icon: "close";
+                    size: ControlSize.sm;
                     danger: true;
                     tooltip: Strings.widget-close-tooltip;
                     tooltip-flip: true;
@@ -1175,7 +1181,7 @@ export component WidgetFrame inherits Rectangle {
 
     resize-ne := TouchArea {
         x: parent.width - 12px;
-        y: 32px;
+        y: Theme.header-height;
         width: 12px;
         height: 12px;
         mouse-cursor: MouseCursor.nesw-resize;
@@ -1197,7 +1203,7 @@ export component WidgetFrame inherits Rectangle {
     }
     if resize-ne.has-hover : Rectangle {
         x: parent.width - resize-ne-hint.preferred-width - 16px;
-        y: 48px;
+        y: Theme.header-height + Theme.space-2;
         width: resize-ne-hint.preferred-width + 12px;
         height: resize-ne-hint.preferred-height + 6px;
         background: Theme.surface-raised;
@@ -1215,7 +1221,7 @@ export component WidgetFrame inherits Rectangle {
 
     resize-nw := TouchArea {
         x: 0;
-        y: 32px;
+        y: Theme.header-height;
         width: 12px;
         height: 12px;
         mouse-cursor: MouseCursor.nwse-resize;
@@ -1237,7 +1243,7 @@ export component WidgetFrame inherits Rectangle {
     }
     if resize-nw.has-hover : Rectangle {
         x: 4px;
-        y: 48px;
+        y: Theme.header-height + Theme.space-2;
         width: resize-nw-hint.preferred-width + 12px;
         height: resize-nw-hint.preferred-height + 6px;
         background: Theme.surface-raised;
