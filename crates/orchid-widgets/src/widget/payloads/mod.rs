@@ -46,7 +46,9 @@ pub use jyotish::{
 pub use media::MediaPlayerPayload;
 pub use moon::MoonPayload;
 pub use notes::{NotesPayload, NotesTabRow};
-pub use password::{PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload};
+pub use password::{
+    PasswordEntryDetailView, PasswordEntryView, PasswordGroupView, PasswordManagerPayload,
+};
 pub use processes::{
     ProcessGroup, ProcessRowView, ProcessSortColumn, ProcessesPayload, ProcessesTab,
     ServiceRowView, StartupRowView, UserRowView,

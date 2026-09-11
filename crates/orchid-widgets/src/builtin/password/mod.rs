@@ -1,8 +1,8 @@
 //! Password-manager widget.
 //!
-//! Supports list, search, copy, and creating new entries. Edit / generate UIs
-//! ship in a later task. The database is expected to already be unlocked —
-//! the unlock dialog is a separate piece of UI that the widget does not own.
+//! Supports list, search, copy, create, edit, groups, and generate. The
+//! database is expected to already be unlocked — the unlock dialog is a
+//! separate piece of UI that the widget does not own.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -19,7 +19,9 @@ use uuid::Uuid;
 use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
-use crate::widget::payloads::{PasswordEntryDetailView, PasswordEntryView, PasswordManagerPayload};
+use crate::widget::payloads::{
+    PasswordEntryDetailView, PasswordEntryView, PasswordGroupView, PasswordManagerPayload,
+};
 use crate::widget::refresh::PeriodicRefresh;
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{
@@ -32,6 +34,7 @@ use orchid_storage::{LifecycleState, WidgetSize};
 struct PasswordPersisted {
     search_query: String,
     selected_id: Option<Uuid>,
+    selected_group_id: Option<Uuid>,
 }
 
 /// Stable type id.
@@ -91,6 +94,8 @@ pub async fn copy_totp(
 }
 
 /// Create a new vault entry, persist to disk, and refresh the live widget.
+///
+/// `group` is a group UUID, empty (selected / root), or a new group name.
 pub fn create_entry(
     instance_id: Uuid,
     vault: Arc<orchid_crypto::PasswordVault>,
@@ -98,12 +103,97 @@ pub fn create_entry(
     username: String,
     password: String,
     url: Option<String>,
+    notes: Option<String>,
+    group: String,
 ) -> Result<Uuid, String> {
     let inner = PASSWORD_LIVE
         .get(&instance_id)
         .map(|r| Arc::clone(r.value()))
         .ok_or_else(|| "password widget not live".to_string())?;
-    inner.create_entry(vault, title, username, password, url)
+    inner.create_entry(vault, title, username, password, url, notes, group)
+}
+
+/// Update an existing vault entry. Empty `password` keeps the current secret.
+pub fn update_entry(
+    instance_id: Uuid,
+    vault: Arc<orchid_crypto::PasswordVault>,
+    entry_id: &str,
+    title: String,
+    username: String,
+    password: String,
+    url: Option<String>,
+    notes: Option<String>,
+    group: String,
+) -> Result<(), String> {
+    let inner = PASSWORD_LIVE
+        .get(&instance_id)
+        .map(|r| Arc::clone(r.value()))
+        .ok_or_else(|| "password widget not live".to_string())?;
+    inner.update_entry(
+        vault, entry_id, title, username, password, url, notes, group,
+    )
+}
+
+/// Copy a generated password through the secure clipboard.
+pub async fn copy_generated(
+    instance_id: Uuid,
+    password: String,
+    clear_after_secs: u32,
+) -> Result<(), String> {
+    let inner = PASSWORD_LIVE
+        .get(&instance_id)
+        .map(|r| Arc::clone(r.value()))
+        .ok_or_else(|| "password widget not live".to_string())?;
+    inner
+        .deps
+        .clipboard
+        .copy_with_auto_clear(
+            secrecy::SecretString::from(password),
+            clipboard_clear_duration(clear_after_secs),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Fields needed to open the edit dialog (no password).
+#[derive(Debug, Clone)]
+pub struct PasswordEditFields {
+    /// Entry id.
+    pub id: String,
+    /// Title.
+    pub title: String,
+    /// Username.
+    pub username: String,
+    /// URL.
+    pub url: Option<String>,
+    /// Notes.
+    pub notes: Option<String>,
+    /// Containing group.
+    pub group_id: String,
+}
+
+/// Snapshot of the selected entry for the edit dialog.
+#[must_use]
+pub fn selected_edit_fields(instance_id: Uuid) -> Option<PasswordEditFields> {
+    let inner = PASSWORD_LIVE.get(&instance_id)?;
+    let state = inner.state.read();
+    let id = state.selected_id?;
+    let e = state.entries.iter().find(|e| e.id == id)?;
+    Some(PasswordEditFields {
+        id: e.id.to_string(),
+        title: e.title.clone(),
+        username: e.username.clone(),
+        url: e.url.clone(),
+        notes: e.notes.clone(),
+        group_id: e.group_id.to_string(),
+    })
+}
+
+/// Restrict the list to `group_id`, or show every group when `group_id` is empty.
+pub fn select_group(instance_id: Uuid, group_id: String) {
+    if let Some(h) = PASSWORD_LIVE.get(&instance_id) {
+        h.on_group_selected(group_id.as_str());
+    }
 }
 
 /// Unlock the vault with a master passphrase and refresh live widgets.
@@ -204,8 +294,10 @@ pub struct PasswordManagerWidget {
 #[derive(Default, Clone, Debug)]
 struct State {
     entries: Vec<orchid_crypto::PasswordEntry>,
+    groups: Vec<orchid_crypto::PasswordGroup>,
     search_query: String,
     selected_id: Option<Uuid>,
+    selected_group_id: Option<Uuid>,
     error: Option<String>,
     unlock_error: Option<String>,
 }
@@ -268,6 +360,7 @@ impl PasswordHandle {
     fn on_vault_locked(&self) {
         let mut state = self.state.write();
         state.entries.clear();
+        state.groups.clear();
         state.selected_id = None;
         state.error = None;
         state.unlock_error = None;
@@ -278,6 +371,7 @@ impl PasswordHandle {
         let Some(db) = self.deps.vault.database() else {
             let mut state = self.state.write();
             state.entries.clear();
+            state.groups.clear();
             state.selected_id = None;
             state.error = None;
             if let Some(new_q) = query {
@@ -285,18 +379,23 @@ impl PasswordHandle {
             }
             return;
         };
-        let q = match &query {
-            Some(q) => q.clone(),
-            None => self.state.read().search_query.clone(),
+        let groups = db.list_groups().unwrap_or_default();
+        let (q, group_filter) = {
+            let state = self.state.read();
+            (
+                query.clone().unwrap_or_else(|| state.search_query.clone()),
+                state.selected_group_id,
+            )
         };
         let (entries, err) = if q.trim().is_empty() {
-            match db.list_entries(None) {
+            match db.list_entries(group_filter) {
                 Ok(v) => (v, None),
                 Err(e) => (Vec::new(), Some(e.to_string())),
             }
         } else {
             let search = orchid_crypto::SearchQuery {
                 text: Some(q.clone()),
+                group: group_filter,
                 limit: Some(200),
                 ..Default::default()
             };
@@ -307,6 +406,7 @@ impl PasswordHandle {
         };
         let mut state = self.state.write();
         state.entries = entries;
+        state.groups = groups;
         state.error = err;
         if let Some(new_q) = query {
             state.search_query = new_q;
@@ -315,6 +415,22 @@ impl PasswordHandle {
 
     fn on_search_changed(&self, query: String) {
         self.refresh_entries(Some(query));
+        self.bus.publish(
+            orchid_core::EventSource::Widget(self.instance_id),
+            WidgetSnapshotUpdated {
+                instance_id: self.instance_id,
+            },
+        );
+    }
+
+    fn on_group_selected(&self, id_str: &str) {
+        let parsed = if id_str.trim().is_empty() {
+            None
+        } else {
+            Uuid::parse_str(id_str).ok()
+        };
+        self.state.write().selected_group_id = parsed;
+        self.refresh_entries(None);
         self.bus.publish(
             orchid_core::EventSource::Widget(self.instance_id),
             WidgetSnapshotUpdated {
@@ -404,13 +520,16 @@ impl PasswordHandle {
         username: String,
         password: String,
         url: Option<String>,
+        notes: Option<String>,
+        group: String,
     ) -> Result<Uuid, String> {
         let title = title.trim().to_string();
         if title.is_empty() {
             return Err("title required".into());
         }
         let db = vault.database().ok_or_else(|| "vault locked".to_string())?;
-        let group_id = db.root_group().map_err(|e| e.to_string())?.id;
+        let selected = self.state.read().selected_group_id;
+        let group_id = resolve_group_id(&db, &group, selected)?;
         let now = Utc::now();
         let id = Uuid::new_v4();
         let entry = orchid_crypto::PasswordEntry {
@@ -419,7 +538,7 @@ impl PasswordHandle {
             username,
             password: secrecy::SecretString::from(password),
             url: url.filter(|s| !s.trim().is_empty()),
-            notes: None,
+            notes: notes.filter(|s| !s.trim().is_empty()),
             tags: Vec::new(),
             custom_fields: BTreeMap::new(),
             totp: None,
@@ -439,6 +558,67 @@ impl PasswordHandle {
         );
         Ok(id)
     }
+
+    fn update_entry(
+        &self,
+        vault: Arc<orchid_crypto::PasswordVault>,
+        entry_id: &str,
+        title: String,
+        username: String,
+        password: String,
+        url: Option<String>,
+        notes: Option<String>,
+        group: String,
+    ) -> Result<(), String> {
+        let title = title.trim().to_string();
+        if title.is_empty() {
+            return Err("title required".into());
+        }
+        let db = vault.database().ok_or_else(|| "vault locked".to_string())?;
+        let id = Uuid::parse_str(entry_id).map_err(|e| e.to_string())?;
+        let mut entry = db.get_entry(id).map_err(|e| e.to_string())?;
+        let selected = self.state.read().selected_group_id;
+        let group_id = resolve_group_id(&db, &group, selected.or(Some(entry.group_id)))?;
+        entry.title = title;
+        entry.username = username;
+        if !password.is_empty() {
+            entry.password = secrecy::SecretString::from(password);
+        }
+        entry.url = url.filter(|s| !s.trim().is_empty());
+        entry.notes = notes.filter(|s| !s.trim().is_empty());
+        entry.group_id = group_id;
+        entry.modified_at = Utc::now();
+        db.update_entry(entry).map_err(|e| e.to_string())?;
+        vault.persist().map_err(|e| e.to_string())?;
+        self.refresh_entries(None);
+        self.state.write().selected_id = Some(id);
+        self.bus.publish(
+            orchid_core::EventSource::Widget(self.instance_id),
+            WidgetSnapshotUpdated {
+                instance_id: self.instance_id,
+            },
+        );
+        Ok(())
+    }
+}
+
+fn resolve_group_id(
+    db: &orchid_crypto::PasswordDatabase,
+    requested: &str,
+    fallback: Option<Uuid>,
+) -> Result<Uuid, String> {
+    let trimmed = requested.trim();
+    if trimmed.is_empty() {
+        if let Some(id) = fallback {
+            return Ok(id);
+        }
+        return db.root_group().map(|g| g.id).map_err(|e| e.to_string());
+    }
+    if let Ok(id) = Uuid::parse_str(trimmed) {
+        return Ok(id);
+    }
+    let root = db.root_group().map_err(|e| e.to_string())?.id;
+    db.add_group(root, trimmed).map_err(|e| e.to_string())
 }
 
 impl Drop for PasswordManagerWidget {
@@ -510,6 +690,7 @@ impl Widget for PasswordManagerWidget {
         state_codec::save_state(&PasswordPersisted {
             search_query: state.search_query.clone(),
             selected_id: state.selected_id,
+            selected_group_id: state.selected_group_id,
         })
     }
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
@@ -517,6 +698,7 @@ impl Widget for PasswordManagerWidget {
         let mut state = self.inner.state.write();
         state.search_query = persisted.search_query;
         state.selected_id = persisted.selected_id;
+        state.selected_group_id = persisted.selected_group_id;
         Ok(())
     }
     fn capabilities(&self) -> WidgetCapabilities {
@@ -537,6 +719,14 @@ fn build_payload(
     vault: &orchid_crypto::PasswordVault,
     locale: &orchid_i18n::LocaleManager,
 ) -> PasswordManagerPayload {
+    let group_name = |id: Uuid| {
+        state
+            .groups
+            .iter()
+            .find(|g| g.id == id)
+            .map(|g| g.name.clone())
+            .unwrap_or_default()
+    };
     let entries = state
         .entries
         .iter()
@@ -549,12 +739,22 @@ fn build_payload(
             tags: e.tags.clone(),
             color_label: None,
             modified_text: relative_from(locale, e.modified_at),
+            group_id: e.group_id.to_string(),
+            group_name: group_name(e.group_id),
         })
         .collect();
     let selected = state
         .selected_id
         .and_then(|id| state.entries.iter().find(|e| e.id == id))
         .map(build_detail);
+    let groups = state
+        .groups
+        .iter()
+        .map(|g| PasswordGroupView {
+            id: g.id.to_string(),
+            name: g.name.clone(),
+        })
+        .collect();
 
     PasswordManagerPayload {
         is_unlocked: vault.is_unlocked() && state.error.is_none(),
@@ -566,6 +766,8 @@ fn build_payload(
         entries,
         selected,
         search_query: state.search_query.clone(),
+        groups,
+        selected_group_id: state.selected_group_id.map(|id| id.to_string()),
         biometric_available: vault.biometric_unlock_available(),
         unlock_error: state.unlock_error.clone(),
     }
@@ -594,6 +796,7 @@ fn build_detail(e: &orchid_crypto::PasswordEntry) -> PasswordEntryDetailView {
         totp_code,
         totp_remaining_seconds: totp_remaining,
         tags: e.tags.clone(),
+        group_id: e.group_id.to_string(),
     }
 }
 
@@ -658,6 +861,7 @@ pub fn descriptor(
             let mut state = widget.inner.state.write();
             state.search_query = persisted.search_query;
             state.selected_id = persisted.selected_id;
+            state.selected_group_id = persisted.selected_group_id;
         }
         if widget.inner.deps.vault.is_unlocked() {
             widget.inner.refresh_entries(None);

@@ -962,6 +962,8 @@ fn password_entry_eq(a: &PasswordEntryView, b: &PasswordEntryView) -> bool {
         && a.tags == b.tags
         && a.color_label == b.color_label
         && a.modified_text == b.modified_text
+        && a.group_id == b.group_id
+        && a.group_name == b.group_name
 }
 
 fn password_detail_eq(a: &PasswordEntryDetailView, b: &PasswordEntryDetailView) -> bool {
@@ -973,6 +975,7 @@ fn password_detail_eq(a: &PasswordEntryDetailView, b: &PasswordEntryDetailView) 
         && a.totp_code == b.totp_code
         && a.totp_remaining_seconds == b.totp_remaining_seconds
         && a.tags == b.tags
+        && a.group_id == b.group_id
 }
 
 fn password_payload_eq(a: &PasswordManagerPayload, b: &PasswordManagerPayload) -> bool {
@@ -981,6 +984,12 @@ fn password_payload_eq(a: &PasswordManagerPayload, b: &PasswordManagerPayload) -
         && a.biometric_available == b.biometric_available
         && a.unlock_error == b.unlock_error
         && a.search_query == b.search_query
+        && a.selected_group_id == b.selected_group_id
+        && a.groups.len() == b.groups.len()
+        && a.groups
+            .iter()
+            .zip(b.groups.iter())
+            .all(|(x, y)| x.id == y.id && x.name == y.name)
         && a.entries.len() == b.entries.len()
         && a.entries
             .iter()

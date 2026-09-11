@@ -17,10 +17,23 @@ pub struct PasswordManagerPayload {
     pub selected: Option<PasswordEntryDetailView>,
     /// Current search query.
     pub search_query: String,
+    /// Vault groups (root first). Empty when locked.
+    pub groups: Vec<PasswordGroupView>,
+    /// Selected group filter; `None` means every group.
+    pub selected_group_id: Option<String>,
     /// Whether Windows Hello unlock is offered in the UI.
     pub biometric_available: bool,
     /// Last unlock attempt error message (if any).
     pub unlock_error: Option<String>,
+}
+
+/// One KDBX group in the sidebar / dialog picker.
+#[derive(Debug, Clone)]
+pub struct PasswordGroupView {
+    /// Stable group id.
+    pub id: String,
+    /// User-visible name.
+    pub name: String,
 }
 
 /// Summary row in the entry list. No passwords are exposed.
@@ -35,6 +48,8 @@ pub struct PasswordEntryView {
     pub tags: Vec<String>,
     pub color_label: Option<String>,
     pub modified_text: String,
+    pub group_id: String,
+    pub group_name: String,
 }
 
 /// Detail view for one selected entry. Still no raw password.
@@ -49,4 +64,5 @@ pub struct PasswordEntryDetailView {
     pub totp_code: Option<String>,
     pub totp_remaining_seconds: u32,
     pub tags: Vec<String>,
+    pub group_id: String,
 }
