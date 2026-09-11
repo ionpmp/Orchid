@@ -1,4 +1,5 @@
 import { Theme } from "../../theme_global.slint";
+import { LongPressArea } from "../../kit.slint";
 import { FmEntry, FmRenameState } from "../../workspace/defs.slint";
 import { FmEntryIcon } from "fm-icons.slint";
 
@@ -543,10 +544,16 @@ export component FmEntryList inherits Rectangle {
                     }
                 }
 
-                row-ta := TouchArea {
+                // LongPressArea forwards the full pointer machine (drag/marquee)
+                // and opens the same context menu as right-click on hold.
+                row-ta := LongPressArea {
                     width: 100%;
                     height: 100%;
                     enabled: !(rename.active && entry.path == rename.path);
+                    forward-pointer-events: true;
+                    // Match drag threshold so a transfer/marquee disarms the hold
+                    // before long-pressed can fire.
+                    move-slop: root.drag-threshold;
                     changed has-hover => {
                         if (self.has-hover) {
                             root.hover-local = i;
@@ -557,6 +564,15 @@ export component FmEntryList inherits Rectangle {
                     double-clicked => {
                         root.cancel-press();
                         root.entry-double-clicked(entry.path, entry.is-dir);
+                    }
+                    long-pressed => {
+                        // Only when the press is still an entry hold — drag and
+                        // marquee clear pressing-path before the timer can fire.
+                        if (root.pressing-path != "") {
+                            root.entry-context(root.pressing-path, self.press-x, self.press-y);
+                            root.pending-exclusive = "";
+                            root.pending-toggle = "";
+                        }
                     }
                     pointer-event(e) => {
                         if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {

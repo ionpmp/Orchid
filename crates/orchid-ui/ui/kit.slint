@@ -650,6 +650,7 @@ export component Grabber inherits Rectangle {
 /// Not wired into every `ListTile` / `IconButton`; opt in where needed.
 export component LongPressArea inherits Rectangle {
     callback clicked();
+    callback double-clicked();
     callback long-pressed();
     /// Fired on pointer-down once the hold is armed (before `long-pressed`).
     callback press-started();
@@ -718,6 +719,11 @@ export component LongPressArea inherits Rectangle {
         clicked => {
             if (!root.did-long-press) {
                 root.clicked();
+            }
+        }
+        double-clicked => {
+            if (!root.did-long-press) {
+                root.double-clicked();
             }
         }
     }
