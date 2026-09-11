@@ -350,40 +350,8 @@ pub(crate) fn build_settings_fields(
                 "settings-field-mirror-edge-swipes",
                 cfg.input.mirror_edge_swipes,
             );
-            // Haptics / palm rejection / pen double-tap need platform pen+haptic
-            // plumbing — mark bools as unavailable rather than Yes/No.
-            push_settings_readonly(
-                &mut rows,
-                locale,
-                "haptic-feedback",
-                "settings-field-haptic-feedback",
-                locale.tr("settings-value-disabled").into(),
-            );
-            push_settings_readonly(
-                &mut rows,
-                locale,
-                "palm-rejection",
-                "settings-field-palm-rejection",
-                locale.tr("settings-value-disabled").into(),
-            );
-            let pen_label = match cfg.input.pen_double_tap_action {
-                orchid_storage::PenDoubleTapAction::None => {
-                    locale.tr("settings-value-pen-double-tap-none")
-                }
-                orchid_storage::PenDoubleTapAction::SwitchTool => {
-                    locale.tr("settings-value-pen-double-tap-switch-tool")
-                }
-                orchid_storage::PenDoubleTapAction::Erase => {
-                    locale.tr("settings-value-pen-double-tap-erase")
-                }
-            };
-            push_settings_readonly(
-                &mut rows,
-                locale,
-                "pen-double-tap",
-                "settings-field-pen-double-tap",
-                pen_label.into(),
-            );
+            // Haptics / palm rejection / pen double-tap stay in config.toml for
+            // a future pen stack. Do not show dead Disabled rows in Settings.
         }
         "shortcuts" => {
             let profile = orchid_core::ShortcutProfile::parse(&cfg.shortcuts.profile)
@@ -496,15 +464,19 @@ pub(crate) fn build_settings_fields(
                     .filter(|s| !s.is_empty())
                     .unwrap_or_else(|| locale.tr("settings-value-default")),
             );
-            push_settings_readonly(
+            push_settings_combo(
                 &mut rows,
                 locale,
                 "first-day-of-week",
                 "settings-field-first-day-of-week",
+                &[
+                    ("0".into(), locale.tr("settings-value-sunday").into()),
+                    ("1".into(), locale.tr("settings-value-monday").into()),
+                ],
                 if cfg.locale.first_day_of_week == 0 {
-                    locale.tr("settings-value-sunday").into()
+                    "0"
                 } else {
-                    locale.tr("settings-value-monday").into()
+                    "1"
                 },
             );
         }

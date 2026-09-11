@@ -22,8 +22,8 @@ User JSON themes: `config\themes\` — `id`, `display_name`, `is_dark`,
 
 ## `[input]`
 
-Wired: `primary-hand`, `mirror-edge-swipes`. **Not wired:** `haptic-feedback`,
-`palm-rejection`, `pen-double-tap-action`.
+Wired: `primary-hand`, `mirror-edge-swipes`. Stored but unused (no Settings
+rows): `haptic-feedback`, `palm-rejection`, `pen-double-tap-action`.
 
 ## `[shortcuts]`
 
@@ -33,7 +33,7 @@ disables), `leader-timeout-ms` (1200), `leader-bindings`.
 ## `[locale]`
 
 `language` (`en-US`), optional `date-format` / `time-format`.
-`first-day-of-week` is stored but not applied in UI.
+`first-day-of-week` (`0` Sunday / `1` Monday) drives the calendar widget.
 
 ## `[privacy]`
 

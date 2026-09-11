@@ -11,9 +11,9 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 |---------|----------------|---------------------|
 | General | Open on startup | Auto-update, telemetry (Disabled) |
 | Appearance | Theme, density, font, reduce motion, follow system | — |
-| Input | Primary hand, mirror edge swipes | Haptics, palm, pen double-tap |
+| Input | Primary hand, mirror edge swipes | Haptics, palm, pen double-tap (TOML only; hidden here) |
 | Shortcuts | Profile, remaps, leader key/timeout | Leader **binding map** (TOML only) |
-| Locale | Language, date/time format | First day of week |
+| Locale | Language, date/time format, first day of week | — |
 | Privacy | History, retention, clipboard clear, vault auto-lock | — |
 
 Widget options stay on each widget.

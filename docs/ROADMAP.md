@@ -21,11 +21,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 
 ## Remaining gaps in what already shipped
 
-### Password manager
-
-- [ ] Edit existing entries and a dedicated generate-password UI
-- [ ] Group browser (crypto crate has groups; widget creates in root)
-
 ### Search & embeddings
 
 - [ ] Wire ANN + RRF hybrid into universal-search UI (engine + tests exist;
@@ -44,8 +39,9 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 
 - [ ] In-app OAuth wizard (Drive / OneDrive / Dropbox). Today: named
       `rclone-remote` only
-- [ ] Wire unused Settings fields: haptics, palm rejection, pen double-tap,
-      first day of week
+- [ ] Pen + haptic stack (`haptic-feedback`, `palm-rejection`,
+      `pen-double-tap-action`). Keys stay in `config.toml`; Settings hides
+      the dead rows.
 - [ ] Auto-update and telemetry pipelines (keys exist; UI shows Disabled)
 
 ### Notifications & storage
@@ -71,7 +67,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 - [ ] Auto-update; opt-in telemetry (off by default)
 - [ ] OS notification toasts
 - [ ] In-app cloud OAuth wizard
-- [ ] Password group UI and entry editing
 - [ ] ORT embeddings in production search
 - [ ] Managed-folder reflink / hardlink ingest
 
