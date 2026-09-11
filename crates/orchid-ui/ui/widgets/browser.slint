@@ -6,10 +6,12 @@ component BrowserToolBtn inherits Rectangle {
     in property <string> label;
     in property <string> tip;
     in property <bool> enabled: true;
+    /// Override for secondary chrome (find bar). Toolbar keeps the default.
+    in property <length> control-height: Theme.control-md;
     callback clicked();
 
-    width: max(Theme.control-md, label-txt.preferred-width + Theme.space-4);
-    height: Theme.control-md;
+    width: max(root.control-height, label-txt.preferred-width + Theme.space-4);
+    height: root.control-height;
     border-radius: Theme.radius-pill;
     background: ta.pressed ? Theme.state-press :
         ta.has-hover ? Theme.state-hover : Colors.transparent;
@@ -521,15 +523,15 @@ export component BrowserView inherits Rectangle {
             }
 
             Rectangle {
-                height: root.find-open ? 32px : 0;
+                height: root.find-open ? Theme.control-xs : 0;
                 clip: true;
                 background: Theme.surface-base;
                 visible: root.find-open;
 
                 HorizontalLayout {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    spacing: 6px;
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-2;
+                    spacing: Theme.space-1;
                     alignment: center;
 
                     Text {
@@ -541,15 +543,16 @@ export component BrowserView inherits Rectangle {
 
                     Rectangle {
                         horizontal-stretch: 1;
-                        height: 26px;
+                        height: Theme.control-xs;
+                        y: (parent.height - self.height) / 2;
                         background: Theme.surface-raised;
                         border-radius: Theme.radius-md;
-                        border-width: 1px;
+                        border-width: Theme.hairline;
                         border-color: Theme.border-default;
 
                         if find-input.text == "" : Text {
-                            x: 8px;
-                            width: parent.width - 16px;
+                            x: Theme.space-2;
+                            width: parent.width - Theme.space-4;
                             height: 100%;
                             text: model.find-placeholder;
                             color: Theme.text-tertiary;
@@ -558,8 +561,8 @@ export component BrowserView inherits Rectangle {
                         }
 
                         find-input := TextInput {
-                            x: 8px;
-                            width: parent.width - 16px;
+                            x: Theme.space-2;
+                            width: parent.width - Theme.space-4;
                             height: 100%;
                             text <=> root.find-query;
                             single-line: true;
@@ -587,22 +590,25 @@ export component BrowserView inherits Rectangle {
                     BrowserToolBtn {
                         label: "↑";
                         tip: model.find-prev-tip;
+                        control-height: Theme.control-xs;
                         clicked => { root.find(root.find-query, false); }
                     }
                     BrowserToolBtn {
                         label: "↓";
                         tip: model.find-next-tip;
+                        control-height: Theme.control-xs;
                         clicked => { root.find(root.find-query, true); }
                     }
                     BrowserToolBtn {
                         label: "×";
                         tip: model.find-close-tip;
+                        control-height: Theme.control-xs;
                         clicked => { root.find-open = false; }
                     }
                 }
             }
 
-            if root.find-open : Rectangle { height: 1px; background: Theme.border-default; }
+            if root.find-open : Rectangle { height: Theme.hairline; background: Theme.border-default; }
 
             Rectangle {
                 height: root.bookmarks-open ? 88px : 0;
