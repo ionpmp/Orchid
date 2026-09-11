@@ -66,7 +66,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 - [ ] Photo library intelligence (hierarchical tags, opt-in auto-tag,
       **People** view / faces, events, smart albums)
 - [ ] Graphical resource monitor with history
-- [ ] Lua scripting (`mlua`)
 - [ ] Theme and widget marketplace
 - [ ] Terminal sixel + kitty; optional `alacritty_terminal`
 - [ ] Auto-update; opt-in telemetry (off by default)

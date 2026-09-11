@@ -12,7 +12,7 @@ The core idea of Orchid: **a gesture, a command, and a widget are three forms of
 This gives three levels of mastery over the system:
 1. **Beginner** — taps the screen
 2. **Experienced user** — uses gestures and shortcuts
-3. **Expert** — writes commands and automates with scripts
+3. **Expert** — writes `orc …` commands and remaps actions
 
 ## Touch-First, Not Touch-Only
 
