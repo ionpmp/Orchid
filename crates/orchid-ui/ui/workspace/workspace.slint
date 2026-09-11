@@ -1,5 +1,6 @@
 import { Theme } from "../theme_global.slint";
 import { Icon } from "../kit-icons.slint";
+import { Tooltip } from "../kit.slint";
 import { NavigationGlobal } from "../navigation_global.slint";
 import { WidgetCatalog } from "../widget_catalog_global.slint";
 import { WidgetFrame } from "widget-frame.slint";
@@ -894,39 +895,68 @@ export component WorkspaceView inherits Rectangle {
         }
 
         // In-app window taskbar for floating + minimized widgets.
-        if root.workspace.window-taskbar.length > 0 : Rectangle {
+        // Cinema strip: GlassCard surface, Chip-like pills, group-tabs swipe.
+        if root.workspace.window-taskbar.length > 0 : taskbar := Rectangle {
             x: 0;
             y: parent.height - self.height;
             width: parent.width;
             height: Theme.control-md + Theme.space-2;
-            background: Theme.surface-glass-strong;
+            background: Theme.gradient-glass;
+            border-width: Theme.hairline;
+            border-color: Theme.border-default;
+            drop-shadow-blur: Theme.elev-1-blur;
+            drop-shadow-offset-y: -Theme.elev-1-y;
+            drop-shadow-color: Theme.shadow-ambient;
 
+            /// Mirrors the active taskbar item so swipe can step to a neighbour.
+            property <int> active-index: 0;
+
+            pure function neighbour-id(step: int) -> string {
+                return root.workspace.window-taskbar[clamp(
+                    taskbar.active-index + step,
+                    0,
+                    root.workspace.window-taskbar.length - 1
+                )].instance-id;
+            }
+
+            // Lit top edge — GlassCard language on a bottom dock.
             Rectangle {
                 y: 0;
                 width: parent.width;
                 height: Theme.hairline;
-                background: Theme.border-default;
+                background: Theme.border-highlight;
+                opacity: 0.6;
             }
 
-            HorizontalLayout {
-                padding: Theme.space-1;
-                padding-left: Theme.space-3;
-                padding-right: Theme.space-3;
-                spacing: Theme.space-2;
-                alignment: start;
+            // Swiping across the strip cycles windows; taps still reach pills.
+            swipe := SwipeGestureHandler {
+                width: 100%;
+                height: 100%;
+                handle-swipe-left: true;
+                handle-swipe-right: true;
 
-                for item[i] in root.workspace.window-taskbar: TouchArea {
-                    width: 200px;
-                    mouse-cursor: MouseCursor.pointer;
-                    clicked => { root.window-taskbar-activate(item.instance-id); }
+                swiped => {
+                    root.window-taskbar-activate(taskbar.neighbour-id(
+                        self.current-position.x < self.pressed-position.x ? 1 : -1
+                    ));
+                }
 
-                    Rectangle {
-                        width: 100%;
-                        height: 100%;
-                        background: item.is-active ? Theme.accent-soft
-                            : parent.has-hover ? Theme.state-hover
-                            : Theme.surface-overlay;
+                HorizontalLayout {
+                    width: 100%;
+                    height: 100%;
+                    padding: Theme.space-1;
+                    padding-left: Theme.space-3;
+                    padding-right: Theme.space-3;
+                    spacing: Theme.space-2;
+                    alignment: start;
+
+                    for item[i] in root.workspace.window-taskbar : Rectangle {
+                        min-width: Theme.control-lg * 2.6;
+                        max-width: Theme.control-lg * 4;
                         border-radius: Theme.radius-pill;
+                        background: item.is-active ? Theme.accent-soft
+                            : item-ta.has-hover ? Theme.state-hover
+                            : Theme.surface-overlay;
                         border-width: Theme.hairline;
                         border-color: item.is-active ? Theme.accent-muted : Theme.border-subtle;
                         opacity: item.is-minimized ? 0.7 : 1.0;
@@ -936,28 +966,44 @@ export component WorkspaceView inherits Rectangle {
                             easing: ease-out;
                         }
 
-                        HorizontalLayout {
-                            padding-left: Theme.space-4;
-                            padding-right: Theme.space-4;
-                            spacing: Theme.space-2;
+                        property <bool> live: item.is-active;
+                        init => { if (self.live) { taskbar.active-index = i; } }
+                        changed live => { if (self.live) { taskbar.active-index = i; } }
 
-                            Icon {
-                                name: item.is-minimized ? "minus" : "dot";
-                                size: Theme.font-size-sm;
-                                tint: item.is-active ? Theme.accent-brand : Theme.text-tertiary;
-                            }
+                        Tooltip {
+                            text: item.title;
+                            shown: item-ta.has-hover;
+                            x: 0;
+                            y: -self.height - Theme.space-1;
+                        }
 
-                            Text {
-                                text: item.title;
-                                color: item.is-active ? Theme.text-primary : Theme.text-secondary;
-                                font-size: Theme.font-size-sm;
-                                font-weight: item.is-active
-                                    ? Theme.weight-semibold
-                                    : Theme.weight-medium;
-                                vertical-alignment: center;
-                                wrap: no-wrap;
-                                overflow: elide;
-                                horizontal-stretch: 1;
+                        item-ta := TouchArea {
+                            mouse-cursor: MouseCursor.pointer;
+                            clicked => { root.window-taskbar-activate(item.instance-id); }
+
+                            HorizontalLayout {
+                                padding-left: Theme.space-3;
+                                padding-right: Theme.space-3;
+                                spacing: Theme.space-2;
+
+                                Icon {
+                                    name: item.is-minimized ? "minus" : "dot";
+                                    size: Theme.font-size-sm;
+                                    tint: item.is-active ? Theme.accent-brand : Theme.text-tertiary;
+                                }
+
+                                Text {
+                                    text: item.title;
+                                    color: item.is-active ? Theme.accent-brand : Theme.text-secondary;
+                                    font-size: Theme.font-size-sm;
+                                    font-weight: item.is-active
+                                        ? Theme.weight-semibold
+                                        : Theme.weight-medium;
+                                    vertical-alignment: center;
+                                    wrap: no-wrap;
+                                    overflow: elide;
+                                    horizontal-stretch: 1;
+                                }
                             }
                         }
                     }
