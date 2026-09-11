@@ -594,7 +594,10 @@ impl PdfViewer {
         self.bytes.read().clone().ok_or(ViewerError::PdfEmpty)
     }
 
-    /// Export the current text selection as a sibling highlight PDF.
+    /// Write highlight annotations for the current selection into the open file.
+    ///
+    /// Falls back to a sibling `*-hl.pdf` when the path is not writable.
+    /// Reloads the payload so stacked highlights keep the previous marks.
     ///
     /// # Errors
     ///
@@ -612,14 +615,26 @@ impl PdfViewer {
         };
         let src = self.local_path()?;
         let bytes = self.payload_bytes()?;
-        let dest = tokio::task::spawn_blocking(move || {
-            ops::save_highlight(bytes.as_slice(), page, &rects, &src)
+        let dest = tokio::task::spawn_blocking({
+            let src = src.clone();
+            let rects = rects.clone();
+            move || match ops::save_highlight(bytes.as_slice(), page, &rects, &src) {
+                Ok(p) => Ok(p),
+                Err(e) => {
+                    tracing::debug!(error = %e, path = %src.display(), "in-place highlight failed");
+                    ops::save_highlight_sibling(bytes.as_slice(), page, &rects, &src)
+                }
+            }
         })
         .await
         .map_err(|e| ViewerError::PdfRender {
             page,
             reason: format!("join: {e}"),
         })??;
+        if dest == src {
+            let fresh = tokio::fs::read(&dest).await.map_err(ViewerError::from)?;
+            self.adopt_bytes(Arc::new(fresh), page).await?;
+        }
         *self.highlight_rects.write() = self
             .selection
             .read()
@@ -627,6 +642,33 @@ impl PdfViewer {
             .map(|s| s.rects.clone())
             .unwrap_or_default();
         Ok(dest)
+    }
+
+    async fn adopt_bytes(&self, bytes: Arc<Vec<u8>>, page: u32) -> Result<()> {
+        let viewport = *self.viewport.read();
+        let fit_mode = *self.fit_mode.read();
+        let zoom = *self.zoom.read();
+        let bytes_for_worker = Arc::clone(&bytes);
+        let (session, rendered) = tokio::task::spawn_blocking(move || {
+            let (session, _) = render::open_document(bytes_for_worker)?;
+            let rendered = render::render_page(session, page, viewport, fit_mode, zoom)?;
+            Ok::<_, ViewerError>((session, rendered))
+        })
+        .await
+        .map_err(|e| ViewerError::PdfRender {
+            page,
+            reason: format!("join: {e}"),
+        })??;
+        if let Some(old) = self.session.write().replace(session) {
+            render::close_document(old);
+        }
+        *self.bytes.write() = Some(bytes);
+        *self.page_count.write() = rendered.page_count;
+        *self.current_page.write() = rendered.current_page;
+        *self.zoom.write() = rendered.zoom;
+        *self.rendered.write() = Some(rendered);
+        self.reload_layer().await;
+        Ok(())
     }
 }
 

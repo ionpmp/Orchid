@@ -116,7 +116,7 @@ pub fn search_document(bytes: &[u8], query: &str, match_case: bool) -> Result<Ve
     })
 }
 
-/// Write a sibling `*-hl.pdf` with highlight annotations over `rects`.
+/// Write highlight annotations over `rects` to `dest`.
 ///
 /// # Errors
 ///
@@ -125,12 +125,12 @@ pub fn save_highlight(
     bytes: &[u8],
     page: u32,
     rects: &[PtsRect],
-    src_path: &Path,
+    dest: &Path,
 ) -> Result<std::path::PathBuf> {
     if rects.is_empty() {
         return Err(ViewerError::PdfHighlightEmpty);
     }
-    let dest = unique_export_dest(src_path, "hl", "pdf");
+    let dest = dest.to_path_buf();
     with_pdfium(|pdfium| {
         let document =
             pdfium
@@ -201,6 +201,21 @@ pub fn save_highlight(
             })?;
         Ok(dest)
     })
+}
+
+/// Sibling `*-hl.pdf` next to `src_path` (fallback when the open file is not writable).
+///
+/// # Errors
+///
+/// Same as [`save_highlight`].
+pub fn save_highlight_sibling(
+    bytes: &[u8],
+    page: u32,
+    rects: &[PtsRect],
+    src_path: &Path,
+) -> Result<std::path::PathBuf> {
+    let dest = unique_export_dest(src_path, "hl", "pdf");
+    save_highlight(bytes, page, rects, &dest)
 }
 
 #[cfg(test)]

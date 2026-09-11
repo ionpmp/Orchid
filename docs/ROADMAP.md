@@ -29,8 +29,8 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 ### Viewers / terminal
 
 - [ ] HDR framebuffer for images (Slint remains 8-bit RGBA)
-- [ ] PDF AcroForm fill-in and in-place annotation save (selection,
-      find, sibling highlight export, and `Ctrl+A` already ship)
+- [ ] PDF AcroForm fill-in and comments (selection, find, `Ctrl+A`,
+      and in-place highlight save already ship)
 - [ ] Terminal inline graphics (sixel + kitty) and optional
       `alacritty_terminal` grid — v1.x
 

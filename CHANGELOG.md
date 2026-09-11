@@ -373,8 +373,8 @@ release yet.
   (`SearchEngine::search_hybrid`, stub embeddings). Semantic hits work
   after the indexer extracts text; the ANN is in-memory.
 - PDF: `Ctrl+A` selects the current page’s extracted text (copy / highlight
-  then use the selection). User guide matches find, drag-select, and sibling
-  highlight export.
+  then use the selection). **Highlight** writes into the open file (sibling
+  `*-hl.pdf` if the path is not writable).
 - Cinema kit: focus rings, Space/Enter activation, and `accessible-*`
   names on buttons / chips / switches. Floating-window chrome tooltips
   (dock, undock, min, max, restore) were missing.

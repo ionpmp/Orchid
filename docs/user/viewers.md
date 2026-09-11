@@ -21,10 +21,11 @@ in-document find (`Ctrl+F`, match case), print (`Ctrl+P`).
 
 Drag to select text (double-click a word, `Ctrl+A` the page). `Ctrl+C`
 copies the selection, or the whole page when nothing is selected.
-**Highlight** writes a sibling `*-hl.pdf` with highlight annotations over
-the selection — it does not edit the open file.
+**Highlight** writes highlight annotations into the open file (reloads so
+you can stack marks). If that path is not writable, it falls back to a
+sibling `*-hl.pdf`.
 
-No AcroForm fill-in, no in-place annotation save, no comments.
+No AcroForm fill-in, no comments.
 
 ## Text
 
