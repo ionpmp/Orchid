@@ -12,8 +12,9 @@ with in-memory ANN via reciprocal rank fusion, plus snippets), **commands**,
 File hits use [`StubEmbedder`](../../crates/orchid-embed) today (synonym-aware
 vectors, no ONNX model). Semantic recall works for indexed text — including
 `.orchid` Clean-Text — after the indexer has extracted it. The ANN is
-in-memory and refills from the crawl / watcher after a restart. A real
-sentence model remains behind the reserved `ort` feature.
+snapshotted to `ann.stub.v1` next to `data\search_index` on commit, so
+hybrid ranking survives a restart. A real sentence model remains behind
+the reserved `ort` feature.
 
 ## Index
 

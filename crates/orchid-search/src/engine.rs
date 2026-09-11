@@ -11,7 +11,7 @@ use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Te
 
 use orchid_embed::{Embedder, StubEmbedder};
 
-use crate::ann::AnnIndex;
+use crate::ann::{AnnIndex, ANN_SNAPSHOT_NAME};
 use crate::error::{Result, SearchError};
 use crate::hybrid::fuse_rrf;
 use crate::query::builder::Query;
@@ -80,9 +80,10 @@ struct SearchEngineInner {
     text_query_parser: tantivy::query::QueryParser,
     /// Parser for the `path_prefix` wildcard filter.
     path_query_parser: tantivy::query::QueryParser,
-    /// In-memory document vectors, kept in lockstep with Tantivy upserts.
-    /// Not persisted; a crawl / watcher pass refills it after restart.
+    /// Document vectors, kept in lockstep with Tantivy upserts.
+    /// Snapshotted to `ann.stub.v1` on [`SearchEngine::commit`].
     ann: parking_lot::RwLock<AnnIndex>,
+    index_dir: std::path::PathBuf,
 }
 
 impl std::fmt::Debug for SearchEngine {
@@ -127,12 +128,16 @@ impl SearchEngine {
                 writer: Mutex::new(Some(writer)),
                 text_query_parser,
                 path_query_parser,
-                ann: parking_lot::RwLock::new(AnnIndex::new(StubEmbedder::new().dimensions())),
+                ann: parking_lot::RwLock::new(load_ann_snapshot(
+                    index_dir,
+                    StubEmbedder::new().dimensions(),
+                )),
+                index_dir: index_dir.to_path_buf(),
             }),
         })
     }
 
-    /// Documents currently held in the in-memory ANN (not persisted).
+    /// Documents currently held in the in-memory ANN.
     #[must_use]
     pub fn ann_len(&self) -> usize {
         self.inner.ann.read().len()
@@ -204,6 +209,9 @@ impl SearchEngine {
                 }
             }
             inner.reader.reload()?;
+            if let Err(e) = persist_ann_snapshot(&inner) {
+                tracing::debug!(error = %e, "ANN snapshot persist skipped");
+            }
             Ok::<_, SearchError>(())
         })
         .await
@@ -241,8 +249,7 @@ impl SearchEngine {
 
     /// BM25 fused with ANN via reciprocal rank fusion.
     ///
-    /// Falls back to Tantivy-only search while the in-memory ANN is empty
-    /// (fresh process, no extracted text yet).
+    /// Falls back to Tantivy-only search while the ANN is empty.
     ///
     /// # Errors
     ///
@@ -315,6 +322,7 @@ impl SearchEngine {
             if let Some(mut w) = writer {
                 let _ = w.commit();
             }
+            let _ = persist_ann_snapshot(&inner);
         })
         .await
         .map_err(|e| SearchError::Extraction {
@@ -367,6 +375,26 @@ fn upsert_batch_sync(inner: &SearchEngineInner, docs: &[IndexDocument]) -> Resul
     // `SearchEngine::commit` (or `IndexScheduler::flush`). Double-committing
     // causes file-handle races on Windows.
     Ok(())
+}
+
+fn load_ann_snapshot(index_dir: &Path, dims: usize) -> AnnIndex {
+    let path = index_dir.join(ANN_SNAPSHOT_NAME);
+    match AnnIndex::load(&path, dims) {
+        Ok(ann) => ann,
+        Err(e) => {
+            if path.exists() {
+                tracing::debug!(error = %e, "ANN snapshot ignored");
+            }
+            AnnIndex::new(dims)
+        }
+    }
+}
+
+fn persist_ann_snapshot(inner: &SearchEngineInner) -> Result<()> {
+    inner
+        .ann
+        .read()
+        .persist(&inner.index_dir.join(ANN_SNAPSHOT_NAME))
 }
 
 fn upsert_ann(inner: &SearchEngineInner, docs: &[IndexDocument]) {

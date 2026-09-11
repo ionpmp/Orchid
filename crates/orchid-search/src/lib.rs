@@ -8,7 +8,8 @@
 //! * [`extractors`] — text, PDF, DOCX, and `.orchid` extractors.
 //! * [`query`] — query builder and result types.
 //! * [`ann`] / [`hybrid`] — Phase 5 embedding ANN + BM25 fusion
-//!   ([`SearchEngine::search_hybrid`] keeps the ANN in lockstep with upserts).
+//!   ([`SearchEngine::search_hybrid`] keeps the ANN in lockstep with upserts
+//!   and snapshots it to `ann.stub.v1` on commit).
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
@@ -23,7 +24,7 @@ pub mod indexer;
 pub mod query;
 pub mod schema;
 
-pub use ann::AnnIndex;
+pub use ann::{AnnIndex, ANN_SNAPSHOT_NAME};
 pub use engine::{DocumentKind, IndexDocument, SearchEngine};
 pub use error::{Result, SearchError};
 pub use extractors::{ContentExtractor, Extractor};

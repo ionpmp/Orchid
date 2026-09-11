@@ -15,7 +15,7 @@ Clean-Text extraction lives in `extractors::orchid`.
 
 ANN + RRF hybrid search (`ann`, `hybrid`, `SearchEngine::search_hybrid`)
 fuses Tantivy BM25 with stub embeddings from `orchid-embed`. The engine
-keeps an in-memory ANN in lockstep with upserts/removes (not persisted;
-the indexer crawl refills it). Universal-search **files** call
+keeps an ANN in lockstep with upserts/removes and writes `ann.stub.v1`
+beside the Tantivy index on commit. Universal-search **files** call
 `search_hybrid`. A production ONNX model remains a
 [roadmap](../../docs/ROADMAP.md) item.

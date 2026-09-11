@@ -371,7 +371,7 @@ release yet.
   haptics / palm / pen rows are hidden (keys stay in `config.toml`).
 - Universal-search **files** use ANN + BM25 reciprocal rank fusion
   (`SearchEngine::search_hybrid`, stub embeddings). Semantic hits work
-  after the indexer extracts text; the ANN is in-memory.
+  after the indexer extracts text; the ANN is snapshotted to `ann.stub.v1`.
 - PDF: `Ctrl+A` selects the current page’s extracted text (copy / highlight
   then use the selection). **Highlight** writes into the open file (sibling
   `*-hl.pdf` if the path is not writable).
