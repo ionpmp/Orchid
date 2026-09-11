@@ -1774,9 +1774,11 @@ impl MainWindowController {
         });
         self.window.on_password_add_entry_commit({
             let t = t.clone();
-            move |title, username, password, url| {
+            move |title, username, password, url, notes, group| {
                 if let Some(c) = t.upgrade() {
-                    c.on_password_add_entry_commit(&title, &username, &password, &url);
+                    c.on_password_add_entry_commit(
+                        &title, &username, &password, &url, &notes, &group,
+                    );
                 }
             }
         });
@@ -1793,6 +1795,30 @@ impl MainWindowController {
             move || {
                 if let Some(c) = t.upgrade() {
                     c.on_password_add_entry_generate_password();
+                }
+            }
+        });
+        self.window.on_password_edit_entry_request({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_edit_entry_request();
+                }
+            }
+        });
+        self.window.on_password_generate_request({
+            let t = t.clone();
+            move || {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_generate_request();
+                }
+            }
+        });
+        self.window.on_password_group_clicked({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_password_group_clicked(&id);
                 }
             }
         });
