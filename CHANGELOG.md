@@ -406,6 +406,8 @@ release yet.
 - **LongPressArea** `forward-pointer-events` opt-in forwards inner
   `pointer-event` / `moved` when nested controls still need clicks
   (`5797fb9c`).
+- **File manager**: long-press opens the context menu via **LongPressArea**
+  (`4450f8f4`).
 - **Workspace orb**: swipe left/right to cycle workspaces; tap still
   toggles the menu (`cc0ca3fd`).
 - **Touch-first "cinema" redesign of the whole interface.** `Theme` in
