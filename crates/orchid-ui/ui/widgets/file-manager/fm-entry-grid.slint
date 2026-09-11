@@ -62,7 +62,7 @@ export component FmEntryGrid inherits Rectangle {
 
     property <length> tile-size: large ? 220px : 100px;
     property <length> tile-height: large ? 240px : 120px;
-    property <length> tile-spacing: 8px;
+    property <length> tile-spacing: Theme.space-2;
     property <int> columns: max(1, floor((root.width - tile-spacing) / (tile-size + tile-spacing)));
     property <bool> virtualized: virtual-content-height > 0px;
     property <int> total-count: entry-total-count > 0 ? entry-total-count : entries.length;
@@ -365,7 +365,7 @@ export component FmEntryGrid inherits Rectangle {
             y: tile-spacing + (floor((first-index + root.hover-local) / columns) * (tile-height + tile-spacing));
             width: tile-size;
             height: tile-height;
-            background: Theme.surface-raised;
+            background: Theme.state-hover;
             border-radius: Theme.radius-md;
         }
 
@@ -375,26 +375,30 @@ export component FmEntryGrid inherits Rectangle {
             width: tile-size;
             height: tile-height;
             background: root.tile-highlighted(i, entry.is-selected, entry.path)
-                ? #4d82ff44
+                ? Theme.state-selected
                 : transparent;
             border-radius: Theme.radius-md;
-            border-width: root.tile-highlighted(i, entry.is-selected, entry.path) || (drag-active && entry.is-dir && entry.path == drag-drop-target) ? 2px : 0px;
+            border-width: root.tile-highlighted(i, entry.is-selected, entry.path) || (drag-active && entry.is-dir && entry.path == drag-drop-target) ? Theme.hairline : 0px;
             border-color: Theme.accent-brand;
 
+            animate background { duration: Theme.motion-instant; easing: ease-out; }
+
             VerticalLayout {
-                padding: 6px;
-                spacing: 4px;
+                padding: Theme.space-2;
+                spacing: Theme.space-1;
 
                 Rectangle {
-                    height: tile-size - 32px;
-                    background: Theme.surface-base;
+                    height: tile-size - Theme.control-sm;
+                    background: Theme.surface-sunken;
                     border-radius: Theme.radius-md;
+                    border-width: Theme.hairline;
+                    border-color: Theme.border-subtle;
 
                     if entry.has-thumbnail : Image {
                         source: entry.thumbnail;
                         image-fit: contain;
-                        width: parent.width - 8px;
-                        height: parent.height - 8px;
+                        width: parent.width - Theme.space-2;
+                        height: parent.height - Theme.space-2;
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
                     }
@@ -406,7 +410,7 @@ export component FmEntryGrid inherits Rectangle {
                         FmEntryIcon {
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
-                            icon-size: large ? 64px : 36px;
+                            icon-size: large ? Theme.control-lg : Theme.control-sm;
                             is-dir: entry.is-dir;
                             is-encrypted: entry.is-encrypted;
                             is-managed: entry.is-managed;
@@ -445,6 +449,9 @@ export component FmEntryGrid inherits Rectangle {
                     text: entry.name;
                     color: Theme.text-primary;
                     font-size: Theme.font-size-sm;
+                    font-weight: root.tile-highlighted(i, entry.is-selected, entry.path)
+                        ? Theme.weight-semibold
+                        : Theme.weight-medium;
                     horizontal-alignment: center;
                     wrap: word-wrap;
                     overflow: elide;
@@ -452,10 +459,10 @@ export component FmEntryGrid inherits Rectangle {
             }
 
             if entry.is-starred : Text {
-                x: parent.width - 20px;
-                y: 4px;
+                x: parent.width - Theme.control-xs;
+                y: Theme.space-1;
                 text: "*";
-                color: #eab308;
+                color: Theme.feedback-warning;
                 font-size: Theme.font-size-sm;
             }
 
@@ -580,11 +587,12 @@ export component FmEntryGrid inherits Rectangle {
     if root.marquee-active : Rectangle {
         x: min(root.marquee-x0, root.marquee-x1);
         y: min(root.marquee-y0, root.marquee-y1) - grid-flick.viewport-y;
-        width: max(1px, abs(root.marquee-x1 - root.marquee-x0));
-        height: max(1px, abs(root.marquee-y1 - root.marquee-y0));
-        background: #4d82ff33;
-        border-width: 1px;
-        border-color: Theme.accent-brand;
+        width: max(Theme.hairline, abs(root.marquee-x1 - root.marquee-x0));
+        height: max(Theme.hairline, abs(root.marquee-y1 - root.marquee-y0));
+        background: Theme.accent-soft;
+        border-width: Theme.hairline;
+        border-color: Theme.accent-muted;
+        border-radius: Theme.radius-sm;
     }
 
 }
