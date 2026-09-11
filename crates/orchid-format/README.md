@@ -36,3 +36,6 @@ Library: `write_sealed_file` / `write_linked_file` / `SealedFile::open` /
 `linked_region_plaintext` / `sealed_to_linked` / `linked_to_sealed` /
 `sign_clean_text_provenance` / `verify_provenance_carrier` /
 `embeddings` / `document_embedding` / `wrap_as_sealed`.
+
+Property-style tests in `tests/properties.rs` cover header/region/footer,
+alignment, embedding wire, zstd, CRDT payloads, and decoder noise.
