@@ -378,6 +378,8 @@ release yet.
 - Cinema kit: focus rings, Space/Enter activation, and `accessible-*`
   names on buttons / chips / switches. Floating-window chrome tooltips
   (dock, undock, min, max, restore) were missing.
+- Property-style tests: `.orchid` framing / embeddings / zstd / CRDT wire,
+  `orc` command tokenizer, OOXML core-props XML and pack line.
 
 ### Documentation
 - Rebuilt project, GitHub, [user](docs/user/README.md), and
@@ -389,6 +391,13 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **Denser widget chrome**: shrink frame headers and in-widget toolbars to
+  ~42px (`Theme.header-height` / `Theme.toolbar-height`), use compact
+  `IconButton` (`ControlSize.sm`) in widget frames, and size FM toolbar
+  shells to `icon-button-sm` so the filter field keeps a usable min-width
+  (`1d0ca83a`). Tab strips (group, FM, terminal, notes) match the same
+  density with `Theme.toolbar-height` / `Theme.control-sm` while keeping
+  finger-sized close / action targets.
 - **Touch-first "cinema" redesign of the whole interface.** `Theme` in
   `theme_global.slint` now derives a full design system from the seven raw
   theme colours: surface ramp (sunken → glass → floating), hover / press /

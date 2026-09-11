@@ -51,5 +51,5 @@ Cinema kit buttons (`TouchButton`, `IconButton`, chips, switches, document
 toolbar) take **Tab** focus, show a focus ring, and activate with
 **Space** or **Enter**. Icon-only chrome uses the same string as the
 tooltip for the accessible name (dock / undock / minimize / maximize /
-restore / close / settings). Screen-reader support follows Slint’s
-`accessible-*` roles on those controls.
+restore / close / settings). Slint `accessible-*` roles are set on those
+controls; the AccessKit backend stays off on Windows (winit focus panic).

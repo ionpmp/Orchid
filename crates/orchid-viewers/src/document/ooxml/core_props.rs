@@ -259,4 +259,38 @@ mod tests {
         assert_eq!(again.title, "New");
         assert_eq!(again.creator, "A");
     }
+
+    #[test]
+    fn core_xml_and_pack_roundtrip_many_seeds() {
+        let mut seed = 0xC0_E0_u64;
+        let next = |s: &mut u64| {
+            *s = s.wrapping_mul(6364136223846793005).wrapping_add(1);
+            *s
+        };
+        let field = |s: &mut u64| {
+            let n = 1 + (next(s) as usize % 10);
+            (0..n)
+                .map(|_| char::from(b'a' + (next(s) % 26) as u8))
+                .collect::<String>()
+        };
+        for _ in 0..48 {
+            let props = OfficeCoreProps {
+                title: field(&mut seed),
+                subject: field(&mut seed),
+                creator: field(&mut seed),
+                keywords: field(&mut seed),
+                description: field(&mut seed),
+                last_modified_by: field(&mut seed),
+            };
+            let back = parse_core_xml(&write_core_xml(&props));
+            assert_eq!(back, props);
+            let packed = pack_office_props(&props);
+            let unpacked = unpack_office_props(&packed, OfficeCoreProps::default());
+            assert_eq!(unpacked.title, props.title);
+            assert_eq!(unpacked.subject, props.subject);
+            assert_eq!(unpacked.creator, props.creator);
+            assert_eq!(unpacked.keywords, props.keywords);
+            assert_eq!(unpacked.description, props.description);
+        }
+    }
 }
