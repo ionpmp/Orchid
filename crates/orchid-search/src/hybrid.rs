@@ -35,6 +35,16 @@ pub async fn hybrid_search(
     })?;
     let ann_hits = ann.search(&qvec, limit.max(50));
 
+    Ok(fuse_rrf(bm25, &ann_hits, limit, started))
+}
+
+/// Reciprocal-rank fusion of a BM25 result set and ANN `(path, score)` hits.
+pub(crate) fn fuse_rrf(
+    bm25: SearchResults,
+    ann_hits: &[(String, f32)],
+    limit: usize,
+    started: std::time::Instant,
+) -> SearchResults {
     let mut scores: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
     for (rank, hit) in bm25.hits.iter().enumerate() {
         *scores.entry(hit.path.clone()).or_default() += 1.0 / (RRF_K + rank as f32 + 1.0);
@@ -77,11 +87,11 @@ pub async fn hybrid_search(
         })
         .collect();
 
-    Ok(SearchResults {
+    SearchResults {
         hits,
         total_estimated: 0,
         query_time_ms: started.elapsed().as_millis() as u64,
-    })
+    }
 }
 
 /// ANN-only top-k (no BM25). Useful for proving semantic-only retrieval.

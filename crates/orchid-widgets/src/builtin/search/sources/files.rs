@@ -40,11 +40,7 @@ impl SearchSource for FilesSource {
         if query.trim().is_empty() {
             return Vec::new();
         }
-        let q = orchid_search::QueryBuilder::new()
-            .text(query)
-            .limit(limit)
-            .build();
-        let Ok(results) = self.engine.search(q).await else {
+        let Ok(results) = self.engine.search_hybrid(query, limit).await else {
             return Vec::new();
         };
         results

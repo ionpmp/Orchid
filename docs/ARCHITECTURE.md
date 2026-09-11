@@ -22,7 +22,7 @@ the tree — see [ROADMAP.md](ROADMAP.md).
 │                   .orchid / media (libmpv) / HTML           │
 │  orchid-terminal — PTY + vte emulator + session/layout      │
 │  orchid-fs — local + rclone (rcd keep-alive + CLI)          │
-│  orchid-search — Tantivy + ANN/RRF (UI still BM25)          │
+│  orchid-search — Tantivy + ANN/RRF hybrid (universal search) │
 │  orchid-format — native .orchid (Phases 1–5)                │
 │  orchid-embed — StubEmbedder (ORT feature reserved)            │
 │  orchid-crypto — age, KDBX4, BLAKE3 chunks, Hello / DPAPI   │

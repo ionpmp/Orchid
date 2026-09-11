@@ -23,10 +23,8 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 
 ### Search & embeddings
 
-- [ ] Wire ANN + RRF hybrid into universal-search UI (engine + tests exist;
-      file source is still Tantivy BM25)
 - [ ] Ship a quantized ONNX sentence model behind `orchid-embed`’s `ort`
-      feature (today: `StubEmbedder`)
+      feature (today: `StubEmbedder` in universal-search hybrid)
 
 ### Viewers / terminal
 

@@ -369,6 +369,9 @@ release yet.
   (`orc diagnostics export`) — zip via a save dialog.
 - Settings: first day of week is a combo and drives the calendar. Dead
   haptics / palm / pen rows are hidden (keys stay in `config.toml`).
+- Universal-search **files** use ANN + BM25 reciprocal rank fusion
+  (`SearchEngine::search_hybrid`, stub embeddings). Semantic hits work
+  after the indexer extracts text; the ANN is in-memory.
 
 ### Documentation
 - Rebuilt project, GitHub, [user](docs/user/README.md), and

@@ -1,9 +1,7 @@
 //! Phase 5 DONE: semantic / hybrid retrieval finds a `.orchid` BM25 misses.
 
 use orchid_embed::{Embedder, StubEmbedder};
-use orchid_format::{
-    document_embedding, write_sealed_file, SealedCreateRequest, MIME_TYPE,
-};
+use orchid_format::{document_embedding, write_sealed_file, SealedCreateRequest, MIME_TYPE};
 use orchid_search::{
     hybrid_search, semantic_search, AnnIndex, DocumentKind, IndexDocument, QueryBuilder,
     SearchEngine,
@@ -99,5 +97,17 @@ async fn semantic_query_finds_orchid_that_bm25_misses() {
         hybrid.hits.iter().any(|h| h.path == path_key),
         "hybrid should retrieve .orchid; hits={:?}",
         hybrid.hits.iter().map(|h| &h.path).collect::<Vec<_>>()
+    );
+
+    // Live ANN on the engine (same vectors as wrap / stub embed) also hits.
+    assert_eq!(engine.ann_len(), 1);
+    let live = engine
+        .search_hybrid("canine companion", 10)
+        .await
+        .unwrap();
+    assert!(
+        live.hits.iter().any(|h| h.path == path_key),
+        "SearchEngine::search_hybrid should retrieve .orchid; hits={:?}",
+        live.hits.iter().map(|h| &h.path).collect::<Vec<_>>()
     );
 }

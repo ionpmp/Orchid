@@ -9,7 +9,11 @@ use tantivy::query::{BooleanQuery, Occur, Query as TantivyQuery, RangeQuery, Ter
 use tantivy::schema::IndexRecordOption;
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Term};
 
+use orchid_embed::{Embedder, StubEmbedder};
+
+use crate::ann::AnnIndex;
 use crate::error::{Result, SearchError};
+use crate::hybrid::fuse_rrf;
 use crate::query::builder::Query;
 use crate::query::snippet::{SearchHit, SearchResults, Snippet};
 use crate::schema::Schema;
@@ -76,6 +80,9 @@ struct SearchEngineInner {
     text_query_parser: tantivy::query::QueryParser,
     /// Parser for the `path_prefix` wildcard filter.
     path_query_parser: tantivy::query::QueryParser,
+    /// In-memory document vectors, kept in lockstep with Tantivy upserts.
+    /// Not persisted; a crawl / watcher pass refills it after restart.
+    ann: parking_lot::RwLock<AnnIndex>,
 }
 
 impl std::fmt::Debug for SearchEngine {
@@ -120,8 +127,15 @@ impl SearchEngine {
                 writer: Mutex::new(Some(writer)),
                 text_query_parser,
                 path_query_parser,
+                ann: parking_lot::RwLock::new(AnnIndex::new(StubEmbedder::new().dimensions())),
             }),
         })
+    }
+
+    /// Documents currently held in the in-memory ANN (not persisted).
+    #[must_use]
+    pub fn ann_len(&self) -> usize {
+        self.inner.ann.read().len()
     }
 
     /// Schema handle for direct Tantivy-level use.
@@ -225,6 +239,42 @@ impl SearchEngine {
             })?
     }
 
+    /// BM25 fused with ANN via reciprocal rank fusion.
+    ///
+    /// Falls back to Tantivy-only search while the in-memory ANN is empty
+    /// (fresh process, no extracted text yet).
+    ///
+    /// # Errors
+    ///
+    /// Propagates Tantivy or embed errors.
+    pub async fn search_hybrid(&self, text: &str, limit: usize) -> Result<SearchResults> {
+        if self.inner.ann.read().is_empty() {
+            return self
+                .search(Query {
+                    text: Some(text.to_string()),
+                    limit,
+                    ..Query::empty()
+                })
+                .await;
+        }
+        let started = std::time::Instant::now();
+        let limit = limit.max(1);
+        let bm25 = self
+            .search(Query {
+                text: Some(text.to_string()),
+                limit: limit.max(50),
+                ..Query::empty()
+            })
+            .await?;
+        let embedder = StubEmbedder::new();
+        let qvec = embedder.embed(text).map_err(|e| SearchError::Extraction {
+            path: String::new(),
+            reason: format!("embed query: {e}"),
+        })?;
+        let ann_hits = self.inner.ann.read().search(&qvec, limit.max(50));
+        Ok(fuse_rrf(bm25, &ann_hits, limit, started))
+    }
+
     /// Merge segments.
     ///
     /// # Errors
@@ -312,10 +362,33 @@ fn upsert_batch_sync(inner: &SearchEngineInner, docs: &[IndexDocument]) -> Resul
         }
         writer.add_document(tantivy_doc)?;
     }
+    upsert_ann(inner, docs);
     // NOTE: we do not commit here. Callers commit explicitly via
     // `SearchEngine::commit` (or `IndexScheduler::flush`). Double-committing
     // causes file-handle races on Windows.
     Ok(())
+}
+
+fn upsert_ann(inner: &SearchEngineInner, docs: &[IndexDocument]) {
+    let embedder = StubEmbedder::new();
+    let mut ann = inner.ann.write();
+    for d in docs {
+        let Some(content) = d.content.as_deref().filter(|c| !c.trim().is_empty()) else {
+            ann.remove(&d.path);
+            continue;
+        };
+        match embedder.embed(content) {
+            Ok(vector) => {
+                if let Err(e) = ann.upsert(&d.path, vector) {
+                    tracing::debug!(error = %e, path = %d.path, "ann upsert skipped");
+                }
+            }
+            Err(e) => {
+                tracing::debug!(error = %e, path = %d.path, "embed skipped");
+                ann.remove(&d.path);
+            }
+        }
+    }
 }
 
 fn remove_sync(inner: &SearchEngineInner, path: &str) -> Result<()> {
@@ -323,6 +396,7 @@ fn remove_sync(inner: &SearchEngineInner, path: &str) -> Result<()> {
     let writer = guard.as_mut().ok_or(SearchError::IndexClosed)?;
     let term = Term::from_field_text(inner.schema.field_path, path);
     writer.delete_term(term);
+    inner.ann.write().remove(path);
     // Commit is the caller's responsibility — see `upsert_batch_sync` note.
     Ok(())
 }

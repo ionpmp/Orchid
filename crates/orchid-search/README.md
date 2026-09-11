@@ -13,7 +13,9 @@ The engine ships with a single fixed schema (see `schema::Schema`). Tokenizers:
 PDF extraction requires pdfium at runtime; see `extractors::pdf`. `.orchid`
 Clean-Text extraction lives in `extractors::orchid`.
 
-ANN + RRF hybrid search (`ann`, `hybrid`) fuses Tantivy BM25 with stub
-embeddings from `orchid-embed`. The universal-search **file** source in
-the UI still calls `SearchEngine::search` (BM25 only); wiring hybrid into
-that list is a [roadmap](../../docs/ROADMAP.md) item.
+ANN + RRF hybrid search (`ann`, `hybrid`, `SearchEngine::search_hybrid`)
+fuses Tantivy BM25 with stub embeddings from `orchid-embed`. The engine
+keeps an in-memory ANN in lockstep with upserts/removes (not persisted;
+the indexer crawl refills it). Universal-search **files** call
+`search_hybrid`. A production ONNX model remains a
+[roadmap](../../docs/ROADMAP.md) item.

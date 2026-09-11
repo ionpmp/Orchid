@@ -7,7 +7,8 @@
 //!   dispatch.
 //! * [`extractors`] — text, PDF, DOCX, and `.orchid` extractors.
 //! * [`query`] — query builder and result types.
-//! * [`ann`] / [`hybrid`] — Phase 5 embedding ANN + BM25 fusion.
+//! * [`ann`] / [`hybrid`] — Phase 5 embedding ANN + BM25 fusion
+//!   ([`SearchEngine::search_hybrid`] keeps the ANN in lockstep with upserts).
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]

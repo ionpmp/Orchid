@@ -5,12 +5,15 @@
 
 ## Universal Search
 
-Top edge swipe, or the Search widget. Sources: **files** (Tantivy BM25 +
-snippets), **commands**, **settings**, **calculator** (`=`), **calendar**,
-**Jyotish**.
+Top edge swipe, or the Search widget. Sources: **files** (Tantivy BM25 fused
+with in-memory ANN via reciprocal rank fusion, plus snippets), **commands**,
+**settings**, **calculator** (`=`), **calendar**, **Jyotish**.
 
-ANN + RRF hybrid search exists in `orchid-search` (stub embeddings, `.orchid`
-Clean-Text) but is **not** what the universal-search file list uses yet.
+File hits use [`StubEmbedder`](../../crates/orchid-embed) today (synonym-aware
+vectors, no ONNX model). Semantic recall works for indexed text — including
+`.orchid` Clean-Text — after the indexer has extracted it. The ANN is
+in-memory and refills from the crawl / watcher after a restart. A real
+sentence model remains behind the reserved `ort` feature.
 
 ## Index
 
