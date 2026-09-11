@@ -16,7 +16,7 @@ export component AudioPlayerView inherits Rectangle {
     property <string> q-drag-path: "";
     property <int> q-drag-from: -1;
     property <int> q-drop-index: -1;
-    property <length> q-row-stride: 41px;
+    property <length> q-row-stride: Theme.space-10 + Theme.hairline;
     property <int> applied-scroll-gen: -1;
 
     scroll-apply-timer := Timer {
@@ -205,12 +205,12 @@ export component AudioPlayerView inherits Rectangle {
         VerticalLayout {
             width: 100%;
             height: 100%;
-            padding: 8px;
-            spacing: 6px;
+            padding: Theme.space-2;
+            spacing: Theme.space-1;
 
             HorizontalLayout {
-                spacing: 4px;
-                height: 28px;
+                spacing: Theme.space-1;
+                height: Theme.control-xs;
                 vertical-stretch: 0;
 
                 Rectangle {
@@ -314,14 +314,14 @@ export component AudioPlayerView inherits Rectangle {
             }
 
             HorizontalLayout {
-                spacing: 6px;
-                height: 28px;
+                spacing: Theme.space-1;
+                height: Theme.control-xs;
                 vertical-stretch: 0;
 
                 if root.model.browse-filter != "" : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: back-txt.preferred-width + 16px;
+                    width: back-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("clear-filter"); } }
                     back-txt := Text {
                         text: root.model.browse-filter-label != ""
@@ -337,7 +337,7 @@ export component AudioPlayerView inherits Rectangle {
 
                 SearchField {
                     horizontal-stretch: 1;
-                    field-height: 28px;
+                    field-height: Theme.control-xs;
                     query: root.model.search-query;
                     placeholder: root.model.search-placeholder;
                     edited(q) => { root.command("search:" + q); }
@@ -347,7 +347,7 @@ export component AudioPlayerView inherits Rectangle {
                 if root.model.search-query != "" && root.model.tracks.length > 0 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: play-search-txt.preferred-width + 16px;
+                    width: play-search-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("play-search"); } }
                     play-search-txt := Text {
                         text: root.model.play-group-label;
@@ -363,7 +363,7 @@ export component AudioPlayerView inherits Rectangle {
                 if root.model.search-query != "" && root.model.tracks.length > 0 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: enq-search-txt.preferred-width + 16px;
+                    width: enq-search-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("enqueue-search"); } }
                     enq-search-txt := Text {
                         text: root.model.enqueue-label;
@@ -378,7 +378,7 @@ export component AudioPlayerView inherits Rectangle {
                 if root.model.browse-tab != 6 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: sort-txt.preferred-width + 16px;
+                    width: sort-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("sort"); } }
                     sort-txt := Text {
                         text: root.model.sort-label;
@@ -393,7 +393,7 @@ export component AudioPlayerView inherits Rectangle {
                 Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: add-txt.preferred-width + 16px;
+                    width: add-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("add-root"); } }
                     add-txt := Text {
                         text: root.model.add-folder-label;
@@ -408,7 +408,7 @@ export component AudioPlayerView inherits Rectangle {
                 Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: rescan-txt.preferred-width + 16px;
+                    width: rescan-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("rescan"); } }
                     rescan-txt := Text {
                         text: root.model.rescan-label;
@@ -423,7 +423,7 @@ export component AudioPlayerView inherits Rectangle {
                 if root.model.has-library-roots : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: rem-root-txt.preferred-width + 16px;
+                    width: rem-root-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("remove-last-root"); } }
                     rem-root-txt := Text {
                         text: root.model.remove-root-label;
@@ -438,7 +438,7 @@ export component AudioPlayerView inherits Rectangle {
                 if root.model.browse-tab == 5 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: new-pl-txt.preferred-width + 16px;
+                    width: new-pl-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("new-playlist"); } }
                     new-pl-txt := Text {
                         text: root.model.new-playlist-label;
@@ -453,7 +453,7 @@ export component AudioPlayerView inherits Rectangle {
                 if root.model.browse-tab == 5 && root.model.active-playlist-id != "" && root.model.active-playlist-id != "__recent__" : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: rename-pl-txt.preferred-width + 16px;
+                    width: rename-pl-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("start-rename-playlist"); } }
                     rename-pl-txt := Text {
                         text: root.model.rename-playlist-label;
@@ -468,7 +468,7 @@ export component AudioPlayerView inherits Rectangle {
                 if root.model.browse-tab == 5 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: del-pl-txt.preferred-width + 16px;
+                    width: del-pl-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("delete-playlist"); } }
                     del-pl-txt := Text {
                         text: root.model.delete-playlist-label;
@@ -483,7 +483,7 @@ export component AudioPlayerView inherits Rectangle {
                 if (root.model.browse-tab == 5 || root.model.browse-tab == 6) && root.model.tracks.length > 0 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: export-m3u-txt.preferred-width + 16px;
+                    width: export-m3u-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("export-m3u"); } }
                     export-m3u-txt := Text {
                         text: root.model.export-m3u-label;
@@ -498,7 +498,7 @@ export component AudioPlayerView inherits Rectangle {
                 if root.model.browse-tab == 5 || root.model.browse-tab == 6 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: import-m3u-txt.preferred-width + 16px;
+                    width: import-m3u-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("import-m3u"); } }
                     import-m3u-txt := Text {
                         text: root.model.import-m3u-label;
@@ -520,7 +520,7 @@ export component AudioPlayerView inherits Rectangle {
                 if root.model.browse-tab == 6 && root.model.tracks.length > 0 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: save-q-pl-txt.preferred-width + 16px;
+                    width: save-q-pl-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("save-queue-as-playlist"); } }
                     save-q-pl-txt := Text {
                         text: root.model.save-queue-as-playlist-label;
@@ -535,7 +535,7 @@ export component AudioPlayerView inherits Rectangle {
                 if root.model.browse-tab == 6 && root.model.current-track-index >= 0 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: jump-cur-txt.preferred-width + 16px;
+                    width: jump-cur-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.scroll-to-current(); } }
                     jump-cur-txt := Text {
                         text: root.model.jump-to-current-label;
@@ -550,7 +550,7 @@ export component AudioPlayerView inherits Rectangle {
                 if root.model.browse-tab == 6 && root.model.tracks.length > 1 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: reshuffle-txt.preferred-width + 16px;
+                    width: reshuffle-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("reshuffle"); } }
                     reshuffle-txt := Text {
                         text: root.model.reshuffle-label;
@@ -565,7 +565,7 @@ export component AudioPlayerView inherits Rectangle {
                 if root.model.browse-tab == 6 && root.model.tracks.length > 0 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-base;
-                    width: clear-q-txt.preferred-width + 16px;
+                    width: clear-q-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("clear-queue"); } }
                     clear-q-txt := Text {
                         text: root.model.clear-queue-label;
@@ -579,19 +579,19 @@ export component AudioPlayerView inherits Rectangle {
             }
 
             if root.model.roots.length > 0 : Flickable {
-                height: 28px;
+                height: Theme.control-xs;
                 vertical-stretch: 0;
                 viewport-height: self.height;
                 HorizontalLayout {
-                    spacing: 4px;
+                    spacing: Theme.space-1;
                     for r in root.model.roots : Rectangle {
                         border-radius: Theme.radius-md;
                         background: Theme.surface-base;
-                        height: 24px;
+                        height: Theme.space-6;
                         HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 4px;
-                            spacing: 4px;
+                            padding-left: Theme.space-2;
+                            padding-right: Theme.space-1;
+                            spacing: Theme.space-1;
                             Text {
                                 text: r.label;
                                 color: Theme.text-secondary;
@@ -599,8 +599,8 @@ export component AudioPlayerView inherits Rectangle {
                                 vertical-alignment: center;
                             }
                             TouchArea {
-                                width: 20px;
-                                height: 20px;
+                                width: Theme.space-5;
+                                height: Theme.space-5;
                                 clicked => { root.command("remove-root:" + r.path); }
                                 Text {
                                     text: "x";
@@ -625,7 +625,7 @@ export component AudioPlayerView inherits Rectangle {
             }
 
             if root.model.browse-tab == 5 && root.model.renaming-playlist : SearchField {
-                field-height: 28px;
+                field-height: Theme.control-xs;
                 vertical-stretch: 0;
                 query: root.model.rename-playlist-draft;
                 placeholder: root.model.rename-playlist-label;
@@ -634,16 +634,16 @@ export component AudioPlayerView inherits Rectangle {
             }
 
             if root.model.browse-tab == 5 && root.model.empty-hint == "" : Flickable {
-                height: 28px;
+                height: Theme.control-xs;
                 vertical-stretch: 0;
                 viewport-width: pl-row.preferred-width;
                 pl-row := HorizontalLayout {
-                    spacing: 4px;
+                    spacing: Theme.space-1;
                     for pl in root.model.playlists : Rectangle {
                         border-radius: Theme.radius-md;
                         background: pl.is-active ? Theme.accent-brand : Theme.surface-base;
-                        width: pl-txt.preferred-width + 14px;
-                        height: 26px;
+                        width: pl-txt.preferred-width + Theme.space-3 + Theme.hairline * 2;
+                        height: Theme.control-xs;
                         TouchArea { clicked => { root.command("select-playlist:" + pl.id); } }
                         pl-txt := Text {
                             text: pl.name + " (" + pl.count + ")";
@@ -672,19 +672,19 @@ export component AudioPlayerView inherits Rectangle {
                     viewport-height: browse-col.preferred-height;
 
                     browse-col := VerticalLayout {
-                        spacing: 2px;
+                        spacing: Theme.hairline * 2;
                         width: parent.width;
 
                         if root.model.groups.length > 0 : VerticalLayout {
-                            spacing: 2px;
+                            spacing: Theme.hairline * 2;
                             for g in root.model.groups : Rectangle {
-                                height: 32px;
+                                height: Theme.space-8;
                                 background: g-ta.has-hover ? Theme.surface-raised : transparent;
                                 border-radius: Theme.radius-md;
                                 HorizontalLayout {
-                                    padding-left: 8px;
-                                    padding-right: 8px;
-                                    spacing: 6px;
+                                    padding-left: Theme.space-2;
+                                    padding-right: Theme.space-2;
+                                    spacing: Theme.space-1;
                                     Rectangle {
                                         horizontal-stretch: 1;
                                         g-ta := TouchArea { clicked => { root.command("open-group:" + g.key); } }
@@ -706,8 +706,8 @@ export component AudioPlayerView inherits Rectangle {
                                         }
                                     }
                                     Rectangle {
-                                        width: 28px;
-                                        height: 28px;
+                                        width: Theme.control-xs;
+                                        height: Theme.control-xs;
                                         TouchArea { clicked => { root.command("play-group:" + g.key); } }
                                         Text {
                                             text: root.model.play-group-label;
@@ -720,8 +720,8 @@ export component AudioPlayerView inherits Rectangle {
                                         }
                                     }
                                     Rectangle {
-                                        width: 28px;
-                                        height: 28px;
+                                        width: Theme.control-xs;
+                                        height: Theme.control-xs;
                                         TouchArea { clicked => { root.command("enqueue-group:" + g.key); } }
                                         Text {
                                             text: root.model.enqueue-label;
@@ -733,8 +733,8 @@ export component AudioPlayerView inherits Rectangle {
                                         }
                                     }
                                     if root.model.browse-tab == 3 && g.is-library-root : Rectangle {
-                                        width: 28px;
-                                        height: 28px;
+                                        width: Theme.control-xs;
+                                        height: Theme.control-xs;
                                         TouchArea { clicked => { root.command("remove-root:" + g.key); } }
                                         Text {
                                             text: root.model.remove-root-label;
@@ -750,9 +750,9 @@ export component AudioPlayerView inherits Rectangle {
                         }
 
                         if root.model.tracks.length > 0 : VerticalLayout {
-                            spacing: 1px;
+                            spacing: Theme.hairline;
                             for t[i] in root.model.tracks : Rectangle {
-                                height: 40px;
+                                height: Theme.space-10;
                                 background: root.q-drag-path == t.path
                                     ? Theme.surface-base
                                     : (root.q-drag-path != "" && root.q-drop-index == i
@@ -761,12 +761,12 @@ export component AudioPlayerView inherits Rectangle {
                                 opacity: root.q-drag-path == t.path ? 0.55 : 1.0;
                                 border-radius: Theme.radius-md;
                                     HorizontalLayout {
-                                    padding-left: 8px;
-                                    padding-right: 8px;
-                                    spacing: 6px;
+                                    padding-left: Theme.space-2;
+                                    padding-right: Theme.space-2;
+                                    spacing: Theme.space-1;
                                     if root.model.browse-tab == 6 : Rectangle {
-                                        width: 18px;
-                                        height: 28px;
+                                        width: Theme.space-4 + Theme.hairline * 2;
+                                        height: Theme.control-xs;
                                         Text {
                                             text: "⋮⋮";
                                             color: Theme.text-tertiary;
@@ -806,8 +806,8 @@ export component AudioPlayerView inherits Rectangle {
                                         }
                                     }
                                     Rectangle {
-                                        width: 32px;
-                                        height: 32px;
+                                        width: Theme.space-8;
+                                        height: Theme.space-8;
                                         border-radius: Theme.radius-md;
                                         background: Theme.surface-base;
                                         clip: true;
@@ -865,7 +865,7 @@ export component AudioPlayerView inherits Rectangle {
                                         vertical-alignment: center;
                                     }
                                     Rectangle {
-                                        width: 28px; height: 28px;
+                                        width: Theme.control-xs; height: Theme.control-xs;
                                         TouchArea { clicked => { root.command("toggle-favorite:" + t.path); } }
                                         Text {
                                             text: t.is-favorite ? "*" : "+";
@@ -877,7 +877,7 @@ export component AudioPlayerView inherits Rectangle {
                                         }
                                     }
                                     if root.model.browse-tab != 6 : Rectangle {
-                                        width: 28px; height: 28px;
+                                        width: Theme.control-xs; height: Theme.control-xs;
                                         TouchArea { clicked => { root.command("enqueue:" + t.path); } }
                                         Text {
                                             text: root.model.enqueue-label;
@@ -889,7 +889,7 @@ export component AudioPlayerView inherits Rectangle {
                                         }
                                     }
                                     if root.model.browse-tab != 6 : Rectangle {
-                                        width: 28px; height: 28px;
+                                        width: Theme.control-xs; height: Theme.control-xs;
                                         TouchArea { clicked => { root.command("play-next:" + t.path); } }
                                         Text {
                                             text: root.model.play-next-label;
@@ -901,7 +901,7 @@ export component AudioPlayerView inherits Rectangle {
                                         }
                                     }
                                     if root.model.browse-tab != 6 && root.model.active-playlist-id != "__recent__" : Rectangle {
-                                        width: 28px; height: 28px;
+                                        width: Theme.control-xs; height: Theme.control-xs;
                                         TouchArea { clicked => { root.command("add-to-active-playlist:" + t.path); } }
                                         Text {
                                             text: root.model.add-to-playlist-label;
@@ -913,7 +913,7 @@ export component AudioPlayerView inherits Rectangle {
                                         }
                                     }
                                     if root.model.browse-tab == 5 : Rectangle {
-                                        width: 28px; height: 28px;
+                                        width: Theme.control-xs; height: Theme.control-xs;
                                         TouchArea { clicked => { root.command("remove-from-active-playlist:" + t.path); } }
                                         Text {
                                             text: root.model.remove-from-playlist-label;
@@ -925,7 +925,7 @@ export component AudioPlayerView inherits Rectangle {
                                         }
                                     }
                                     if root.model.browse-tab == 6 : Rectangle {
-                                        width: 22px; height: 28px;
+                                        width: Theme.space-5 + Theme.hairline * 2; height: Theme.control-xs;
                                         TouchArea { clicked => { root.command("queue-up:" + t.path); } }
                                         Text {
                                             text: root.model.move-up-label;
@@ -937,7 +937,7 @@ export component AudioPlayerView inherits Rectangle {
                                         }
                                     }
                                     if root.model.browse-tab == 6 : Rectangle {
-                                        width: 22px; height: 28px;
+                                        width: Theme.space-5 + Theme.hairline * 2; height: Theme.control-xs;
                                         TouchArea { clicked => { root.command("queue-down:" + t.path); } }
                                         Text {
                                             text: root.model.move-down-label;
@@ -949,7 +949,7 @@ export component AudioPlayerView inherits Rectangle {
                                         }
                                     }
                                     if root.model.browse-tab == 6 : Rectangle {
-                                        width: 28px; height: 28px;
+                                        width: Theme.control-xs; height: Theme.control-xs;
                                         TouchArea { clicked => { root.command("remove-from-queue:" + t.path); } }
                                         Text {
                                             text: root.model.remove-label;
@@ -985,7 +985,7 @@ export component AudioPlayerView inherits Rectangle {
                 clip: true;
 
                 property <int> applied-lyrics-idx: -2;
-                property <length> lyrics-row-stride: 22px;
+                property <length> lyrics-row-stride: Theme.space-5 + Theme.hairline * 2;
 
                 lyrics-scroll-timer := Timer {
                     interval: 1ms;
@@ -1006,17 +1006,17 @@ export component AudioPlayerView inherits Rectangle {
                     viewport-width: self.width;
                     viewport-height: lyrics-col.preferred-height;
                     VerticalLayout {
-                        padding: 8px;
-                        spacing: 2px;
+                        padding: Theme.space-2;
+                        spacing: Theme.hairline * 2;
                         width: parent.width;
                         lyrics-col := VerticalLayout {
-                            spacing: 2px;
+                            spacing: Theme.hairline * 2;
                             for line[idx] in root.model.lyrics-lines : Rectangle {
-                                height: 20px;
+                                height: Theme.space-5;
                                 HorizontalLayout {
                                     Text {
                                         width: 100%;
-                                        height: 20px;
+                                        height: Theme.space-5;
                                         text: line.text;
                                         color: line.is-current ? Theme.accent-brand : Theme.text-secondary;
                                         font-size: Theme.font-size-sm;
@@ -1039,7 +1039,7 @@ export component AudioPlayerView inherits Rectangle {
             // Now-playing chrome — sized to content, never pushed outside the widget.
             Rectangle {
                 vertical-stretch: 0;
-                min-height: 128px;
+                min-height: Theme.control-lg * 2 + Theme.space-2;
                 background: Theme.gradient-chrome;
                 border-radius: Theme.radius-lg;
                 border-width: Theme.hairline;
@@ -1052,11 +1052,11 @@ export component AudioPlayerView inherits Rectangle {
 
                     HorizontalLayout {
                         spacing: Theme.space-3;
-                        height: 64px;
+                        height: Theme.control-lg + Theme.space-1;
                         // Cover art doubles as the widget's light source.
                         Rectangle {
-                            width: 64px;
-                            height: 64px;
+                            width: Theme.control-lg + Theme.space-1;
+                            height: Theme.control-lg + Theme.space-1;
                             background: root.model.has-cover ? Theme.surface-sunken : Theme.gradient-hero;
                             border-radius: Theme.radius-md;
                             drop-shadow-blur: Theme.elev-2-blur;
@@ -1080,7 +1080,7 @@ export component AudioPlayerView inherits Rectangle {
                         VerticalLayout {
                             alignment: center;
                             horizontal-stretch: 1;
-                            spacing: 2px;
+                            spacing: Theme.hairline * 2;
                             Text {
                                 text: root.model.has-track ? root.model.title : root.model.no-track-label;
                                 color: Theme.text-primary;
@@ -1101,7 +1101,7 @@ export component AudioPlayerView inherits Rectangle {
                                 overflow: elide;
                             }
                             if root.model.has-lyrics : Rectangle {
-                                height: 18px;
+                                height: Theme.space-4 + Theme.hairline * 2;
                                 TouchArea { clicked => { root.command("toggle-lyrics"); } }
                                 Text {
                                     text: root.model.lyrics-open ? root.model.lyrics-label : (root.model.lyrics-line != "" ? root.model.lyrics-line : root.model.lyrics-label);
@@ -1123,8 +1123,8 @@ export component AudioPlayerView inherits Rectangle {
                     }
 
                     HorizontalLayout {
-                        spacing: 6px;
-                        height: 16px;
+                        spacing: Theme.space-1;
+                        height: Theme.space-4;
                         Text {
                             text: root.model.position-label;
                             color: Theme.text-tertiary;
@@ -1241,10 +1241,10 @@ export component AudioPlayerView inherits Rectangle {
                                 clicked => { root.command("show-in-fm"); }
                             }
                             vol-chip := Rectangle {
-                                width: 56px;
-                                height: 24px;
+                                width: Theme.control-lg - Theme.space-1;
+                                height: Theme.space-6;
                                 VerticalLayout {
-                                    spacing: 2px;
+                                    spacing: Theme.hairline * 2;
                                     alignment: center;
                                     Text {
                                         text: root.model.muted ? "M" : (root.model.volume + "%");
@@ -1253,14 +1253,14 @@ export component AudioPlayerView inherits Rectangle {
                                         horizontal-alignment: center;
                                     }
                                     Rectangle {
-                                        height: 3px;
+                                        height: Theme.indicator-thickness;
                                         background: Theme.surface-base;
-                                        border-radius: 1px;
+                                        border-radius: Theme.hairline;
                                         Rectangle {
                                             height: parent.height;
                                             width: parent.width * min(1.0, root.model.volume / 150);
                                             background: Theme.accent-brand;
-                                            border-radius: 1px;
+                                            border-radius: Theme.hairline;
                                         }
                                     }
                                 }
@@ -1288,7 +1288,7 @@ export component AudioPlayerView inherits Rectangle {
                                 }
                             }
                             Rectangle {
-                                width: sleep-txt.preferred-width + 10px; height: 24px;
+                                width: sleep-txt.preferred-width + Theme.space-2 + Theme.hairline * 2; height: Theme.space-6;
                                 TouchArea { clicked => { root.command("sleep"); } }
                                 sleep-txt := Text {
                                     text: root.model.sleep-label != "" ? root.model.sleep-label : root.model.sleep-off-label;
@@ -1300,7 +1300,7 @@ export component AudioPlayerView inherits Rectangle {
                                 }
                             }
                             Rectangle {
-                                width: eq-txt.preferred-width + 10px; height: 24px;
+                                width: eq-txt.preferred-width + Theme.space-2 + Theme.hairline * 2; height: Theme.space-6;
                                 TouchArea { clicked => { root.command("eq"); } }
                                 eq-txt := Text {
                                     text: root.model.eq-label != "" ? root.model.eq-label : root.model.eq-off-label;
@@ -1312,7 +1312,7 @@ export component AudioPlayerView inherits Rectangle {
                                 }
                             }
                             Rectangle {
-                                width: rg-txt.preferred-width + 10px; height: 24px;
+                                width: rg-txt.preferred-width + Theme.space-2 + Theme.hairline * 2; height: Theme.space-6;
                                 TouchArea { clicked => { root.command("rg"); } }
                                 rg-txt := Text {
                                     text: root.model.rg-label != "" ? root.model.rg-label : root.model.rg-off-label;
@@ -1324,7 +1324,7 @@ export component AudioPlayerView inherits Rectangle {
                                 }
                             }
                             Rectangle {
-                                width: speed-txt.preferred-width + 10px; height: 24px;
+                                width: speed-txt.preferred-width + Theme.space-2 + Theme.hairline * 2; height: Theme.space-6;
                                 TouchArea { clicked => { root.command("speed"); } }
                                 speed-txt := Text {
                                     text: root.model.speed-label != "" ? root.model.speed-label : root.model.speed-off-label;
@@ -1336,7 +1336,7 @@ export component AudioPlayerView inherits Rectangle {
                                 }
                             }
                             Rectangle {
-                                width: xf-txt.preferred-width + 10px; height: 24px;
+                                width: xf-txt.preferred-width + Theme.space-2 + Theme.hairline * 2; height: Theme.space-6;
                                 TouchArea { clicked => { root.command("crossfade"); } }
                                 xf-txt := Text {
                                     text: root.model.crossfade-label != "" ? root.model.crossfade-label : root.model.crossfade-off-label;

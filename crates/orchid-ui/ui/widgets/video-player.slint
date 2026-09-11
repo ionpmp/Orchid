@@ -16,7 +16,7 @@ export component VideoPlayerView inherits Rectangle {
     property <string> q-drag-path: "";
     property <int> q-drag-from: -1;
     property <int> q-drop-index: -1;
-    property <length> q-row-stride: 38px;
+    property <length> q-row-stride: Theme.control-sm;
 
     scroll-apply-timer := Timer {
         interval: 16ms;
@@ -104,8 +104,8 @@ export component VideoPlayerView inherits Rectangle {
         }
 
         VerticalLayout {
-            padding: 8px;
-            spacing: 8px;
+            padding: Theme.space-2;
+            spacing: Theme.space-2;
 
             // Video surface
             Rectangle {
@@ -123,11 +123,11 @@ export component VideoPlayerView inherits Rectangle {
 
                 if !root.model.has-video : VerticalLayout {
                     alignment: center;
-                    spacing: 6px;
+                    spacing: Theme.space-1;
                     Text {
                         text: "▶";
                         color: Theme.text-tertiary;
-                        font-size: 36px;
+                        font-size: Theme.font-size-3xl;
                         horizontal-alignment: center;
                     }
                     Text {
@@ -158,7 +158,7 @@ export component VideoPlayerView inherits Rectangle {
                 text: root.model.has-track ? root.model.title : root.model.no-track-label;
                 color: Theme.text-primary;
                 font-size: Theme.font-size-md;
-                font-weight: 600;
+                font-weight: Theme.weight-semibold;
                 overflow: elide;
             }
 
@@ -191,7 +191,7 @@ export component VideoPlayerView inherits Rectangle {
             }
 
             HorizontalLayout {
-                spacing: 8px;
+                spacing: Theme.space-2;
                 Text {
                     text: root.model.position-label;
                     color: Theme.text-tertiary;
@@ -270,16 +270,16 @@ export component VideoPlayerView inherits Rectangle {
 
             // Tabs + actions
             HorizontalLayout {
-                spacing: 6px;
+                spacing: Theme.space-1;
                 TouchArea {
-                    height: 28px;
+                    height: Theme.control-xs;
                     clicked => { root.command("tab:0"); }
                     Rectangle {
                         background: root.model.browse-tab == 0 ? Theme.surface-raised : transparent;
                         border-radius: Theme.radius-md;
                         HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 8px;
+                            padding-left: Theme.space-2;
+                            padding-right: Theme.space-2;
                             Text {
                                 text: root.model.tab-library + " (" + root.model.library-count + ")";
                                 color: root.model.browse-tab == 0 ? Theme.text-primary : Theme.text-tertiary;
@@ -291,14 +291,14 @@ export component VideoPlayerView inherits Rectangle {
                     }
                 }
                 TouchArea {
-                    height: 28px;
+                    height: Theme.control-xs;
                     clicked => { root.command("tab:1"); }
                     Rectangle {
                         background: root.model.browse-tab == 1 ? Theme.surface-raised : transparent;
                         border-radius: Theme.radius-md;
                         HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 8px;
+                            padding-left: Theme.space-2;
+                            padding-right: Theme.space-2;
                             Text {
                                 text: root.model.tab-queue + " (" + root.model.queue-count + ")";
                                 color: root.model.browse-tab == 1 ? Theme.text-primary : Theme.text-tertiary;
@@ -311,7 +311,7 @@ export component VideoPlayerView inherits Rectangle {
                 }
                 Rectangle { horizontal-stretch: 1; }
                 TouchArea {
-                    height: 28px;
+                    height: Theme.control-xs;
                     clicked => { root.command("open-file"); }
                     Text {
                         text: root.model.open-file-label;
@@ -321,7 +321,7 @@ export component VideoPlayerView inherits Rectangle {
                     }
                 }
                 TouchArea {
-                    height: 28px;
+                    height: Theme.control-xs;
                     clicked => { root.command("add-folder"); }
                     Text {
                         text: root.model.add-folder-label;
@@ -331,7 +331,7 @@ export component VideoPlayerView inherits Rectangle {
                     }
                 }
                 TouchArea {
-                    height: 28px;
+                    height: Theme.control-xs;
                     clicked => { root.command("rescan"); }
                     Text {
                         text: root.model.rescan-label;
@@ -343,13 +343,13 @@ export component VideoPlayerView inherits Rectangle {
             }
 
             HorizontalLayout {
-                spacing: 6px;
-                height: 28px;
+                spacing: Theme.space-1;
+                height: Theme.control-xs;
 
                 if root.model.browse-filter != "" : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-raised;
-                    width: back-txt.preferred-width + 16px;
+                    width: back-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("clear-filter"); } }
                     back-txt := Text {
                         text: root.model.browse-filter-label != ""
@@ -365,7 +365,7 @@ export component VideoPlayerView inherits Rectangle {
 
                 SearchField {
                     horizontal-stretch: 1;
-                    field-height: 28px;
+                    field-height: Theme.control-xs;
                     query: root.model.search-query;
                     placeholder: root.model.search-placeholder;
                     edited(q) => { root.command("search:" + q); }
@@ -375,7 +375,7 @@ export component VideoPlayerView inherits Rectangle {
                 if root.model.search-query != "" && root.model.items.length > 0 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-raised;
-                    width: play-search-txt.preferred-width + 16px;
+                    width: play-search-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("play-search"); } }
                     play-search-txt := Text {
                         text: root.model.play-group-label;
@@ -390,7 +390,7 @@ export component VideoPlayerView inherits Rectangle {
                 if root.model.search-query != "" && root.model.items.length > 0 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-raised;
-                    width: enq-search-txt.preferred-width + 16px;
+                    width: enq-search-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("enqueue-search"); } }
                     enq-search-txt := Text {
                         text: root.model.enqueue-label;
@@ -412,7 +412,7 @@ export component VideoPlayerView inherits Rectangle {
                 if root.model.browse-tab == 1 && root.model.current-track-index >= 0 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-raised;
-                    width: jump-cur-txt.preferred-width + 16px;
+                    width: jump-cur-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.scroll-to-current(); } }
                     jump-cur-txt := Text {
                         text: root.model.jump-to-current-label;
@@ -427,7 +427,7 @@ export component VideoPlayerView inherits Rectangle {
                 if root.model.browse-tab == 1 && root.model.items.length > 1 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-raised;
-                    width: reshuffle-txt.preferred-width + 16px;
+                    width: reshuffle-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("reshuffle"); } }
                     reshuffle-txt := Text {
                         text: root.model.reshuffle-label;
@@ -442,7 +442,7 @@ export component VideoPlayerView inherits Rectangle {
                 if root.model.browse-tab == 1 && root.model.queue-count > 0 : Rectangle {
                     border-radius: Theme.radius-md;
                     background: Theme.surface-raised;
-                    width: clear-q-txt.preferred-width + 16px;
+                    width: clear-q-txt.preferred-width + Theme.space-4;
                     TouchArea { clicked => { root.command("clear-queue"); } }
                     clear-q-txt := Text {
                         text: root.model.clear-queue-label;
@@ -456,20 +456,20 @@ export component VideoPlayerView inherits Rectangle {
             }
 
             if root.model.browse-tab == 0 && root.model.has-library-roots : Flickable {
-                height: 24px;
+                height: Theme.space-6;
                 viewport-height: self.height;
                 HorizontalLayout {
-                    spacing: 4px;
+                    spacing: Theme.space-1;
                     for root-item in root.model.roots : TouchArea {
-                        height: 24px;
+                        height: Theme.space-6;
                         clicked => { root.command("remove-root:" + root-item.path); }
                         Rectangle {
                             background: Theme.surface-raised;
                             border-radius: Theme.radius-md;
                             HorizontalLayout {
-                                padding-left: 6px;
-                                padding-right: 6px;
-                                spacing: 4px;
+                                padding-left: Theme.space-1;
+                                padding-right: Theme.space-1;
+                                spacing: Theme.space-1;
                                 Text {
                                     text: root-item.label;
                                     color: Theme.text-secondary;
@@ -510,19 +510,19 @@ export component VideoPlayerView inherits Rectangle {
                     viewport-height: browse-col.preferred-height;
 
                     browse-col := VerticalLayout {
-                        spacing: 2px;
+                        spacing: Theme.hairline * 2;
                         width: parent.width;
 
                         if root.model.browse-tab == 0 && root.model.groups.length > 0 : VerticalLayout {
-                            spacing: 2px;
+                            spacing: Theme.hairline * 2;
                             for g in root.model.groups : Rectangle {
-                                height: 32px;
+                                height: Theme.space-8;
                                 background: g-ta.has-hover ? Theme.surface-raised : transparent;
                                 border-radius: Theme.radius-md;
                                 HorizontalLayout {
-                                    padding-left: 8px;
-                                    padding-right: 8px;
-                                    spacing: 6px;
+                                    padding-left: Theme.space-2;
+                                    padding-right: Theme.space-2;
+                                    spacing: Theme.space-1;
                                     Rectangle {
                                         horizontal-stretch: 1;
                                         g-ta := TouchArea { clicked => { root.command("open-group:" + g.key); } }
@@ -544,8 +544,8 @@ export component VideoPlayerView inherits Rectangle {
                                         }
                                     }
                                     Rectangle {
-                                        width: 36px;
-                                        height: 28px;
+                                        width: Theme.icon-button-sm;
+                                        height: Theme.control-xs;
                                         TouchArea { clicked => { root.command("play-group:" + g.key); } }
                                         Text {
                                             text: root.model.play-group-label;
@@ -557,13 +557,13 @@ export component VideoPlayerView inherits Rectangle {
                                         }
                                     }
                                     Rectangle {
-                                        width: 36px;
-                                        height: 28px;
+                                        width: Theme.icon-button-sm;
+                                        height: Theme.control-xs;
                                         TouchArea { clicked => { root.command("enqueue-group:" + g.key); } }
                                         Text {
                                             text: "+";
                                             color: Theme.text-tertiary;
-                                            font-size: 16px;
+                                            font-size: Theme.font-size-md;
                                             horizontal-alignment: center;
                                             vertical-alignment: center;
                                             width: 100%; height: 100%;
@@ -574,9 +574,9 @@ export component VideoPlayerView inherits Rectangle {
                         }
 
                         if root.model.items.length > 0 : VerticalLayout {
-                            spacing: 2px;
+                            spacing: Theme.hairline * 2;
                             for item[i] in root.model.items : Rectangle {
-                                height: 36px;
+                                height: Theme.icon-button-sm;
                                 background: root.q-drag-path == item.path
                                     ? Theme.surface-raised
                                     : (root.q-drag-path != "" && root.q-drop-index == i
@@ -585,13 +585,13 @@ export component VideoPlayerView inherits Rectangle {
                                 opacity: root.q-drag-path == item.path ? 0.55 : 1.0;
                                 border-radius: Theme.radius-md;
                                 HorizontalLayout {
-                                    padding-left: 6px;
-                                    padding-right: 4px;
-                                    spacing: 6px;
+                                    padding-left: Theme.space-1;
+                                    padding-right: Theme.space-1;
+                                    spacing: Theme.space-1;
 
                                     if root.model.browse-tab == 1 : Rectangle {
-                                        width: 18px;
-                                        height: 28px;
+                                        width: Theme.space-4 + Theme.hairline * 2;
+                                        height: Theme.control-xs;
                                         Text {
                                             text: "⋮⋮";
                                             color: Theme.text-tertiary;
@@ -660,18 +660,18 @@ export component VideoPlayerView inherits Rectangle {
                                     }
 
                                     if root.model.browse-tab == 0 : TouchArea {
-                                        width: 28px;
+                                        width: Theme.control-xs;
                                         clicked => { root.command("enqueue:" + item.path); }
                                         Text {
                                             text: "+";
                                             color: Theme.text-tertiary;
-                                            font-size: 16px;
+                                            font-size: Theme.font-size-md;
                                             horizontal-alignment: center;
                                             vertical-alignment: center;
                                         }
                                     }
                                     if root.model.browse-tab == 0 : TouchArea {
-                                        width: 28px;
+                                        width: Theme.control-xs;
                                         clicked => { root.command("play-next:" + item.path); }
                                         Text {
                                             text: root.model.play-next-label;
@@ -682,7 +682,7 @@ export component VideoPlayerView inherits Rectangle {
                                         }
                                     }
                                     if root.model.browse-tab == 1 : TouchArea {
-                                        width: 22px;
+                                        width: Theme.space-5 + Theme.hairline * 2;
                                         clicked => { root.command("queue-up:" + item.path); }
                                         Text {
                                             text: root.model.move-up-label;
@@ -693,7 +693,7 @@ export component VideoPlayerView inherits Rectangle {
                                         }
                                     }
                                     if root.model.browse-tab == 1 : TouchArea {
-                                        width: 22px;
+                                        width: Theme.space-5 + Theme.hairline * 2;
                                         clicked => { root.command("queue-down:" + item.path); }
                                         Text {
                                             text: root.model.move-down-label;
@@ -704,12 +704,12 @@ export component VideoPlayerView inherits Rectangle {
                                         }
                                     }
                                     if root.model.browse-tab == 1 : TouchArea {
-                                        width: 28px;
+                                        width: Theme.control-xs;
                                         clicked => { root.command("remove-queue:" + item.path); }
                                         Text {
                                             text: "×";
                                             color: Theme.text-tertiary;
-                                            font-size: 14px;
+                                            font-size: Theme.font-size-md;
                                             horizontal-alignment: center;
                                             vertical-alignment: center;
                                         }
