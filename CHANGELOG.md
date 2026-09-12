@@ -453,6 +453,10 @@ release yet.
 - Build: `.cargo/config.toml` raises `RUST_MIN_STACK` and `orchid-ui/build.rs`
   compiles Slint on a 256 MiB stack — the generated UI tree overflowed both the
   Slint compiler and rustc on Windows.
+- **Compile-time module split**: cut oversized first-party units (document
+  editor, file-manager widget, viewer widget, UI `wire_callbacks`) into
+  sibling modules so rustc can rebuild them incrementally. Public widget
+  and viewer APIs stay the same.
 - **Document viewer toolbar**: extract shared `DocToolBtn` so Slint/rustc
   spend less stack and memory on the `viewer-document` compile tree.
 - **Image viewer chrome**: extract shared `ImageToolBtn` so Slint generates

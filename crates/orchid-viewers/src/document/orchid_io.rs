@@ -471,7 +471,9 @@ mod tests {
         let id = Identity::passphrase("correct horse battery");
         let doc = sample_document();
         let expected = doc.plain_text();
-        save_document_as_orchid(&doc, &path, Some(&id)).await.unwrap();
+        save_document_as_orchid(&doc, &path, Some(&id))
+            .await
+            .unwrap();
         let err = open_document_from_orchid(&path, None).await.unwrap_err();
         assert!(
             is_orchid_identity_error(&err.to_string()),
