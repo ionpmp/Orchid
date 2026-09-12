@@ -1,4 +1,7 @@
 use super::*;
+use crate::document::model::*;
+use crate::document::ooxml::numbering::NumberingDefs;
+use crate::document::ooxml::styles::StyleDefaults;
 
 #[test]
 fn parse_simple_paragraph() {

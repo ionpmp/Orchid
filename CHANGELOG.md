@@ -456,7 +456,10 @@ release yet.
 - **Compile-time module split**: cut oversized first-party units (document
   editor, file-manager widget, viewer widget, UI `wire_callbacks`) into
   sibling modules so rustc can rebuild them incrementally. Public widget
-  and viewer APIs stay the same.
+  and viewer APIs stay the same. Follow-up splits: UI file-manager
+  handlers (`fm` drag / nav / dialogs / outcome), OOXML
+  `document_xml` parse vs write, and document layout (flow / tables /
+  paint).
 - **Document viewer toolbar**: extract shared `DocToolBtn` so Slint/rustc
   spend less stack and memory on the `viewer-document` compile tree.
 - **Image viewer chrome**: extract shared `ImageToolBtn` so Slint generates
