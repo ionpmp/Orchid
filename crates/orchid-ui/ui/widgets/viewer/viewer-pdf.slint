@@ -21,6 +21,7 @@ export component ViewerPdfView inherits Rectangle {
     callback outline-goto(int);
     callback print();
     callback highlight();
+    callback comment();
 
     background: transparent;
 
@@ -232,6 +233,13 @@ export component ViewerPdfView inherits Rectangle {
                         tip: model.highlight-label;
                         enabled: model.has-selection;
                         clicked => { root.highlight(); pdf-keys.focus(); }
+                    }
+
+                    DocToolBtn {
+                        label: model.comment-label;
+                        tip: model.comment-label;
+                        enabled: model.has-selection;
+                        clicked => { root.comment(); pdf-keys.focus(); }
                     }
 
                     Rectangle {

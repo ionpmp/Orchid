@@ -1,5 +1,5 @@
 //! Document-level PDF operations that run off the raster worker:
-//! outline extraction, full-document search, and highlight export.
+//! outline extraction, full-document search, highlight export, and sticky notes.
 
 use std::path::Path;
 
@@ -216,6 +216,95 @@ pub fn save_highlight_sibling(
 ) -> Result<std::path::PathBuf> {
     let dest = unique_export_dest(src_path, "hl", "pdf");
     save_highlight(bytes, page, rects, &dest)
+}
+
+/// Write a sticky text annotation at the first rect into `dest`.
+///
+/// # Errors
+///
+/// Empty text / rects, Pdfium failures, or I/O.
+pub fn save_text_comment(
+    bytes: &[u8],
+    page: u32,
+    rects: &[PtsRect],
+    text: &str,
+    dest: &Path,
+) -> Result<std::path::PathBuf> {
+    let text = text.trim();
+    if text.is_empty() || rects.is_empty() {
+        return Err(ViewerError::PdfCommentEmpty);
+    }
+    let dest = dest.to_path_buf();
+    let note = text.to_string();
+    let anchor = rects[0];
+    with_pdfium(|pdfium| {
+        let document =
+            pdfium
+                .load_pdf_from_byte_slice(bytes, None)
+                .map_err(|e| ViewerError::PdfRender {
+                    page,
+                    reason: format!("load document: {e}"),
+                })?;
+        let count = i32::from(document.pages().len()).max(0) as u32;
+        if count == 0 {
+            return Err(ViewerError::PdfEmpty);
+        }
+        let current = page.clamp(1, count);
+        let mut pdf_page = document
+            .pages()
+            .get(current.saturating_sub(1) as i32)
+            .map_err(|e| ViewerError::PdfRender {
+                page: current,
+                reason: format!("open page: {e}"),
+            })?;
+        let pdf_rect =
+            PdfRect::new_from_values(anchor.bottom, anchor.left, anchor.top, anchor.right);
+        let mut ann = pdf_page
+            .annotations_mut()
+            .create_text_annotation(&note)
+            .map_err(|e| ViewerError::PdfRender {
+                page: current,
+                reason: format!("comment: {e}"),
+            })?;
+        ann.set_position(pdf_rect.left(), pdf_rect.top())
+            .map_err(|e| ViewerError::PdfRender {
+                page: current,
+                reason: format!("comment position: {e}"),
+            })?;
+        ann.set_width(PdfPoints::new(18.0))
+            .map_err(|e| ViewerError::PdfRender {
+                page: current,
+                reason: format!("comment width: {e}"),
+            })?;
+        ann.set_height(PdfPoints::new(18.0))
+            .map_err(|e| ViewerError::PdfRender {
+                page: current,
+                reason: format!("comment height: {e}"),
+            })?;
+        document
+            .save_to_file(&dest)
+            .map_err(|e| ViewerError::PdfRender {
+                page: current,
+                reason: format!("save comment: {e}"),
+            })?;
+        Ok(dest)
+    })
+}
+
+/// Sibling `*-note.pdf` next to `src_path` when the open file is not writable.
+///
+/// # Errors
+///
+/// Same as [`save_text_comment`].
+pub fn save_text_comment_sibling(
+    bytes: &[u8],
+    page: u32,
+    rects: &[PtsRect],
+    text: &str,
+    src_path: &Path,
+) -> Result<std::path::PathBuf> {
+    let dest = unique_export_dest(src_path, "note", "pdf");
+    save_text_comment(bytes, page, rects, text, &dest)
 }
 
 #[cfg(test)]

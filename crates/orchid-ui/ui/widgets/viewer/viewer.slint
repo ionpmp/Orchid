@@ -40,6 +40,7 @@ export component ViewerView inherits Rectangle {
     callback pdf-outline-goto(int);
     callback pdf-print();
     callback pdf-highlight();
+    callback pdf-comment();
 
     callback archive-navigate-into(string);
     callback archive-navigate-up();
@@ -159,6 +160,7 @@ export component ViewerView inherits Rectangle {
         outline-goto(pg) => { root.pdf-outline-goto(pg); }
         print => { root.pdf-print(); }
         highlight => { root.pdf-highlight(); }
+        comment => { root.pdf-comment(); }
     }
 
     if model.kind == 5 : ViewerTextView {

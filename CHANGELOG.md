@@ -375,7 +375,8 @@ release yet.
   when present. The ANN is snapshotted to `ann.stub.v1`.
 - PDF: `Ctrl+A` selects the current page’s extracted text (copy / highlight
   then use the selection). **Highlight** writes into the open file (sibling
-  `*-hl.pdf` if the path is not writable).
+  `*-hl.pdf` if the path is not writable). **Comment** pins a sticky note
+  with the selected text (`*-note.pdf` fallback).
 - Cinema kit: focus rings, Space/Enter activation, and `accessible-*`
   names on buttons / chips / switches. Floating-window chrome tooltips
   (dock, undock, min, max, restore) were missing.

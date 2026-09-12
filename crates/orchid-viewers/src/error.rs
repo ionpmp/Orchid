@@ -100,6 +100,10 @@ pub enum ViewerError {
     #[error("viewer-pdf-highlight-empty")]
     PdfHighlightEmpty,
 
+    /// A sticky comment was requested with no selected text.
+    #[error("viewer-pdf-comment-empty")]
+    PdfCommentEmpty,
+
     /// libmpv shared library could not be loaded.
     #[error(
         "Media playback unavailable: place mpv-1.dll (or libmpv-2.dll) next to the executable or see docs/BUILDING.md"

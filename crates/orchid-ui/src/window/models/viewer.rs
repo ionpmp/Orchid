@@ -5,14 +5,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::super::errors::viewer_localized_error;
+use super::file_manager::empty_passphrase_state;
 use crate::slint_generated::{
     FmPassphraseState, ViewerArchiveEntry, ViewerArchiveModel, ViewerCalDay, ViewerDocumentModel,
     ViewerEmptyModel, ViewerHtmlModel, ViewerImageModel, ViewerImageThumb, ViewerMapPin,
-    ViewerMediaChapterItem, ViewerMediaModel, ViewerMediaPlaylistItem, ViewerModel,
-    ViewerPdfModel, ViewerPdfOutlineRow, ViewerPdfOverlay, ViewerStatusModel, ViewerSyntaxLine,
+    ViewerMediaChapterItem, ViewerMediaModel, ViewerMediaPlaylistItem, ViewerModel, ViewerPdfModel,
+    ViewerPdfOutlineRow, ViewerPdfOverlay, ViewerStatusModel, ViewerSyntaxLine,
     ViewerSyntaxSegment, ViewerTextModel,
 };
-use super::file_manager::empty_passphrase_state;
 
 /// Reuse Slint images when the underlying RGBA `Arc` is unchanged (pan/zoom).
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -414,6 +414,7 @@ fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
         find_no_match_label: locale.tr("viewer-pdf-find-no-match").into(),
         print_label: locale.tr("viewer-pdf-print").into(),
         highlight_label: locale.tr("viewer-pdf-highlight").into(),
+        comment_label: locale.tr("viewer-pdf-comment").into(),
         match_case_label: locale.tr("viewer-pdf-match-case").into(),
     }
 }
@@ -1534,8 +1535,7 @@ fn build_document_snapshot(
         if s.orchid_generation > 0 {
             let gen = locale.tr_args(
                 "viewer-document-orchid-gen",
-                &orchid_i18n::FluentArgs::new()
-                    .with("generation", s.orchid_generation.to_string()),
+                &orchid_i18n::FluentArgs::new().with("generation", s.orchid_generation.to_string()),
             );
             base = format!("{base} · {gen}");
             if s.orchid_linked {
@@ -2181,6 +2181,7 @@ fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -
         find_no_match_label: locale.tr("viewer-pdf-find-no-match").into(),
         print_label: locale.tr("viewer-pdf-print").into(),
         highlight_label: locale.tr("viewer-pdf-highlight").into(),
+        comment_label: locale.tr("viewer-pdf-comment").into(),
         match_case_label: locale.tr("viewer-pdf-match-case").into(),
     }
 }

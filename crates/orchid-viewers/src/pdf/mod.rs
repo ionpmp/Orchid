@@ -644,6 +644,55 @@ impl PdfViewer {
         Ok(dest)
     }
 
+    /// Write a sticky note whose contents are the current selection.
+    ///
+    /// Falls back to a sibling `*-note.pdf` when the path is not writable.
+    /// Reloads the payload so stacked notes keep the previous marks.
+    ///
+    /// # Errors
+    ///
+    /// [`ViewerError::PdfCommentEmpty`] when nothing is selected, or Pdfium / I/O failures.
+    pub async fn comment_selection(&self) -> Result<PathBuf> {
+        let (rects, text, page) = {
+            let sel = self.selection.read();
+            let Some(sel) = sel.as_ref() else {
+                return Err(ViewerError::PdfCommentEmpty);
+            };
+            if sel.rects.is_empty() || sel.text.trim().is_empty() {
+                return Err(ViewerError::PdfCommentEmpty);
+            }
+            (
+                sel.rects.clone(),
+                sel.text.clone(),
+                (*self.current_page.read()).max(1),
+            )
+        };
+        let src = self.local_path()?;
+        let bytes = self.payload_bytes()?;
+        let dest = tokio::task::spawn_blocking({
+            let src = src.clone();
+            let rects = rects.clone();
+            let text = text.clone();
+            move || match ops::save_text_comment(bytes.as_slice(), page, &rects, &text, &src) {
+                Ok(p) => Ok(p),
+                Err(e) => {
+                    tracing::debug!(error = %e, path = %src.display(), "in-place comment failed");
+                    ops::save_text_comment_sibling(bytes.as_slice(), page, &rects, &text, &src)
+                }
+            }
+        })
+        .await
+        .map_err(|e| ViewerError::PdfRender {
+            page,
+            reason: format!("join: {e}"),
+        })??;
+        if dest == src {
+            let fresh = tokio::fs::read(&dest).await.map_err(ViewerError::from)?;
+            self.adopt_bytes(Arc::new(fresh), page).await?;
+        }
+        Ok(dest)
+    }
+
     async fn adopt_bytes(&self, bytes: Arc<Vec<u8>>, page: u32) -> Result<()> {
         let viewport = *self.viewport.read();
         let fit_mode = *self.fit_mode.read();

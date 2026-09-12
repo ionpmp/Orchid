@@ -23,9 +23,10 @@ Drag to select text (double-click a word, `Ctrl+A` the page). `Ctrl+C`
 copies the selection, or the whole page when nothing is selected.
 **Highlight** writes highlight annotations into the open file (reloads so
 you can stack marks). If that path is not writable, it falls back to a
-sibling `*-hl.pdf`.
+sibling `*-hl.pdf`. **Comment** pins a sticky note whose text is the
+current selection (`*-note.pdf` if the open file is not writable).
 
-No AcroForm fill-in, no comments.
+No AcroForm fill-in.
 
 ## Text
 
