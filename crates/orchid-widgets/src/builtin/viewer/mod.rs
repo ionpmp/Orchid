@@ -3420,6 +3420,25 @@ pub async fn pdf_highlight(instance_id: Uuid) -> WidgetResult<String> {
     Ok(dest.to_string_lossy().into_owned())
 }
 
+/// PDF: pin the current selection as a sticky text annotation.
+pub async fn pdf_comment(instance_id: Uuid) -> WidgetResult<String> {
+    let inner = live_inner(instance_id)?;
+    let dest = {
+        let guard = inner.viewer.lock().await;
+        let Some(v) = guard.as_ref() else {
+            return Err(WidgetError::InvalidStateForOperation("no viewer".into()));
+        };
+        let Some(pdf) = v.as_any().downcast_ref::<PdfViewer>() else {
+            return Err(WidgetError::InvalidStateForOperation(
+                "not a pdf viewer".into(),
+            ));
+        };
+        pdf.comment_selection().await.map_err(map_viewer_err)?
+    };
+    inner.refresh_snapshot().await;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
 /// Archive: open folder.
 pub async fn archive_navigate_into(instance_id: Uuid, path: String) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
