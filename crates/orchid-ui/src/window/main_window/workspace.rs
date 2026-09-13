@@ -1894,6 +1894,7 @@ impl MainWindowController {
         self.sync_fm_transfer_notifications();
         self.sync_jyotish_notifications();
         self.sync_visible_html_webviews();
+        self.clear_live_frame_overlay_if_idle();
         Ok(())
     }
 }

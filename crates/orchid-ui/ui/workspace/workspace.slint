@@ -3,6 +3,7 @@ import { Icon } from "../kit-icons.slint";
 import { LongPressArea, Tooltip } from "../kit.slint";
 import { NavigationGlobal } from "../navigation_global.slint";
 import { WidgetCatalog } from "../widget_catalog_global.slint";
+import { AppState } from "../app_state_global.slint";
 import { WidgetFrame } from "widget-frame.slint";
 import { WorkspaceOrb } from "workspace-orb.slint";
 import { WidgetCatalogPanel } from "widget-catalog.slint";
@@ -408,10 +409,11 @@ export component WorkspaceView inherits Rectangle {
                 }
 
                 for w[i] in root.workspace.widgets: WidgetFrame {
-                    x: w.x;
-                    y: w.y;
-                    width: w.width;
-                    height: w.height;
+                    x: AppState.live-frame-id == w.instance-id ? AppState.live-frame-x : w.x;
+                    y: AppState.live-frame-id == w.instance-id ? AppState.live-frame-y : w.y;
+                    width: AppState.live-frame-id == w.instance-id ? AppState.live-frame-width : w.width;
+                    height: AppState.live-frame-id == w.instance-id ? AppState.live-frame-height : w.height;
+                    z: AppState.live-frame-id == w.instance-id ? 10000 : w.z-order;
                     model: w;
                     close-clicked => { root.widget-close-clicked(w.instance-id); }
                     settings-clicked => { root.widget-settings-clicked(w.instance-id); }
@@ -738,15 +740,14 @@ export component WorkspaceView inherits Rectangle {
                 }
 
                 // Snap-cell ghosts sit above frames so they are not clipped by frame `clip: true`.
-                for w[i] in root.workspace.widgets: Rectangle {
-                    visible: w.snap-visible;
-                    x: w.snap-x;
-                    y: w.snap-y;
-                    width: w.snap-width;
-                    height: w.snap-height;
+                if AppState.live-snap-visible && AppState.live-snap-in-content : Rectangle {
+                    x: AppState.live-snap-x;
+                    y: AppState.live-snap-y;
+                    width: AppState.live-snap-width;
+                    height: AppState.live-snap-height;
                     background: transparent;
                     border-width: 2px;
-                    border-color: w.placement-valid ? Theme.accent-brand : #e35d6a;
+                    border-color: AppState.live-frame-placement-valid ? Theme.accent-brand : #e35d6a;
                     border-radius: Theme.radius-md;
                     opacity: 0.9;
                 }
@@ -755,10 +756,11 @@ export component WorkspaceView inherits Rectangle {
 
         // Floating viewers: viewport-relative, above the scrollable canvas.
         for w[i] in root.workspace.floating-widgets: WidgetFrame {
-            x: w.x;
-            y: w.y;
-            width: w.width;
-            height: w.height;
+            x: AppState.live-frame-id == w.instance-id ? AppState.live-frame-x : w.x;
+            y: AppState.live-frame-id == w.instance-id ? AppState.live-frame-y : w.y;
+            width: AppState.live-frame-id == w.instance-id ? AppState.live-frame-width : w.width;
+            height: AppState.live-frame-id == w.instance-id ? AppState.live-frame-height : w.height;
+            z: AppState.live-frame-id == w.instance-id ? 10000 : w.z-order;
             model: w;
             close-clicked => { root.widget-close-clicked(w.instance-id); }
             settings-clicked => { root.widget-settings-clicked(w.instance-id); }
@@ -855,25 +857,24 @@ export component WorkspaceView inherits Rectangle {
             viewer-passphrase-cancel(id) => { root.viewer-passphrase-cancel(id); }
         }
 
-        for w[i] in root.workspace.floating-widgets: Rectangle {
-            visible: w.snap-visible;
-            x: w.snap-x;
-            y: w.snap-y;
-            width: w.snap-width;
-            height: w.snap-height;
+        if AppState.live-snap-visible && !AppState.live-snap-in-content : Rectangle {
+            x: AppState.live-snap-x;
+            y: AppState.live-snap-y;
+            width: AppState.live-snap-width;
+            height: AppState.live-snap-height;
             background: transparent;
             border-width: 2px;
-            border-color: w.placement-valid ? Theme.accent-brand : #e35d6a;
+            border-color: AppState.live-frame-placement-valid ? Theme.accent-brand : #e35d6a;
             border-radius: Theme.radius-md;
             opacity: 0.9;
         }
 
         // Edge snap ghost (left/right half / maximize).
-        if root.workspace.snap-zone-visible : Rectangle {
-            x: root.workspace.snap-zone-x;
-            y: root.workspace.snap-zone-y;
-            width: root.workspace.snap-zone-width;
-            height: root.workspace.snap-zone-height;
+        if AppState.live-snap-zone-visible : Rectangle {
+            x: AppState.live-snap-zone-x;
+            y: AppState.live-snap-zone-y;
+            width: AppState.live-snap-zone-width;
+            height: AppState.live-snap-zone-height;
             background: Theme.accent-soft;
             border-width: 2px;
             border-color: Theme.accent-muted;

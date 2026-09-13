@@ -1,6 +1,7 @@
 import { Theme } from "../theme_global.slint";
 import { ControlSize, IconButton, Tooltip } from "../kit.slint";
 import { Strings } from "../strings_global.slint";
+import { AppState } from "../app_state_global.slint";
 import { WidgetFrameModel, TerminalCellModel } from "defs.slint";
 import { TerminalView } from "terminal-view.slint";
 import { TerminalTabs } from "../widgets/terminal/terminal-tabs.slint";
@@ -396,9 +397,13 @@ export component WidgetFrame inherits Rectangle {
             "*";
     }
 
+    property <bool> frame-placement-valid: AppState.live-frame-id == model.instance-id
+        ? AppState.live-frame-placement-valid
+        : model.placement-valid;
+
     background: Theme.surface-raised;
-    border-width: model.placement-valid ? Theme.hairline : 2px;
-    border-color: model.placement-valid
+    border-width: root.frame-placement-valid ? Theme.hairline : 2px;
+    border-color: root.frame-placement-valid
         ? (drag-area.pressed ? Theme.accent-muted : Theme.border-default)
         : Theme.feedback-danger;
     border-radius: Theme.radius-lg;

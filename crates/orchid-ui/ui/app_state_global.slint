@@ -11,4 +11,27 @@ export global AppState {
     in property <bool> edge-panels-mirrored;
     in property <int> mode;
     in property <WorkspaceModel> workspace;
+
+    /// Live drag/resize overlay. Avoids `set_row_data` on the fat widget row
+    /// (which remounts a full-resolution image viewer on every pointer move).
+    in-out property <string> live-frame-id;
+    in-out property <length> live-frame-x;
+    in-out property <length> live-frame-y;
+    in-out property <length> live-frame-width;
+    in-out property <length> live-frame-height;
+    in-out property <bool> live-frame-placement-valid: true;
+    /// Grid-cell snap ghost (border only).
+    in-out property <bool> live-snap-visible;
+    in-out property <length> live-snap-x;
+    in-out property <length> live-snap-y;
+    in-out property <length> live-snap-width;
+    in-out property <length> live-snap-height;
+    /// True when `live-snap-*` is in canvas content space (docked), not viewport.
+    in-out property <bool> live-snap-in-content;
+    /// Edge snap ghost (filled left/right/maximize).
+    in-out property <bool> live-snap-zone-visible;
+    in-out property <length> live-snap-zone-x;
+    in-out property <length> live-snap-zone-y;
+    in-out property <length> live-snap-zone-width;
+    in-out property <length> live-snap-zone-height;
 }

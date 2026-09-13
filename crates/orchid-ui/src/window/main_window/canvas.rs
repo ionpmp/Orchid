@@ -206,6 +206,9 @@ impl MainWindowController {
                 if let Some(b) = inst.floating_bounds() {
                     self.drag_start_bounds.lock().insert(u, b);
                     self.raise_floating(u);
+                    self.apply_live_frame_overlay(
+                        u, b.x, b.y, b.width, b.height, true, None, false, false,
+                    );
                 }
             }
             return;
@@ -231,6 +234,17 @@ impl MainWindowController {
             {
                 if pl.instance_id == u {
                     self.drag_start_bounds.lock().insert(u, pl.bounds);
+                    self.apply_live_frame_overlay(
+                        u,
+                        pl.bounds.x,
+                        pl.bounds.y,
+                        pl.bounds.width,
+                        pl.bounds.height,
+                        true,
+                        None,
+                        true,
+                        false,
+                    );
                     return;
                 }
             }
@@ -249,17 +263,85 @@ impl MainWindowController {
         self.apply_drag_frame_preview(u, canvas_x, canvas_y);
     }
 
-    fn frame_model_for_instance(&self, instance: Uuid) -> Option<&VecModel<WidgetFrameModel>> {
-        let floating = self.is_floating_window(instance);
-        let model = if floating {
-            &self.workspace_floating_widgets
-        } else {
-            &self.workspace_widgets
-        };
-        model.as_any().downcast_ref::<VecModel<WidgetFrameModel>>()
+    fn live_frame_gesture_active(&self) -> bool {
+        !self.drag_offset.lock().is_empty()
+            || !self.drag_grab.lock().is_empty()
+            || !self.resize_override.lock().is_empty()
+            || self.resize_state.lock().is_some()
     }
 
-    /// O(1) update of the dragged widget's `x`/`y` in the Slint model (no full rebuild).
+    pub(super) fn clear_live_frame_overlay(&self) {
+        let g = self.window.global::<AppState>();
+        if g.get_live_frame_id().is_empty()
+            && !g.get_live_snap_visible()
+            && !g.get_live_snap_zone_visible()
+        {
+            return;
+        }
+        g.set_live_frame_id(SharedString::default());
+        g.set_live_snap_visible(false);
+        g.set_live_snap_in_content(false);
+        g.set_live_snap_zone_visible(false);
+    }
+
+    pub(super) fn clear_live_frame_overlay_if_idle(&self) {
+        if !self.live_frame_gesture_active() {
+            self.clear_live_frame_overlay();
+        }
+    }
+
+    /// Update only AppState live-geometry properties. Never `set_row_data` the
+    /// fat `WidgetFrameModel` (that remounts a full-resolution viewer).
+    fn apply_live_frame_overlay(
+        &self,
+        instance: Uuid,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        placement_valid: bool,
+        snap: Option<PixelBounds>,
+        snap_in_content: bool,
+        snap_filled: bool,
+    ) {
+        let g = self.window.global::<AppState>();
+        let mut buf = [0u8; uuid::fmt::Hyphenated::LENGTH];
+        g.set_live_frame_id(SharedString::from(
+            instance.as_hyphenated().encode_lower(&mut buf).as_str(),
+        ));
+        g.set_live_frame_x(x);
+        g.set_live_frame_y(y);
+        g.set_live_frame_width(width);
+        g.set_live_frame_height(height);
+        g.set_live_frame_placement_valid(placement_valid);
+        match snap {
+            Some(sb) if snap_filled => {
+                g.set_live_snap_visible(false);
+                g.set_live_snap_in_content(false);
+                g.set_live_snap_zone_visible(true);
+                g.set_live_snap_zone_x(sb.x);
+                g.set_live_snap_zone_y(sb.y);
+                g.set_live_snap_zone_width(sb.width);
+                g.set_live_snap_zone_height(sb.height);
+            }
+            Some(sb) => {
+                g.set_live_snap_visible(true);
+                g.set_live_snap_in_content(snap_in_content);
+                g.set_live_snap_x(sb.x);
+                g.set_live_snap_y(sb.y);
+                g.set_live_snap_width(sb.width);
+                g.set_live_snap_height(sb.height);
+                g.set_live_snap_zone_visible(false);
+            }
+            None => {
+                g.set_live_snap_visible(false);
+                g.set_live_snap_in_content(false);
+                g.set_live_snap_zone_visible(false);
+            }
+        }
+    }
+
+    /// O(1) live geometry overlay for the dragged widget (no `set_row_data`).
     pub(super) fn apply_drag_frame_preview(
         self: &Arc<Self>,
         instance: Uuid,
@@ -288,39 +370,18 @@ impl MainWindowController {
         } else {
             self.drag_snap_preview(instance, fx, fy)
         };
-
-        let Some(v) = self.frame_model_for_instance(instance) else {
-            self.schedule_rebuild();
-            return;
-        };
-        let needle = instance.to_string();
-        for r in 0..v.row_count() {
-            let Some(mut row) = v.row_data(r) else {
-                continue;
-            };
-            if row.instance_id.as_str() != needle.as_str() {
-                continue;
-            }
-            row.x = fx;
-            row.y = fy;
-            row.z_order = 10_000;
-            row.placement_valid = placement_valid;
-            if let Some(sb) = snap_bounds {
-                row.snap_visible = true;
-                row.snap_x = sb.x;
-                row.snap_y = sb.y;
-                row.snap_width = sb.width;
-                row.snap_height = sb.height;
-            } else {
-                row.snap_visible = false;
-            }
-            v.set_row_data(r, row);
-            if !floating {
-                self.sync_canvas_scroll_extent();
-            }
-            return;
-        }
-        self.schedule_rebuild();
+        let snap_filled = floating && self.snap_zone.lock().is_some();
+        self.apply_live_frame_overlay(
+            instance,
+            fx,
+            fy,
+            start.width,
+            start.height,
+            placement_valid,
+            snap_bounds,
+            !floating,
+            snap_filled,
+        );
     }
 
     /// Snapped cell bounds + whether that placement is free of collisions.
@@ -401,11 +462,9 @@ impl MainWindowController {
                 .unwrap_or(0.0);
         if let Some(snap) = self.snap_bounds_for_pointer(cx, viewport_y) {
             *self.snap_zone.lock() = Some(snap.bounds);
-            self.patch_workspace_snap_zone();
             return (Some(snap.bounds), true);
         }
         *self.snap_zone.lock() = None;
-        self.patch_workspace_snap_zone();
         (None, true)
     }
 
@@ -432,6 +491,7 @@ impl MainWindowController {
                     self.drag_offset.lock().remove(&u);
                     self.drag_start_bounds.lock().remove(&u);
                     self.drag_grab.lock().remove(&u);
+                    self.clear_live_frame_overlay();
                     self.bring_floating_to_front(u);
                 }
             }
@@ -440,7 +500,13 @@ impl MainWindowController {
 
         let (off, start) = match (off, start) {
             (Some(o), Some(s)) => (o, s),
-            _ => return,
+            _ => {
+                self.drag_offset.lock().remove(&u);
+                self.drag_start_bounds.lock().remove(&u);
+                self.drag_grab.lock().remove(&u);
+                self.clear_live_frame_overlay();
+                return;
+            }
         };
 
         let wm = self.widget_manager.clone();
@@ -966,6 +1032,9 @@ impl MainWindowController {
                         start: b,
                         press_canvas: (press_x, press_y),
                     });
+                    self.apply_live_frame_overlay(
+                        u, b.x, b.y, b.width, b.height, true, None, false, false,
+                    );
                 }
             }
             return;
@@ -996,6 +1065,17 @@ impl MainWindowController {
                         start: pl.bounds,
                         press_canvas: (press_x, press_y),
                     });
+                    self.apply_live_frame_overlay(
+                        u,
+                        pl.bounds.x,
+                        pl.bounds.y,
+                        pl.bounds.width,
+                        pl.bounds.height,
+                        true,
+                        None,
+                        true,
+                        false,
+                    );
                     return;
                 }
             }
@@ -1048,49 +1128,25 @@ impl MainWindowController {
         }
     }
 
-    /// O(1) update of a frame's bounds during live resize (no full `rebuild_workspace_model`).
+    /// O(1) live geometry overlay during resize (no `set_row_data`).
     pub(super) fn apply_resize_frame_preview(self: &Arc<Self>, instance: Uuid, b: PixelBounds) {
         let floating = self.is_floating_window(instance);
         let (snap_bounds, placement_valid) = if floating {
-            // Free pixel resize while floating — no grid snap required.
             (None, true)
         } else {
             self.resize_snap_preview(instance, &b)
         };
-        let Some(v) = self.frame_model_for_instance(instance) else {
-            self.schedule_rebuild();
-            return;
-        };
-        let needle = instance.to_string();
-        for r in 0..v.row_count() {
-            let Some(mut row) = v.row_data(r) else {
-                continue;
-            };
-            if row.instance_id.as_str() != needle.as_str() {
-                continue;
-            }
-            row.x = b.x;
-            row.y = b.y;
-            row.width = b.width;
-            row.height = b.height;
-            row.z_order = 10_000;
-            row.placement_valid = placement_valid;
-            if let Some(sb) = snap_bounds {
-                row.snap_visible = true;
-                row.snap_x = sb.x;
-                row.snap_y = sb.y;
-                row.snap_width = sb.width;
-                row.snap_height = sb.height;
-            } else {
-                row.snap_visible = false;
-            }
-            v.set_row_data(r, row);
-            if !floating {
-                self.sync_canvas_scroll_extent();
-            }
-            return;
-        }
-        self.schedule_rebuild();
+        self.apply_live_frame_overlay(
+            instance,
+            b.x,
+            b.y,
+            b.width,
+            b.height,
+            placement_valid,
+            snap_bounds,
+            !floating,
+            false,
+        );
     }
 
     pub(super) fn resize_snap_preview(
@@ -1467,18 +1523,6 @@ impl MainWindowController {
             });
         }
         None
-    }
-
-    fn patch_workspace_snap_zone(&self) {
-        let app_g = self.window.global::<crate::slint_generated::AppState>();
-        let mut ws = app_g.get_workspace();
-        let snap = *self.snap_zone.lock();
-        ws.snap_zone_visible = snap.is_some();
-        ws.snap_zone_x = snap.map(|b| b.x).unwrap_or(0.0);
-        ws.snap_zone_y = snap.map(|b| b.y).unwrap_or(0.0);
-        ws.snap_zone_width = snap.map(|b| b.width).unwrap_or(0.0);
-        ws.snap_zone_height = snap.map(|b| b.height).unwrap_or(0.0);
-        app_g.set_workspace(ws);
     }
 }
 

@@ -37,6 +37,22 @@ export component ViewerImageView inherits Rectangle {
     property <length> last-my: 0px;
     property <length> swipe-x: 0px;
     property <length> swipe-y: 0px;
+    /// Local pan so dragging the photo does not rebuild the widget snapshot
+    /// on every pointer move. Committed to Rust on pointer-up.
+    property <length> live-pan-x: 0px;
+    property <length> live-pan-y: 0px;
+    property <length> sent-pan-x: 0px;
+    property <length> sent-pan-y: 0px;
+    property <length> model-pan-x: model.pan-x;
+    property <length> model-pan-y: model.pan-y;
+    changed model-pan-x => {
+        root.live-pan-x = 0px;
+        root.sent-pan-x = 0px;
+    }
+    changed model-pan-y => {
+        root.live-pan-y = 0px;
+        root.sent-pan-y = 0px;
+    }
     property <length> pan-step: 40px;
     property <bool> show-recent: false;
     property <bool> select-zoom: false;
@@ -111,6 +127,14 @@ export component ViewerImageView inherits Rectangle {
     function bump-overlay() {
         root.overlay-peek = true;
         root.activity-gen = root.activity-gen + 1;
+    }
+    function commit-live-pan() {
+        if (abs(root.live-pan-x - root.sent-pan-x) > 0.5px
+            || abs(root.live-pan-y - root.sent-pan-y) > 0.5px) {
+            root.pan(root.live-pan-x - root.sent-pan-x, root.live-pan-y - root.sent-pan-y);
+            root.sent-pan-x = root.live-pan-x;
+            root.sent-pan-y = root.live-pan-y;
+        }
     }
     property <length> thumb-cell: model.thumb-size == 0 ? 64px
         : model.thumb-size == 2 ? 256px
@@ -1236,10 +1260,23 @@ export component ViewerImageView inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
 
-            property <length> img-left: (self.width - model.width-px * 1px * model.zoom) / 2 + model.pan-x;
-            property <length> img-top: (self.height - model.height-px * 1px * model.zoom) / 2 + model.pan-y;
+            property <length> img-left: (self.width - model.width-px * 1px * model.zoom) / 2 + model.pan-x + root.live-pan-x;
+            property <length> img-top: (self.height - model.height-px * 1px * model.zoom) / 2 + model.pan-y + root.live-pan-y;
             property <bool> overflows: model.width-px * 1px * model.zoom > self.width + 4px
                 || model.height-px * 1px * model.zoom > self.height + 4px;
+            property <length> img-w: model.width-px * 1px * model.zoom;
+            property <length> img-h: model.height-px * 1px * model.zoom;
+            /// source-clip is in image space; rotation/flip would crop the wrong region.
+            property <bool> axis-aligned: abs(model.rotation-deg) < 0.5 && !model.flipped-h && !model.flipped-v;
+            property <bool> clip-view: canvas.axis-aligned && !(model.slideshow-playing && model.prev-width-px > 0);
+            property <length> vis-x: max(0px, canvas.img-left);
+            property <length> vis-y: max(0px, canvas.img-top);
+            property <length> vis-w: max(0px, min(self.width, canvas.img-left + canvas.img-w) - canvas.vis-x);
+            property <length> vis-h: max(0px, min(self.height, canvas.img-top + canvas.img-h) - canvas.vis-y);
+            property <length> src-x: (canvas.vis-x - canvas.img-left) / max(0.01, model.zoom);
+            property <length> src-y: (canvas.vis-y - canvas.img-top) / max(0.01, model.zoom);
+            property <length> src-w: canvas.vis-w / max(0.01, model.zoom);
+            property <length> src-h: canvas.vis-h / max(0.01, model.zoom);
 
             property <float> slide-t: model.slideshow-playing && model.prev-width-px > 0 && model.slideshow-transition-ms > 0
                 ? min(1.0, model.slideshow-gen * 50.0 / model.slideshow-transition-ms)
@@ -1273,7 +1310,20 @@ export component ViewerImageView inherits Rectangle {
                 }
             }
 
-            if !(model.slideshow-playing && model.slideshow-transition == 4) : Image {
+            if !(model.slideshow-playing && model.slideshow-transition == 4) && canvas.clip-view && canvas.vis-w > 0.5px && canvas.vis-h > 0.5px : Image {
+                source: model.rgba-image;
+                x: canvas.vis-x;
+                y: canvas.vis-y;
+                width: canvas.vis-w;
+                height: canvas.vis-h;
+                source-clip-x: canvas.src-x;
+                source-clip-y: canvas.src-y;
+                source-clip-width: canvas.src-w;
+                source-clip-height: canvas.src-h;
+                image-fit: fill;
+            }
+
+            if !(model.slideshow-playing && model.slideshow-transition == 4) && !canvas.clip-view : Image {
                 source: model.rgba-image;
                 x: canvas.img-left - (model.slideshow-playing && model.slideshow-transition == 2
                     ? canvas.width * (1.0 - canvas.slide-t) : 0px);
@@ -1386,6 +1436,7 @@ export component ViewerImageView inherits Rectangle {
                         img-keys.focus();
                     }
                     if (e.kind == PointerEventKind.up) {
+                        root.commit-live-pan();
                         root.middle-pan = false;
                         if (root.selecting && root.ann-mode == 6) {
                             root.command("annotate-view:pen:" + root.pen-pts + " | " + root.ann-style());
@@ -1467,7 +1518,8 @@ export component ViewerImageView inherits Rectangle {
                             root.sel-y1 = self.mouse-y;
                         }
                     } else if (self.pressed && (model.fit-mode == 0 || root.middle-pan)) {
-                        root.pan(self.mouse-x - root.last-mx, self.mouse-y - root.last-my);
+                        root.live-pan-x = root.live-pan-x + (self.mouse-x - root.last-mx);
+                        root.live-pan-y = root.live-pan-y + (self.mouse-y - root.last-my);
                         root.last-mx = self.mouse-x;
                         root.last-my = self.mouse-y;
                     }
@@ -1525,7 +1577,17 @@ export component ViewerImageView inherits Rectangle {
                 border-width: 2px;
                 border-color: Theme.accent-brand;
                 z: 30;
-                Image {
+                if canvas.axis-aligned : Image {
+                    source: model.rgba-image;
+                    width: 128px;
+                    height: 128px;
+                    image-fit: fill;
+                    source-clip-x: (pan-area.mouse-x - canvas.img-left) / max(0.01, model.zoom) - 64px / 2.5 / max(0.01, model.zoom);
+                    source-clip-y: (pan-area.mouse-y - canvas.img-top) / max(0.01, model.zoom) - 64px / 2.5 / max(0.01, model.zoom);
+                    source-clip-width: 128px / 2.5 / max(0.01, model.zoom);
+                    source-clip-height: 128px / 2.5 / max(0.01, model.zoom);
+                }
+                if !canvas.axis-aligned : Image {
                     source: model.rgba-image;
                     width: model.width-px * 1px * model.zoom * 2.5;
                     height: model.height-px * 1px * model.zoom * 2.5;

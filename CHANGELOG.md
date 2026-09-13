@@ -691,6 +691,12 @@ release yet.
   `touch()` widgets that are already Active.
 
 ### Fixed
+- Image viewer no longer hitches when the widget is dragged or the photo is
+  panned: live geometry is applied through AppState overlay properties
+  instead of `set_row_data` on the fat `WidgetFrameModel` (which remounted
+  the full-resolution frame on every pointer move), the canvas draws only
+  the visible `source-clip` of axis-aligned photos, and pan commits to
+  Rust on pointer-up.
 - File-manager toolbar hover no longer freezes for ~1s: volume enumeration
   (`sysinfo` / WMI) ran on the UI thread during every FM patch, including
   while the pointer moved across Back / Forward / drives. Drive letters
