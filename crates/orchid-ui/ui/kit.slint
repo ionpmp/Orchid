@@ -35,20 +35,46 @@ export enum ControlSize {
 }
 
 /// Hover tooltip. Place inside the control that owns the hover state.
+///
+/// Reveal is delayed so sweeping a dense toolbar does not spawn a
+/// drop-shadow layer on every button (that used to invalidate the whole
+/// clipped widget frame and freeze hover for about a second).
 export component Tooltip inherits Rectangle {
     in property <string> text;
     in property <bool> shown: false;
+    property <bool> reveal: false;
 
-    visible: shown && text != "";
+    changed shown => {
+        if (root.shown) {
+            reveal-timer.running = false;
+            reveal-timer.running = true;
+        } else {
+            reveal-timer.running = false;
+            root.reveal = false;
+        }
+    }
+
+    reveal-timer := Timer {
+        interval: 400ms;
+        running: false;
+        triggered => {
+            if (root.shown) {
+                root.reveal = true;
+            }
+            self.running = false;
+        }
+    }
+
+    visible: root.reveal && text != "";
     width: label.preferred-width + Theme.space-3 * 2;
     height: label.preferred-height + Theme.space-2 * 2;
     background: Theme.surface-floating;
     border-radius: Theme.radius-sm;
     border-width: Theme.hairline;
     border-color: Theme.border-subtle;
-    drop-shadow-blur: Theme.elev-2-blur;
-    drop-shadow-offset-y: Theme.elev-2-y;
-    drop-shadow-color: Theme.shadow-key;
+    drop-shadow-blur: Theme.elev-1-blur;
+    drop-shadow-offset-y: Theme.elev-1-y;
+    drop-shadow-color: Theme.shadow-ambient;
     z: 1000;
 
     label := Text {

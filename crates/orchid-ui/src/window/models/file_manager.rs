@@ -5,7 +5,6 @@ use slint::{Image, Model, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
-use std::time::Instant;
 use uuid::Uuid;
 
 use super::super::errors::fm_localized_error;
@@ -850,7 +849,6 @@ const FM_LIST_ROW_H: f32 = 28.0;
 const FM_LIST_OVERSCAN: usize = 16;
 /// Keep the committed list window until the tight visible range is this close to an edge.
 pub(crate) const FM_LIST_REBASE_SLACK: usize = 6;
-const FM_DRIVES_CACHE_MS: u128 = 4000;
 
 /// Tight visible list range (no overscan).
 #[must_use]
@@ -1521,28 +1519,14 @@ fn build_visit_history_items(
         .collect()
 }
 
-thread_local! {
-    static FM_DRIVES_CACHE: RefCell<Option<(Instant, Vec<FmPathSuggest>)>> = const { RefCell::new(None) };
-}
-
 fn build_drive_items() -> Vec<FmPathSuggest> {
-    FM_DRIVES_CACHE.with(|slot| {
-        let mut cache = slot.borrow_mut();
-        if let Some((at, rows)) = cache.as_ref() {
-            if at.elapsed().as_millis() < FM_DRIVES_CACHE_MS {
-                return rows.clone();
-            }
-        }
-        let rows: Vec<FmPathSuggest> = orchid_widgets::builtin::file_manager::list_local_drives()
-            .into_iter()
-            .map(|d| FmPathSuggest {
-                path: d.path.into(),
-                label: d.label.into(),
-            })
-            .collect();
-        *cache = Some((Instant::now(), rows.clone()));
-        rows
-    })
+    orchid_widgets::builtin::file_manager::list_local_drives()
+        .into_iter()
+        .map(|d| FmPathSuggest {
+            path: d.path.into(),
+            label: d.label.into(),
+        })
+        .collect()
 }
 
 #[allow(clippy::too_many_arguments)]

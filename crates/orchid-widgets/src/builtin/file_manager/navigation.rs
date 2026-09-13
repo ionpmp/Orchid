@@ -1,7 +1,11 @@
 //! Navigation helper: lists a directory via the provider registry and
 //! builds breadcrumb segments.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use parking_lot::Mutex;
 
 /// One step in a breadcrumb trail.
 #[derive(Debug, Clone)]
@@ -269,9 +273,87 @@ pub fn drive_root(path: &orchid_fs::FsPath) -> Option<orchid_fs::FsPath> {
     None
 }
 
+/// How long a drive list stays "fresh" before a background refresh.
+///
+/// [`sysinfo::Disks::new_with_refreshed_list`] talks to WMI / volume APIs
+/// on Windows. A disconnected network drive or sleeping optical tray can
+/// stall that call for a second or more — long enough to freeze toolbar
+/// hover if it runs on the UI thread during every FM patch.
+const DRIVES_CACHE_TTL: Duration = Duration::from_secs(30);
+
+struct DrivesCache {
+    at: Instant,
+    rows: Vec<DriveItem>,
+}
+
+static DRIVES_CACHE: Mutex<Option<DrivesCache>> = Mutex::new(None);
+static DRIVES_REFRESHING: AtomicBool = AtomicBool::new(false);
+
 /// Mounted local volumes for the drive switcher.
+///
+/// Returns cached rows immediately after the first fill. A stale list is
+/// still returned while `sysinfo` refreshes on a background thread, so the
+/// Slint UI thread never waits on volume I/O.
 #[must_use]
 pub fn list_local_drives() -> Vec<DriveItem> {
+    if let Some((fresh, rows)) = cached_drives() {
+        if !fresh {
+            spawn_drive_refresh();
+        }
+        return rows;
+    }
+
+    #[cfg(windows)]
+    {
+        // Letter bitmask is a registry/DOS-device lookup — no per-volume I/O.
+        let rows = drives_from_win_letters();
+        store_drives(rows.clone());
+        spawn_drive_refresh();
+        rows
+    }
+    #[cfg(not(windows))]
+    {
+        let rows = enumerate_local_drives_sysinfo();
+        store_drives(rows.clone());
+        rows
+    }
+}
+
+fn cached_drives() -> Option<(bool, Vec<DriveItem>)> {
+    let guard = DRIVES_CACHE.lock();
+    guard
+        .as_ref()
+        .map(|c| (c.at.elapsed() < DRIVES_CACHE_TTL, c.rows.clone()))
+}
+
+fn store_drives(rows: Vec<DriveItem>) {
+    *DRIVES_CACHE.lock() = Some(DrivesCache {
+        at: Instant::now(),
+        rows,
+    });
+}
+
+fn spawn_drive_refresh() {
+    if DRIVES_REFRESHING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+    if std::thread::Builder::new()
+        .name("orchid-fm-drives".into())
+        .spawn(|| {
+            let rows = enumerate_local_drives_sysinfo();
+            store_drives(rows);
+            DRIVES_REFRESHING.store(false, Ordering::Release);
+        })
+        .is_err()
+    {
+        DRIVES_REFRESHING.store(false, Ordering::Release);
+    }
+}
+
+fn enumerate_local_drives_sysinfo() -> Vec<DriveItem> {
     let disks = sysinfo::Disks::new_with_refreshed_list();
     let mut out: Vec<DriveItem> = Vec::new();
     for disk in disks.list() {
@@ -307,6 +389,51 @@ pub fn list_local_drives() -> Vec<DriveItem> {
     }
     out.sort_by(|a, b| a.label.cmp(&b.label));
     out
+}
+
+#[cfg(windows)]
+fn drives_from_win_letters() -> Vec<DriveItem> {
+    letters_from_mask(win_logical_drives_mask())
+        .into_iter()
+        .filter_map(drive_item_from_letter)
+        .collect()
+}
+
+#[cfg(any(windows, test))]
+fn letters_from_mask(mask: u32) -> Vec<char> {
+    (0..26)
+        .filter(|i| mask & (1 << i) != 0)
+        .map(|i| (b'A' + i) as char)
+        .collect()
+}
+
+#[cfg(any(windows, test))]
+fn drive_item_from_letter(letter: char) -> Option<DriveItem> {
+    let letter = letter.to_ascii_uppercase();
+    if !letter.is_ascii_alphabetic() {
+        return None;
+    }
+    let os = format!("{letter}:\\");
+    let fp = orchid_fs::FsPath::from_local(std::path::Path::new(&os)).ok()?;
+    Some(DriveItem {
+        path: fp.as_str().to_string(),
+        label: format!("{letter}:"),
+    })
+}
+
+#[cfg(windows)]
+fn win_logical_drives_mask() -> u32 {
+    // SAFETY: `GetLogicalDrives` is a kernel32 function with no pointer
+    // arguments; it returns a bitmask of present A:–Z: volumes.
+    unsafe { win_drives::GetLogicalDrives() }
+}
+
+#[cfg(windows)]
+mod win_drives {
+    #[link(name = "kernel32")]
+    extern "system" {
+        pub fn GetLogicalDrives() -> u32;
+    }
 }
 
 /// Windows `net use` shares that have no drive letter (UNC-only mappings).
@@ -415,6 +542,29 @@ mod complete_tests {
     #[test]
     fn list_local_drives_does_not_panic() {
         let _ = list_local_drives();
+    }
+
+    #[test]
+    fn letters_from_mask_c_and_d() {
+        assert_eq!(letters_from_mask(1 << 2 | 1 << 3), vec!['C', 'D']);
+    }
+
+    #[test]
+    fn drive_item_from_letter_c_is_local_scheme() {
+        let item = drive_item_from_letter('c').expect("C:");
+        assert_eq!(item.path, "local:c:/");
+        assert_eq!(item.label, "C:");
+    }
+
+    #[test]
+    fn list_local_drives_second_call_is_cached() {
+        let _ = list_local_drives();
+        let start = Instant::now();
+        let _ = list_local_drives();
+        assert!(
+            start.elapsed() < Duration::from_millis(100),
+            "cached list_local_drives blocked the caller"
+        );
     }
 
     #[test]

@@ -691,6 +691,12 @@ release yet.
   `touch()` widgets that are already Active.
 
 ### Fixed
+- File-manager toolbar hover no longer freezes for ~1s: volume enumeration
+  (`sysinfo` / WMI) ran on the UI thread during every FM patch, including
+  while the pointer moved across Back / Forward / drives. Drive letters
+  now come from `GetLogicalDrives` (no per-volume I/O); labels refresh in
+  the background. Tooltips wait 400ms and use a lighter shadow so sweeping
+  the chrome does not invalidate the whole widget frame.
 - Cinema design tokens on light themes: glass / scrim / shadow alphas and
   ink-based edge highlights so panels, modals, and GlassCard edges stay
   readable on paper (orchid-light bases tightened for the same contrast).
