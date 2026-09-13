@@ -6817,6 +6817,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "zip",
 ]
 
 [[package]]
@@ -6869,6 +6870,7 @@ dependencies = [
  "orchid-widgets",
  "parking_lot",
  "reqwest",
+ "rfd",
  "secrecy",
  "serde",
  "serde_json",
