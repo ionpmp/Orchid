@@ -269,11 +269,9 @@ impl MainWindowController {
                 return;
             }
             let path = super::next_untitled_docx_path(&documents_dir);
-            let create = orchid_viewers::create_sample_orchid_with_store(
-                &path,
-                chunk_store.as_deref(),
-            )
-            .await;
+            let create =
+                orchid_viewers::create_sample_orchid_with_store(&path, chunk_store.as_deref())
+                    .await;
             if let Err(e) = create {
                 warn!(?e, path = %path.display(), "document editor: write sample orchid");
                 return;

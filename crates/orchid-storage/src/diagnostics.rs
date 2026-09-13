@@ -159,7 +159,7 @@ fn add_recent_logs(
         zip.start_file(&zip_name, opts)
             .map_err(|e| StorageError::Archive(e.to_string()))?;
         let mut f = File::open(&path)?;
-        let mut limited = f.by_ref().take(MAX_BYTES);
+        let mut limited = std::io::Read::by_ref(&mut f).take(MAX_BYTES);
         io::copy(&mut limited, zip)?;
     }
     Ok(())

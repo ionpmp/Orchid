@@ -237,7 +237,9 @@ impl IndexFsSubscriber {
             DocumentKind::File
         };
 
-        let embedding = if extension.as_deref().is_some_and(|e| e.eq_ignore_ascii_case("orchid"))
+        let embedding = if extension
+            .as_deref()
+            .is_some_and(|e| e.eq_ignore_ascii_case("orchid"))
             && path.is_local()
         {
             path.to_local()

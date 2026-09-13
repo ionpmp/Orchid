@@ -21,16 +21,15 @@ mod win {
     use tracing::{info, warn};
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{
-        CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE, INVALID_HANDLE_VALUE,
-        WIN32_ERROR,
+        CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE, INVALID_HANDLE_VALUE, WIN32_ERROR,
     };
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_FLAGS_AND_ATTRIBUTES, FILE_GENERIC_READ,
         FILE_GENERIC_WRITE, FILE_SHARE_NONE, OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
     };
     use windows::Win32::System::Pipes::{
-        ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE,
-        PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
+        ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_BYTE,
+        PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
     };
     use windows::Win32::System::Threading::CreateMutexW;
 
@@ -118,10 +117,7 @@ mod win {
     /// Connect to the primary pipe and send `paths` (may be empty).
     pub(super) fn forward_paths(paths: &[PathBuf]) -> Result<(), String> {
         let payload = encode_message(paths);
-        let wide: Vec<u16> = PIPE_NAME
-            .encode_utf16()
-            .chain(std::iter::once(0))
-            .collect();
+        let wide: Vec<u16> = PIPE_NAME.encode_utf16().chain(std::iter::once(0)).collect();
         let deadline = std::time::Instant::now() + Duration::from_secs(3);
         let access = FILE_GENERIC_READ.0 | FILE_GENERIC_WRITE.0;
         loop {
@@ -163,10 +159,7 @@ mod win {
     }
 
     fn listener_loop(tx: SyncSender<Vec<PathBuf>>) {
-        let wide: Vec<u16> = PIPE_NAME
-            .encode_utf16()
-            .chain(std::iter::once(0))
-            .collect();
+        let wide: Vec<u16> = PIPE_NAME.encode_utf16().chain(std::iter::once(0)).collect();
         loop {
             // SAFETY: duplex byte pipe for open-path IPC.
             let pipe = unsafe {
@@ -197,7 +190,10 @@ mod win {
             let file = to_file(pipe);
             if let Some(body) = read_frame(&file) {
                 if let Some(paths) = decode_message(&body) {
-                    info!(count = paths.len(), "received open paths from secondary instance");
+                    info!(
+                        count = paths.len(),
+                        "received open paths from secondary instance"
+                    );
                     if tx.send(paths).is_err() {
                         let handle = from_file(file);
                         let _ = unsafe { CloseHandle(handle) };

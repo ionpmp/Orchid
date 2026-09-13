@@ -102,10 +102,7 @@ async fn semantic_query_finds_orchid_that_bm25_misses() {
 
     // Live ANN on the engine (same vectors as wrap / stub embed) also hits.
     assert_eq!(engine.ann_len(), 1);
-    let live = engine
-        .search_hybrid("canine companion", 10)
-        .await
-        .unwrap();
+    let live = engine.search_hybrid("canine companion", 10).await.unwrap();
     assert!(
         live.hits.iter().any(|h| h.path == path_key),
         "SearchEngine::search_hybrid should retrieve .orchid; hits={:?}",

@@ -91,8 +91,9 @@ impl EncryptedFileMeta {
     ///
     /// Propagates [`CryptoError::Encoding`] on decode failure.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        let (v, _) = bincode_reloaded::decode_from_slice(bytes, bincode_reloaded::config::standard())
-            .map_err(|e| CryptoError::Encoding(e.to_string()))?;
+        let (v, _) =
+            bincode_reloaded::decode_from_slice(bytes, bincode_reloaded::config::standard())
+                .map_err(|e| CryptoError::Encoding(e.to_string()))?;
         Ok(v)
     }
 }

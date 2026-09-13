@@ -26,7 +26,15 @@ pub const SCHEME_ARCHIVE: &str = "archive";
 
 /// Canonicalised path with an explicit scheme prefix.
 #[derive(
-    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, bincode_reloaded::Encode, bincode_reloaded::Decode,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    bincode_reloaded::Encode,
+    bincode_reloaded::Decode,
 )]
 pub struct FsPath(String);
 

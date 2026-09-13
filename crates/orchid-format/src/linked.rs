@@ -88,7 +88,7 @@ pub async fn build_linked_bytes(store: &ChunkStore, req: &LinkedCreateRequest) -
         caps |= capability::ENCRYPTED;
     }
 
-    let mut     prepared: Vec<(
+    let mut prepared: Vec<(
         u16,
         RegionType,
         crate::crypto_region::PreparedRegionBody,
@@ -316,12 +316,11 @@ pub async fn linked_to_sealed(
     let clean = linked_region_plaintext(&linked, store, RegionType::CleanText, identity).await?;
     let structured =
         linked_region_plaintext(&linked, store, RegionType::Structured, identity).await?;
-    let embeddings = match linked_region_plaintext(&linked, store, RegionType::Embedding, identity)
-        .await
-    {
-        Ok(bytes) => crate::EmbeddingPayload::decode(&bytes).ok(),
-        Err(_) => None,
-    };
+    let embeddings =
+        match linked_region_plaintext(&linked, store, RegionType::Embedding, identity).await {
+            Ok(bytes) => crate::EmbeddingPayload::decode(&bytes).ok(),
+            Err(_) => None,
+        };
     let (raw_name, raw_content_type) = match linked.find_region(RegionType::Raw) {
         Ok(entry) => (
             entry.name().map(str::to_owned),
