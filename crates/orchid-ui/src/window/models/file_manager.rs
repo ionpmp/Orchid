@@ -1277,7 +1277,7 @@ fn fm_listing_unchanged(tab: &FmTab, t: &orchid_widgets::TabPayload) -> bool {
         && tab.entry_total_count == t.item_count as i32
         && tab.virtual_first_index == t.entries_offset as i32
         && tab.view_mode == view_mode_to_int(t.view_mode)
-        && tab.entries.row_count() == t.entries.len() as i32
+        && tab.entries.row_count() as i32 == t.entries.len() as i32
 }
 
 fn fm_tab_chrome_changed(tab: &FmTab, fresh: &FmTab) -> bool {
@@ -1658,7 +1658,7 @@ fn patch_fm_pane(
     }
     for (tab_idx, t) in pp.tabs.iter().enumerate() {
         if tab_idx < tabs.row_count() {
-            let Some(tab) = tabs.row_data(tab_idx) else {
+            let Some(mut tab) = tabs.row_data(tab_idx) else {
                 continue;
             };
             // Fast path: the visible window, filter, view mode, and row count
@@ -1682,7 +1682,7 @@ fn patch_fm_pane(
                     continue;
                 }
                 let mut updated = tab;
-                if tab.id != fresh.id || tab.path_display != fresh.path_display {
+                if updated.id != fresh.id || updated.path_display != fresh.path_display {
                     updated.breadcrumbs = fresh.breadcrumbs;
                 }
                 updated.id = fresh.id;
