@@ -174,6 +174,10 @@ struct Inner {
     /// every one of them re-runs Fluent pattern resolution. Cleared
     /// whenever the active locale or any bundle changes.
     tr_cache: RwLock<HashMap<Box<str>, Arc<str>>>,
+    /// Formatted byte sizes for the current locale. File-manager snapshots
+    /// format ~96 visible rows per tick; without this every row re-runs a
+    /// Fluent `tr_args` lookup. Cleared alongside `tr_cache` on locale change.
+    byte_size_cache: RwLock<HashMap<u64, String>>,
 }
 
 impl std::fmt::Debug for LocaleManager {
@@ -244,6 +248,7 @@ impl LocaleManager {
                 pending: RwLock::new(pending),
                 extra_dir,
                 tr_cache: RwLock::new(HashMap::new()),
+                byte_size_cache: RwLock::new(HashMap::new()),
             }),
         })
     }
@@ -259,6 +264,7 @@ impl LocaleManager {
         if self.ensure_loaded(&locale) {
             *self.inner.current.write() = locale;
             self.inner.tr_cache.write().clear();
+            self.inner.byte_size_cache.write().clear();
         } else {
             warn!(?locale, "locale not registered; ignoring set_current");
         }
@@ -296,6 +302,7 @@ impl LocaleManager {
         }
         self.inner.bundles.write().push((parsed, bundle));
         self.inner.tr_cache.write().clear();
+        self.inner.byte_size_cache.write().clear();
         true
     }
 
@@ -367,6 +374,9 @@ impl LocaleManager {
     /// rounded to the nearest integer; MB and above use one decimal place.
     #[must_use]
     pub fn format_byte_size(&self, bytes: u64) -> String {
+        if let Some(hit) = self.inner.byte_size_cache.read().get(&bytes).cloned() {
+            return hit;
+        }
         const KB: f64 = 1024.0;
         const MB: f64 = KB * 1024.0;
         const GB: f64 = MB * 1024.0;
@@ -383,7 +393,17 @@ impl LocaleManager {
         } else {
             ("byte-size-b", bytes.to_string())
         };
-        self.tr_args(key, &FluentArgs::new().with("value", value))
+        let formatted = self.tr_args(key, &FluentArgs::new().with("value", value));
+        // Bound the cache so a pathological range of sizes cannot grow it
+        // without limit; common listings reuse a small set of bucket values.
+        {
+            let mut cache = self.inner.byte_size_cache.write();
+            if cache.len() >= 4096 {
+                cache.clear();
+            }
+            cache.insert(bytes, formatted.clone());
+        }
+        formatted
     }
 
     /// Format an uptime / duration in seconds with localized unit suffixes.

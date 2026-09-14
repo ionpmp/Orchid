@@ -48,6 +48,77 @@ impl FileManagerInner {
         self.visit_log.lock().record(path.as_str());
     }
 
+    /// Resolve the formatted display strings (size / date / type / name) for
+    /// `entry`, reusing a cached result when neither the entry metadata nor
+    /// the locale / show-extensions setting changed since the last snapshot.
+    ///
+    /// This is the hot path: `build_tab_payload` calls it once per visible row
+    /// (~96) per snapshot, and a Fluent `tr_args` lookup plus a `chrono`
+    /// format parse per call was the dominant CPU cost on scroll / selection.
+    pub(super) fn entry_text_for(
+        &self,
+        entry: &orchid_fs::FsEntry,
+        show_extensions: bool,
+        locale: &LocaleConfig,
+        locale_tag: &str,
+    ) -> Arc<EntryText> {
+        let path_key = entry.path.as_str().to_string();
+        let modified_ms = entry
+            .metadata
+            .modified
+            .map(|t| t.timestamp_millis())
+            .unwrap_or(0);
+        let is_dir = matches!(entry.metadata.kind, orchid_fs::FsEntryKind::Directory);
+        {
+            let cache = self.entry_text_cache.lock();
+            if let Some(c) = cache.get(&path_key) {
+                if c.size == entry.metadata.size
+                    && c.modified_ms == modified_ms
+                    && c.name == entry.name
+                    && c.is_dir == is_dir
+                    && c.show_ext == show_extensions
+                    && c.locale_tag == locale_tag
+                    && c.date_format == locale.date_format
+                    && c.time_format == locale.time_format
+                {
+                    return Arc::clone(c);
+                }
+            }
+        }
+        let display_name = entry_display_name(&entry.name, is_dir, show_extensions);
+        let size_text = self.deps.locale.format_byte_size(entry.metadata.size);
+        let modified_text = entry
+            .metadata
+            .modified
+            .map(|t| locale.format_datetime(t))
+            .unwrap_or_default();
+        let type_text = if is_dir {
+            self.deps.locale.tr("fm-properties-kind-folder")
+        } else {
+            classify(&self.deps.locale, &entry.name, false)
+        };
+        let icon: &'static str = if is_dir { "folder" } else { "file" };
+        let text = Arc::new(EntryText {
+            size: entry.metadata.size,
+            modified_ms,
+            name: entry.name.clone(),
+            is_dir,
+            show_ext: show_extensions,
+            locale_tag: locale_tag.to_string(),
+            date_format: locale.date_format.clone(),
+            time_format: locale.time_format.clone(),
+            display_name,
+            size_text,
+            modified_text,
+            type_text,
+            icon,
+        });
+        self.entry_text_cache
+            .lock()
+            .insert(path_key, Arc::clone(&text));
+        text
+    }
+
     pub(super) fn visit_history_payload(&self) -> Vec<VisitHistoryItemPayload> {
         self.visit_log
             .lock()

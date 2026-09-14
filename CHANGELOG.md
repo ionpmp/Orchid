@@ -396,6 +396,13 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **File-manager rendering throughput**: cache per-entry formatted text
+  (size / date / type / display name) so an unchanged listing no longer
+  re-runs ~288 Fluent `tr_args` lookups plus `chrono` format parses per
+  snapshot; cache `format_byte_size` in the `LocaleManager`; and skip
+  rebuilding the ~96 `FmEntry` rows on scroll / selection / transfer ticks
+  where the visible window did not move, syncing only thumbnail
+  appearances in place.
 - **Denser widget chrome**: shrink frame headers and in-widget toolbars to
   ~42px (`Theme.header-height` / `Theme.toolbar-height`), use compact
   `IconButton` (`ControlSize.sm`) in widget frames, and size FM toolbar

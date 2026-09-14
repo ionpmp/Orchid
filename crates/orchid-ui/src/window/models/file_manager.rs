@@ -1069,11 +1069,39 @@ fn build_fm_tab(
     sort_modified_label: &SharedString,
     sort_type_label: &SharedString,
 ) -> FmTab {
+    let entries: Vec<FmEntry> = t.entries.iter().map(build_fm_entry).collect();
+    build_fm_tab_chrome(
+        t,
+        locale,
+        view_w,
+        sort_name_label,
+        sort_size_label,
+        sort_modified_label,
+        sort_type_label,
+        ModelRc::new(VecModel::from(entries)),
+    )
+}
+
+/// Build the tab chrome (breadcrumbs / status / sort labels / virtual
+/// layout) reusing an existing entries model. Used by the fast patch
+/// path in [`patch_fm_pane`] so an unchanged listing does not rebuild 96
+/// `FmEntry` rows (≈ 670 `SharedString` allocations) just to update the
+/// status bar text.
+#[allow(clippy::too_many_arguments)]
+fn build_fm_tab_chrome(
+    t: &orchid_widgets::TabPayload,
+    locale: &LocaleManager,
+    view_w: f32,
+    sort_name_label: &SharedString,
+    sort_size_label: &SharedString,
+    sort_modified_label: &SharedString,
+    sort_type_label: &SharedString,
+    entries: ModelRc<FmEntry>,
+) -> FmTab {
     let view_mode = view_mode_to_int(t.view_mode);
     let total = t.item_count as usize;
     let (pad_top, content_h, first_index) =
         fm_virtual_layout(view_mode, total, t.entries_offset as usize, view_w);
-    let entries: Vec<FmEntry> = t.entries.iter().map(build_fm_entry).collect();
     let breadcrumbs: Vec<FmBreadcrumb> = t
         .breadcrumbs
         .iter()
@@ -1089,7 +1117,7 @@ fn build_fm_tab(
         can_back: t.can_go_back,
         can_forward: t.can_go_forward,
         view_mode,
-        entries: ModelRc::new(VecModel::from(entries)),
+        entries,
         entry_total_count: total as i32,
         virtual_pad_top: pad_top,
         virtual_content_height: content_h,
@@ -1185,6 +1213,71 @@ fn sync_fm_entries(model: &ModelRc<FmEntry>, new_rows: Vec<FmEntry>) {
             v.push(row);
         }
     }
+}
+
+/// Patch only thumbnail / icon fields of existing rows when the listing
+/// identity (tab id + path + filter + visible window + view mode) is
+/// unchanged. Avoids rebuilding 96 `FmEntry` rows (≈ 670 `SharedString`
+/// allocations) on every scroll / selection / transfer-progress tick
+/// where the entries themselves did not move.
+///
+/// Returns `false` when the row count disagrees with `payloads`, in which
+/// case the caller must fall back to a full [`sync_fm_entries`].
+fn sync_fm_entry_icons(
+    model: &ModelRc<FmEntry>,
+    payloads: &[orchid_widgets::EntryPayload],
+) -> bool {
+    let Some(v) = model.as_any().downcast_ref::<VecModel<FmEntry>>() else {
+        return false;
+    };
+    if v.row_count() != payloads.len() {
+        return false;
+    }
+    for (i, p) in payloads.iter().enumerate() {
+        let Some(mut old) = v.row_data(i) else {
+            return false;
+        };
+        let want_w = p.thumbnail_width as i32;
+        let want_h = p.thumbnail_height as i32;
+        if old.has_thumbnail == p.has_thumbnail
+            && old.thumbnail_width == want_w
+            && old.thumbnail_height == want_h
+            && old.thumbnail_is_icon == p.thumbnail_is_icon
+        {
+            // The painted Image already lives in the row; a re-decode at the
+            // same dimensions produces identical pixels, so leave it.
+            continue;
+        }
+        old.has_thumbnail = p.has_thumbnail;
+        old.thumbnail = if p.has_thumbnail {
+            p.thumbnail_rgba
+                .as_ref()
+                .map(|rgba| fm_rgba_to_image(rgba, p.thumbnail_width, p.thumbnail_height))
+                .unwrap_or_default()
+        } else {
+            Image::default()
+        };
+        old.thumbnail_width = want_w;
+        old.thumbnail_height = want_h;
+        old.thumbnail_is_icon = p.thumbnail_is_icon;
+        v.set_row_data(i, old);
+    }
+    true
+}
+
+/// Whether the listing identity (the set of visible rows) is unchanged
+/// between an existing committed [`FmTab`] and a fresh [`TabPayload`].
+///
+/// When this returns `true`, [`patch_fm_pane`] can skip rebuilding the
+/// entry rows and only sync thumbnail appearances plus tab chrome.
+fn fm_listing_unchanged(tab: &FmTab, t: &orchid_widgets::TabPayload) -> bool {
+    tab.id == t.tab_id.as_str()
+        && tab.path_display == t.path_display.as_str()
+        && tab.quick_filter == t.quick_filter.as_str()
+        && tab.entry_total_count == t.item_count as i32
+        && tab.virtual_first_index == t.entries_offset as i32
+        && tab.view_mode == view_mode_to_int(t.view_mode)
+        && tab.entries.row_count() == t.entries.len() as i32
 }
 
 fn fm_tab_chrome_changed(tab: &FmTab, fresh: &FmTab) -> bool {
@@ -1564,19 +1657,69 @@ fn patch_fm_pane(
         tabs.remove(tabs.row_count() - 1);
     }
     for (tab_idx, t) in pp.tabs.iter().enumerate() {
-        let fresh = build_fm_tab(
-            t,
-            locale,
-            view_w,
-            sort_name_label,
-            sort_size_label,
-            sort_modified_label,
-            sort_type_label,
-        );
         if tab_idx < tabs.row_count() {
-            let Some(mut tab) = tabs.row_data(tab_idx) else {
+            let Some(tab) = tabs.row_data(tab_idx) else {
                 continue;
             };
+            // Fast path: the visible window, filter, view mode, and row count
+            // are all unchanged, so the set of rows is identical. Skip the
+            // ~96 `FmEntry` rebuild (≈ 670 `SharedString` allocations) and
+            // only sync thumbnail appearances that landed since the last
+            // patch (icon / thumb first-decode false→true). Selection is
+            // patched separately by `try_patch_fm_selection`.
+            if fm_listing_unchanged(&tab, t) && sync_fm_entry_icons(&tab.entries, &t.entries) {
+                let fresh = build_fm_tab_chrome(
+                    t,
+                    locale,
+                    view_w,
+                    sort_name_label,
+                    sort_size_label,
+                    sort_modified_label,
+                    sort_type_label,
+                    tab.entries.clone(),
+                );
+                if !fm_tab_chrome_changed(&tab, &fresh) {
+                    continue;
+                }
+                let mut updated = tab;
+                if tab.id != fresh.id || tab.path_display != fresh.path_display {
+                    updated.breadcrumbs = fresh.breadcrumbs;
+                }
+                updated.id = fresh.id;
+                updated.path_display = fresh.path_display;
+                updated.can_back = fresh.can_back;
+                updated.can_forward = fresh.can_forward;
+                updated.view_mode = fresh.view_mode;
+                updated.entry_total_count = fresh.entry_total_count;
+                updated.virtual_pad_top = fresh.virtual_pad_top;
+                updated.virtual_content_height = fresh.virtual_content_height;
+                updated.virtual_first_index = fresh.virtual_first_index;
+                updated.selection_count = fresh.selection_count;
+                updated.status_text = fresh.status_text;
+                updated.quick_filter = fresh.quick_filter;
+                updated.is_loading = fresh.is_loading;
+                updated.error = fresh.error;
+                updated.error_action_label = fresh.error_action_label;
+                updated.sort_by = fresh.sort_by;
+                updated.sort_descending = fresh.sort_descending;
+                updated.sort_name_label = fresh.sort_name_label;
+                updated.sort_size_label = fresh.sort_size_label;
+                updated.sort_modified_label = fresh.sort_modified_label;
+                updated.sort_type_label = fresh.sort_type_label;
+                updated.branch_view = fresh.branch_view;
+                // entries ModelRc is reused unchanged.
+                tabs.set_row_data(tab_idx, updated);
+                continue;
+            }
+            let fresh = build_fm_tab(
+                t,
+                locale,
+                view_w,
+                sort_name_label,
+                sort_size_label,
+                sort_modified_label,
+                sort_type_label,
+            );
             if let (Some(dst), Some(src)) = (
                 tab.entries.as_any().downcast_ref::<VecModel<FmEntry>>(),
                 fresh.entries.as_any().downcast_ref::<VecModel<FmEntry>>(),
@@ -1619,6 +1762,15 @@ fn patch_fm_pane(
                 tabs.set_row_data(tab_idx, fresh);
             }
         } else {
+            let fresh = build_fm_tab(
+                t,
+                locale,
+                view_w,
+                sort_name_label,
+                sort_size_label,
+                sort_modified_label,
+                sort_type_label,
+            );
             tabs.push(fresh);
         }
     }

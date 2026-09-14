@@ -102,6 +102,7 @@ pub(crate) fn build_tab_payload(
     };
     let entries_offset = first as u32;
     let locale = inner.deps.orchid_config.read().locale.clone();
+    let locale_tag = locale.language.clone();
     let thumb_cache = inner.thumbnail_rgba.read();
     let shell_cache = inner.shell_icon_rgba.read();
     let entry_payloads: Vec<EntryPayload> = entries_filtered[first..end]
@@ -138,36 +139,33 @@ pub(crate) fn build_tab_payload(
                 (false, None, 0, 0, false)
             };
             let is_dir = matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory);
+            // Formatted strings (size / date / type / display name) are the
+            // expensive part of a snapshot: each costs a Fluent `tr_args`
+            // lookup plus a `chrono` format parse. Cache them per entry path
+            // and reuse when the metadata / locale / show-ext setting is
+            // unchanged — the common case during scroll and selection.
+            let text = inner.entry_text_for(e, config.show_extensions, &locale, &locale_tag);
+            // Recycle-bin rows show the original parent path in the Type
+            // column; that override cannot be cached by entry path because
+            // the recycle mapping is external, so apply it on top of the
+            // cached classify result.
+            let type_text = orchid_fs::recycle_original_path(path_key)
+                .and_then(|orig| {
+                    std::path::Path::new(&orig)
+                        .parent()
+                        .map(|p| p.display().to_string())
+                        .filter(|s| !s.is_empty())
+                        .or(Some(orig))
+                })
+                .unwrap_or_else(|| text.type_text.clone());
             EntryPayload {
                 path: path_key.to_string(),
-                name: entry_display_name(&e.name, is_dir, config.show_extensions),
+                name: text.display_name.clone(),
                 is_dir,
-                size_text: inner.deps.locale.format_byte_size(e.metadata.size),
-                modified_text: e
-                    .metadata
-                    .modified
-                    .map(|t| locale.format_datetime(t))
-                    .unwrap_or_default(),
-                type_text: orchid_fs::recycle_original_path(path_key)
-                    .and_then(|orig| {
-                        std::path::Path::new(&orig)
-                            .parent()
-                            .map(|p| p.display().to_string())
-                            .filter(|s| !s.is_empty())
-                            .or(Some(orig))
-                    })
-                    .unwrap_or_else(|| {
-                        classify(
-                            &inner.deps.locale,
-                            &e.name,
-                            matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory),
-                        )
-                    }),
-                icon: if matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory) {
-                    "folder".into()
-                } else {
-                    "file".into()
-                },
+                size_text: text.size_text.clone(),
+                modified_text: text.modified_text.clone(),
+                type_text,
+                icon: text.icon.into(),
                 has_thumbnail,
                 thumbnail_key: None,
                 thumbnail_rgba,

@@ -61,7 +61,7 @@ use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{
     Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
 };
-use orchid_storage::{LifecycleState, WidgetSize};
+use orchid_storage::{LifecycleState, LocaleConfig, WidgetSize};
 
 pub use clipboard::{ClipboardOperation, FileClipboard};
 pub use config::{
@@ -360,6 +360,12 @@ pub(crate) struct FileManagerInner {
     external_refresh_gen: AtomicU64,
     /// Generation counter for coalescing decoration (icon/thumb) snapshot publishes.
     decoration_publish_gen: AtomicU64,
+    /// Cached formatted text (size / date / type / display name) per entry
+    /// path. Snapshot builds format ~96 visible rows per tick; without this
+    /// every row re-runs Fluent `tr_args` + `chrono::format`. Entries are
+    /// invalidated by metadata change (size / mtime / name), locale switch,
+    /// or the show-extensions toggle.
+    entry_text_cache: parking_lot::Mutex<EntryTextCache>,
     /// Folder visit counts for the history dropdown.
     visit_log: parking_lot::Mutex<VisitLog>,
     /// Runtime find / duplicate / large-file result sets (`virtual:search/<id>`).
@@ -386,6 +392,65 @@ struct TransferState {
 struct RefreshOpts {
     publish: bool,
     indicate_loading: bool,
+}
+
+/// Cached formatted strings for one entry.
+///
+/// Keyed by entry path; invalidated when any of `size` / `modified_ms` /
+/// `name` / `is_dir` changes, or when the active locale / show-extensions
+/// setting flips. Hits avoid a Fluent `tr_args` lookup plus a `chrono`
+/// format parse per row per snapshot — the dominant cost on scroll and
+/// selection in large directories.
+#[derive(Clone, Debug)]
+struct EntryText {
+    size: u64,
+    modified_ms: i64,
+    name: String,
+    is_dir: bool,
+    show_ext: bool,
+    locale_tag: String,
+    date_format: Option<String>,
+    time_format: Option<String>,
+    display_name: String,
+    size_text: String,
+    modified_text: String,
+    type_text: String,
+    icon: &'static str,
+}
+
+/// LRU-bounded map of entry path → cached formatted text.
+#[derive(Debug)]
+struct EntryTextCache {
+    map: HashMap<String, Arc<EntryText>>,
+    order: VecDeque<String>,
+}
+
+impl EntryTextCache {
+    const CAP: usize = 8192;
+
+    fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+
+    fn get(&self, key: &str) -> Option<&Arc<EntryText>> {
+        self.map.get(key)
+    }
+
+    fn insert(&mut self, key: String, value: Arc<EntryText>) {
+        if !self.map.contains_key(&key) {
+            while self.map.len() >= Self::CAP {
+                let Some(old) = self.order.pop_front() else {
+                    break;
+                };
+                self.map.remove(&old);
+            }
+            self.order.push_back(key.clone());
+        }
+        self.map.insert(key, value);
+    }
 }
 
 /// Byte budget for the shell icon cache.
@@ -560,6 +625,7 @@ impl FileManagerWidget {
                 dir_watch_subs: parking_lot::Mutex::new(Vec::new()),
                 external_refresh_gen: AtomicU64::new(0),
                 decoration_publish_gen: AtomicU64::new(0),
+                entry_text_cache: parking_lot::Mutex::new(EntryTextCache::new()),
                 visit_log: parking_lot::Mutex::new(VisitLog::from_entries(persisted.path_visits)),
                 search_sessions: RwLock::new(HashMap::new()),
                 undo: parking_lot::Mutex::new(undo::FsUndoStack::default()),
