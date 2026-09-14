@@ -1316,10 +1316,10 @@ export component ViewerImageView inherits Rectangle {
                 y: canvas.vis-y;
                 width: canvas.vis-w;
                 height: canvas.vis-h;
-                source-clip-x: canvas.src-x;
-                source-clip-y: canvas.src-y;
-                source-clip-width: canvas.src-w;
-                source-clip-height: canvas.src-h;
+                source-clip-x: round(canvas.src-x / 1px);
+                source-clip-y: round(canvas.src-y / 1px);
+                source-clip-width: round(canvas.src-w / 1px);
+                source-clip-height: round(canvas.src-h / 1px);
                 image-fit: fill;
             }
 
@@ -1582,10 +1582,10 @@ export component ViewerImageView inherits Rectangle {
                     width: 128px;
                     height: 128px;
                     image-fit: fill;
-                    source-clip-x: (pan-area.mouse-x - canvas.img-left) / max(0.01, model.zoom) - 64px / 2.5 / max(0.01, model.zoom);
-                    source-clip-y: (pan-area.mouse-y - canvas.img-top) / max(0.01, model.zoom) - 64px / 2.5 / max(0.01, model.zoom);
-                    source-clip-width: 128px / 2.5 / max(0.01, model.zoom);
-                    source-clip-height: 128px / 2.5 / max(0.01, model.zoom);
+                    source-clip-x: round(((pan-area.mouse-x - canvas.img-left) / max(0.01, model.zoom) - 64px / 2.5 / max(0.01, model.zoom)) / 1px);
+                    source-clip-y: round(((pan-area.mouse-y - canvas.img-top) / max(0.01, model.zoom) - 64px / 2.5 / max(0.01, model.zoom)) / 1px);
+                    source-clip-width: round(128px / 2.5 / max(0.01, model.zoom) / 1px);
+                    source-clip-height: round(128px / 2.5 / max(0.01, model.zoom) / 1px);
                 }
                 if !canvas.axis-aligned : Image {
                     source: model.rgba-image;
