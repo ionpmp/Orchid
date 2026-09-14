@@ -413,7 +413,11 @@ export component WorkspaceView inherits Rectangle {
                     y: AppState.live-frame-id == w.instance-id ? AppState.live-frame-y : w.y;
                     width: AppState.live-frame-id == w.instance-id ? AppState.live-frame-width : w.width;
                     height: AppState.live-frame-id == w.instance-id ? AppState.live-frame-height : w.height;
-                    z: AppState.live-frame-id == w.instance-id ? 10000 : w.z-order;
+                    // Slint 1.17 requires `z` to be a number literal (dynamic z lands in 1.18).
+                    // Painting order falls back to model order, which matches the grid
+                    // index, so stacking is preserved. The live-frame drag preview
+                    // loses its z-lift until Slint 1.18 re-allows dynamic `z`.
+                    z: 1;
                     model: w;
                     close-clicked => { root.widget-close-clicked(w.instance-id); }
                     settings-clicked => { root.widget-settings-clicked(w.instance-id); }
@@ -760,7 +764,8 @@ export component WorkspaceView inherits Rectangle {
             y: AppState.live-frame-id == w.instance-id ? AppState.live-frame-y : w.y;
             width: AppState.live-frame-id == w.instance-id ? AppState.live-frame-width : w.width;
             height: AppState.live-frame-id == w.instance-id ? AppState.live-frame-height : w.height;
-            z: AppState.live-frame-id == w.instance-id ? 10000 : w.z-order;
+            // Slint 1.17 requires `z` to be a number literal (dynamic z lands in 1.18).
+            z: 1;
             model: w;
             close-clicked => { root.widget-close-clicked(w.instance-id); }
             settings-clicked => { root.widget-settings-clicked(w.instance-id); }

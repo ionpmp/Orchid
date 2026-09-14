@@ -307,7 +307,7 @@ impl MainWindowController {
         let g = self.window.global::<AppState>();
         let mut buf = [0u8; uuid::fmt::Hyphenated::LENGTH];
         g.set_live_frame_id(SharedString::from(
-            instance.as_hyphenated().encode_lower(&mut buf).as_str(),
+            &*instance.as_hyphenated().encode_lower(&mut buf),
         ));
         g.set_live_frame_x(x);
         g.set_live_frame_y(y);

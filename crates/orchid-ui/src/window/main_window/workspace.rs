@@ -54,7 +54,7 @@ fn find_frame_row(v: &VecModel<WidgetFrameModel>, id: Uuid) -> Option<(usize, Wi
         let Some(row) = v.row_data(r) else {
             continue;
         };
-        if row.instance_id.as_str() == needle {
+        if row.instance_id.as_str() == &*needle {
             return Some((r, row));
         }
     }

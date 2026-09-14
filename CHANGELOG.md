@@ -396,6 +396,16 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- Workspace crates: `rawler` 0.8, `rfd` 0.17, `libloading` 0.9,
+  `zstd` 0.14, plus a semver-compatible `Cargo.lock` refresh.
+  Pin `keepass` to 0.13.22 (0.13.25's `aes 0.9` conflicts
+  with `age`'s `aes-gcm ^0.10`/`aes 0.8` until `age`
+  adopts `aes-gcm 0.11`). Adapt the Slint UI to Slint
+  1.17: `Image.source-clip-*` are now `int` (wrap in `round(… / 1px)`),
+  repeater `z` must be a number literal (drop the live-frame
+  ternary until Slint 1.18 re-allows dynamic `z`), and
+  `uuid::encode_lower` now returns `&mut str` (reborrow via `&*`
+  instead of the unstable `str_as_str` `.as_str()`).
 - **File-manager rendering throughput**: cache per-entry formatted text
   (size / date / type / display name) so an unchanged listing no longer
   re-runs ~288 Fluent `tr_args` lookups plus `chrono` format parses per

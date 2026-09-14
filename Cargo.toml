@@ -71,6 +71,11 @@ redb = "4"
 
 # Crypto / content addressing
 age = "0.12"
+# keepass 0.13.25 pulls aes 0.9.x, but age 0.12.1 still requires
+# aes-gcm ^0.10 (aes 0.8.x); the two aes majors cannot unify and the
+# build breaks with `Aes256: Digest` not implemented. age has not yet
+# adopted aes-gcm 0.11, so pin keepass to the last 0.13.22 release that
+# stays on aes 0.8 until age upgrades.
 keepass = { version = "0.13", features = ["save_kdbx4"] }
 blake3 = { version = "1", features = ["mmap", "rayon"] }
 sha2 = "0.11"
@@ -135,7 +140,7 @@ arboard = "3"
 
 # Viewers / archives / file IO
 pdfium-render = "0.9"
-libloading = "0.8"
+libloading = "0.9"
 # AVIF goes through WIC; JXL / RAW / PSD / SVG have their own crates.
 # Drop `avif` (ravif), `qoi`, and `ff` (farbfeld) from the default set.
 image = { version = "0.25", default-features = false, features = [
@@ -155,7 +160,7 @@ image = { version = "0.25", default-features = false, features = [
 ] }
 jxl-oxide = { version = "0.12", default-features = false, features = ["moxcms"] }
 psd = "0.3"
-rawler = "0.7"
+rawler = "0.8"
 resvg = "0.48"
 tree-sitter = "0.26"
 tree-sitter-rust = "0.24"
@@ -198,7 +203,7 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls", "j
 feed-rs = "2.4"
 futures = "0.3"
 opener = "0.8"
-rfd = "0.15"
+rfd = "0.17"
 
 # System info
 sysinfo = { version = "0.39", default-features = false, features = ["disk", "system", "network", "user"] }
@@ -210,7 +215,7 @@ memmap2 = "0.9"
 
 # Native .orchid container (FlatBuffers TOC + zstd regions)
 flatbuffers = "25"
-zstd = "0.13"
+zstd = "0.14"
 clap = { version = "4", features = ["derive"] }
 # C2PA content credentials (Phase 3). Prefer rust_native_crypto on Windows.
 c2pa = { version = "0.90", default-features = false, features = ["rust_native_crypto"] }
