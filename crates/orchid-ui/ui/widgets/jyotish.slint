@@ -9,13 +9,11 @@ import {
 } from "../workspace/defs.slint";
 import { SearchField } from "search-field.slint";
 
-/// Compact ± stepper row for birth time / UTC offset.
-component ProfileStepper inherits HorizontalLayout {
+/// Compact UTC offset row (− / value / +), with optional hour jumps.
+component ProfileOffsetRow inherits HorizontalLayout {
     in property <string> label;
     in property <string> value-text;
     in property <string> empty-text;
-    in property <int> small-step: 1;
-    in property <int> large-step: 30;
     callback nudge(int);
 
     spacing: Theme.space-1;
@@ -26,28 +24,28 @@ component ProfileStepper inherits HorizontalLayout {
         color: Theme.text-secondary;
         font-size: Theme.font-size-sm;
         vertical-alignment: center;
-        min-width: 52px;
+        min-width: 36px;
     }
-    TouchButton {
-        text: "«";
-        tone: ButtonTone.neutral;
+    IconButton {
+        icon: "chevron-left";
         size: ControlSize.sm;
-        clicked => { root.nudge(-root.large-step); }
+        clicked => { root.nudge(-60); }
     }
     TouchButton {
         text: "−";
         tone: ButtonTone.neutral;
         size: ControlSize.sm;
-        clicked => { root.nudge(-root.small-step); }
+        clicked => { root.nudge(-30); }
     }
     Text {
         text: root.value-text == "" ? root.empty-text : root.value-text;
         color: root.value-text == "" ? Theme.text-tertiary : Theme.text-primary;
         font-size: Theme.font-size-sm;
         font-family: Theme.font-family-mono;
+        font-weight: Theme.weight-medium;
         vertical-alignment: center;
         horizontal-alignment: center;
-        min-width: 88px;
+        min-width: 72px;
         horizontal-stretch: 1;
         wrap: no-wrap;
         overflow: elide;
@@ -56,13 +54,12 @@ component ProfileStepper inherits HorizontalLayout {
         text: "+";
         tone: ButtonTone.neutral;
         size: ControlSize.sm;
-        clicked => { root.nudge(root.small-step); }
+        clicked => { root.nudge(30); }
     }
-    TouchButton {
-        text: "»";
-        tone: ButtonTone.neutral;
+    IconButton {
+        icon: "chevron-right";
         size: ControlSize.sm;
-        clicked => { root.nudge(root.large-step); }
+        clicked => { root.nudge(60); }
     }
 }
 
@@ -80,17 +77,25 @@ component ProfileDateCal inherits VerticalLayout {
     callback set-mode(int);
     callback pick(int);
 
-    spacing: Theme.space-2;
+    spacing: Theme.space-1;
     property <int> cols: root.mode == 0 ? 7 : 3;
     property <length> cell-h: root.mode == 0 ? Theme.control-sm : Theme.control-md;
 
-    Eyebrow { text: root.label; }
-
-    Text {
-        text: root.selected-text == "" ? root.empty-text : root.selected-text;
-        color: root.selected-text == "" ? Theme.text-tertiary : Theme.text-primary;
-        font-size: Theme.font-size-sm;
-        font-family: Theme.font-family-mono;
+    HorizontalLayout {
+        spacing: Theme.space-2;
+        Eyebrow { text: root.label; }
+        Text {
+            text: root.selected-text == "" ? root.empty-text : root.selected-text;
+            color: root.selected-text == "" ? Theme.text-tertiary : Theme.text-primary;
+            font-size: Theme.font-size-sm;
+            font-family: Theme.font-family-mono;
+            font-weight: Theme.weight-medium;
+            horizontal-alignment: right;
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+            wrap: no-wrap;
+            overflow: elide;
+        }
     }
 
     HorizontalLayout {
@@ -169,15 +174,27 @@ component TimeWheel inherits Rectangle {
     in property <int> selected;
     callback pick(int);
 
-    background: Theme.surface-sunken;
+    background: Theme.surface-base;
     border-radius: Theme.radius-md;
     border-width: Theme.hairline;
     border-color: Theme.border-subtle;
     clip: true;
     horizontal-stretch: 1;
+    property <length> row-h: Theme.control-sm + 1px;
+
+    init => { root.scroll-to-selected(); }
+    changed selected => { root.scroll-to-selected(); }
+    changed height => { root.scroll-to-selected(); }
+
+    public function scroll-to-selected() {
+        if root.selected < 0 { return; }
+        let y = root.selected * root.row-h - wheel-flick.height / 2 + Theme.control-sm / 2;
+        let max-y = max(0px, wheel-flick.viewport-height - wheel-flick.height);
+        wheel-flick.viewport-y = min(max-y, max(0px, y));
+    }
 
     VerticalLayout {
-        padding-top: Theme.space-2;
+        padding-top: Theme.space-1;
         spacing: Theme.space-1;
 
         Text {
@@ -187,7 +204,7 @@ component TimeWheel inherits Rectangle {
             horizontal-alignment: center;
         }
 
-        Flickable {
+        wheel-flick := Flickable {
             vertical-stretch: 1;
             viewport-width: self.width;
             viewport-height: wheel.preferred-height;
@@ -234,20 +251,28 @@ component ProfileTimeSelect inherits VerticalLayout {
     in property <int> minute;
     callback set-time(int, int);
 
-    spacing: Theme.space-2;
+    spacing: Theme.space-1;
 
-    Eyebrow { text: root.label; }
-
-    Text {
-        text: root.selected-text == "" ? root.empty-text : root.selected-text;
-        color: root.selected-text == "" ? Theme.text-tertiary : Theme.text-primary;
-        font-size: Theme.font-size-sm;
-        font-family: Theme.font-family-mono;
+    HorizontalLayout {
+        spacing: Theme.space-2;
+        Eyebrow { text: root.label; }
+        Text {
+            text: root.selected-text == "" ? root.empty-text : root.selected-text;
+            color: root.selected-text == "" ? Theme.text-tertiary : Theme.text-primary;
+            font-size: Theme.font-size-sm;
+            font-family: Theme.font-family-mono;
+            font-weight: Theme.weight-medium;
+            horizontal-alignment: right;
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+            wrap: no-wrap;
+            overflow: elide;
+        }
     }
 
     HorizontalLayout {
         spacing: Theme.space-2;
-        height: 148px;
+        height: 112px;
 
         TimeWheel {
             label: root.hour-label;
@@ -261,6 +286,22 @@ component ProfileTimeSelect inherits VerticalLayout {
             selected: root.minute;
             pick(m) => { root.set-time(root.hour < 0 ? 12 : root.hour, m); }
         }
+    }
+}
+
+/// Soft card used to group related profile-edit fields.
+component ProfileCard inherits Rectangle {
+    background: Theme.surface-sunken;
+    border-radius: Theme.radius-lg;
+    border-width: Theme.hairline;
+    border-color: Theme.border-subtle;
+    vertical-stretch: 0;
+    height: body.preferred-height;
+
+    body := VerticalLayout {
+        padding: Theme.space-3;
+        spacing: Theme.space-2;
+        @children
     }
 }
 
@@ -1448,50 +1489,34 @@ export component JyotishView inherits Rectangle {
                         profiles-list := VerticalLayout {
                             spacing: Theme.space-1;
 
-                            for profile[i] in model.profiles : Rectangle {
-                                height: Theme.row-height;
-                                background: profile.active ? Theme.state-selected
-                                    : (profile-row-ta.has-hover ? Theme.state-hover : Colors.transparent);
-                                border-radius: Theme.radius-md;
-                                animate background { duration: Theme.motion-fast; easing: ease-out; }
+                            for profile[i] in model.profiles : HorizontalLayout {
+                                spacing: Theme.space-1;
 
-                                profile-row-ta := TouchArea {
-                                    mouse-cursor: MouseCursor.pointer;
+                                // Trailing actions stay siblings so ListTile's
+                                // full-bleed TouchArea does not steal their clicks.
+                                ListTile {
+                                    title: profile.name;
+                                    selected: profile.active;
+                                    horizontal-stretch: 1;
                                     clicked => { root.select-profile(i); }
                                 }
 
-                                HorizontalLayout {
-                                    padding-left: Theme.space-3;
-                                    padding-right: Theme.space-1;
-                                    spacing: Theme.space-1;
-
-                                    Text {
-                                        text: profile.name;
-                                        color: profile.active ? Theme.accent-brand : Theme.text-primary;
-                                        font-size: Theme.font-size-md;
-                                        vertical-alignment: center;
-                                        horizontal-stretch: 1;
-                                        wrap: no-wrap;
-                                        overflow: elide;
+                                IconButton {
+                                    icon: "more";
+                                    size: ControlSize.sm;
+                                    tooltip-flip: true;
+                                    clicked => {
+                                        root.draft-profile-name = profile.name;
+                                        root.begin-edit-profile(i);
                                     }
+                                }
 
-                                    IconButton {
-                                        icon: "more";
-                                        size: ControlSize.sm;
-                                        tooltip-flip: true;
-                                        clicked => {
-                                            root.draft-profile-name = profile.name;
-                                            root.begin-edit-profile(i);
-                                        }
-                                    }
-
-                                    if model.profiles.length > 0 : IconButton {
-                                        icon: "trash";
-                                        size: ControlSize.sm;
-                                        danger: true;
-                                        tooltip-flip: true;
-                                        clicked => { root.remove-profile(i); }
-                                    }
+                                if model.profiles.length > 0 : IconButton {
+                                    icon: "trash";
+                                    size: ControlSize.sm;
+                                    danger: true;
+                                    tooltip-flip: true;
+                                    clicked => { root.remove-profile(i); }
                                 }
                             }
                         }
@@ -1508,119 +1533,103 @@ export component JyotishView inherits Rectangle {
                     }
                 }
 
-                if model.profile-editing : Flickable {
+                if model.profile-editing : VerticalLayout {
                     vertical-stretch: 1;
-                    viewport-width: self.width;
-                    viewport-height: profile-edit-form.preferred-height;
+                    spacing: Theme.space-2;
 
-                    profile-edit-form := VerticalLayout {
-                        spacing: Theme.space-2;
+                    Text {
+                        text: model.profile-edit-index < 0 ? model.profiles-add-label : model.profiles-edit-label;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        font-weight: Theme.weight-medium;
+                    }
 
-                        Text {
-                            text: model.profile-edit-index < 0 ? model.profiles-add-label : model.profiles-edit-label;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            font-weight: Theme.weight-medium;
-                        }
+                    Flickable {
+                        vertical-stretch: 1;
+                        viewport-width: self.width;
+                        viewport-height: profile-edit-form.preferred-height;
 
-                        Rectangle {
-                            height: Theme.control-md;
-                            background: Theme.surface-sunken;
-                            border-radius: Theme.radius-pill;
-                            border-width: Theme.hairline;
-                            border-color: Theme.border-default;
-                            name-input := TextInput {
-                                x: Theme.space-3;
-                                y: 0px;
-                                width: parent.width - Theme.space-6;
-                                height: parent.height;
-                                text: root.draft-profile-name == "" && model.profile-edit-name != "" ? model.profile-edit-name : root.draft-profile-name;
-                                color: Theme.text-primary;
-                                font-size: Theme.font-size-sm;
-                                vertical-alignment: center;
-                                single-line: true;
-                                edited => { root.draft-profile-name = self.text; }
+                        profile-edit-form := VerticalLayout {
+                            spacing: Theme.space-2;
+
+                            Rectangle {
+                                height: Theme.control-md;
+                                background: Theme.surface-base;
+                                border-radius: Theme.radius-pill;
+                                border-width: Theme.hairline;
+                                border-color: Theme.border-default;
+                                name-input := TextInput {
+                                    x: Theme.space-3;
+                                    y: 0px;
+                                    width: parent.width - Theme.space-6;
+                                    height: parent.height;
+                                    text: root.draft-profile-name == "" && model.profile-edit-name != "" ? model.profile-edit-name : root.draft-profile-name;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                    single-line: true;
+                                    edited => { root.draft-profile-name = self.text; }
+                                }
+                                if name-input.text == "" : Text {
+                                    x: Theme.space-3;
+                                    y: 0px;
+                                    width: parent.width - Theme.space-6;
+                                    height: parent.height;
+                                    text: model.profile-name-placeholder;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                }
                             }
-                            if name-input.text == "" : Text {
-                                x: Theme.space-3;
-                                y: 0px;
-                                width: parent.width - Theme.space-6;
-                                height: parent.height;
-                                text: model.profile-name-placeholder;
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
-                                vertical-alignment: center;
-                            }
-                        }
 
-                        HorizontalLayout {
-                            spacing: Theme.space-1;
-                            for g-label[gi] in model.gender-labels : Chip {
-                                text: g-label;
-                                selected: model.profile-edit-gender == gi;
-                                horizontal-stretch: 1;
-                                clicked => { root.set-profile-gender(gi); }
-                            }
-                        }
-
-                        ProfileDateCal {
-                            label: model.profile-date-label;
-                            selected-text: model.profile-edit-date;
-                            empty-text: model.profile-date-placeholder;
-                            mode: model.profile-cal-mode;
-                            month-title: model.profile-cal-month-title;
-                            year-title: model.profile-cal-year-title;
-                            weekday-headers: model.weekday-headers;
-                            cells: model.profile-cal-cells;
-                            nav(d) => { root.nav-profile-cal(d); }
-                            set-mode(m) => { root.set-profile-cal-mode(m); }
-                            pick(v) => { root.set-profile-cal-day(v); }
-                        }
-
-                        ProfileTimeSelect {
-                            label: model.profile-time-label;
-                            selected-text: model.profile-edit-time;
-                            empty-text: model.profile-time-placeholder;
-                            hour-label: model.profile-hour-label;
-                            minute-label: model.profile-minute-label;
-                            hour-items: model.profile-hour-items;
-                            minute-items: model.profile-minute-items;
-                            hour: model.profile-edit-hour;
-                            minute: model.profile-edit-minute;
-                            set-time(h, m) => { root.set-profile-time(h, m); }
-                        }
-
-                        ProfileStepper {
-                            label: model.profile-offset-label;
-                            value-text: model.profile-edit-offset-text;
-                            empty-text: model.profile-offset-placeholder;
-                            small-step: 30;
-                            large-step: 60;
-                            nudge(d) => { root.nudge-profile-offset(d); }
-                        }
-
-                        Rectangle {
-                            height: model.profile-edit-place-coords == "" ? Theme.control-md : Theme.control-lg;
-                            background: Theme.surface-sunken;
-                            border-radius: Theme.radius-md;
-                            border-width: Theme.hairline;
-                            border-color: Theme.border-subtle;
-                            VerticalLayout {
-                                padding-left: Theme.space-3;
-                                padding-right: Theme.space-3;
-                                padding-top: Theme.space-2;
-                                padding-bottom: Theme.space-2;
+                            HorizontalLayout {
                                 spacing: Theme.space-1;
-                                HorizontalLayout {
+                                for g-label[gi] in model.gender-labels : Chip {
+                                    text: g-label;
+                                    selected: model.profile-edit-gender == gi;
+                                    horizontal-stretch: 1;
+                                    clicked => { root.set-profile-gender(gi); }
+                                }
+                            }
+
+                            ProfileCard {
+                                ProfileDateCal {
+                                    label: model.profile-date-label;
+                                    selected-text: model.profile-edit-date;
+                                    empty-text: model.profile-date-placeholder;
+                                    mode: model.profile-cal-mode;
+                                    month-title: model.profile-cal-month-title;
+                                    year-title: model.profile-cal-year-title;
+                                    weekday-headers: model.weekday-headers;
+                                    cells: model.profile-cal-cells;
+                                    nav(d) => { root.nav-profile-cal(d); }
+                                    set-mode(m) => { root.set-profile-cal-mode(m); }
+                                    pick(v) => { root.set-profile-cal-day(v); }
+                                }
+                            }
+
+                            ProfileCard {
+                                ProfileTimeSelect {
+                                    label: model.profile-time-label;
+                                    selected-text: model.profile-edit-time;
+                                    empty-text: model.profile-time-placeholder;
+                                    hour-label: model.profile-hour-label;
+                                    minute-label: model.profile-minute-label;
+                                    hour-items: model.profile-hour-items;
+                                    minute-items: model.profile-minute-items;
+                                    hour: model.profile-edit-hour;
+                                    minute: model.profile-edit-minute;
+                                    set-time(h, m) => { root.set-profile-time(h, m); }
+                                }
+                            }
+
+                            ProfileCard {
+                                Eyebrow { text: model.profile-place-placeholder; }
+
+                                if model.profile-edit-place-name != "" : HorizontalLayout {
                                     spacing: Theme.space-2;
                                     Text {
-                                        text: model.profile-place-placeholder;
-                                        color: Theme.text-secondary;
-                                        font-size: Theme.font-size-sm;
-                                        vertical-alignment: center;
-                                    }
-                                    Text {
-                                        text: model.profile-edit-place-name == "" ? "-" : model.profile-edit-place-name;
+                                        text: model.profile-edit-place-name;
                                         color: Theme.text-primary;
                                         font-size: Theme.font-size-sm;
                                         font-weight: Theme.weight-medium;
@@ -1629,80 +1638,94 @@ export component JyotishView inherits Rectangle {
                                         wrap: no-wrap;
                                         overflow: elide;
                                     }
-                                }
-                                if model.profile-edit-place-coords != "" : Text {
-                                    text: model.profile-edit-place-coords;
-                                    color: Theme.text-tertiary;
-                                    font-size: Theme.font-size-sm;
-                                    font-family: Theme.font-family-mono;
-                                    wrap: no-wrap;
-                                    overflow: elide;
-                                }
-                            }
-                        }
-
-                        SearchField {
-                            query: model.profile-search-query;
-                            placeholder: model.profile-place-search-placeholder;
-                            edited(q) => { root.search-birth-places(q); }
-                        }
-
-                        if model.profile-search-busy : Text {
-                            text: model.searching-label;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                        }
-
-                        if !model.profile-search-busy && model.profile-search-query != "" && model.profile-search-results.length == 0 : Text {
-                            text: model.no-results-label;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                        }
-
-                        Flickable {
-                            height: min(120px, place-results.preferred-height);
-                            viewport-width: self.width;
-                            viewport-height: place-results.preferred-height;
-                            interactive: true;
-
-                            place-results := VerticalLayout {
-                                spacing: Theme.space-1;
-                                for hit[hi] in model.profile-search-results : ListTile {
-                                    title: hit.name;
-                                    subtitle: hit.detail;
-                                    clicked => {
-                                        root.set-birth-place(hit.name, hit.latitude, hit.longitude, hit.timezone);
+                                    if model.profile-edit-place-coords != "" : Text {
+                                        text: model.profile-edit-place-coords;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        font-family: Theme.font-family-mono;
+                                        vertical-alignment: center;
+                                        wrap: no-wrap;
+                                        overflow: elide;
                                     }
                                 }
+
+                                SearchField {
+                                    query: model.profile-search-query;
+                                    placeholder: model.profile-place-search-placeholder;
+                                    edited(q) => { root.search-birth-places(q); }
+                                }
+
+                                if model.profile-search-busy : Text {
+                                    text: model.searching-label;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                }
+
+                                if !model.profile-search-busy && model.profile-search-query != "" && model.profile-search-results.length == 0 : Text {
+                                    text: model.no-results-label;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                }
+
+                                if model.profile-search-results.length > 0 : Flickable {
+                                    height: min(100px, place-results.preferred-height);
+                                    viewport-width: self.width;
+                                    viewport-height: place-results.preferred-height;
+                                    interactive: true;
+
+                                    place-results := VerticalLayout {
+                                        spacing: Theme.space-1;
+                                        for hit[hi] in model.profile-search-results : ListTile {
+                                            title: hit.name;
+                                            subtitle: hit.detail;
+                                            clicked => {
+                                                root.set-birth-place(hit.name, hit.latitude, hit.longitude, hit.timezone);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Divider { }
+
+                                ProfileOffsetRow {
+                                    label: model.profile-offset-label;
+                                    value-text: model.profile-edit-offset-text;
+                                    empty-text: model.profile-offset-placeholder;
+                                    nudge(d) => { root.nudge-profile-offset(d); }
+                                }
                             }
                         }
+                    }
 
-                        HorizontalLayout {
-                            spacing: Theme.space-2;
-                            TouchButton {
-                                text: model.profiles-cancel-label;
-                                tone: ButtonTone.ghost;
-                                size: ControlSize.md;
-                                clicked => { root.cancel-edit-profile(); }
-                            }
-                            TouchButton {
-                                text: model.profiles-save-label;
-                                tone: ButtonTone.filled;
-                                size: ControlSize.md;
-                                clicked => {
-                                    root.upsert-profile(
-                                        model.profile-edit-index,
-                                        name-input.text == "" ? model.profile-edit-name : name-input.text,
-                                        model.profile-edit-gender,
-                                        model.profile-edit-date,
-                                        model.profile-edit-time,
-                                        model.profile-edit-offset,
-                                        "",
-                                        0,
-                                        0
-                                    );
-                                    root.draft-profile-name = "";
-                                }
+                    Divider { }
+
+                    HorizontalLayout {
+                        spacing: Theme.space-2;
+                        TouchButton {
+                            text: model.profiles-cancel-label;
+                            tone: ButtonTone.ghost;
+                            size: ControlSize.md;
+                            wide: true;
+                            clicked => { root.cancel-edit-profile(); }
+                        }
+                        TouchButton {
+                            text: model.profiles-save-label;
+                            tone: ButtonTone.filled;
+                            size: ControlSize.md;
+                            wide: true;
+                            clicked => {
+                                root.upsert-profile(
+                                    model.profile-edit-index,
+                                    name-input.text == "" ? model.profile-edit-name : name-input.text,
+                                    model.profile-edit-gender,
+                                    model.profile-edit-date,
+                                    model.profile-edit-time,
+                                    model.profile-edit-offset,
+                                    "",
+                                    0,
+                                    0
+                                );
+                                root.draft-profile-name = "";
                             }
                         }
                     }
