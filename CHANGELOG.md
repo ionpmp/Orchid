@@ -402,6 +402,9 @@ release yet.
 - **Jyotish**: profile rows use **ListTile** (`efd6b45c`).
 - **Clock**: city rows use **ListTile** (`cebc2060`).
 - **Search**: candidate rows use **ListTile** (`b149b73a`).
+- **Processes**: chrome densified to Theme tokens without flattening the
+  table (not ListTile) (`1565dadb`).
+- **Calendar**: densified chrome to Theme tokens (`1f11a32a`).
 - Workspace crates: `rawler` 0.8, `rfd` 0.17, `libloading` 0.9,
   `zstd` 0.14, plus a semver-compatible `Cargo.lock` refresh.
   Pin `keepass` to 0.13.22 (0.13.25's `aes 0.9` conflicts
