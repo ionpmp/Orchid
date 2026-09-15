@@ -1,5 +1,5 @@
 import { Theme } from "../theme_global.slint";
-import { ControlSize, Divider, Eyebrow, IconButton } from "../kit.slint";
+import { ControlSize, Divider, Eyebrow, IconButton, ListTile, Tooltip } from "../kit.slint";
 import { SearchField } from "search-field.slint";
 import { ClockModel } from "../workspace/defs.slint";
 
@@ -249,50 +249,37 @@ export component ClockView inherits Rectangle {
                         interactive: true;
 
                         saved-list := VerticalLayout {
-                            spacing: 4px;
+                            spacing: Theme.space-1;
 
-                            for city[i] in model.cities : Rectangle {
+                            for city[i] in model.cities : HorizontalLayout {
                                 height: city.is-local ? 0px : Theme.row-height;
                                 visible: !city.is-local;
-                                background: saved-ta.has-hover ? Theme.state-hover : transparent;
-                                border-radius: Theme.radius-md;
-                                animate background { duration: Theme.motion-fast; easing: ease-out; }
+                                spacing: Theme.space-1;
 
-                                saved-ta := TouchArea { }
+                                // ListTile owns the label; action buttons stay siblings so their
+                                // TouchAreas are not covered by the tile hit target.
+                                ListTile {
+                                    horizontal-stretch: 1;
+                                    title: city.name;
+                                }
 
-                                HorizontalLayout {
-                                    padding-left: Theme.space-3;
-                                    padding-right: Theme.space-1;
-                                    spacing: Theme.space-1;
-
-                                    Text {
-                                        text: city.name;
-                                        color: Theme.text-primary;
-                                        font-size: Theme.font-size-md;
-                                        vertical-alignment: center;
-                                        horizontal-stretch: 1;
-                                        wrap: no-wrap;
-                                        overflow: elide;
-                                    }
-
-                                    IconButton {
-                                        icon: "chevron-up";
-                                        size: ControlSize.sm;
-                                        clicked => { root.move-city(i, -1); }
-                                    }
-                                    IconButton {
-                                        icon: "chevron-down";
-                                        size: ControlSize.sm;
-                                        clicked => { root.move-city(i, 1); }
-                                    }
-                                    IconButton {
-                                        icon: "trash";
-                                        size: ControlSize.sm;
-                                        danger: true;
-                                        tooltip: model.remove-city-hint;
-                                        tooltip-flip: true;
-                                        clicked => { root.remove-city(i); }
-                                    }
+                                IconButton {
+                                    icon: "chevron-up";
+                                    size: ControlSize.sm;
+                                    clicked => { root.move-city(i, -1); }
+                                }
+                                IconButton {
+                                    icon: "chevron-down";
+                                    size: ControlSize.sm;
+                                    clicked => { root.move-city(i, 1); }
+                                }
+                                IconButton {
+                                    icon: "trash";
+                                    size: ControlSize.sm;
+                                    danger: true;
+                                    tooltip: model.remove-city-hint;
+                                    tooltip-flip: true;
+                                    clicked => { root.remove-city(i); }
                                 }
                             }
                         }
@@ -319,59 +306,25 @@ export component ClockView inherits Rectangle {
                         interactive: true;
 
                         results-list := VerticalLayout {
-                            spacing: 4px;
+                            spacing: Theme.space-1;
 
                             for hit[i] in model.search-results : Rectangle {
-                                height: Theme.control-lg;
-                                background: hit-ta.has-hover ? Theme.state-hover : transparent;
-                                border-radius: Theme.radius-md;
-                                animate background { duration: Theme.motion-fast; easing: ease-out; }
+                                height: hit-tile.preferred-height;
 
-                                hit-ta := TouchArea {
-                                    mouse-cursor: MouseCursor.pointer;
+                                hit-tile := ListTile {
+                                    width: 100%;
+                                    title: hit.name;
+                                    subtitle: hit.detail != "" ? hit.detail : hit.timezone;
                                     clicked => {
                                         root.add-city(hit.name, hit.timezone);
                                     }
                                 }
-                                if hit-ta.has-hover : Rectangle {
-                                    x: parent.x + 8px;
-                                    y: parent.height - 2px;
-                                    width: add-hint.preferred-width + 12px;
-                                    height: add-hint.preferred-height + 6px;
-                                    background: Theme.surface-raised;
-                                    border-radius: Theme.radius-md;
-                                    border-width: 1px;
-                                    border-color: Theme.border-default;
-                                    z: 100;
-                                    add-hint := Text {
-                                        x: 6px; y: 3px;
-                                        text: model.add-city-hint;
-                                        color: Theme.text-secondary;
-                                        font-size: Theme.font-size-sm;
-                                    }
-                                }
 
-                                VerticalLayout {
-                                    padding-left: Theme.space-3;
-                                    padding-right: Theme.space-3;
-                                    spacing: 2px;
-                                    alignment: center;
-
-                                    Text {
-                                        text: hit.name;
-                                        color: Theme.text-primary;
-                                        font-size: Theme.font-size-md;
-                                        font-weight: Theme.weight-medium;
-                                        wrap: no-wrap;
-                                        overflow: elide;
-                                    }
-                                    Text {
-                                        text: hit.detail != "" ? hit.detail : hit.timezone;
-                                        color: Theme.text-tertiary;
-                                        font-size: Theme.font-size-sm;
-                                        wrap: no-wrap;
-                                        overflow: elide;
-                                    }
+                                Tooltip {
+                                    text: model.add-city-hint;
+                                    shown: hit-tile.hovered;
+                                    x: Theme.space-2;
+                                    y: parent.height - Theme.space-1;
                                 }
                             }
                         }
