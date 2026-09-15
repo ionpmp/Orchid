@@ -1,6 +1,5 @@
 import { Theme } from "../theme_global.slint";
-import { EmptyState, Tooltip } from "../kit.slint";
-import { Icon } from "../kit-icons.slint";
+import { EmptyState, ListTile, Tooltip } from "../kit.slint";
 import { Strings } from "../strings_global.slint";
 import { RecentFilesModel } from "../workspace/defs.slint";
 
@@ -30,80 +29,34 @@ export component RecentFilesView inherits Rectangle {
 
             list := VerticalLayout {
                 width: parent.viewport-width;
-                spacing: Theme.space-2;
+                spacing: Theme.space-1;
 
                 for item[i] in model.items : Rectangle {
-                    height: Theme.control-xl;
-                    background: item-ta.has-hover ? Theme.surface-raised : Theme.surface-sunken;
-                    border-radius: Theme.radius-lg;
-                    border-width: Theme.hairline;
-                    border-color: item-ta.has-hover ? Theme.border-subtle : Colors.transparent;
+                    horizontal-stretch: 1;
+                    height: file-tile.preferred-height;
 
-                    animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
-
-                    item-ta := TouchArea {
-                        mouse-cursor: MouseCursor.pointer;
+                    file-tile := ListTile {
+                        width: 100%;
+                        title: item.name;
+                        subtitle: item.path;
+                        icon: "layers";
                         clicked => {
                             root.item-clicked(item.path);
+                        }
+
+                        if item.opened != "" : Text {
+                            text: item.opened;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-xs;
+                            vertical-alignment: center;
                         }
                     }
 
                     Tooltip {
                         x: Theme.space-3;
-                        y: parent.height - Theme.space-1;
-                        shown: item-ta.has-hover;
+                        y: parent.height + Theme.space-1;
+                        shown: file-tile.hovered;
                         text: item.path != "" ? item.path : Strings.recent-files-open-hint;
-                    }
-
-                    HorizontalLayout {
-                        padding-left: Theme.space-3;
-                        padding-right: Theme.space-3;
-                        spacing: Theme.space-3;
-
-                        Rectangle {
-                            min-width: Theme.control-md;
-                            max-width: Theme.control-md;
-                            min-height: Theme.control-md;
-                            max-height: Theme.control-md;
-                            y: (parent.height - self.height) / 2;
-                            border-radius: Theme.radius-md;
-                            background: Theme.accent-soft;
-
-                            Icon {
-                                name: "layers";
-                                size: Theme.font-size-xl;
-                                tint: Theme.accent-brand;
-                            }
-                        }
-
-                        VerticalLayout {
-                            spacing: 2px;
-                            alignment: center;
-                            horizontal-stretch: 1;
-
-                            Text {
-                                text: item.name;
-                                color: Theme.text-primary;
-                                font-size: Theme.font-size-md;
-                                font-weight: Theme.weight-semibold;
-                                wrap: no-wrap;
-                                overflow: elide;
-                            }
-
-                            Text {
-                                text: item.path;
-                                color: Theme.text-secondary;
-                                font-size: Theme.font-size-sm;
-                                wrap: no-wrap;
-                                overflow: elide;
-                            }
-
-                            Text {
-                                text: item.opened;
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-xs;
-                            }
-                        }
                     }
                 }
             }

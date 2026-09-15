@@ -1,5 +1,5 @@
 import { Theme } from "../theme_global.slint";
-import { Badge, EmptyState, Tooltip } from "../kit.slint";
+import { Badge, EmptyState, ListTile, Tooltip } from "../kit.slint";
 import { Icon } from "../kit-icons.slint";
 import { Strings } from "../strings_global.slint";
 import { RssModel } from "../workspace/defs.slint";
@@ -57,87 +57,42 @@ export component RssView inherits Rectangle {
 
             rss-list := VerticalLayout {
                 width: parent.viewport-width;
-                spacing: Theme.space-2;
+                spacing: Theme.space-1;
 
                 for item[i] in model.items : Rectangle {
-                    height: 96px;
-                    background: item-ta.has-hover ? Theme.surface-raised : Theme.surface-sunken;
-                    border-radius: Theme.radius-lg;
-                    border-width: Theme.hairline;
-                    border-color: item-ta.has-hover ? Theme.border-subtle : Colors.transparent;
+                    horizontal-stretch: 1;
+                    height: rss-tile.preferred-height;
 
-                    animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
-
-                    item-ta := TouchArea {
-                        mouse-cursor: MouseCursor.pointer;
+                    rss-tile := ListTile {
+                        width: 100%;
+                        title: item.title;
+                        subtitle: item.summary;
+                        icon: "bell";
                         clicked => {
                             root.item-clicked(item.link);
+                        }
+
+                        if item.source != "" : Badge {
+                            text: item.source;
+                        }
+
+                        if item.published != "" : Text {
+                            text: item.published;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-xs;
+                            vertical-alignment: center;
                         }
                     }
 
                     Tooltip {
                         x: Theme.space-3;
-                        y: parent.height - Theme.space-1;
-                        shown: item-ta.has-hover;
+                        y: parent.height + Theme.space-1;
+                        shown: rss-tile.hovered;
                         text: item.summary != ""
                             ? (item.title != "" ? item.title + " — " + item.summary : item.summary)
                             : item.title != ""
                                 ? (item.source != "" ? item.title + " — " + item.source : item.title)
                                 : Strings.rss-open-item-hint;
-                    }
-
-                    // Unread rail keeps the feed scannable in a glance.
-                    Rectangle {
-                        x: 0;
-                        width: Theme.indicator-thickness;
-                        height: parent.height - Theme.space-4;
-                        y: Theme.space-2;
-                        border-radius: Theme.radius-pill;
-                        background: item-ta.has-hover ? Theme.accent-brand : Theme.accent-muted;
-                    }
-
-                    VerticalLayout {
-                        padding-left: Theme.space-4;
-                        padding-right: Theme.space-3;
-                        padding-top: Theme.space-2;
-                        padding-bottom: Theme.space-2;
-                        spacing: Theme.space-1;
-
-                        Text {
-                            text: item.title;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-md;
-                            font-weight: Theme.weight-semibold;
-                            wrap: no-wrap;
-                            overflow: elide;
-                            horizontal-alignment: left;
-                        }
-
-                        HorizontalLayout {
-                            spacing: Theme.space-2;
-                            alignment: start;
-
-                            Badge {
-                                text: item.source;
-                            }
-
-                            Text {
-                                text: item.published;
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-xs;
-                                vertical-alignment: center;
-                            }
-                        }
-
-                        if item.summary != "" : Text {
-                            text: item.summary;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                            wrap: word-wrap;
-                            overflow: elide;
-                            horizontal-alignment: left;
-                            vertical-stretch: 1;
-                        }
                     }
                 }
             }
