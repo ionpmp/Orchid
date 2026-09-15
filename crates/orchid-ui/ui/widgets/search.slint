@@ -1,5 +1,5 @@
 import { Theme } from "../theme_global.slint";
-import { Badge, EmptyState, Tooltip } from "../kit.slint";
+import { Badge, EmptyState, ListTile, Tooltip } from "../kit.slint";
 import { Icon } from "../kit-icons.slint";
 import { Strings } from "../strings_global.slint";
 import { SearchModel } from "../workspace/defs.slint";
@@ -15,13 +15,16 @@ export component SearchView inherits Rectangle {
 
     background: transparent;
 
-    // ASCII/BMP glyphs — color emoji and many Unicode symbols are missing in Slint's default font on Windows.
-    pure function source-glyph(name: string) -> string {
+    // Map search source ids to kit Icon names (unknown names render empty).
+    pure function source-icon(name: string) -> string {
         return
-            name == "files" ? "/" :
-            name == "commands" ? ">" :
-            name == "settings" ? "*" :
-            ".";
+            name == "files" ? "search" :
+            name == "commands" ? "grid" :
+            name == "settings" ? "settings" :
+            name == "calendar" ? "clock" :
+            name == "jyotish" ? "star" :
+            name == "calculator" ? "plus" :
+            "";
     }
 
     init => {
@@ -167,34 +170,25 @@ export component SearchView inherits Rectangle {
 
             cand-list := VerticalLayout {
                 width: parent.viewport-width;
-                spacing: 2px;
+                spacing: Theme.space-1;
 
                 for cand[i] in model.candidates : Rectangle {
-                    property <bool> is-selected: i == model.selected-index;
+                    height: cand-tile.preferred-height;
 
-                    height: Theme.control-lg;
-                    background: self.is-selected ? Theme.state-selected
-                        : cand-ta.has-hover ? Theme.state-hover
-                        : Colors.transparent;
-                    border-radius: Theme.radius-md;
-
-                    animate background { duration: Theme.motion-instant; easing: ease-out; }
-
-                    // Accent rail on the keyboard-selected row.
-                    if self.is-selected : Rectangle {
-                        x: 0;
-                        y: (parent.height - self.height) / 2;
-                        width: Theme.indicator-thickness;
-                        height: parent.height * 0.55;
-                        border-radius: self.width / 2;
-                        background: Theme.accent-brand;
-                    }
-
-                    cand-ta := TouchArea {
-                        mouse-cursor: MouseCursor.pointer;
+                    cand-tile := ListTile {
+                        width: 100%;
+                        title: cand.title;
+                        subtitle: cand.subtitle;
+                        icon: source-icon(cand.source-icon);
+                        selected: i == model.selected-index;
                         clicked => {
                             root.selection-changed(i);
                             root.candidate-activated(cand.id);
+                        }
+
+                        if cand.shortcut != "" : Badge {
+                            text: cand.shortcut;
+                            tint: Theme.text-tertiary;
                         }
                     }
 
@@ -202,64 +196,9 @@ export component SearchView inherits Rectangle {
                         text: cand.subtitle != ""
                             ? cand.title + " — " + cand.subtitle
                             : cand.title != "" ? cand.title : Strings.search-open-hint;
-                        shown: cand-ta.has-hover;
+                        shown: cand-tile.hovered;
                         x: Theme.space-2;
                         y: parent.height - Theme.space-1;
-                    }
-
-                    HorizontalLayout {
-                        padding-left: Theme.space-3;
-                        padding-right: Theme.space-3;
-                        spacing: Theme.space-3;
-
-                        // Source tile — a colour anchor per result kind.
-                        Rectangle {
-                            min-width: Theme.icon-button-sm;
-                            max-width: Theme.icon-button-sm;
-                            min-height: Theme.icon-button-sm;
-                            max-height: Theme.icon-button-sm;
-                            border-radius: Theme.radius-sm;
-                            background: Theme.accent-soft;
-
-                            Text {
-                                width: 100%;
-                                height: 100%;
-                                text: source-glyph(cand.source-icon);
-                                color: Theme.accent-brand;
-                                font-size: Theme.font-size-md;
-                                font-weight: Theme.weight-bold;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-                        }
-
-                        VerticalLayout {
-                            alignment: center;
-                            horizontal-stretch: 1;
-                            spacing: 2px;
-
-                            Text {
-                                text: cand.title;
-                                color: Theme.text-primary;
-                                font-size: Theme.font-size-md;
-                                font-weight: Theme.weight-semibold;
-                                wrap: no-wrap;
-                                overflow: elide;
-                            }
-
-                            if cand.subtitle != "" : Text {
-                                text: cand.subtitle;
-                                color: Theme.text-tertiary;
-                                font-size: Theme.font-size-sm;
-                                wrap: no-wrap;
-                                overflow: elide;
-                            }
-                        }
-
-                        if cand.shortcut != "" : Badge {
-                            text: cand.shortcut;
-                            tint: Theme.text-tertiary;
-                        }
                     }
                 }
             }
