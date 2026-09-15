@@ -27,9 +27,9 @@ export component FmToolbar inherits Rectangle {
     clip: false;
 
     HorizontalLayout {
-        padding-left: 6px;
-        padding-right: 6px;
-        spacing: 4px;
+        padding-left: Theme.space-2;
+        padding-right: Theme.space-2;
+        spacing: Theme.space-1;
 
         // Navigation cluster. Buttons stay clickable while disabled so the
         // tooltip can explain *why* they are unavailable.
@@ -97,34 +97,35 @@ export component FmToolbar inherits Rectangle {
 
             if root.history-open : Rectangle {
                 x: 0;
-                y: parent.height + 4px;
+                y: parent.height + Theme.space-1;
                 width: 280px;
-                height: min(320px, hist-lay.preferred-height + 8px);
-                background: Theme.surface-raised;
+                height: min(320px, hist-lay.preferred-height + Theme.space-2);
+                background: Theme.surface-floating;
                 border-color: Theme.border-default;
-                border-width: 1px;
-                border-radius: Theme.radius-md;
-                drop-shadow-blur: Theme.reduce-motion ? 0px : 12px;
-                drop-shadow-color: #00000060;
+                border-width: Theme.hairline;
+                border-radius: Theme.radius-lg;
+                drop-shadow-blur: Theme.elev-2-blur;
+                drop-shadow-offset-y: Theme.elev-2-y;
+                drop-shadow-color: Theme.shadow-key;
                 z: 200;
                 clip: true;
 
                 hist-lay := VerticalLayout {
-                    padding: 4px;
-                    spacing: 1px;
+                    padding: Theme.space-1;
+                    spacing: Theme.hairline;
 
                     if root.visit-history.length == 0 : Text {
                         text: Strings.fm-nav-history-empty;
                         color: Theme.text-tertiary;
                         font-size: Theme.font-size-sm;
                         horizontal-stretch: 1;
-                        height: 36px;
+                        height: Theme.control-sm;
                         vertical-alignment: center;
                         horizontal-alignment: left;
                     }
 
                     for item in root.visit-history : Rectangle {
-                        height: item.is-header ? 22px : 32px;
+                        height: item.is-header ? Theme.space-6 : Theme.space-8;
                         background: !item.is-header && item-ta.has-hover ? Theme.accent-brand : transparent;
                         border-radius: Theme.radius-md;
 
@@ -137,8 +138,8 @@ export component FmToolbar inherits Rectangle {
                         }
 
                         if item.is-header : Text {
-                            x: 8px;
-                            width: parent.width - 16px;
+                            x: Theme.space-2;
+                            width: parent.width - Theme.space-4;
                             height: parent.height;
                             text: item.label;
                             color: Theme.text-tertiary;
@@ -148,18 +149,18 @@ export component FmToolbar inherits Rectangle {
                         }
 
                         if !item.is-header : HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 8px;
-                            spacing: 8px;
+                            padding-left: Theme.space-2;
+                            padding-right: Theme.space-2;
+                            spacing: Theme.space-2;
 
                             if item.frequent : Rectangle {
-                                width: 8px; height: 8px;
+                                width: Theme.space-2; height: Theme.space-2;
                                 y: (parent.height - self.height) / 2;
                                 background: Theme.text-primary;
-                                border-radius: 4px;
+                                border-radius: Theme.radius-xs;
                             }
                             if !item.frequent : Rectangle {
-                                width: 8px; height: 8px;
+                                width: Theme.space-2; height: Theme.space-2;
                             }
 
                             VerticalLayout {
@@ -226,21 +227,22 @@ export component FmToolbar inherits Rectangle {
 
             if root.drives-open : Rectangle {
                 x: 0;
-                y: parent.height + 4px;
+                y: parent.height + Theme.space-1;
                 width: 220px;
-                height: min(280px, drv-lay.preferred-height + 8px);
-                background: Theme.surface-raised;
+                height: min(280px, drv-lay.preferred-height + Theme.space-2);
+                background: Theme.surface-floating;
                 border-color: Theme.border-default;
-                border-width: 1px;
-                border-radius: Theme.radius-md;
-                drop-shadow-blur: Theme.reduce-motion ? 0px : 12px;
-                drop-shadow-color: #00000060;
+                border-width: Theme.hairline;
+                border-radius: Theme.radius-lg;
+                drop-shadow-blur: Theme.elev-2-blur;
+                drop-shadow-offset-y: Theme.elev-2-y;
+                drop-shadow-color: Theme.shadow-key;
                 z: 200;
                 clip: true;
 
                 drv-lay := VerticalLayout {
-                    padding: 4px;
-                    spacing: 1px;
+                    padding: Theme.space-1;
+                    spacing: Theme.hairline;
 
                     if root.drives.length == 0 : Text {
                         text: Strings.fm-nav-drives-empty;
@@ -250,7 +252,7 @@ export component FmToolbar inherits Rectangle {
                     }
 
                     for item in root.drives : Rectangle {
-                        height: 28px;
+                        height: Theme.control-xs;
                         background: drow-ta.has-hover ? Theme.surface-base : transparent;
                         border-radius: Theme.radius-md;
                         drow-ta := TouchArea {
@@ -260,8 +262,8 @@ export component FmToolbar inherits Rectangle {
                             }
                         }
                         Text {
-                            x: 8px;
-                            width: parent.width - 16px;
+                            x: Theme.space-2;
+                            width: parent.width - Theme.space-4;
                             height: parent.height;
                             text: item.label;
                             color: Theme.text-primary;
