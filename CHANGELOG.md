@@ -399,6 +399,9 @@ release yet.
 - **Recent files**: list rows use the shared **ListTile** control instead of
   custom row chrome (`c0f35fae`).
 - **RSS**: feed item rows use **ListTile** (`c0f35fae`).
+- **Jyotish**: profile rows use **ListTile** (`efd6b45c`).
+- **Clock**: city rows use **ListTile** (`cebc2060`).
+- **Search**: candidate rows use **ListTile** (`b149b73a`).
 - Workspace crates: `rawler` 0.8, `rfd` 0.17, `libloading` 0.9,
   `zstd` 0.14, plus a semver-compatible `Cargo.lock` refresh.
   Pin `keepass` to 0.13.22 (0.13.25's `aes 0.9` conflicts
