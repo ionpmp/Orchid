@@ -99,11 +99,11 @@ export component WeatherView inherits Rectangle {
                 }
 
                 Rectangle {
-                    width: 10px;
-                    height: 10px;
+                    width: Theme.space-2 + Theme.hairline * 2;
+                    height: Theme.space-2 + Theme.hairline * 2;
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;
-                    border-radius: 5px;
+                    border-radius: self.width / 2;
                     background:
                         model.status == 0 ? Theme.feedback-success :
                         model.status == 1 ? Theme.feedback-warning :
@@ -244,7 +244,7 @@ export component WeatherView inherits Rectangle {
 
         // Swipe horizontally to see more forecast days (up to 16). Tap a day for details.
         Flickable {
-            height: 124px;
+            height: Theme.control-xl + Theme.control-sm + Theme.space-2 + Theme.hairline * 2;
             viewport-height: self.height;
             viewport-width: forecast-row.preferred-width.max(self.width);
             interactive: true;
@@ -254,8 +254,8 @@ export component WeatherView inherits Rectangle {
                 alignment: start;
 
                 for day[i] in model.forecast : Rectangle {
-                    width: 84px;
-                    height: 116px;
+                    width: Theme.control-xl + Theme.space-2;
+                    height: Theme.control-xl + Theme.control-sm + Theme.hairline * 2;
                     background: day.selected ? Theme.accent-soft
                         : day-ta.has-hover ? Theme.surface-raised
                         : Theme.surface-sunken;
@@ -389,7 +389,7 @@ export component WeatherView inherits Rectangle {
                 }
 
                 if model.cities.length > 0 : Flickable {
-                    height: min(140px, cities-list.preferred-height);
+                    height: min(Theme.control-xl + Theme.control-lg + Theme.space-1, cities-list.preferred-height);
                     viewport-width: self.width;
                     viewport-height: cities-list.preferred-height;
                     interactive: true;
@@ -459,7 +459,7 @@ export component WeatherView inherits Rectangle {
                     interactive: true;
 
                     results-list := VerticalLayout {
-                        spacing: 4px;
+                        spacing: Theme.space-1;
 
                         for hit[i] in model.search-results : Rectangle {
                             height: Theme.control-lg;
@@ -474,17 +474,18 @@ export component WeatherView inherits Rectangle {
                                 }
                             }
                             if hit-ta.has-hover : Rectangle {
-                                x: parent.x + 8px;
-                                y: parent.height - 2px;
-                                width: add-hint.preferred-width + 12px;
-                                height: add-hint.preferred-height + 6px;
+                                x: parent.x + Theme.space-2;
+                                y: parent.height - Theme.hairline * 2;
+                                width: add-hint.preferred-width + Theme.space-3;
+                                height: add-hint.preferred-height + Theme.space-1 + Theme.hairline * 2;
                                 background: Theme.surface-raised;
                                 border-radius: Theme.radius-md;
-                                border-width: 1px;
+                                border-width: Theme.hairline;
                                 border-color: Theme.border-default;
                                 z: 100;
                                 add-hint := Text {
-                                    x: 6px; y: 3px;
+                                    x: Theme.space-1 + Theme.hairline * 2;
+                                    y: Theme.indicator-thickness;
                                     text: model.add-city-hint;
                                     color: Theme.text-secondary;
                                     font-size: Theme.font-size-sm;
@@ -494,7 +495,7 @@ export component WeatherView inherits Rectangle {
                             VerticalLayout {
                                 padding-left: Theme.space-3;
                                 padding-right: Theme.space-3;
-                                spacing: 2px;
+                                spacing: Theme.hairline * 2;
                                 alignment: center;
 
                                 Text {
