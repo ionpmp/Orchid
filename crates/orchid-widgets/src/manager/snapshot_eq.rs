@@ -214,6 +214,8 @@ fn file_manager_payload_eq(a: &FileManagerPayload, b: &FileManagerPayload) -> bo
         && a.transfer_active == b.transfer_active
         && a.transfer_progress.to_bits() == b.transfer_progress.to_bits()
         && a.transfer_is_copy == b.transfer_is_copy
+        && a.transfer_paused == b.transfer_paused
+        && a.transfer_queue == b.transfer_queue
         && a.transfer_current == b.transfer_current
         && a.transfer_error == b.transfer_error
         && a.passphrase_error == b.passphrase_error
@@ -256,7 +258,10 @@ fn file_manager_payload_eq(a: &FileManagerPayload, b: &FileManagerPayload) -> bo
                         && ta.can_go_forward == tb.can_go_forward
                         && ta.view_mode == tb.view_mode
                         && ta.selection_count == tb.selection_count
+                        && ta.selection_bytes == tb.selection_bytes
                         && ta.item_count == tb.item_count
+                        && ta.entries_offset == tb.entries_offset
+                        && ta.branch_view == tb.branch_view
                         && ta.managed_files_tracked == tb.managed_files_tracked
                         && ta.managed_dedup_bytes == tb.managed_dedup_bytes
                         && ta.quick_filter == tb.quick_filter
@@ -1161,5 +1166,58 @@ mod tests {
         let b = make("new");
         assert!(!payload_renders_equal(&a, &b));
         assert!(payload_renders_equal(&a, &make("old")));
+    }
+
+    #[test]
+    fn file_manager_detects_transfer_and_tab_state_changes() {
+        use crate::widget::payloads::{FmViewMode, PanePayload, TabPayload};
+
+        let tab = TabPayload {
+            tab_id: "t1".into(),
+            path_display: "local:/".into(),
+            breadcrumbs: Vec::new(),
+            can_go_back: false,
+            can_go_forward: false,
+            view_mode: FmViewMode::Details,
+            entries: Vec::new(),
+            entries_offset: 0,
+            selection_count: 0,
+            item_count: 0,
+            selection_bytes: 0,
+            managed_files_tracked: None,
+            managed_dedup_bytes: None,
+            quick_filter: String::new(),
+            is_loading: false,
+            error: None,
+            sort_by: 0,
+            sort_descending: false,
+            branch_view: false,
+        };
+        let base = FileManagerPayload {
+            panes: vec![PanePayload {
+                tabs: vec![tab],
+                active_tab: 0,
+            }],
+            transfer_active: true,
+            ..FileManagerPayload::default()
+        };
+        let wrap = |p: FileManagerPayload| WidgetPayload::FileManager(p);
+        assert!(payload_renders_equal(
+            &wrap(base.clone()),
+            &wrap(base.clone())
+        ));
+
+        let edits: [fn(&mut FileManagerPayload); 5] = [
+            |p| p.transfer_paused = true,
+            |p| p.transfer_queue = 2,
+            |p| p.panes[0].tabs[0].selection_bytes = 4096,
+            |p| p.panes[0].tabs[0].entries_offset = 40,
+            |p| p.panes[0].tabs[0].branch_view = true,
+        ];
+        for edit in edits {
+            let mut changed = base.clone();
+            edit(&mut changed);
+            assert!(!payload_renders_equal(&wrap(base.clone()), &wrap(changed)));
+        }
     }
 }
