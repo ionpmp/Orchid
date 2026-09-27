@@ -406,6 +406,11 @@ release yet.
   table (not ListTile) (`1565dadb`).
 - **Calendar**: densified chrome to Theme tokens (`1f11a32a`).
 - **Weather**: remaining chrome densified to Theme tokens (`c834c9a4`).
+- **Performance**: terminal full redraws paint once instead of twice, with
+  cheaper glyph blits (`f158f99f`); frame patches find their row via an index
+  hint instead of cloning every wide frame row (`c8c554b1`); audio track
+  covers upload only for changed rows (`d40a4cc6`); unchanged System and
+  Processes rows are no longer rewritten each sample (`478f1f4d`).
 - Workspace crates: `rawler` 0.8, `rfd` 0.17, `libloading` 0.9,
   `zstd` 0.14, plus a semver-compatible `Cargo.lock` refresh.
   Pin `keepass` to 0.13.22 (0.13.25's `aes 0.9` conflicts
@@ -718,6 +723,14 @@ release yet.
   `touch()` widgets that are already Active.
 
 ### Fixed
+- Terminal no longer leaves stale rows on screen after a UI stall: the
+  retained raster diffs each buffer against the cells it shows instead of
+  trusting the emulator's per-snapshot dirty lines (`f158f99f`).
+- Closed terminal panes no longer leak their two retained RGBA bitmaps
+  (`f158f99f`).
+- Playing video no longer fills the viewer image cache with up to 96 stale
+  full-size frames (evicting photos and PDF pages); image caches pin their
+  source buffer so a reused address cannot show an old frame (`bc83d29f`).
 - Image viewer no longer hitches when the widget is dragged or the photo is
   panned: live geometry is applied through AppState overlay properties
   instead of `set_row_data` on the fat `WidgetFrameModel` (which remounted
