@@ -324,165 +324,153 @@ export component ProcessesView inherits Rectangle {
         }
 
         // Services
-        if model.tab == 1 : Flickable {
+        if model.tab == 1 : ListView {
             vertical-stretch: 1;
-            viewport-width: self.width;
-            viewport-height: svc-list.preferred-height;
-            svc-list := VerticalLayout {
-                spacing: 0;
-                for row[i] in model.services : Rectangle {
-                    height: Theme.row-height;
-                    background: row.name == model.selected-service ? Theme.state-selected
-                        : svc-ta.has-hover ? Theme.state-hover
-                        : Colors.transparent;
+            for row[i] in model.services : Rectangle {
+                height: Theme.row-height;
+                width: parent.width;
+                background: row.name == model.selected-service ? Theme.state-selected
+                    : svc-ta.has-hover ? Theme.state-hover
+                    : Colors.transparent;
 
-                    animate background { duration: Theme.motion-instant; easing: ease-out; }
+                animate background { duration: Theme.motion-instant; easing: ease-out; }
 
-                    svc-ta := TouchArea { clicked => { root.service-clicked(row.name); } }
-                    HorizontalLayout {
-                        padding-left: Theme.space-2; padding-right: Theme.space-2; spacing: Theme.space-2;
-                        Text {
-                            horizontal-stretch: 2;
-                            text: row.display-name;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                            overflow: elide;
-                        }
-                        Text {
-                            width: 100px;
-                            text: row.status;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                        }
-                        Text {
-                            width: 90px;
-                            text: row.start-type;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                        }
-                        Text {
-                            width: 64px;
-                            text: row.pid-text;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                        }
+                svc-ta := TouchArea { clicked => { root.service-clicked(row.name); } }
+                HorizontalLayout {
+                    padding-left: Theme.space-2; padding-right: Theme.space-2; spacing: Theme.space-2;
+                    Text {
+                        horizontal-stretch: 2;
+                        text: row.display-name;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    Text {
+                        width: 100px;
+                        text: row.status;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        width: 90px;
+                        text: row.start-type;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        width: 64px;
+                        text: row.pid-text;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
                     }
                 }
             }
         }
 
         // Startup
-        if model.tab == 2 : Flickable {
+        if model.tab == 2 : ListView {
             vertical-stretch: 1;
-            viewport-width: self.width;
-            viewport-height: start-list.preferred-height;
-            start-list := VerticalLayout {
-                spacing: 0;
-                for row[i] in model.startups : Rectangle {
-                    height: Theme.row-height;
-                    background: row.id == model.selected-startup ? Theme.state-selected
-                        : start-ta.has-hover ? Theme.state-hover
-                        : Colors.transparent;
+            for row[i] in model.startups : Rectangle {
+                height: Theme.row-height;
+                width: parent.width;
+                background: row.id == model.selected-startup ? Theme.state-selected
+                    : start-ta.has-hover ? Theme.state-hover
+                    : Colors.transparent;
 
-                    animate background { duration: Theme.motion-instant; easing: ease-out; }
+                animate background { duration: Theme.motion-instant; easing: ease-out; }
 
-                    start-ta := TouchArea {
-                        clicked => { root.startup-clicked(row.id); }
-                        double-clicked => { root.startup-open-location(row.id); }
+                start-ta := TouchArea {
+                    clicked => { root.startup-clicked(row.id); }
+                    double-clicked => { root.startup-open-location(row.id); }
+                }
+                HorizontalLayout {
+                    padding-left: Theme.space-2; padding-right: Theme.space-2; spacing: Theme.space-2;
+                    Text {
+                        width: 28px;
+                        text: row.enabled ? "●" : "○";
+                        color: row.enabled ? Theme.accent-brand : Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        TouchArea {
+                            enabled: row.can-toggle;
+                            clicked => { root.startup-toggle(row.id, !row.enabled); }
+                        }
                     }
-                    HorizontalLayout {
-                        padding-left: Theme.space-2; padding-right: Theme.space-2; spacing: Theme.space-2;
-                        Text {
-                            width: 28px;
-                            text: row.enabled ? "●" : "○";
-                            color: row.enabled ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                            TouchArea {
-                                enabled: row.can-toggle;
-                                clicked => { root.startup-toggle(row.id, !row.enabled); }
-                            }
-                        }
-                        Text {
-                            horizontal-stretch: 1;
-                            text: row.name;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                            overflow: elide;
-                        }
-                        Text {
-                            width: 140px;
-                            text: row.location;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                            overflow: elide;
-                        }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: row.name;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    Text {
+                        width: 140px;
+                        text: row.location;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        overflow: elide;
                     }
                 }
             }
         }
 
         // Users
-        if model.tab == 3 : Flickable {
+        if model.tab == 3 : ListView {
             vertical-stretch: 1;
-            viewport-width: self.width;
-            viewport-height: user-list.preferred-height;
-            user-list := VerticalLayout {
-                spacing: 0;
-                for row[i] in model.users : Rectangle {
-                    height: Theme.row-height;
-                    background: row.session-id == model.selected-session ? Theme.state-selected
-                        : user-ta.has-hover ? Theme.state-hover
-                        : Colors.transparent;
+            for row[i] in model.users : Rectangle {
+                height: Theme.row-height;
+                width: parent.width;
+                background: row.session-id == model.selected-session ? Theme.state-selected
+                    : user-ta.has-hover ? Theme.state-hover
+                    : Colors.transparent;
 
-                    animate background { duration: Theme.motion-instant; easing: ease-out; }
+                animate background { duration: Theme.motion-instant; easing: ease-out; }
 
-                    user-ta := TouchArea { clicked => { root.user-clicked(row.session-id); } }
-                    HorizontalLayout {
-                        padding-left: Theme.space-2; padding-right: Theme.space-2; spacing: Theme.space-2;
-                        Text {
-                            horizontal-stretch: 1;
-                            text: row.user-name;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                            overflow: elide;
-                        }
-                        Text {
-                            width: 72px;
-                            text: row.session-text;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                        }
-                        Text {
-                            width: 100px;
-                            text: row.state;
-                            color: Theme.text-secondary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                        }
-                        Text {
-                            width: 64px;
-                            text: row.process-count-text;
-                            color: Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                        }
-                        Text {
-                            width: 80px;
-                            text: row.memory-text;
-                            color: Theme.text-primary;
-                            font-size: Theme.font-size-sm;
-                            vertical-alignment: center;
-                            horizontal-alignment: right;
-                        }
+                user-ta := TouchArea { clicked => { root.user-clicked(row.session-id); } }
+                HorizontalLayout {
+                    padding-left: Theme.space-2; padding-right: Theme.space-2; spacing: Theme.space-2;
+                    Text {
+                        horizontal-stretch: 1;
+                        text: row.user-name;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    Text {
+                        width: 72px;
+                        text: row.session-text;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        width: 100px;
+                        text: row.state;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        width: 64px;
+                        text: row.process-count-text;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        width: 80px;
+                        text: row.memory-text;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        horizontal-alignment: right;
                     }
                 }
             }
