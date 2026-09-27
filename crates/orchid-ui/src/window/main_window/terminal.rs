@@ -86,9 +86,14 @@ impl MainWindowController {
             t.cursor_col,
             t.cursor_row,
             t.cursor_visible,
-            &t.dirty_lines,
-            t.full_redraw,
         )
+    }
+
+    /// Drop retained terminal bitmaps whose PTY session no longer exists.
+    pub(super) fn prune_terminal_raster_cache(&self) {
+        self.terminal_raster_cache.lock().retain(|key, _| {
+            Uuid::parse_str(key).map_or(true, |sid| self.session_manager.get(sid).is_ok())
+        });
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -101,8 +106,6 @@ impl MainWindowController {
         cursor_col: u16,
         cursor_row: u16,
         cursor_visible: bool,
-        dirty_lines: &[u16],
-        full_redraw: bool,
     ) -> Image {
         if let Some(ref f) = self.mono_font {
             let size_md = self.theme.current().tokens.typography.size_md;
@@ -113,7 +116,10 @@ impl MainWindowController {
             let scale = self.window.window().scale_factor();
             let glyph_fb = self.mono_font_glyph_fallback.as_ref();
             let mut cache = self.terminal_raster_cache.lock();
-            let retained = cache.entry(cache_key.to_string()).or_insert(None);
+            if !cache.contains_key(cache_key) {
+                cache.insert(cache_key.to_string(), None);
+            }
+            let retained = cache.get_mut(cache_key).expect("inserted above");
             terminal_raster::render_terminal_cells_retained(
                 retained,
                 cols,
@@ -122,8 +128,6 @@ impl MainWindowController {
                 cursor_col,
                 cursor_row,
                 cursor_visible,
-                dirty_lines,
-                full_redraw,
                 f,
                 glyph_fb,
                 size_md,
@@ -162,8 +166,6 @@ impl MainWindowController {
                     t.cursor_col,
                     t.cursor_row,
                     t.cursor_visible,
-                    &t.dirty_lines,
-                    t.full_redraw,
                 ),
                 cursor_col: i32::from(t.cursor_col),
                 cursor_row: i32::from(t.cursor_row),
@@ -197,8 +199,6 @@ impl MainWindowController {
                             p.cursor_col,
                             p.cursor_row,
                             p.cursor_visible,
-                            &p.dirty_lines,
-                            p.full_redraw,
                         ),
                         cursor_col: i32::from(p.cursor_col),
                         cursor_row: i32::from(p.cursor_row),

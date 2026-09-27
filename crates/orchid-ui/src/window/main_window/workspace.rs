@@ -329,8 +329,6 @@ impl MainWindowController {
                     p.cursor_col,
                     p.cursor_row,
                     p.cursor_visible,
-                    &p.dirty_lines,
-                    p.full_redraw,
                 );
                 pane.left = p.left;
                 pane.top = p.top;
@@ -392,22 +390,17 @@ impl MainWindowController {
         // scalar flipping (new split, rename). Rebuild only when we
         // already owe a frame write, or when the active tab / count
         // no longer match.
-        let (tabs, active) = build_terminal_tab_models(t);
-        let tab_count = tabs
-            .as_any()
-            .downcast_ref::<VecModel<crate::slint_generated::TerminalTabModel>>()
-            .map(|m| m.row_count())
-            .unwrap_or(0);
         let old_tab_count = row
             .terminal_tabs
             .as_any()
             .downcast_ref::<VecModel<crate::slint_generated::TerminalTabModel>>()
             .map(|m| m.row_count())
             .unwrap_or(0);
-        if tab_count != old_tab_count || row.terminal_active_tab != active {
+        if t.tabs.len() != old_tab_count || row.terminal_active_tab != t.active_tab as i32 {
             need_frame = true;
         }
         if need_frame {
+            let (tabs, active) = build_terminal_tab_models(t);
             row.terminal_tabs = tabs;
             row.terminal_active_tab = active;
             row.terminal_dividers = build_terminal_divider_models(t);
@@ -1891,6 +1884,7 @@ impl MainWindowController {
             "rebuild_workspace_model in {ms:.2} ms"
         );
         *self.search_autofocus_pending.lock() = None;
+        self.prune_terminal_raster_cache();
         self.sync_fm_transfer_notifications();
         self.sync_jyotish_notifications();
         self.sync_visible_html_webviews();

@@ -4,11 +4,10 @@
 //! a code point, an optional `glyph_fallback` (e.g. a system UI / symbol font) is used; if that
 //! also misses, we try U+FFFD and finally a small cell-center dot so the cell is not blank.
 //!
-//! Retained buffers ([`RetainedRaster`]) allow dirty-line patches instead of reallocating and
-//! filling the entire bitmap on every PTY update.
+//! Retained buffers ([`RetainedRaster`]) remember which cells each bitmap holds, so an update
+//! repaints only the rows whose cells differ instead of reallocating and filling the whole bitmap.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use fontdue::Font;
 use orchid_widgets::TerminalPayload;
@@ -18,7 +17,7 @@ use slint::Image;
 use slint::Rgba8Pixel;
 use slint::SharedPixelBuffer;
 
-type GlyphRaster = Option<(fontdue::Metrics, Arc<[u8]>)>;
+type GlyphRaster = Option<(fontdue::Metrics, Box<[u8]>)>;
 
 /// Cached glyph coverage for `(font identity, char, size_bucket)`.
 struct GlyphCache {
@@ -27,29 +26,60 @@ struct GlyphCache {
     fallback_ptr: usize,
     /// Size quantized to 0.25 px to keep the key space small.
     size_q: u32,
-    map: HashMap<(char, bool), GlyphRaster>,
+    map: HashMap<char, GlyphRaster>,
 }
 
 impl GlyphCache {
     fn new(primary: &Font, fallback: Option<&Font>, size_draw: f32) -> Self {
         Self {
-            primary_ptr: primary as *const Font as usize,
-            fallback_ptr: fallback.map(|f| f as *const Font as usize).unwrap_or(0),
-            size_q: (size_draw * 4.0).round() as u32,
+            primary_ptr: font_id(primary),
+            fallback_ptr: fallback.map(font_id).unwrap_or(0),
+            size_q: size_bucket(size_draw),
             map: HashMap::with_capacity(512),
         }
     }
 
     fn matches(&self, primary: &Font, fallback: Option<&Font>, size_draw: f32) -> bool {
-        self.primary_ptr == primary as *const Font as usize
-            && self.fallback_ptr == fallback.map(|f| f as *const Font as usize).unwrap_or(0)
-            && self.size_q == (size_draw * 4.0).round() as u32
+        self.primary_ptr == font_id(primary)
+            && self.fallback_ptr == fallback.map(font_id).unwrap_or(0)
+            && self.size_q == size_bucket(size_draw)
     }
+
+    fn glyph(
+        &mut self,
+        primary: &Font,
+        glyph_fallback: Option<&Font>,
+        ch: char,
+        size: f32,
+    ) -> Option<&(fontdue::Metrics, Box<[u8]>)> {
+        self.map
+            .entry(ch)
+            .or_insert_with(|| best_raster_for_cell(primary, glyph_fallback, ch, size))
+            .as_ref()
+    }
+}
+
+fn font_id(f: &Font) -> usize {
+    f as *const Font as usize
+}
+
+fn size_bucket(size_draw: f32) -> u32 {
+    (size_draw * 4.0).round() as u32
 }
 
 fn glyph_cache() -> &'static Mutex<Option<GlyphCache>> {
     static CACHE: Mutex<Option<GlyphCache>> = Mutex::new(None);
     &CACHE
+}
+
+/// Alpha-blend `fg` (straight) over the RGBA pixel `dst` with coverage `a` (0..=255).
+#[inline]
+fn blend_coverage(dst: &mut [u8; 4], fg: [u8; 4], a: u8) {
+    let a = u32::from(a);
+    let inv = 255 - a;
+    for (d, f) in dst.iter_mut().zip(fg) {
+        *d = ((u32::from(f) * a + u32::from(*d) * inv + 127) / 255) as u8;
+    }
 }
 
 /// Alpha-blend `fg` (straight) over `dst` using `alpha` 0.0..=1.0.
@@ -81,10 +111,10 @@ fn blend_straight_over(dst: &mut [u8], i: usize, layer: [u8; 4], a: f32) {
 }
 
 /// `font.rasterize` with no coverage (missing glyph) returns an empty mask; treat as missing.
-fn try_raster_glyph(f: &Font, ch: char, size: f32) -> Option<(fontdue::Metrics, Arc<[u8]>)> {
+fn try_raster_glyph(f: &Font, ch: char, size: f32) -> GlyphRaster {
     let (m, coverage) = f.rasterize(ch, size);
     if !coverage.is_empty() && m.width > 0 && m.height > 0 {
-        return Some((m, Arc::from(coverage)));
+        return Some((m, coverage.into_boxed_slice()));
     }
     None
 }
@@ -94,36 +124,11 @@ fn best_raster_for_cell(
     glyph_fallback: Option<&Font>,
     ch: char,
     size: f32,
-) -> Option<(fontdue::Metrics, Arc<[u8]>)> {
+) -> GlyphRaster {
     try_raster_glyph(primary, ch, size)
         .or_else(|| glyph_fallback.and_then(|fb| try_raster_glyph(fb, ch, size)))
         .or_else(|| try_raster_glyph(primary, '\u{FFFD}', size))
         .or_else(|| glyph_fallback.and_then(|fb| try_raster_glyph(fb, '\u{FFFD}', size)))
-}
-
-fn cached_raster_for_cell(
-    primary: &Font,
-    glyph_fallback: Option<&Font>,
-    ch: char,
-    size: f32,
-) -> Option<(fontdue::Metrics, Arc<[u8]>)> {
-    let mut guard = glyph_cache().lock();
-    let need_new = guard
-        .as_ref()
-        .is_none_or(|c| !c.matches(primary, glyph_fallback, size));
-    if need_new {
-        *guard = Some(GlyphCache::new(primary, glyph_fallback, size));
-    }
-    let cache = guard.as_mut().expect("glyph cache just initialized");
-    let key = (ch, false);
-    if let Some(hit) = cache.map.get(&key) {
-        return hit.as_ref().map(|(m, cov)| (*m, Arc::clone(cov)));
-    }
-    let rendered = best_raster_for_cell(primary, glyph_fallback, ch, size);
-    cache
-        .map
-        .insert(key, rendered.as_ref().map(|(m, cov)| (*m, Arc::clone(cov))));
-    rendered
 }
 
 /// 2×2–3×3 block in the cell so undefined points are visible even with no TTF.
@@ -155,72 +160,101 @@ fn draw_missing_glyphs_marker(
     }
 }
 
-/// Retained RGBA buffers for dirty-line terminal updates.
+/// One bitmap plus the cells and cursor it currently shows.
+struct PaintedBuffer {
+    pixels: SharedPixelBuffer<Rgba8Pixel>,
+    /// Row-major copy of the cells last painted into `pixels`.
+    cells: Vec<TerminalPayloadCell>,
+    /// Cursor cell tinted into `pixels`, if any.
+    cursor: Option<(u16, u16)>,
+}
+
+/// Retained RGBA buffers for incremental terminal updates.
 ///
 /// Two independent pixel buffers ping-pong so `Image::from_rgba8` never
 /// shares the buffer we paint next. A cheap `clone()` of `SharedPixelBuffer`
 /// only bumps a refcount; the next `make_mut_slice` would otherwise detach
 /// and copy the whole frame (~3.5 MiB at 120×40×2×).
+///
+/// Each buffer is diffed against the incoming cells rather than trusting the
+/// emulator's dirty-line list: that list is drained per snapshot, so rows are
+/// lost whenever two snapshots land between rasters.
 pub struct RetainedRaster {
-    buffers: [SharedPixelBuffer<Rgba8Pixel>; 2],
+    buffers: [PaintedBuffer; 2],
     /// Index last handed to Slint as an `Image`.
     front: usize,
-    /// Rows still dirty on each buffer (the one we skipped last frame).
-    pending: [Vec<u16>; 2],
     cols: u16,
     rows: u16,
     cell_wp: u32,
     cell_hp: u32,
     size_q: u32,
-    cursor_col: u16,
-    cursor_row: u16,
-    cursor_visible: bool,
+    font: usize,
+    fallback: usize,
+    cursor_color: [u8; 4],
 }
 
 impl RetainedRaster {
-    fn matches_geometry(
+    #[allow(clippy::too_many_arguments)]
+    fn matches(
         &self,
         cols: u16,
         rows: u16,
         cell_wp: u32,
         cell_hp: u32,
         size_q: u32,
+        font: usize,
+        fallback: usize,
+        cursor_color: [u8; 4],
     ) -> bool {
         self.cols == cols
             && self.rows == rows
             && self.cell_wp == cell_wp
             && self.cell_hp == cell_hp
             && self.size_q == size_q
+            && self.font == font
+            && self.fallback == fallback
+            && self.cursor_color == cursor_color
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn paint_rows(
-    buffer: &mut SharedPixelBuffer<Rgba8Pixel>,
+/// Geometry shared by every paint call for one raster.
+struct PaintCtx<'a> {
     cols: u16,
     rows: u16,
-    cells: &[TerminalPayloadCell],
-    row_indices: impl Iterator<Item = u16>,
-    font: &Font,
-    glyph_fallback: Option<&Font>,
+    font: &'a Font,
+    glyph_fallback: Option<&'a Font>,
     size_draw: f32,
     cell_wp: u32,
     cell_hp: u32,
     tw: u32,
     th: u32,
     ascent: f32,
+}
+
+fn paint_rows(
+    buffer: &mut SharedPixelBuffer<Rgba8Pixel>,
+    ctx: &PaintCtx<'_>,
+    cells: &[TerminalPayloadCell],
+    row_list: &[u16],
 ) {
-    let row_list: Vec<u16> = row_indices.filter(|&r| r < rows).collect();
+    let PaintCtx {
+        cols,
+        rows,
+        cell_wp,
+        cell_hp,
+        tw,
+        th,
+        ..
+    } = *ctx;
     if row_list.is_empty() {
         return;
     }
     {
         let sbuf = buffer.make_mut_slice();
-        for &r in &row_list {
+        for &r in row_list.iter().filter(|&&r| r < rows) {
             for c in 0..cols {
-                let i = (r * cols + c) as usize;
-                let cell: &TerminalPayloadCell = cells.get(i).unwrap_or(&FALLBACK_CELL);
-                let b = cell.bg_rgba;
+                let i = (r as usize) * (cols as usize) + c as usize;
+                let b = cells.get(i).unwrap_or(&FALLBACK_CELL).bg_rgba;
                 let px = Rgba8Pixel {
                     r: b[0],
                     g: b[1],
@@ -230,85 +264,89 @@ fn paint_rows(
                 let cx = c as u32 * cell_wp;
                 let cy = r as u32 * cell_hp;
                 for yy in 0..cell_hp {
-                    for xx in 0..cell_wp {
-                        sbuf[((cy + yy) * tw + (cx + xx)) as usize] = px;
-                    }
+                    let start = ((cy + yy) * tw + cx) as usize;
+                    sbuf[start..start + cell_wp as usize].fill(px);
                 }
             }
         }
     }
+    let mut glyphs = glyph_cache().lock();
+    if glyphs
+        .as_ref()
+        .is_none_or(|g| !g.matches(ctx.font, ctx.glyph_fallback, ctx.size_draw))
     {
-        let p = buffer.make_mut_bytes();
-        for &r in &row_list {
-            for c in 0..cols {
-                let i = (r * cols + c) as usize;
-                let cell: &TerminalPayloadCell = cells.get(i).unwrap_or(&FALLBACK_CELL);
-                if cell.ch == '\0' || cell.ch == ' ' {
-                    continue;
-                }
-                let fg = cell.fg_rgba;
-                if let Some((m, coverage)) =
-                    cached_raster_for_cell(font, glyph_fallback, cell.ch, size_draw)
-                {
-                    let w = m.width;
-                    let h = m.height;
-                    let b = m.bounds;
-                    let cx = c as f32 * cell_wp as f32;
-                    let cy = r as f32 * cell_hp as f32;
-                    let baseline = cy + ascent;
-                    let y_top = baseline - (b.ymin + b.height);
-                    let x_left =
-                        cx + (cell_wp as f32 - m.advance_width).max(0.0) * 0.5 + m.xmin as f32;
-                    for y in 0..h {
-                        for x in 0..w {
-                            let a = *coverage.get(y * w + x).unwrap_or(&0) as f32 / 255.0;
-                            if a <= 0.0 {
-                                continue;
-                            }
-                            let px = (x_left + x as f32).round() as i32;
-                            let py = (y_top + y as f32).round() as i32;
-                            if px < 0 || py < 0 || (px as u32) >= tw || (py as u32) >= th {
-                                continue;
-                            }
-                            let oi = (py as u32 * tw + px as u32) as usize * 4;
-                            if oi + 3 < p.len() {
-                                blend_over_rgba(p, oi, fg, a);
-                            }
-                        }
+        *glyphs = Some(GlyphCache::new(ctx.font, ctx.glyph_fallback, ctx.size_draw));
+    }
+    let glyphs = glyphs.as_mut().expect("glyph cache just initialized");
+    let p = buffer.make_mut_bytes();
+    let row_stride = tw as usize * 4;
+    for &r in row_list.iter().filter(|&&r| r < rows) {
+        for c in 0..cols {
+            let i = (r as usize) * (cols as usize) + c as usize;
+            let cell = cells.get(i).unwrap_or(&FALLBACK_CELL);
+            if cell.ch == '\0' || cell.ch == ' ' {
+                continue;
+            }
+            let fg = cell.fg_rgba;
+            let Some((m, coverage)) =
+                glyphs.glyph(ctx.font, ctx.glyph_fallback, cell.ch, ctx.size_draw)
+            else {
+                draw_missing_glyphs_marker(p, tw, th, c as u32, r as u32, cell_wp, cell_hp, fg);
+                continue;
+            };
+            let w = m.width;
+            let bounds = m.bounds;
+            let cx = c as f32 * cell_wp as f32;
+            let cy = r as f32 * cell_hp as f32;
+            let baseline = cy + ctx.ascent;
+            let y_top = baseline - (bounds.ymin + bounds.height);
+            let x_left = cx + (cell_wp as f32 - m.advance_width).max(0.0) * 0.5 + m.xmin as f32;
+            let ox = x_left.round() as i64;
+            let oy = y_top.round() as i64;
+            let x0 = (-ox).clamp(0, w as i64) as usize;
+            let x1 = (i64::from(tw) - ox).clamp(0, w as i64) as usize;
+            let y0 = (-oy).clamp(0, m.height as i64) as usize;
+            let y1 = (i64::from(th) - oy).clamp(0, m.height as i64) as usize;
+            if x0 >= x1 {
+                continue;
+            }
+            for y in y0..y1 {
+                let src = &coverage[y * w + x0..y * w + x1];
+                let dst_start =
+                    (oy + y as i64) as usize * row_stride + (ox + x0 as i64) as usize * 4;
+                let dst = &mut p[dst_start..dst_start + src.len() * 4];
+                for (px, &a) in dst.as_chunks_mut::<4>().0.iter_mut().zip(src) {
+                    if a != 0 {
+                        blend_coverage(px, fg, a);
                     }
-                } else {
-                    draw_missing_glyphs_marker(p, tw, th, c as u32, r as u32, cell_wp, cell_hp, fg);
                 }
             }
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn paint_cursor(
     buffer: &mut SharedPixelBuffer<Rgba8Pixel>,
-    cols: u16,
-    rows: u16,
-    cursor_col: u16,
-    cursor_row: u16,
-    cursor_visible: bool,
-    cell_wp: u32,
-    cell_hp: u32,
-    tw: u32,
-    th: u32,
+    ctx: &PaintCtx<'_>,
+    cursor: (u16, u16),
     cursor_color: [u8; 4],
 ) {
-    if !cursor_visible || (cursor_col as u32) >= cols as u32 || (cursor_row as u32) >= rows as u32 {
-        return;
-    }
-    let cx = cursor_col as f32 * cell_wp as f32;
-    let cy = cursor_row as f32 * cell_hp as f32;
+    let PaintCtx {
+        cell_wp,
+        cell_hp,
+        tw,
+        th,
+        ..
+    } = *ctx;
+    let (cursor_col, cursor_row) = cursor;
+    let cx = cursor_col as u32 * cell_wp;
+    let cy = cursor_row as u32 * cell_hp;
     let a = 0.35f32;
     let p2 = buffer.make_mut_bytes();
     for yy in 0..cell_hp {
         for xx in 0..cell_wp {
-            let px = cx as u32 + xx;
-            let py = cy as u32 + yy;
+            let px = cx + xx;
+            let py = cy + yy;
             if px < tw && py < th {
                 let oi = (py * tw + px) as usize * 4;
                 if oi + 3 < p2.len() {
@@ -319,8 +357,16 @@ fn paint_cursor(
     }
 }
 
-/// Raster terminal cells, optionally patching into a retained buffer when only
-/// a subset of rows changed (`full_redraw == false` and geometry matches).
+/// Cells padded / truncated to exactly `cols * rows`, as painted.
+fn normalized_cells(cells: &[TerminalPayloadCell], len: usize) -> Vec<TerminalPayloadCell> {
+    let mut out = Vec::with_capacity(len);
+    out.extend_from_slice(&cells[..cells.len().min(len)]);
+    out.resize(len, FALLBACK_CELL);
+    out
+}
+
+/// Raster terminal cells, patching into a retained buffer when geometry matches:
+/// only rows whose cells differ from what that buffer shows are repainted.
 #[allow(clippy::too_many_arguments)]
 pub fn render_terminal_cells_retained(
     retained: &mut Option<RetainedRaster>,
@@ -330,8 +376,6 @@ pub fn render_terminal_cells_retained(
     cursor_col: u16,
     cursor_row: u16,
     cursor_visible: bool,
-    dirty_lines: &[u16],
-    full_redraw: bool,
     font: &Font,
     glyph_fallback: Option<&Font>,
     size_px: f32,
@@ -350,7 +394,7 @@ pub fn render_terminal_cells_retained(
         1.0
     };
     let size_draw = size_px * s;
-    let size_q = (size_draw * 4.0).round() as u32;
+    let size_q = size_bucket(size_draw);
     let cell_wp = (cell_w as f32 * s).round().max(1.0) as u32;
     let cell_hp = (cell_h as f32 * s).round().max(1.0) as u32;
     let tw = cols as u32 * cell_wp;
@@ -359,121 +403,115 @@ pub fn render_terminal_cells_retained(
         return None;
     }
     let line = font.horizontal_line_metrics(size_draw)?;
-    let ascent = line.ascent;
+    let ctx = PaintCtx {
+        cols,
+        rows,
+        font,
+        glyph_fallback,
+        size_draw,
+        cell_wp,
+        cell_hp,
+        tw,
+        th,
+        ascent: line.ascent,
+    };
+    let font_ptr = font_id(font);
+    let fallback_ptr = glyph_fallback.map(font_id).unwrap_or(0);
+    let cursor = (cursor_visible && cursor_col < cols && cursor_row < rows)
+        .then_some((cursor_col, cursor_row));
+    let n_cells = cols as usize * rows as usize;
 
-    let geometry_ok = retained
-        .as_ref()
-        .is_some_and(|r| r.matches_geometry(cols, rows, cell_wp, cell_hp, size_q));
-    let do_full = full_redraw || !geometry_ok || retained.is_none();
-
-    if do_full {
-        let mut paint_all = |buffer: &mut SharedPixelBuffer<Rgba8Pixel>| {
-            paint_rows(
-                buffer,
-                cols,
-                rows,
-                cells,
-                0..rows,
-                font,
-                glyph_fallback,
-                size_draw,
-                cell_wp,
-                cell_hp,
-                tw,
-                th,
-                ascent,
-            );
-            paint_cursor(
-                buffer,
-                cols,
-                rows,
-                cursor_col,
-                cursor_row,
-                cursor_visible,
-                cell_wp,
-                cell_hp,
-                tw,
-                th,
-                cursor_color,
-            );
-        };
-        let mut a = SharedPixelBuffer::new(tw, th);
-        let mut b = SharedPixelBuffer::new(tw, th);
-        paint_all(&mut a);
-        paint_all(&mut b);
-        let image = Image::from_rgba8(a.clone());
-        *retained = Some(RetainedRaster {
-            buffers: [a, b],
-            front: 0,
-            pending: [Vec::new(), Vec::new()],
+    let reusable = retained.as_ref().is_some_and(|r| {
+        r.matches(
             cols,
             rows,
             cell_wp,
             cell_hp,
             size_q,
-            cursor_col,
-            cursor_row,
-            cursor_visible,
+            font_ptr,
+            fallback_ptr,
+            cursor_color,
+        )
+    });
+
+    if !reusable {
+        let all_rows: Vec<u16> = (0..rows).collect();
+        let mut a = SharedPixelBuffer::new(tw, th);
+        paint_rows(&mut a, &ctx, cells, &all_rows);
+        if let Some(cur) = cursor {
+            paint_cursor(&mut a, &ctx, cur, cursor_color);
+        }
+        let b = SharedPixelBuffer::clone_from_slice(a.as_bytes(), tw, th);
+        let painted = normalized_cells(cells, n_cells);
+        let image = Image::from_rgba8(a.clone());
+        *retained = Some(RetainedRaster {
+            buffers: [
+                PaintedBuffer {
+                    pixels: a,
+                    cells: painted.clone(),
+                    cursor,
+                },
+                PaintedBuffer {
+                    pixels: b,
+                    cells: painted,
+                    cursor,
+                },
+            ],
+            front: 0,
+            cols,
+            rows,
+            cell_wp,
+            cell_hp,
+            size_q,
+            font: font_ptr,
+            fallback: fallback_ptr,
+            cursor_color,
         });
         return Some(image);
     }
 
     let rast = retained.as_mut().expect("checked above");
-    let mut this_dirty: Vec<u16> = dirty_lines.iter().copied().filter(|&r| r < rows).collect();
-    // Re-paint previous + current cursor rows so the tint is cleared/redrawn.
-    if rast.cursor_visible {
-        this_dirty.push(rast.cursor_row);
-    }
-    if cursor_visible {
-        this_dirty.push(cursor_row);
-    }
-    this_dirty.sort_unstable();
-    this_dirty.dedup();
-
     let back = 1 - rast.front;
-    let mut paint_set = rast.pending[back].clone();
-    paint_set.extend_from_slice(&this_dirty);
-    paint_set.sort_unstable();
-    paint_set.dedup();
-
-    if !paint_set.is_empty() {
-        paint_rows(
-            &mut rast.buffers[back],
-            cols,
-            rows,
-            cells,
-            paint_set.into_iter(),
-            font,
-            glyph_fallback,
-            size_draw,
-            cell_wp,
-            cell_hp,
-            tw,
-            th,
-            ascent,
-        );
-        paint_cursor(
-            &mut rast.buffers[back],
-            cols,
-            rows,
-            cursor_col,
-            cursor_row,
-            cursor_visible,
-            cell_wp,
-            cell_hp,
-            tw,
-            th,
-            cursor_color,
-        );
+    let buf = &mut rast.buffers[back];
+    let cols_us = cols as usize;
+    let mut paint: Vec<u16> = (0..rows)
+        .filter(|&r| {
+            let start = r as usize * cols_us;
+            let end = start + cols_us;
+            cells
+                .get(start..end)
+                .is_none_or(|src| src != &buf.cells[start..end])
+        })
+        .collect();
+    // Repaint old + new cursor rows so the tint is cleared / redrawn.
+    if buf.cursor != cursor {
+        paint.extend(buf.cursor.map(|(_, r)| r));
+        paint.extend(cursor.map(|(_, r)| r));
+        paint.sort_unstable();
+        paint.dedup();
     }
-    rast.pending[back].clear();
-    rast.pending[rast.front].extend_from_slice(&this_dirty);
-    rast.pending[rast.front].sort_unstable();
-    rast.pending[rast.front].dedup();
-    rast.cursor_col = cursor_col;
-    rast.cursor_row = cursor_row;
-    rast.cursor_visible = cursor_visible;
-    let image = Image::from_rgba8(rast.buffers[back].clone());
+
+    if !paint.is_empty() {
+        paint_rows(&mut buf.pixels, &ctx, cells, &paint);
+        if let Some(cur) = cursor.filter(|(_, r)| paint.binary_search(r).is_ok()) {
+            paint_cursor(&mut buf.pixels, &ctx, cur, cursor_color);
+        }
+        for &r in &paint {
+            let start = r as usize * cols_us;
+            let end = start + cols_us;
+            let dst = &mut buf.cells[start..end];
+            match cells.get(start..end) {
+                Some(src) => dst.clone_from_slice(src),
+                None => {
+                    for (i, d) in dst.iter_mut().enumerate() {
+                        *d = cells.get(start + i).unwrap_or(&FALLBACK_CELL).clone();
+                    }
+                }
+            }
+        }
+    }
+    buf.cursor = cursor;
+    let image = Image::from_rgba8(buf.pixels.clone());
     rast.front = back;
     Some(image)
 }
@@ -505,8 +543,6 @@ pub fn render_terminal_cells(
         cursor_col,
         cursor_row,
         cursor_visible,
-        &[],
-        true,
         font,
         glyph_fallback,
         size_px,
@@ -555,3 +591,92 @@ const FALLBACK_CELL: TerminalPayloadCell = TerminalPayloadCell {
     italic: false,
     underline: false,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const COLS: u16 = 24;
+    const ROWS: u16 = 6;
+    const CURSOR: [u8; 4] = [0x40, 0x90, 0xFF, 0xFF];
+
+    fn system_mono_font() -> Option<Font> {
+        [
+            "C:\\Windows\\Fonts\\consola.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+            "/System/Library/Fonts/Menlo.ttc",
+        ]
+        .iter()
+        .find_map(|p| std::fs::read(p).ok())
+        .and_then(|bytes| Font::from_bytes(bytes, fontdue::FontSettings::default()).ok())
+    }
+
+    fn screen(lines: &[&str]) -> Vec<TerminalPayloadCell> {
+        let mut cells = vec![FALLBACK_CELL; COLS as usize * ROWS as usize];
+        for (r, line) in lines.iter().enumerate() {
+            for (c, ch) in line.chars().take(COLS as usize).enumerate() {
+                let cell = &mut cells[r * COLS as usize + c];
+                cell.ch = ch;
+                if ch.is_ascii_digit() {
+                    cell.fg_rgba = [0xFF, 0x80, 0x40, 0xFF];
+                    cell.bg_rgba = [0x20, 0x30, 0x40, 0xFF];
+                }
+            }
+        }
+        cells
+    }
+
+    fn render(
+        retained: &mut Option<RetainedRaster>,
+        font: &Font,
+        cells: &[TerminalPayloadCell],
+        cursor: (u16, u16, bool),
+    ) -> Vec<u8> {
+        render_terminal_cells_retained(
+            retained, COLS, ROWS, cells, cursor.0, cursor.1, cursor.2, font, None, 14.0, 8, 16,
+            1.25, CURSOR,
+        )
+        .and_then(|img| img.to_rgba8())
+        .expect("raster")
+        .as_bytes()
+        .to_vec()
+    }
+
+    #[test]
+    fn incremental_updates_match_full_redraw() {
+        let Some(font) = system_mono_font() else {
+            return;
+        };
+        let frames = [
+            (screen(&["$ ls", "a b c"]), (4, 0, true)),
+            (screen(&["$ ls", "a b c", "$ echo 42"]), (9, 2, true)),
+            (screen(&["$ ls", "a b c", "$ echo 42", "42"]), (0, 4, false)),
+            (screen(&["x", "", "$ echo 42", "42", "$ _"]), (2, 4, true)),
+            (screen(&["x", "", "", "", "", "tail 7"]), (2, 4, true)),
+        ];
+        let mut retained = None;
+        for (cells, cursor) in &frames {
+            let incremental = render(&mut retained, &font, cells, *cursor);
+            let full = render(&mut None, &font, cells, *cursor);
+            assert!(incremental == full, "incremental raster diverged");
+        }
+    }
+
+    #[test]
+    fn skipped_frames_and_shared_key_stay_correct() {
+        let Some(font) = system_mono_font() else {
+            return;
+        };
+        let a = screen(&["terminal a", "1111"]);
+        let b = screen(&["terminal b", "", "2222 2222"]);
+        let mut retained = None;
+        render(&mut retained, &font, &a, (0, 0, true));
+        // Two terminals sharing one retained slot, and frames whose
+        // intermediate states were never rastered.
+        for (cells, cursor) in [(&b, (3, 2, true)), (&a, (1, 1, true)), (&b, (3, 2, false))] {
+            let incremental = render(&mut retained, &font, cells, cursor);
+            let full = render(&mut None, &font, cells, cursor);
+            assert!(incremental == full, "incremental raster diverged");
+        }
+    }
+}
