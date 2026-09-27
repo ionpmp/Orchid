@@ -1,3 +1,4 @@
+import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme_global.slint";
 import { ControlSize, IconButton, TouchButton } from "../kit.slint";
 import { Icon } from "../kit-icons.slint";
@@ -33,9 +34,9 @@ export component AudioPlayerView inherits Rectangle {
             return;
         }
         let y = root.q-row-stride * root.model.current-track-index;
-        let margin = browse-flick.height / 3;
-        let max-y = max(0px, browse-flick.viewport-height - browse-flick.height);
-        browse-flick.viewport-y = min(max-y, max(0px, y - margin));
+        let margin = browse-list.visible-height / 3;
+        let max-y = max(0px, browse-list.viewport-height - browse-list.visible-height);
+        browse-list.viewport-y = -min(max-y, max(0px, y - margin));
     }
 
     focus-scope := FocusScope {
@@ -664,301 +665,298 @@ export component AudioPlayerView inherits Rectangle {
                 clip: true;
                 background: transparent;
 
-                browse-flick := Flickable {
+                if root.model.empty-hint == "" && root.model.groups.length > 0 : ListView {
                     width: 100%;
                     height: 100%;
-                    visible: root.model.empty-hint == "";
-                    viewport-width: self.width;
-                    viewport-height: browse-col.preferred-height;
-
-                    browse-col := VerticalLayout {
-                        spacing: Theme.hairline * 2;
-                        width: parent.width;
-
-                        if root.model.groups.length > 0 : VerticalLayout {
-                            spacing: Theme.hairline * 2;
-                            for g in root.model.groups : Rectangle {
-                                height: Theme.space-8;
-                                background: g-ta.has-hover ? Theme.surface-raised : transparent;
-                                border-radius: Theme.radius-md;
-                                HorizontalLayout {
-                                    padding-left: Theme.space-2;
-                                    padding-right: Theme.space-2;
-                                    spacing: Theme.space-1;
-                                    Rectangle {
-                                        horizontal-stretch: 1;
-                                        g-ta := TouchArea { clicked => { root.command("open-group:" + g.key); } }
-                                        HorizontalLayout {
-                                            Text {
-                                                text: g.label;
-                                                color: Theme.text-primary;
-                                                font-size: Theme.font-size-md;
-                                                vertical-alignment: center;
-                                                horizontal-stretch: 1;
-                                                overflow: elide;
-                                            }
-                                            Text {
-                                                text: g.count;
-                                                color: Theme.text-tertiary;
-                                                font-size: Theme.font-size-sm;
-                                                vertical-alignment: center;
-                                            }
-                                        }
-                                    }
-                                    Rectangle {
-                                        width: Theme.control-xs;
-                                        height: Theme.control-xs;
-                                        TouchArea { clicked => { root.command("play-group:" + g.key); } }
+                    for g in root.model.groups : Rectangle {
+                        height: Theme.space-8 + Theme.hairline * 2;
+                        Rectangle {
+                            y: 0;
+                            height: Theme.space-8;
+                            background: g-ta.has-hover ? Theme.surface-raised : transparent;
+                            border-radius: Theme.radius-md;
+                            HorizontalLayout {
+                                padding-left: Theme.space-2;
+                                padding-right: Theme.space-2;
+                                spacing: Theme.space-1;
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    g-ta := TouchArea { clicked => { root.command("open-group:" + g.key); } }
+                                    HorizontalLayout {
                                         Text {
-                                            text: root.model.play-group-label;
-                                            color: Theme.accent-brand;
-                                            font-size: Theme.font-size-sm;
-                                            font-weight: Theme.weight-semibold;
-                                            horizontal-alignment: center;
+                                            text: g.label;
+                                            color: Theme.text-primary;
+                                            font-size: Theme.font-size-md;
                                             vertical-alignment: center;
-                                            width: 100%; height: 100%;
+                                            horizontal-stretch: 1;
+                                            overflow: elide;
                                         }
-                                    }
-                                    Rectangle {
-                                        width: Theme.control-xs;
-                                        height: Theme.control-xs;
-                                        TouchArea { clicked => { root.command("enqueue-group:" + g.key); } }
                                         Text {
-                                            text: root.model.enqueue-label;
+                                            text: g.count;
                                             color: Theme.text-tertiary;
                                             font-size: Theme.font-size-sm;
-                                            horizontal-alignment: center;
                                             vertical-alignment: center;
-                                            width: 100%; height: 100%;
                                         }
                                     }
-                                    if root.model.browse-tab == 3 && g.is-library-root : Rectangle {
-                                        width: Theme.control-xs;
-                                        height: Theme.control-xs;
-                                        TouchArea { clicked => { root.command("remove-root:" + g.key); } }
-                                        Text {
-                                            text: root.model.remove-root-label;
-                                            color: Theme.text-tertiary;
-                                            font-size: Theme.font-size-sm;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                            width: 100%; height: 100%;
-                                        }
+                                }
+                                Rectangle {
+                                    width: Theme.control-xs;
+                                    height: Theme.control-xs;
+                                    TouchArea { clicked => { root.command("play-group:" + g.key); } }
+                                    Text {
+                                        text: root.model.play-group-label;
+                                        color: Theme.accent-brand;
+                                        font-size: Theme.font-size-sm;
+                                        font-weight: Theme.weight-semibold;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%; height: 100%;
+                                    }
+                                }
+                                Rectangle {
+                                    width: Theme.control-xs;
+                                    height: Theme.control-xs;
+                                    TouchArea { clicked => { root.command("enqueue-group:" + g.key); } }
+                                    Text {
+                                        text: root.model.enqueue-label;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%; height: 100%;
+                                    }
+                                }
+                                if root.model.browse-tab == 3 && g.is-library-root : Rectangle {
+                                    width: Theme.control-xs;
+                                    height: Theme.control-xs;
+                                    TouchArea { clicked => { root.command("remove-root:" + g.key); } }
+                                    Text {
+                                        text: root.model.remove-root-label;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%; height: 100%;
                                     }
                                 }
                             }
                         }
+                    }
+                }
 
-                        if root.model.tracks.length > 0 : VerticalLayout {
-                            spacing: Theme.hairline;
-                            for t[i] in root.model.tracks : Rectangle {
-                                height: Theme.space-10;
-                                background: root.q-drag-path == t.path
-                                    ? Theme.surface-base
-                                    : (root.q-drag-path != "" && root.q-drop-index == i
-                                        ? Theme.accent-brand
-                                        : (t.is-current ? Theme.surface-raised : (t-ta.has-hover ? Theme.surface-base : transparent)));
-                                opacity: root.q-drag-path == t.path ? 0.55 : 1.0;
-                                border-radius: Theme.radius-md;
-                                    HorizontalLayout {
-                                    padding-left: Theme.space-2;
-                                    padding-right: Theme.space-2;
-                                    spacing: Theme.space-1;
-                                    if root.model.browse-tab == 6 : Rectangle {
-                                        width: Theme.space-4 + Theme.hairline * 2;
-                                        height: Theme.control-xs;
-                                        Text {
-                                            text: "⋮⋮";
-                                            color: Theme.text-tertiary;
-                                            font-size: Theme.font-size-sm;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                            width: 100%; height: 100%;
-                                        }
-                                        TouchArea {
-                                            pointer-event(e) => {
-                                                if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
-                                                    root.q-drag-path = t.path;
-                                                    root.q-drag-from = i;
-                                                    root.q-drop-index = i;
-                                                }
-                                                if root.q-drag-path == t.path && e.kind == PointerEventKind.move {
-                                                    let pointer-y = self.absolute-position.y - browse-flick.absolute-position.y + self.mouse-y;
-                                                    let content-y = pointer-y + browse-flick.viewport-y;
-                                                    let raw = content-y / root.q-row-stride;
-                                                    let idx = min(root.model.tracks.length - 1, max(0, floor(raw)));
-                                                    root.q-drop-index = idx;
-                                                }
-                                                if root.q-drag-path == t.path && e.kind == PointerEventKind.up {
-                                                    if root.q-drop-index >= 0 && root.q-drop-index != root.q-drag-from {
-                                                        root.command("queue-move-to:" + root.q-drop-index + "|" + root.q-drag-path);
-                                                    }
-                                                    root.q-drag-path = "";
-                                                    root.q-drag-from = -1;
-                                                    root.q-drop-index = -1;
-                                                }
-                                                if e.kind == PointerEventKind.cancel {
-                                                    root.q-drag-path = "";
-                                                    root.q-drag-from = -1;
-                                                    root.q-drop-index = -1;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    Rectangle {
-                                        width: Theme.space-8;
-                                        height: Theme.space-8;
-                                        border-radius: Theme.radius-md;
-                                        background: Theme.surface-base;
-                                        clip: true;
-                                        if t.has-cover : Image {
-                                            width: 100%;
-                                            height: 100%;
-                                            source: t.cover;
-                                            image-fit: cover;
-                                        }
-                                        if !t.has-cover : Text {
-                                            text: "♪";
-                                            color: Theme.text-tertiary;
-                                            font-size: Theme.font-size-sm;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                            width: 100%; height: 100%;
-                                        }
-                                    }
-                                    Rectangle {
-                                        horizontal-stretch: 1;
-                                        t-ta := TouchArea {
-                                            clicked => {
-                                                if root.model.browse-tab == 6 {
-                                                    root.command("queue-play:" + t.path);
-                                                } else {
-                                                    root.command("play-track:" + t.path);
-                                                }
-                                            }
-                                            double-clicked => {
-                                                if root.model.browse-tab != 6 {
-                                                    root.command("enqueue:" + t.path);
-                                                }
-                                            }
-                                        }
-                                        VerticalLayout {
-                                            alignment: center;
-                                            Text {
-                                                text: t.title;
-                                                color: Theme.text-primary;
-                                                font-size: Theme.font-size-md;
-                                                overflow: elide;
-                                            }
-                                            Text {
-                                                text: t.subtitle;
-                                                color: Theme.text-tertiary;
-                                                font-size: Theme.font-size-sm;
-                                                overflow: elide;
-                                            }
-                                        }
-                                    }
-                                    if t.duration-label != "" : Text {
-                                        text: t.duration-label;
+                browse-list := ListView {
+                    width: 100%;
+                    height: 100%;
+                    visible: root.model.empty-hint == "" && root.model.tracks.length > 0;
+                    for t[i] in root.model.tracks : track-row := Rectangle {
+                        height: root.q-row-stride;
+                        Rectangle {
+                            y: 0;
+                            height: Theme.space-10;
+                            background: root.q-drag-path == t.path
+                                ? Theme.surface-base
+                                : (root.q-drag-path != "" && root.q-drop-index == i
+                                    ? Theme.accent-brand
+                                    : (t.is-current ? Theme.surface-raised : (t-ta.has-hover ? Theme.surface-base : transparent)));
+                            opacity: root.q-drag-path == t.path ? 0.55 : 1.0;
+                            border-radius: Theme.radius-md;
+                            HorizontalLayout {
+                                padding-left: Theme.space-2;
+                                padding-right: Theme.space-2;
+                                spacing: Theme.space-1;
+                                if root.model.browse-tab == 6 : Rectangle {
+                                    width: Theme.space-4 + Theme.hairline * 2;
+                                    height: Theme.control-xs;
+                                    Text {
+                                        text: "⋮⋮";
                                         color: Theme.text-tertiary;
                                         font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
                                         vertical-alignment: center;
+                                        width: 100%; height: 100%;
                                     }
-                                    Rectangle {
-                                        width: Theme.control-xs; height: Theme.control-xs;
-                                        TouchArea { clicked => { root.command("toggle-favorite:" + t.path); } }
+                                    TouchArea {
+                                        pointer-event(e) => {
+                                            if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                                                root.q-drag-path = t.path;
+                                                root.q-drag-from = i;
+                                                root.q-drop-index = i;
+                                            }
+                                            if root.q-drag-path == t.path && e.kind == PointerEventKind.move {
+                                                let content-y = track-row.y + self.absolute-position.y - track-row.absolute-position.y + self.mouse-y;
+                                                let raw = content-y / root.q-row-stride;
+                                                let idx = min(root.model.tracks.length - 1, max(0, floor(raw)));
+                                                root.q-drop-index = idx;
+                                            }
+                                            if root.q-drag-path == t.path && e.kind == PointerEventKind.up {
+                                                if root.q-drop-index >= 0 && root.q-drop-index != root.q-drag-from {
+                                                    root.command("queue-move-to:" + root.q-drop-index + "|" + root.q-drag-path);
+                                                }
+                                                root.q-drag-path = "";
+                                                root.q-drag-from = -1;
+                                                root.q-drop-index = -1;
+                                            }
+                                            if e.kind == PointerEventKind.cancel {
+                                                root.q-drag-path = "";
+                                                root.q-drag-from = -1;
+                                                root.q-drop-index = -1;
+                                            }
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    width: Theme.space-8;
+                                    height: Theme.space-8;
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.surface-base;
+                                    clip: true;
+                                    if t.has-cover : Image {
+                                        width: 100%;
+                                        height: 100%;
+                                        source: t.cover;
+                                        image-fit: cover;
+                                    }
+                                    if !t.has-cover : Text {
+                                        text: "♪";
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%; height: 100%;
+                                    }
+                                }
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    t-ta := TouchArea {
+                                        clicked => {
+                                            if root.model.browse-tab == 6 {
+                                                root.command("queue-play:" + t.path);
+                                            } else {
+                                                root.command("play-track:" + t.path);
+                                            }
+                                        }
+                                        double-clicked => {
+                                            if root.model.browse-tab != 6 {
+                                                root.command("enqueue:" + t.path);
+                                            }
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        alignment: center;
                                         Text {
-                                            text: t.is-favorite ? "*" : "+";
-                                            color: t.is-favorite ? Theme.accent-brand : Theme.text-tertiary;
+                                            text: t.title;
+                                            color: Theme.text-primary;
                                             font-size: Theme.font-size-md;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                            width: 100%; height: 100%;
+                                            overflow: elide;
                                         }
-                                    }
-                                    if root.model.browse-tab != 6 : Rectangle {
-                                        width: Theme.control-xs; height: Theme.control-xs;
-                                        TouchArea { clicked => { root.command("enqueue:" + t.path); } }
                                         Text {
-                                            text: root.model.enqueue-label;
+                                            text: t.subtitle;
                                             color: Theme.text-tertiary;
                                             font-size: Theme.font-size-sm;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                            width: 100%; height: 100%;
+                                            overflow: elide;
                                         }
                                     }
-                                    if root.model.browse-tab != 6 : Rectangle {
-                                        width: Theme.control-xs; height: Theme.control-xs;
-                                        TouchArea { clicked => { root.command("play-next:" + t.path); } }
-                                        Text {
-                                            text: root.model.play-next-label;
-                                            color: Theme.text-tertiary;
-                                            font-size: Theme.font-size-sm;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                            width: 100%; height: 100%;
-                                        }
+                                }
+                                if t.duration-label != "" : Text {
+                                    text: t.duration-label;
+                                    color: Theme.text-tertiary;
+                                    font-size: Theme.font-size-sm;
+                                    vertical-alignment: center;
+                                }
+                                Rectangle {
+                                    width: Theme.control-xs; height: Theme.control-xs;
+                                    TouchArea { clicked => { root.command("toggle-favorite:" + t.path); } }
+                                    Text {
+                                        text: t.is-favorite ? "*" : "+";
+                                        color: t.is-favorite ? Theme.accent-brand : Theme.text-tertiary;
+                                        font-size: Theme.font-size-md;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%; height: 100%;
                                     }
-                                    if root.model.browse-tab != 6 && root.model.active-playlist-id != "__recent__" : Rectangle {
-                                        width: Theme.control-xs; height: Theme.control-xs;
-                                        TouchArea { clicked => { root.command("add-to-active-playlist:" + t.path); } }
-                                        Text {
-                                            text: root.model.add-to-playlist-label;
-                                            color: Theme.text-tertiary;
-                                            font-size: Theme.font-size-sm;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                            width: 100%; height: 100%;
-                                        }
+                                }
+                                if root.model.browse-tab != 6 : Rectangle {
+                                    width: Theme.control-xs; height: Theme.control-xs;
+                                    TouchArea { clicked => { root.command("enqueue:" + t.path); } }
+                                    Text {
+                                        text: root.model.enqueue-label;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%; height: 100%;
                                     }
-                                    if root.model.browse-tab == 5 : Rectangle {
-                                        width: Theme.control-xs; height: Theme.control-xs;
-                                        TouchArea { clicked => { root.command("remove-from-active-playlist:" + t.path); } }
-                                        Text {
-                                            text: root.model.remove-from-playlist-label;
-                                            color: Theme.text-tertiary;
-                                            font-size: Theme.font-size-sm;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                            width: 100%; height: 100%;
-                                        }
+                                }
+                                if root.model.browse-tab != 6 : Rectangle {
+                                    width: Theme.control-xs; height: Theme.control-xs;
+                                    TouchArea { clicked => { root.command("play-next:" + t.path); } }
+                                    Text {
+                                        text: root.model.play-next-label;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%; height: 100%;
                                     }
-                                    if root.model.browse-tab == 6 : Rectangle {
-                                        width: Theme.space-5 + Theme.hairline * 2; height: Theme.control-xs;
-                                        TouchArea { clicked => { root.command("queue-up:" + t.path); } }
-                                        Text {
-                                            text: root.model.move-up-label;
-                                            color: Theme.text-tertiary;
-                                            font-size: Theme.font-size-sm;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                            width: 100%; height: 100%;
-                                        }
+                                }
+                                if root.model.browse-tab != 6 && root.model.active-playlist-id != "__recent__" : Rectangle {
+                                    width: Theme.control-xs; height: Theme.control-xs;
+                                    TouchArea { clicked => { root.command("add-to-active-playlist:" + t.path); } }
+                                    Text {
+                                        text: root.model.add-to-playlist-label;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%; height: 100%;
                                     }
-                                    if root.model.browse-tab == 6 : Rectangle {
-                                        width: Theme.space-5 + Theme.hairline * 2; height: Theme.control-xs;
-                                        TouchArea { clicked => { root.command("queue-down:" + t.path); } }
-                                        Text {
-                                            text: root.model.move-down-label;
-                                            color: Theme.text-tertiary;
-                                            font-size: Theme.font-size-sm;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                            width: 100%; height: 100%;
-                                        }
+                                }
+                                if root.model.browse-tab == 5 : Rectangle {
+                                    width: Theme.control-xs; height: Theme.control-xs;
+                                    TouchArea { clicked => { root.command("remove-from-active-playlist:" + t.path); } }
+                                    Text {
+                                        text: root.model.remove-from-playlist-label;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%; height: 100%;
                                     }
-                                    if root.model.browse-tab == 6 : Rectangle {
-                                        width: Theme.control-xs; height: Theme.control-xs;
-                                        TouchArea { clicked => { root.command("remove-from-queue:" + t.path); } }
-                                        Text {
-                                            text: root.model.remove-label;
-                                            color: Theme.text-tertiary;
-                                            font-size: Theme.font-size-sm;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                            width: 100%; height: 100%;
-                                        }
+                                }
+                                if root.model.browse-tab == 6 : Rectangle {
+                                    width: Theme.space-5 + Theme.hairline * 2; height: Theme.control-xs;
+                                    TouchArea { clicked => { root.command("queue-up:" + t.path); } }
+                                    Text {
+                                        text: root.model.move-up-label;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%; height: 100%;
+                                    }
+                                }
+                                if root.model.browse-tab == 6 : Rectangle {
+                                    width: Theme.space-5 + Theme.hairline * 2; height: Theme.control-xs;
+                                    TouchArea { clicked => { root.command("queue-down:" + t.path); } }
+                                    Text {
+                                        text: root.model.move-down-label;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%; height: 100%;
+                                    }
+                                }
+                                if root.model.browse-tab == 6 : Rectangle {
+                                    width: Theme.control-xs; height: Theme.control-xs;
+                                    TouchArea { clicked => { root.command("remove-from-queue:" + t.path); } }
+                                    Text {
+                                        text: root.model.remove-label;
+                                        color: Theme.text-tertiary;
+                                        font-size: Theme.font-size-sm;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%; height: 100%;
                                     }
                                 }
                             }
