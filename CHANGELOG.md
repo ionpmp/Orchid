@@ -412,7 +412,9 @@ release yet.
   covers upload only for changed rows (`d40a4cc6`); unchanged System and
   Processes rows are no longer rewritten each sample (`478f1f4d`); the image
   viewer's animation frame strip is no longer remounted on every pan, zoom
-  or GIF frame (`68550dd7`).
+  or GIF frame (`68550dd7`); audio and video player libraries and queues
+  (`8142edc3`) and the Processes Services, Startup and Users tabs
+  (`0c3bd7d9`) build only the rows on screen.
 - Workspace crates: `rawler` 0.8, `rfd` 0.17, `libloading` 0.9,
   `zstd` 0.14, plus a semver-compatible `Cargo.lock` refresh.
   Pin `keepass` to 0.13.22 (0.13.25's `aes 0.9` conflicts
@@ -736,6 +738,9 @@ release yet.
 - File manager now reflects pausing a transfer, the transfer queue length,
   selected-size totals, scrolled viewport windows and branch view right
   away instead of waiting for an unrelated change (`4ead829e`).
+- Audio and video player queues: jumping to the current track no longer
+  slides the list down behind a blank gap, and drag-reordering a scrolled
+  queue drops the track where the pointer is (`8142edc3`).
 - Image viewer no longer hitches when the widget is dragged or the photo is
   panned: live geometry is applied through AppState overlay properties
   instead of `set_row_data` on the fat `WidgetFrameModel` (which remounted
