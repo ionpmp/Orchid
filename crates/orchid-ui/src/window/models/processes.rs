@@ -10,7 +10,7 @@ use crate::slint_generated::{
     UserRowEntry,
 };
 
-fn sync_rows<T: Clone + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
+fn sync_rows<T: Clone + PartialEq + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
     let Some(v) = model.as_any().downcast_ref::<VecModel<T>>() else {
         return;
     };
@@ -19,6 +19,9 @@ fn sync_rows<T: Clone + 'static>(model: &ModelRc<T>, new_rows: Vec<T>) {
     }
     for (i, row) in new_rows.into_iter().enumerate() {
         if i < v.row_count() {
+            if v.row_data(i).as_ref() == Some(&row) {
+                continue;
+            }
             v.set_row_data(i, row);
         } else {
             v.push(row);

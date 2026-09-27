@@ -112,6 +112,15 @@ fn sync_system_indicators(
                 continue;
             };
             sync_f32_segments(&old.segments, segment_values(&new_row.segments));
+            if old.label == new_row.label
+                && old.value_text == new_row.value_text
+                && old.percent == new_row.percent
+                && old.icon == new_row.icon
+                && old.status == new_row.status
+                && old.status_hint == new_row.status_hint
+            {
+                continue;
+            }
             old.label = new_row.label;
             old.value_text = new_row.value_text;
             old.percent = new_row.percent;
