@@ -43,18 +43,37 @@ use crate::window::models::{
 
 use super::{sync_vec_model, MainWindowController};
 
+thread_local! {
+    /// Last row index seen per instance. Only a hint: every hit is re-checked.
+    static FRAME_ROW_HINT: std::cell::RefCell<std::collections::HashMap<Uuid, usize>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
 /// Locate a frame row by instance id without heap-allocating the UUID string.
 ///
-/// Slint's `row_data` still clones the matched row; this only removes the
-/// per-call `id.to_string()` allocation that every patch path was paying.
+/// `row_data` clones the whole (very wide) `WidgetFrameModel`, so a linear scan
+/// pays one fat clone per row visited. The per-instance index hint makes the
+/// common case a single clone; the scan remains as a fallback.
 fn find_frame_row(v: &VecModel<WidgetFrameModel>, id: Uuid) -> Option<(usize, WidgetFrameModel)> {
     let mut buf = [0u8; uuid::fmt::Hyphenated::LENGTH];
     let needle = id.as_hyphenated().encode_lower(&mut buf);
+    let hint = FRAME_ROW_HINT.with(|h| h.borrow().get(&id).copied());
+    if let Some(r) = hint {
+        if let Some(row) = v.row_data(r) {
+            if row.instance_id.as_str() == &*needle {
+                return Some((r, row));
+            }
+        }
+    }
     for r in 0..v.row_count() {
+        if Some(r) == hint {
+            continue;
+        }
         let Some(row) = v.row_data(r) else {
             continue;
         };
         if row.instance_id.as_str() == &*needle {
+            FRAME_ROW_HINT.with(|h| h.borrow_mut().insert(id, r));
             return Some((r, row));
         }
     }
@@ -1843,6 +1862,7 @@ impl MainWindowController {
         sync_vec_model(&self.workspace_workspaces, wlist);
         sync_vec_model(&self.workspace_widgets, frames);
         sync_vec_model(&self.workspace_floating_widgets, floating_frames);
+        FRAME_ROW_HINT.with(|h| h.borrow_mut().clear());
         sync_vec_model(
             &self.workspace_window_taskbar,
             self.build_window_taskbar_items(&all_instances),
