@@ -27,6 +27,9 @@ struct RgbaCacheKey {
 
 struct RgbaImageCacheEntry {
     image: Image,
+    /// Pins the source allocation so its address cannot be reused while the
+    /// entry exists; a dead source means the entry can never hit again.
+    source: std::sync::Weak<Vec<u8>>,
 }
 
 thread_local! {
@@ -81,6 +84,9 @@ fn slint_image_from_rgba(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image 
 
     RGBA_IMAGE_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
+        // Video frames insert a fresh buffer every tick; drop entries whose
+        // source is gone instead of keeping up to CAP stale full-size copies.
+        cache.retain(|_, e| e.source.strong_count() > 0);
         if cache.len() >= RGBA_IMAGE_CACHE_CAP {
             if let Some(old) = cache.keys().next().copied() {
                 cache.remove(&old);
@@ -90,6 +96,7 @@ fn slint_image_from_rgba(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image 
             key,
             RgbaImageCacheEntry {
                 image: image.clone(),
+                source: Arc::downgrade(rgba),
             },
         );
     });

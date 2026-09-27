@@ -475,8 +475,12 @@ pub(crate) fn build_audio_player_model(
     )
 }
 
+/// Source pixels, width, height, uploaded image.
+type CoverCacheEntry = (std::sync::Weak<Vec<u8>>, u32, u32, Image);
+
 thread_local! {
-    static COVER_CACHE: RefCell<Option<(usize, u32, u32, Image)>> = const { RefCell::new(None) };
+    /// The `Weak` pins the source allocation so a new cover cannot reuse its address.
+    static COVER_CACHE: RefCell<Option<CoverCacheEntry>> = const { RefCell::new(None) };
 }
 
 fn slint_cover(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
@@ -491,10 +495,10 @@ fn slint_cover(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
         COVER_CACHE.with(|c| *c.borrow_mut() = None);
         return Image::default();
     }
-    let ptr = rgba.as_ptr() as usize;
     if let Some(img) = COVER_CACHE.with(|c| {
-        c.borrow().as_ref().and_then(|(p, w, h, img)| {
-            (*p == ptr && *w == width && *h == height).then(|| img.clone())
+        c.borrow().as_ref().and_then(|(src, w, h, img)| {
+            (std::ptr::eq(src.as_ptr(), Arc::as_ptr(rgba)) && *w == width && *h == height)
+                .then(|| img.clone())
         })
     }) {
         return img;
@@ -502,7 +506,8 @@ fn slint_cover(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
     let buf =
         SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(rgba.as_ref(), width, height);
     let img = Image::from_rgba8(buf);
-    COVER_CACHE.with(|c| *c.borrow_mut() = Some((ptr, width, height, img.clone())));
+    COVER_CACHE
+        .with(|c| *c.borrow_mut() = Some((Arc::downgrade(rgba), width, height, img.clone())));
     img
 }
 

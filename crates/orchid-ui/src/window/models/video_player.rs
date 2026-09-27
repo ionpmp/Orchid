@@ -1,7 +1,7 @@
 //! Slint model for the local video library player.
 
 use std::cell::RefCell;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use orchid_i18n::{FluentArgs, LocaleManager};
 use orchid_widgets::VideoPlayerPayload;
@@ -13,10 +13,14 @@ use crate::slint_generated::{
     VideoPlayerGroupItem, VideoPlayerItem, VideoPlayerModel, VideoPlayerRootItem,
 };
 
+/// Source pixels, width, height, uploaded image.
+type FrameCacheEntry = (Weak<Vec<u8>>, u32, u32, Image);
+
 thread_local! {
     /// Reuse the last uploaded frame when the payload still points at the
-    /// same `Arc` (progress ticks and workspace rebuilds).
-    static FRAME_CACHE: RefCell<Option<(usize, u32, u32, Image)>> = const { RefCell::new(None) };
+    /// same `Arc` (progress ticks and workspace rebuilds). The `Weak` pins the
+    /// allocation so a later frame cannot land on the same address.
+    static FRAME_CACHE: RefCell<Option<FrameCacheEntry>> = const { RefCell::new(None) };
 }
 
 fn slint_image_from_rgba(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image {
@@ -31,10 +35,10 @@ fn slint_image_from_rgba(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image 
         FRAME_CACHE.with(|c| *c.borrow_mut() = None);
         return Image::default();
     }
-    let ptr = Arc::as_ptr(rgba) as *const u8 as usize;
     if let Some(img) = FRAME_CACHE.with(|c| {
-        c.borrow().as_ref().and_then(|(p, w, h, img)| {
-            (*p == ptr && *w == width && *h == height).then(|| img.clone())
+        c.borrow().as_ref().and_then(|(src, w, h, img)| {
+            (std::ptr::eq(src.as_ptr(), Arc::as_ptr(rgba)) && *w == width && *h == height)
+                .then(|| img.clone())
         })
     }) {
         return img;
@@ -42,7 +46,8 @@ fn slint_image_from_rgba(rgba: &Arc<Vec<u8>>, width: u32, height: u32) -> Image 
     let mut buf = SharedPixelBuffer::<Rgba8Pixel>::new(width, height);
     buf.make_mut_bytes()[..expected].copy_from_slice(&rgba[..expected]);
     let img = Image::from_rgba8(buf);
-    FRAME_CACHE.with(|c| *c.borrow_mut() = Some((ptr, width, height, img.clone())));
+    FRAME_CACHE
+        .with(|c| *c.borrow_mut() = Some((Arc::downgrade(rgba), width, height, img.clone())));
     img
 }
 
