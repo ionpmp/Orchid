@@ -410,7 +410,9 @@ release yet.
   cheaper glyph blits (`f158f99f`); frame patches find their row via an index
   hint instead of cloning every wide frame row (`c8c554b1`); audio track
   covers upload only for changed rows (`d40a4cc6`); unchanged System and
-  Processes rows are no longer rewritten each sample (`478f1f4d`).
+  Processes rows are no longer rewritten each sample (`478f1f4d`); the image
+  viewer's animation frame strip is no longer remounted on every pan, zoom
+  or GIF frame (`68550dd7`).
 - Workspace crates: `rawler` 0.8, `rfd` 0.17, `libloading` 0.9,
   `zstd` 0.14, plus a semver-compatible `Cargo.lock` refresh.
   Pin `keepass` to 0.13.22 (0.13.25's `aes 0.9` conflicts
@@ -731,6 +733,9 @@ release yet.
 - Playing video no longer fills the viewer image cache with up to 96 stale
   full-size frames (evicting photos and PDF pages); image caches pin their
   source buffer so a reused address cannot show an old frame (`bc83d29f`).
+- File manager now reflects pausing a transfer, the transfer queue length,
+  selected-size totals, scrolled viewport windows and branch view right
+  away instead of waiting for an unrelated change (`4ead829e`).
 - Image viewer no longer hitches when the widget is dragged or the photo is
   panned: live geometry is applied through AppState overlay properties
   instead of `set_row_data` on the fat `WidgetFrameModel` (which remounted
