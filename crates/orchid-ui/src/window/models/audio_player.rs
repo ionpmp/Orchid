@@ -544,33 +544,30 @@ pub(crate) fn patch_audio_player_model(
         &model.tracks,
         p.tracks
             .iter()
-            .map(|t| {
-                let cover = if t.has_cover
-                    && t.cover_width > 0
-                    && t.cover_height > 0
-                    && !t.cover_rgba.is_empty()
-                {
-                    let buf = SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
-                        t.cover_rgba.as_ref(),
-                        t.cover_width,
-                        t.cover_height,
-                    );
-                    Image::from_rgba8(buf)
-                } else {
-                    Image::default()
-                };
-                AudioPlayerTrackItem {
-                    path: t.path.clone().into(),
-                    title: t.title.clone().into(),
-                    subtitle: t.subtitle.clone().into(),
-                    duration_label: t.duration_label.clone().into(),
-                    is_current: t.is_current,
-                    is_favorite: t.is_favorite,
-                    has_cover: t.has_cover,
-                    cover,
-                }
+            .map(|t| AudioPlayerTrackItem {
+                path: t.path.clone().into(),
+                title: t.title.clone().into(),
+                subtitle: t.subtitle.clone().into(),
+                duration_label: t.duration_label.clone().into(),
+                is_current: t.is_current,
+                is_favorite: t.is_favorite,
+                has_cover: t.has_cover,
+                cover: Image::default(),
             })
             .collect(),
+        |i| {
+            let t = &p.tracks[i];
+            if t.has_cover && t.cover_width > 0 && t.cover_height > 0 && !t.cover_rgba.is_empty() {
+                let buf = SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+                    t.cover_rgba.as_ref(),
+                    t.cover_width,
+                    t.cover_height,
+                );
+                Image::from_rgba8(buf)
+            } else {
+                Image::default()
+            }
+        },
     );
     sync_eq_rows(
         &model.playlists,
@@ -653,7 +650,13 @@ pub(crate) fn patch_audio_player_model(
     model.is_current_favorite = p.is_current_favorite;
 }
 
-fn sync_audio_tracks(model: &ModelRc<AudioPlayerTrackItem>, rows: Vec<AudioPlayerTrackItem>) {
+/// `cover(i)` uploads the cover for row `i`; it only runs for rows that are
+/// actually written, so unchanged rows skip the RGBA copy.
+fn sync_audio_tracks(
+    model: &ModelRc<AudioPlayerTrackItem>,
+    rows: Vec<AudioPlayerTrackItem>,
+    cover: impl Fn(usize) -> Image,
+) {
     let Some(v) = model
         .as_any()
         .downcast_ref::<VecModel<AudioPlayerTrackItem>>()
@@ -663,22 +666,26 @@ fn sync_audio_tracks(model: &ModelRc<AudioPlayerTrackItem>, rows: Vec<AudioPlaye
     while v.row_count() > rows.len() {
         v.remove(v.row_count() - 1);
     }
-    for (i, row) in rows.into_iter().enumerate() {
+    for (i, mut row) in rows.into_iter().enumerate() {
         if i < v.row_count() {
             if let Some(old) = v.row_data(i) {
-                if old.path == row.path
+                let same_track = old.path == row.path && old.has_cover == row.has_cover;
+                if same_track
                     && old.title == row.title
                     && old.subtitle == row.subtitle
                     && old.duration_label == row.duration_label
                     && old.is_current == row.is_current
                     && old.is_favorite == row.is_favorite
-                    && old.has_cover == row.has_cover
                 {
                     continue;
                 }
+                row.cover = if same_track { old.cover } else { cover(i) };
+            } else {
+                row.cover = cover(i);
             }
             v.set_row_data(i, row);
         } else {
+            row.cover = cover(i);
             v.push(row);
         }
     }
