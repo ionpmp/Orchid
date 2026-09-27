@@ -1236,7 +1236,11 @@ fn patch_image_snapshot(
     let map_pins = model.map_pins.clone();
     let cal_days = model.cal_days.clone();
     let recent = model.recent_paths.clone();
+    let anim_thumbs = model.anim_thumbs.clone();
     *model = build_image_snapshot(s, locale);
+    let fresh_anim_thumbs: Vec<ViewerImageThumb> = model.anim_thumbs.iter().collect();
+    model.anim_thumbs = anim_thumbs;
+    sync_model_rows(&model.anim_thumbs, fresh_anim_thumbs, |a, b| a == b);
     model.thumbs = thumbs;
     model.timeline = timeline;
     model.map_pins = map_pins;
