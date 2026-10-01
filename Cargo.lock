@@ -6734,6 +6734,7 @@ dependencies = [
  "dashmap",
  "encoding_rs",
  "futures",
+ "id3",
  "memmap2",
  "orchid-core",
  "orchid-crypto",
