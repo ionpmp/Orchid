@@ -19,6 +19,7 @@ pub mod fb2;
 pub mod feed;
 pub mod gettext;
 pub mod gomod;
+pub mod gosum;
 pub mod html;
 pub mod ical;
 pub mod info;
@@ -271,6 +272,11 @@ impl Extractor {
         if gomod::is_gomod_name(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(gomod::gomod_text(&text::decode_best_effort(&raw))));
+        }
+        // `go.sum` is plain text, which would index checksum lines.
+        if gosum::is_gosum_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(gosum::gosum_text(&text::decode_best_effort(&raw))));
         }
         // `Cargo.lock` is plain text, which would index checksums.
         if cargo::is_cargo_lock_name(name) {
