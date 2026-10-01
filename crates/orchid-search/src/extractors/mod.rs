@@ -12,6 +12,7 @@ pub mod epub_odf;
 pub mod fb2;
 pub mod html;
 pub mod ical;
+pub mod notebook;
 pub mod ooxml;
 pub mod opml;
 pub mod orchid;
@@ -65,6 +66,7 @@ impl Extractor {
                 Arc::new(bib::BibExtractor),
                 Arc::new(bib::RisExtractor),
                 Arc::new(opml::OpmlExtractor),
+                Arc::new(notebook::NotebookExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

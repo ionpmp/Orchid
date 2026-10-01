@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Jupyter notebooks (`.ipynb`): markdown and
+  code cell sources. Cell outputs and embedded images are skipped.
 - Full-text search indexes OPML (`.opml`) outline titles and feed URLs
   instead of the raw XML.
 - Full-text search indexes BibTeX (`.bib`) and RIS (`.ris`) titles,
