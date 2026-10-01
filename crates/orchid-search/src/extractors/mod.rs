@@ -33,6 +33,7 @@ pub mod mo;
 pub mod msbuild;
 pub mod nfo;
 pub mod notebook;
+pub mod nugetlock;
 pub mod nuspec;
 pub mod ooxml;
 pub mod opml;
@@ -283,6 +284,13 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `packages.lock.json` is plain JSON, which would index content hashes.
+        if nugetlock::is_nuget_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(nugetlock::nuget_lock_text(&text::decode_best_effort(
+                &raw,
+            ))));
         }
         // `uv.lock` is plain text, which would index package hashes.
         if uv::is_uv_lock_name(name) {
