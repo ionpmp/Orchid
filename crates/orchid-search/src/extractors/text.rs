@@ -29,10 +29,11 @@ impl ContentExtractor for TextExtractor {
         // Subtitles are timed text. Leave them for [`super::subtitle`].
         // `.nfo` is either Kodi XML or a scene note. Leave it for [`super::nfo`].
         // `.svg` labels are extracted separately. Leave them for [`super::svg`].
+        // `.reg` string values are extracted separately. Leave them for [`super::reg`].
         if extension.is_some_and(|ext| {
             matches!(
                 ext.to_ascii_lowercase().as_str(),
-                "srt" | "vtt" | "ass" | "ssa" | "lrc" | "nfo" | "svg"
+                "srt" | "vtt" | "ass" | "ssa" | "lrc" | "nfo" | "svg" | "reg"
             )
         }) {
             return false;

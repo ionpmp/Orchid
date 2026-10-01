@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes registry exports (`.reg`): key paths and
+  string values, including UTF-16 files. `dword` and `hex` values are
+  not indexed.
 - Full-text search indexes visible SVG (`.svg`) labels. Scripts, styles,
   and metadata are not indexed.
 - Full-text search indexes media notes (`.nfo`). Kodi XML contributes

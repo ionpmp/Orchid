@@ -55,6 +55,8 @@ Kodi XML. Poster URLs and stream details are skipped. A plain-text
 scene note is indexed as text.
 SVG drawings (`.svg`) contribute visible labels. Scripts, styles, and
 metadata are skipped.
+Registry exports (`.reg`) contribute key paths and string values,
+including UTF-16 files. `dword` and `hex` values are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
