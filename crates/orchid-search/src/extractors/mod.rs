@@ -19,6 +19,7 @@ pub mod ooxml;
 pub mod opml;
 pub mod orchid;
 pub mod pdf;
+pub mod playlist;
 pub mod rtf;
 pub mod text;
 
@@ -71,6 +72,7 @@ impl Extractor {
                 Arc::new(feed::FeedExtractor),
                 Arc::new(notebook::NotebookExtractor),
                 Arc::new(mbox::MboxExtractor),
+                Arc::new(playlist::PlaylistExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

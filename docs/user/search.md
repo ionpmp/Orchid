@@ -38,6 +38,8 @@ Jupyter notebooks (`.ipynb`) contribute markdown and code cells, not outputs.
 Unix mailboxes (`.mbox`) are split into messages and indexed like `.eml`.
 RSS and Atom feeds (`.rss`, `.atom`, and `.xml` that opens as a feed)
 contribute titles, authors, links, and article text. Markup is skipped.
+Playlists (`.m3u`, `.m3u8`, `.pls`) contribute track titles and paths.
+Durations and stream directives are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes playlists (`.m3u`, `.m3u8`, `.pls`): track
+  titles and file or stream paths. Durations and playlist directives
+  are not indexed.
 - Full-text search indexes RSS and Atom feeds (`.rss`, `.atom`, and
   `.xml` files that open as a feed). Titles, authors, links, and article
   text are kept; markup, scripts, and dates are not.
