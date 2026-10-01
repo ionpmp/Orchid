@@ -6729,6 +6729,7 @@ name = "orchid-search"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.23.1",
  "chardetng",
  "chrono",
  "dashmap",

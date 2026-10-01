@@ -26,7 +26,9 @@ indexes DOCX, XLSX / XLSM cell text, PPTX / PPTM / PPSX slide and
 notes text, EPUB chapters, OpenDocument `.odt` / `.ods` / `.odp`,
 RTF, visible HTML text (scripts and styles are skipped), audio
 tags (ID3 and Vorbis comments: title, artist, album, lyrics), and
-FictionBook (`.fb2` and `.fb2.zip`, including Windows-1251)).
+FictionBook (`.fb2` and `.fb2.zip`, including Windows-1251), and email
+(`.eml`: subject, from, to, and text or HTML bodies; attachments are
+skipped)).
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

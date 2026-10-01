@@ -6,6 +6,7 @@
 
 pub mod audio;
 pub mod docx;
+pub mod eml;
 pub mod epub_odf;
 pub mod fb2;
 pub mod html;
@@ -110,6 +111,13 @@ impl Extractor {
     #[must_use]
     pub fn with_audio(self) -> Self {
         self.with(Arc::new(audio::AudioTagExtractor))
+    }
+
+    /// Enable `.eml` extraction ahead of the plain-text fallback.
+    #[must_use]
+    pub fn with_eml(mut self) -> Self {
+        self.extractors.insert(0, Arc::new(eml::EmlExtractor));
+        self
     }
 
     /// Enable FictionBook extraction ahead of the plain-text XML fallback.

@@ -489,6 +489,7 @@ impl OrchidApp {
                 .with_rtf()
                 .with_audio()
                 .with_fb2()
+                .with_eml()
                 .with_html();
         }
         let index_extractor = Arc::new(index_extractor);

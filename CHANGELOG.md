@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `.eml` messages: subject, from, to, and
+  text or HTML bodies. Quoted-printable, base64, and encoded-words are
+  decoded; attachments are skipped.
 - Full-text search indexes FictionBook (`.fb2` and `.fb2.zip`): title,
   authors, annotation, and body text. Embedded cover images are skipped,
   and `windows-1251` books are decoded from the XML declaration.
