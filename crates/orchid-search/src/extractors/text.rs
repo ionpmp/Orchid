@@ -37,6 +37,7 @@ impl ContentExtractor for TextExtractor {
         // Interface files are extracted separately. Leave them for [`super::ui`].
         // XAML labels are extracted separately. Leave them for [`super::xaml`].
         // Storyboards are extracted separately. Leave them for [`super::storyboard`].
+        // Perl POD is extracted separately. Leave it for [`super::pod`].
         // Manual pages are extracted separately. Leave them for [`super::man`].
         if extension.is_some_and(super::man::is_man_ext) {
             return false;
@@ -66,6 +67,7 @@ impl ContentExtractor for TextExtractor {
                     | "xaml"
                     | "storyboard"
                     | "xib"
+                    | "pod"
             )
         }) {
             return false;

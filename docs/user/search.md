@@ -82,6 +82,8 @@ and body text. Comments and `.ig` blocks are skipped.
 iOS storyboards and XIB files (`.storyboard`, `.xib`) contribute titles,
 label text, placeholders, and user labels. Class names and object ids
 are skipped.
+Perl POD (`.pod`) contributes headings, items, and paragraphs. Code
+after `=cut` and `=begin comment` blocks are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

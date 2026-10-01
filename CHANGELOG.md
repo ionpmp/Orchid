@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Perl POD (`.pod`): headings, items, and
+  paragraphs. Code after `=cut` and `=begin comment` blocks are not
+  indexed.
 - Full-text search indexes SAMI (`.smi`) and TTML (`.ttml`, `.dfxp`)
   cues. Style blocks and timestamps are not indexed.
 - Full-text search indexes iOS storyboards and XIB files

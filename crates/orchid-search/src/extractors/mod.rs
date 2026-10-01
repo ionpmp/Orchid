@@ -26,6 +26,7 @@ pub mod opml;
 pub mod orchid;
 pub mod pdf;
 pub mod playlist;
+pub mod pod;
 pub mod properties;
 pub mod qt;
 pub mod rc;
@@ -108,6 +109,7 @@ impl Extractor {
                 Arc::new(xaml::XamlExtractor),
                 Arc::new(man::ManExtractor),
                 Arc::new(storyboard::StoryboardExtractor),
+                Arc::new(pod::PodExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }
