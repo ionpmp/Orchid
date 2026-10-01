@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Qt Designer and GTK Glade files (`.ui`):
+  window titles, labels, and tooltips. Geometry and object ids are not
+  indexed.
 - Full-text search indexes Windows resource scripts (`.rc`): quoted
   strings from string tables, dialogs, and menus. Comments and
   `#include` lines are not indexed.

@@ -72,6 +72,8 @@ Android resource XML (`<resources>` with `<string>`, `<plurals>`, or
 Windows resource scripts (`.rc`) contribute quoted UI strings from
 string tables, dialogs, and menus. Comments and `#include` lines are
 skipped.
+Qt Designer and GTK Glade files (`.ui`) contribute window titles, labels,
+and tooltips. Geometry and object ids are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

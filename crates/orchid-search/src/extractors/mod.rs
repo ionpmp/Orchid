@@ -36,6 +36,7 @@ pub mod strings;
 pub mod subtitle;
 pub mod svg;
 pub mod text;
+pub mod ui;
 
 use std::sync::Arc;
 
@@ -100,6 +101,7 @@ impl Extractor {
                 Arc::new(strings::StringsExtractor),
                 Arc::new(qt::QtExtractor),
                 Arc::new(rc::RcExtractor),
+                Arc::new(ui::UiExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

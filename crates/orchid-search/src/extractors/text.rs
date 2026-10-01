@@ -34,6 +34,7 @@ impl ContentExtractor for TextExtractor {
         // `.resx` and XLIFF strings are extracted separately. Leave them for [`super::resources`].
         // Apple string tables are extracted separately. Leave them for [`super::strings`].
         // Windows resource scripts are extracted separately. Leave them for [`super::rc`].
+        // Interface files are extracted separately. Leave them for [`super::ui`].
         if extension.is_some_and(|ext| {
             matches!(
                 ext.to_ascii_lowercase().as_str(),
@@ -52,6 +53,7 @@ impl ContentExtractor for TextExtractor {
                     | "strings"
                     | "stringsdict"
                     | "rc"
+                    | "ui"
             )
         }) {
             return false;
