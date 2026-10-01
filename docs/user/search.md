@@ -171,6 +171,8 @@ commits are skipped.
 are skipped.
 `Chart.lock` contributes dependency names and repositories. Versions and
 the digest are skipped.
+`MODULE.bazel.lock` contributes module and repository names. Integrity
+hashes are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:

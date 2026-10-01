@@ -6,6 +6,7 @@
 
 pub mod android;
 pub mod audio;
+pub mod bazel;
 pub mod bib;
 pub mod bun;
 pub mod cargo;
@@ -294,6 +295,13 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `MODULE.bazel.lock` is plain JSON, which would index integrity hashes.
+        if bazel::is_bazel_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(bazel::bazel_lock_text(&text::decode_best_effort(
+                &raw,
+            ))));
         }
         // `Chart.lock` is plain YAML, which would index the digest.
         if chart::is_chart_lock_name(name) {

@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `MODULE.bazel.lock`: module and repository
+  names. Integrity hashes are not indexed.
 - Full-text search indexes `Chart.lock`: dependency names and
   repositories. Versions and the digest are not indexed.
 - Full-text search indexes `.terraform.lock.hcl`: provider addresses.
