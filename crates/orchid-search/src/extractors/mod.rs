@@ -17,6 +17,7 @@ pub mod gettext;
 pub mod html;
 pub mod ical;
 pub mod latex;
+pub mod man;
 pub mod mbox;
 pub mod nfo;
 pub mod notebook;
@@ -104,6 +105,7 @@ impl Extractor {
                 Arc::new(rc::RcExtractor),
                 Arc::new(ui::UiExtractor),
                 Arc::new(xaml::XamlExtractor),
+                Arc::new(man::ManExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

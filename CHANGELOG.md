@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes manual pages (`.1`, `.3pm`, `.man`, and
+  similar): section titles and body text. Comments and `.ig` blocks are
+  not indexed.
 - Full-text search indexes XAML (`.xaml`) titles, text, content, and
   headers. Element names and `x:Name` ids are not indexed.
 - Full-text search indexes Qt Designer and GTK Glade files (`.ui`):

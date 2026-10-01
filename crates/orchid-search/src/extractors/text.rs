@@ -36,6 +36,10 @@ impl ContentExtractor for TextExtractor {
         // Windows resource scripts are extracted separately. Leave them for [`super::rc`].
         // Interface files are extracted separately. Leave them for [`super::ui`].
         // XAML labels are extracted separately. Leave them for [`super::xaml`].
+        // Manual pages are extracted separately. Leave them for [`super::man`].
+        if extension.is_some_and(super::man::is_man_ext) {
+            return false;
+        }
         if extension.is_some_and(|ext| {
             matches!(
                 ext.to_ascii_lowercase().as_str(),
