@@ -60,6 +60,7 @@ pub mod qt;
 pub mod rc;
 pub mod rdoc;
 pub mod reg;
+pub mod resolved;
 pub mod resources;
 pub mod rtf;
 pub mod shortcut;
@@ -290,6 +291,13 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `Package.resolved` is plain JSON, which would index revisions.
+        if resolved::is_resolved_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(resolved::resolved_text(&text::decode_best_effort(
+                &raw,
+            ))));
         }
         // `deno.lock` is plain JSON, which would index integrity hashes.
         if deno::is_deno_lock_name(name) {

@@ -163,6 +163,8 @@ values and revisions are skipped.
 skipped.
 `deno.lock` contributes package names and remote module URLs. Integrity
 hashes and revisions are skipped.
+`Package.resolved` contributes package identities and repository URLs.
+Revisions and versions are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:
