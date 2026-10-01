@@ -8,6 +8,7 @@ pub mod android;
 pub mod audio;
 pub mod bib;
 pub mod cargo;
+pub mod composer;
 pub mod cue;
 pub mod debian;
 pub mod diff;
@@ -269,6 +270,13 @@ impl Extractor {
         if pkg::is_pkg_name(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(pkg::pkg_text(&text::decode_best_effort(&raw))));
+        }
+        // `composer.lock` is plain JSON, which would index dist checksums.
+        if composer::is_composer_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(composer::composer_lock_text(
+                &text::decode_best_effort(&raw),
+            )));
         }
         // `yarn.lock` is plain text, which would index integrity hashes.
         if yarn::is_yarn_name(name) {

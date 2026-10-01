@@ -137,6 +137,8 @@ and dependency versions are skipped.
 hashes are skipped.
 `yarn.lock` contributes package names. Versions and integrity hashes are
 skipped.
+`composer.lock` contributes package names and descriptions. Versions and
+dist checksums are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:
