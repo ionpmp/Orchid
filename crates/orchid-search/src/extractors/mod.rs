@@ -10,6 +10,7 @@ pub mod bib;
 pub mod cue;
 pub mod debian;
 pub mod diff;
+pub mod docker;
 pub mod docx;
 pub mod eml;
 pub mod epub_odf;
@@ -144,6 +145,7 @@ impl Extractor {
                 Arc::new(sln::SlnExtractor),
                 Arc::new(slnx::SlnxExtractor),
                 Arc::new(plist::PlistExtractor),
+                Arc::new(docker::DockerExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }
@@ -252,6 +254,11 @@ impl Extractor {
             }
         }
         let extension = path.extension().map(|e| e.to_ascii_lowercase());
+        // `Dockerfile` has no extension, so `text/plain` would index `ENV` values.
+        if docker::needs_name_dispatch(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(docker::docker_text(&text::decode_best_effort(&raw))));
+        }
         // Feeds are often saved as `.xml`, which the plain-text extractor
         // would otherwise index as markup.
         if extension.as_deref() == Some("xml") {

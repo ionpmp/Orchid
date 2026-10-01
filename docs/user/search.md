@@ -126,6 +126,8 @@ references are skipped.
 Property lists (`.plist`) contribute display names, identifiers, and
 usage descriptions. Version and SDK values are skipped, and binary
 plists are ignored.
+Dockerfiles (`Dockerfile`, `.dockerfile`) contribute image names, labels,
+and copy paths. `ENV` and `ARG` values are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

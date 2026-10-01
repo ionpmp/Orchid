@@ -55,6 +55,7 @@ impl ContentExtractor for TextExtractor {
         // Visual Studio solutions are extracted separately. Leave them for [`super::sln`].
         // XML solutions are extracted separately. Leave them for [`super::slnx`].
         // Property lists are extracted separately. Leave them for [`super::plist`].
+        // Dockerfiles are extracted separately. Leave them for [`super::docker`].
         if extension.is_some_and(super::man::is_man_ext)
             || extension.is_some_and(super::info::is_info_ext)
             || extension.is_some_and(super::unit::is_unit_ext)
@@ -110,6 +111,8 @@ impl ContentExtractor for TextExtractor {
                     | "sln"
                     | "slnx"
                     | "plist"
+                    | "dockerfile"
+                    | "containerfile"
             )
         }) {
             return false;

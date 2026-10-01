@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Dockerfiles (`Dockerfile`, `.dockerfile`):
+  image names, labels, and copy paths. `ENV` and `ARG` values are not
+  indexed.
 - Full-text search indexes property lists (`.plist`): display names,
   identifiers, and usage descriptions. Version and SDK values are not
   indexed, and binary plists are ignored.
