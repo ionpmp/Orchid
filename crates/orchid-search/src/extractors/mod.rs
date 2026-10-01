@@ -33,6 +33,7 @@ pub mod ooxml;
 pub mod opml;
 pub mod orchid;
 pub mod pdf;
+pub mod pkg;
 pub mod playlist;
 pub mod plist;
 pub mod pod;
@@ -258,6 +259,11 @@ impl Extractor {
         if docker::needs_name_dispatch(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(docker::docker_text(&text::decode_best_effort(&raw))));
+        }
+        // `package.json` is plain JSON, which would index script commands.
+        if pkg::is_pkg_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(pkg::pkg_text(&text::decode_best_effort(&raw))));
         }
         // Feeds are often saved as `.xml`, which the plain-text extractor
         // would otherwise index as markup.

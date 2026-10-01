@@ -128,6 +128,8 @@ usage descriptions. Version and SDK values are skipped, and binary
 plists are ignored.
 Dockerfiles (`Dockerfile`, `.dockerfile`) contribute image names, labels,
 and copy paths. `ENV` and `ARG` values are skipped.
+`package.json` and `composer.json` contribute names, descriptions,
+keywords, and dependency names. Scripts and versions are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

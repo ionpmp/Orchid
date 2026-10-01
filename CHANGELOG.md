@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `package.json` and `composer.json`: names,
+  descriptions, keywords, and dependency names. Scripts and versions are
+  not indexed.
 - Full-text search indexes Dockerfiles (`Dockerfile`, `.dockerfile`):
   image names, labels, and copy paths. `ENV` and `ARG` values are not
   indexed.
