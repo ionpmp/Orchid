@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Gettext catalogs (`.po`, `.pot`): message
+  ids, translations, and translator comments. Source locations (`#:`)
+  and flags (`#,`) are not indexed.
 - Full-text search indexes CUE sheets (`.cue`): album and track titles,
   performers, songwriters, and file names. `INDEX` timestamps and `TRACK`
   headers are not indexed.

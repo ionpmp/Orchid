@@ -44,6 +44,8 @@ LaTeX sources (`.tex`, `.ltx`) contribute the document with comments
 removed. Escaped percent signs and verbatim blocks are kept.
 CUE sheets (`.cue`) contribute album and track titles, performers, and
 file names. Index timestamps are skipped.
+Gettext catalogs (`.po`, `.pot`) contribute message ids, translations,
+and translator comments. Source locations and flags are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

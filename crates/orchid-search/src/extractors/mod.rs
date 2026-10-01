@@ -12,6 +12,7 @@ pub mod eml;
 pub mod epub_odf;
 pub mod fb2;
 pub mod feed;
+pub mod gettext;
 pub mod html;
 pub mod ical;
 pub mod latex;
@@ -77,6 +78,7 @@ impl Extractor {
                 Arc::new(playlist::PlaylistExtractor),
                 Arc::new(latex::LatexExtractor),
                 Arc::new(cue::CueExtractor),
+                Arc::new(gettext::GettextExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }
