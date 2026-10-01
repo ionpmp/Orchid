@@ -42,8 +42,10 @@ impl ContentExtractor for TextExtractor {
         // Compiled gettext catalogs are extracted separately. Leave them for [`super::mo`].
         // Manual pages are extracted separately. Leave them for [`super::man`].
         // GNU Info is extracted separately. Leave it for [`super::info`].
+        // systemd units are extracted separately. Leave them for [`super::unit`].
         if extension.is_some_and(super::man::is_man_ext)
             || extension.is_some_and(super::info::is_info_ext)
+            || extension.is_some_and(super::unit::is_unit_ext)
         {
             return false;
         }

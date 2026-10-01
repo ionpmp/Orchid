@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes systemd units (`.service`, `.socket`, `.mount`,
+  and similar): descriptions, documentation, and start commands.
+  Environment variables and credentials are not indexed.
 - Full-text search indexes GNU Info manuals (`.info`, `.info-1`): node
   titles and body text. Tag tables are not indexed.
 - Full-text search indexes compiled gettext catalogs (`.mo`, `.gmo`):

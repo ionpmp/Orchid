@@ -43,6 +43,7 @@ pub mod svg;
 pub mod texinfo;
 pub mod text;
 pub mod ui;
+pub mod unit;
 pub mod xaml;
 
 use std::sync::Arc;
@@ -116,6 +117,7 @@ impl Extractor {
                 Arc::new(texinfo::TexinfoExtractor),
                 Arc::new(mo::MoExtractor),
                 Arc::new(info::InfoExtractor),
+                Arc::new(unit::UnitExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

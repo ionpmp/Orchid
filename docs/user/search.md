@@ -90,6 +90,9 @@ Compiled gettext catalogs (`.mo`, `.gmo`) contribute message ids and
 translations. The catalog header is skipped.
 GNU Info manuals (`.info`, `.info-1`) contribute node titles and body
 text. Tag tables are skipped.
+systemd units (`.service`, `.socket`, `.mount`, and similar) contribute
+descriptions, documentation, and start commands. Environment variables
+and credentials are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
