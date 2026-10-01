@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Visual Studio solutions (`.sln`): project
+  names, project paths, and solution items. GUIDs and configuration
+  tables are not indexed.
 - Full-text search indexes NuGet manifests (`.nuspec`): package ids,
   titles, descriptions, authors, and dependency ids. Versions, commits,
   and packed files are not indexed.
