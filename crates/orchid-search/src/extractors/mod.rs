@@ -7,6 +7,7 @@
 pub mod android;
 pub mod audio;
 pub mod bib;
+pub mod cargo;
 pub mod cue;
 pub mod debian;
 pub mod diff;
@@ -270,6 +271,13 @@ impl Extractor {
         if gomod::is_gomod_name(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(gomod::gomod_text(&text::decode_best_effort(&raw))));
+        }
+        // `Cargo.lock` is plain text, which would index checksums.
+        if cargo::is_cargo_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(cargo::cargo_lock_text(&text::decode_best_effort(
+                &raw,
+            ))));
         }
         // Feeds are often saved as `.xml`, which the plain-text extractor
         // would otherwise index as markup.

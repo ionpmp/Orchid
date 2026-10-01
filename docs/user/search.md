@@ -132,6 +132,8 @@ and copy paths. `ENV` and `ARG` values are skipped.
 keywords, and dependency names. Scripts and versions are skipped.
 `go.mod` contributes the module path and required module paths. Toolchain
 and dependency versions are skipped.
+`Cargo.lock` contributes package names. Versions, sources, and checksums
+are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `Cargo.lock`: package names. Versions,
+  sources, and checksums are not indexed.
 - Full-text search indexes `go.mod`: the module path and required
   module paths. Toolchain and dependency versions are not indexed.
 - Full-text search indexes `package.json` and `composer.json`: names,
