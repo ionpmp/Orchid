@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `mix.lock`: package names. Versions and
+  checksums are not indexed.
 - Full-text search indexes `pdm.lock`: package names and summaries.
   Versions and file hashes are not indexed.
 - Full-text search indexes `Podfile.lock`: pod names. Versions, commits,

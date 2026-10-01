@@ -29,6 +29,7 @@ pub mod latex;
 pub mod man;
 pub mod manifest;
 pub mod mbox;
+pub mod mix;
 pub mod mo;
 pub mod msbuild;
 pub mod nfo;
@@ -286,6 +287,11 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `mix.lock` is plain text, which would index checksums.
+        if mix::is_mix_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(mix::mix_lock_text(&text::decode_best_effort(&raw))));
         }
         // `pdm.lock` is plain text, which would index file hashes.
         if pdm::is_pdm_lock_name(name) {
