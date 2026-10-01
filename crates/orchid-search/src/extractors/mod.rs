@@ -10,6 +10,7 @@ pub mod eml;
 pub mod epub_odf;
 pub mod fb2;
 pub mod html;
+pub mod ical;
 pub mod ooxml;
 pub mod orchid;
 pub mod pdf;
@@ -54,7 +55,13 @@ impl Extractor {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            extractors: vec![Arc::new(text::TextExtractor)],
+            // Calendar and contacts sit ahead of plain text so `text/calendar`
+            // is not indexed as a raw blob (which would include PHOTO/ATTACH).
+            extractors: vec![
+                Arc::new(ical::IcsExtractor),
+                Arc::new(ical::VcfExtractor),
+                Arc::new(text::TextExtractor),
+            ],
         }
     }
 

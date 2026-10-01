@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes iCalendar (`.ics`) and vCard (`.vcf`) fields
+  (summary, location, name, email, notes). Folded lines are joined.
+  `PHOTO` and `ATTACH` values are not indexed.
 - Full-text search indexes source and subtitle files (Rust, Python,
   JavaScript, TypeScript, PowerShell, SQL, ASS/SSA, and similar) when
   `[search].extract-text` is enabled.

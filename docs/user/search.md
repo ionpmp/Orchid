@@ -30,7 +30,9 @@ FictionBook (`.fb2` and `.fb2.zip`, including Windows-1251), and email
 (`.eml`: subject, from, to, and text or HTML bodies; attachments are
 skipped)).
 `extract-text` also indexes source and subtitle files (`.rs`, `.py`, `.js`,
-`.ts`, `.ps1`, `.sql`, `.ass`, and similar).
+`.ts`, `.ps1`, `.sql`, `.ass`, and similar), plus calendar (`.ics`) and
+contact (`.vcf`) fields. Photo and attachment blobs in those files are
+skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
