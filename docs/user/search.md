@@ -116,6 +116,8 @@ authors, and dependency ids. Versions, commits, and packed files are
 skipped.
 Visual Studio solutions (`.sln`) contribute project names, project paths,
 and solution items. GUIDs and configuration tables are skipped.
+Maven POM files (`pom.xml`) contribute group ids, artifact ids, names,
+and descriptions. Versions and `properties` blocks are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

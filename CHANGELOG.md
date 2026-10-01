@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Maven POM files (`pom.xml`): group ids,
+  artifact ids, names, and descriptions. Versions and `properties`
+  blocks are not indexed.
 - Full-text search indexes Visual Studio solutions (`.sln`): project
   names, project paths, and solution items. GUIDs and configuration
   tables are not indexed.

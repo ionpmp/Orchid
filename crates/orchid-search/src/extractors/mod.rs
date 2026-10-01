@@ -33,6 +33,7 @@ pub mod orchid;
 pub mod pdf;
 pub mod playlist;
 pub mod pod;
+pub mod pom;
 pub mod properties;
 pub mod qt;
 pub mod rc;
@@ -256,6 +257,9 @@ impl Extractor {
             }
             if android::looks_like_android(&decoded) {
                 return Ok(Some(android::android_text(&decoded)));
+            }
+            if pom::looks_like_pom(&decoded) {
+                return Ok(Some(pom::pom_text(&decoded)));
             }
             return Ok(Some(decoded));
         }
