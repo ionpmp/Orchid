@@ -139,6 +139,8 @@ hashes are skipped.
 skipped.
 `composer.lock` contributes package names and descriptions. Versions and
 dist checksums are skipped.
+`pnpm-lock.yaml` contributes package names. Versions and integrity hashes
+are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:

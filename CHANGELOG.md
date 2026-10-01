@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `pnpm-lock.yaml`: package names. Versions
+  and integrity hashes are not indexed.
 - Full-text search indexes `composer.lock`: package names and
   descriptions. Versions and dist checksums are not indexed.
 - Full-text search indexes `yarn.lock`: package names. Versions and
