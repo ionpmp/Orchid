@@ -145,11 +145,13 @@ fn kind_from_mime(content_type: Option<&str>) -> Option<ViewerKind> {
 }
 
 fn kind_for_payload(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
-    // OOXML Office files are ZIP containers — check extension before archive magic
-    // so `.docx` does not open as a generic archive browser.
-    // TODO: sniff `[Content_Types].xml` inside the zip to distinguish xlsx/pptx.
-    if is_docx_path(path) && looks_like_zip(sample) {
-        return Some(ViewerKind::Document);
+    // OOXML packages are ZIP containers. Prefer `[Content_Types].xml` when the
+    // head sample includes that local entry; fall back to the extension so
+    // `.docx` still opens in the document editor when sniffing is inconclusive.
+    if looks_like_zip(sample) {
+        if let Some(kind) = kind_for_ooxml(path, sample) {
+            return Some(kind);
+        }
     }
     // PDF-based .ai and ZIP-based .cdr / .svgz must not steal the PDF / archive viewers.
     if is_vector_image_path(path) {
@@ -185,6 +187,8 @@ fn kind_from_extension(ext: &str) -> Option<ViewerKind> {
     match ext {
         "pdf" => Some(ViewerKind::Pdf),
         "docx" | "docm" => Some(ViewerKind::Document),
+        // No dedicated sheet/slide viewers yet — browse as archives.
+        "xlsx" | "xlsm" | "xlsb" | "pptx" | "pptm" | "ppsx" => Some(ViewerKind::Archive),
         "orchid" => Some(ViewerKind::Document),
         "zip" | "7z" | "tar" | "tgz" | "gz" | "xz" | "txz" => Some(ViewerKind::Archive),
         other if crate::html::is_html_file_extension(other) => Some(ViewerKind::Html),
@@ -192,6 +196,25 @@ fn kind_from_extension(ext: &str) -> Option<ViewerKind> {
         other if crate::image::loader::is_image_file_extension(other) => Some(ViewerKind::Image),
         other if crate::image::vector::is_vector_extension(other) => Some(ViewerKind::Image),
         _ => Some(ViewerKind::Text),
+    }
+}
+
+/// Map an OOXML ZIP (by Content_Types sniff and/or Office extension) to a viewer.
+fn kind_for_ooxml(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind> {
+    use crate::ooxml_sniff::{sniff_ooxml_family, OoxmlFamily};
+
+    match sniff_ooxml_family(sample) {
+        Some(OoxmlFamily::Word) => Some(ViewerKind::Document),
+        Some(OoxmlFamily::Excel | OoxmlFamily::PowerPoint) => Some(ViewerKind::Archive),
+        None => {
+            if is_docx_path(path) {
+                Some(ViewerKind::Document)
+            } else if is_sheet_or_slide_path(path) {
+                Some(ViewerKind::Archive)
+            } else {
+                None
+            }
+        }
     }
 }
 
@@ -319,6 +342,13 @@ fn is_docx_path(path: &orchid_fs::FsPath) -> bool {
     matches!(extension_of(path).as_deref(), Some("docx") | Some("docm"))
 }
 
+fn is_sheet_or_slide_path(path: &orchid_fs::FsPath) -> bool {
+    matches!(
+        extension_of(path).as_deref(),
+        Some("xlsx") | Some("xlsm") | Some("xlsb") | Some("pptx") | Some("pptm") | Some("ppsx")
+    )
+}
+
 fn is_vector_image_path(path: &orchid_fs::FsPath) -> bool {
     extension_of(path).is_some_and(|ext| crate::image::vector::is_vector_extension(&ext))
 }
@@ -403,6 +433,64 @@ mod tests {
     #[test]
     fn docx_extension_with_zip_magic_is_document_not_archive() {
         let kind = kind_for(&path("local:/a/b.docx"), b"PK\x03\x04rest").unwrap();
+        assert_eq!(kind, ViewerKind::Document);
+    }
+
+    #[test]
+    fn xlsx_extension_with_zip_magic_is_archive_not_document() {
+        let kind = kind_for(&path("local:/a/b.xlsx"), b"PK\x03\x04rest").unwrap();
+        assert_eq!(kind, ViewerKind::Archive);
+    }
+
+    #[test]
+    fn pptx_extension_fallback_is_archive() {
+        let kind = kind_for(&path("local:/a/b.pptx"), b"").unwrap();
+        assert_eq!(kind, ViewerKind::Archive);
+    }
+
+    #[test]
+    fn ooxml_content_types_override_misleading_extension() {
+        use std::io::{Cursor, Write};
+        use zip::write::SimpleFileOptions;
+        use zip::{CompressionMethod, ZipWriter};
+
+        let excel_types = r#"<?xml version="1.0"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+</Types>"#;
+        let mut cursor = Cursor::new(Vec::new());
+        {
+            let mut zip = ZipWriter::new(&mut cursor);
+            let opts =
+                SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+            zip.start_file("[Content_Types].xml", opts).unwrap();
+            zip.write_all(excel_types.as_bytes()).unwrap();
+            zip.start_file("xl/workbook.xml", opts).unwrap();
+            zip.write_all(b"<workbook/>").unwrap();
+            zip.finish().unwrap();
+        }
+        let bytes = cursor.into_inner();
+        // Misnamed as .docx — sniff must not open the sheet in the document editor.
+        let kind = kind_for(&path("local:/a/fake.docx"), &bytes).unwrap();
+        assert_eq!(kind, ViewerKind::Archive);
+
+        let word_types = r#"<?xml version="1.0"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>"#;
+        let mut cursor = Cursor::new(Vec::new());
+        {
+            let mut zip = ZipWriter::new(&mut cursor);
+            let opts =
+                SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+            zip.start_file("[Content_Types].xml", opts).unwrap();
+            zip.write_all(word_types.as_bytes()).unwrap();
+            zip.start_file("word/document.xml", opts).unwrap();
+            zip.write_all(b"<w:document/>").unwrap();
+            zip.finish().unwrap();
+        }
+        let bytes = cursor.into_inner();
+        let kind = kind_for(&path("local:/a/mystery.bin"), &bytes).unwrap();
         assert_eq!(kind, ViewerKind::Document);
     }
 

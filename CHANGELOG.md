@@ -727,6 +727,10 @@ release yet.
   `touch()` widgets that are already Active.
 
 ### Fixed
+
+- Viewer dispatch sniffs OOXML `[Content_Types].xml` in ZIP heads so Word
+  packages open in the document editor while Excel / PowerPoint open as
+  archives (including misnamed `.docx` sheets/slides).
 - Terminal no longer leaves stale rows on screen after a UI stall: the
   retained raster diffs each buffer against the cells it shows instead of
   trusting the emulator's per-snapshot dirty lines (`f158f99f`).

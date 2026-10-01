@@ -13,6 +13,7 @@ pub mod error;
 pub mod html;
 pub mod image;
 pub mod media;
+pub(crate) mod ooxml_sniff;
 pub mod pdf;
 pub mod snapshot;
 pub mod text;

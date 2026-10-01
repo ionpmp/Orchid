@@ -3,7 +3,10 @@
 Opening a file (F3 / double-click / drop) routes by magic bytes and
 extension. `.orchid` wraps unwrap Raw (except DOCX envelopes, which stay
 in the document editor). Chrome keeps the `.orchid` path; temps are deleted
-on close.
+on close. OOXML packages (ZIP) are classified via `[Content_Types].xml`
+when present in the file head: Word → document editor; Excel / PowerPoint →
+archive browser until dedicated viewers ship. Misnamed `.docx` sheets or
+slides follow the sniff, not the extension.
 
 Catalog **Document Editor** creates `Untitled.orchid` (linked when a
 `ChunkStore` is available). **Media Player** is a file picker → media Viewer.
