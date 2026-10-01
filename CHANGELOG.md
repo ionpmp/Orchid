@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes OPML (`.opml`) outline titles and feed URLs
+  instead of the raw XML.
 - Full-text search indexes BibTeX (`.bib`) and RIS (`.ris`) titles,
   authors, abstracts, and related fields. Citation keys and `@string`
   macros are not indexed.

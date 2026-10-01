@@ -33,7 +33,7 @@ skipped)).
 `.ts`, `.ps1`, `.sql`, `.ass`, and similar), plus calendar (`.ics`) and
 contact (`.vcf`) fields. Photo and attachment blobs in those files are
 skipped. Bibliography files (`.bib`, `.ris`) contribute titles, authors,
-and abstracts.
+and abstracts. OPML lists (`.opml`) contribute outline titles and feed URLs.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

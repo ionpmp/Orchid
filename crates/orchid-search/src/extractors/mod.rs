@@ -13,6 +13,7 @@ pub mod fb2;
 pub mod html;
 pub mod ical;
 pub mod ooxml;
+pub mod opml;
 pub mod orchid;
 pub mod pdf;
 pub mod rtf;
@@ -63,6 +64,7 @@ impl Extractor {
                 Arc::new(ical::VcfExtractor),
                 Arc::new(bib::BibExtractor),
                 Arc::new(bib::RisExtractor),
+                Arc::new(opml::OpmlExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }
