@@ -17,6 +17,7 @@ pub mod html;
 pub mod ical;
 pub mod latex;
 pub mod mbox;
+pub mod nfo;
 pub mod notebook;
 pub mod ooxml;
 pub mod opml;
@@ -83,6 +84,7 @@ impl Extractor {
                 Arc::new(gettext::GettextExtractor),
                 Arc::new(shortcut::ShortcutExtractor),
                 Arc::new(subtitle::SubtitleExtractor),
+                Arc::new(nfo::NfoExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

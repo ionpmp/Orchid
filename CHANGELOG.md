@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes media notes (`.nfo`). Kodi XML contributes
+  titles, plots, and names; poster URLs and stream details are skipped.
+  Plain-text scene notes are indexed as text.
 - Full-text search indexes subtitle cues (`.srt`, `.vtt`, `.ass`, `.ssa`,
   `.lrc`) without timestamps, cue numbers, or style overrides.
 - Full-text search indexes shortcuts (`.url`, `.desktop`, `.webloc`):
