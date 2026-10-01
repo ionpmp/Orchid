@@ -654,9 +654,11 @@ impl MainWindowController {
         let Some((r, mut row)) = find_frame_row(v, id) else {
             return false;
         };
-        // Nested viewer ModelRcs are Arc-shared with the live row, so
-        // patching them here is already visible without set_row_data.
+        // Lists notify through shared ModelRcs. Scalars (page, zoom, path)
+        // live on this cloned row and are invisible until it is written back.
+        let before = row.clone();
         patch_viewer_model(&mut row.viewer, vp, &self.locale);
+        let content_changed = row != before;
         self.sync_html_webview_document(id, &vp.snapshot);
 
         let mut need_frame = false;
@@ -688,6 +690,8 @@ impl MainWindowController {
             let (group_id, group_tabs) = self.build_group_tab_models(id);
             row.group_id = group_id;
             row.group_tabs = group_tabs;
+        }
+        if need_frame || content_changed {
             v.set_row_data(r, row);
         }
         true
@@ -713,7 +717,11 @@ impl MainWindowController {
         let Some((r, mut row)) = find_frame_row(v, id) else {
             return false;
         };
-        let mut content_changed = false;
+        // `row` is a clone. List models are shared, so in-place edits show up
+        // on their own. Scalars (display, body, tab, temperature, …) do not,
+        // unless this row is written back. ModelRc equality is pointer
+        // identity, so a list-only tick does not force that write.
+        let before = row.clone();
         let patched = match (type_id, &ws.payload) {
             (orchid_widgets::builtin::clock::TYPE_ID, WidgetPayload::Clock(p)) => {
                 patch_clock_model(&mut row.clock, p, &self.locale);
@@ -790,7 +798,7 @@ impl MainWindowController {
                 true
             }
             (orchid_widgets::builtin::jyotish::TYPE_ID, WidgetPayload::Jyotish(p)) => {
-                content_changed = patch_jyotish_model(&mut row.jyotish, p, &self.locale);
+                patch_jyotish_model(&mut row.jyotish, p, &self.locale);
                 true
             }
             (orchid_widgets::builtin::moon::TYPE_ID, WidgetPayload::Moon(p)) => {
@@ -814,12 +822,9 @@ impl MainWindowController {
         if !patched {
             return false;
         }
-        // Nested content ModelRcs are Arc-shared and notify on their own.
-        // Jyotish scalars (active tab, titles, scores) live on this row, so a
-        // content change must be written back or the view stays on the old tab
-        // until the next full frame rebuild. Group-tab models are rebuilt only
-        // for chrome changes, and kept by pointer so that write does not
-        // remount the tab strip.
+        let content_changed = row != before;
+        // Group-tab models are rebuilt only for chrome changes and kept by
+        // pointer, so a content write does not remount the tab strip.
         let mut need_frame = false;
         if let Some(b) = bounds {
             if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
