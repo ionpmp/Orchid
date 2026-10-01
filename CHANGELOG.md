@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes diffs (`.diff`, `.patch`): changed paths and
+  line text. Git blob hashes and binary patch bodies are not indexed.
 - Full-text search indexes MSBuild projects (`.csproj`, `.fsproj`,
   `.vbproj`, `.vcxproj`): assembly names, descriptions, SDK ids, and
   package or project references. Versions and source-file lists are not

@@ -50,6 +50,7 @@ impl ContentExtractor for TextExtractor {
         // Debian control files are extracted separately. Leave them for [`super::debian`].
         // RDoc is extracted separately. Leave it for [`super::rdoc`].
         // MSBuild projects are extracted separately. Leave them for [`super::msbuild`].
+        // Unified diffs are extracted separately. Leave them for [`super::diff`].
         if extension.is_some_and(super::man::is_man_ext)
             || extension.is_some_and(super::info::is_info_ext)
             || extension.is_some_and(super::unit::is_unit_ext)
@@ -99,6 +100,8 @@ impl ContentExtractor for TextExtractor {
                     | "fsproj"
                     | "vbproj"
                     | "vcxproj"
+                    | "diff"
+                    | "patch"
             )
         }) {
             return false;

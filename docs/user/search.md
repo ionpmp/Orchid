@@ -109,6 +109,8 @@ and `:stopdoc:` blocks are skipped.
 MSBuild projects (`.csproj`, `.fsproj`, `.vbproj`, `.vcxproj`) contribute
 assembly names, descriptions, SDK ids, and package or project references.
 Versions and source-file lists are skipped.
+Diffs (`.diff`, `.patch`) contribute changed paths and line text. Git
+blob hashes and binary patch bodies are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

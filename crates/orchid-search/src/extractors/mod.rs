@@ -9,6 +9,7 @@ pub mod audio;
 pub mod bib;
 pub mod cue;
 pub mod debian;
+pub mod diff;
 pub mod docx;
 pub mod eml;
 pub mod epub_odf;
@@ -132,6 +133,7 @@ impl Extractor {
                 Arc::new(debian::DebianExtractor),
                 Arc::new(rdoc::RdocExtractor),
                 Arc::new(msbuild::MsbuildExtractor),
+                Arc::new(diff::DiffExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }
