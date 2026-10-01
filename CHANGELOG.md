@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes torrent files (`.torrent`): display names,
+  comments, announce URLs, and file paths. Piece hashes are not indexed.
 - Full-text search indexes WiX sources (`.wxs`, `.wxl`): product names,
   feature titles, dialog text, and localization strings. Component ids
   and property values are not indexed.

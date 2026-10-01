@@ -45,6 +45,7 @@ impl ContentExtractor for TextExtractor {
         // systemd units are extracted separately. Leave them for [`super::unit`].
         // XSPF playlists are extracted separately. Leave them for [`super::xspf`].
         // WiX sources are extracted separately. Leave them for [`super::wix`].
+        // Torrent metainfo is extracted separately. Leave it for [`super::torrent`].
         if extension.is_some_and(super::man::is_man_ext)
             || extension.is_some_and(super::info::is_info_ext)
             || extension.is_some_and(super::unit::is_unit_ext)
@@ -85,6 +86,7 @@ impl ContentExtractor for TextExtractor {
                     | "xspf"
                     | "wxs"
                     | "wxl"
+                    | "torrent"
             )
         }) {
             return false;

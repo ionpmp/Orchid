@@ -42,6 +42,7 @@ pub mod subtitle;
 pub mod svg;
 pub mod texinfo;
 pub mod text;
+pub mod torrent;
 pub mod ui;
 pub mod unit;
 pub mod wix;
@@ -122,6 +123,7 @@ impl Extractor {
                 Arc::new(unit::UnitExtractor),
                 Arc::new(xspf::XspfExtractor),
                 Arc::new(wix::WixExtractor),
+                Arc::new(torrent::TorrentExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

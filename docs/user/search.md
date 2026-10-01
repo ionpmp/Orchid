@@ -98,6 +98,8 @@ locations. Durations and vendor extensions are skipped.
 WiX sources (`.wxs`, `.wxl`) contribute product names, feature titles,
 dialog text, and localization strings. Component ids and property values
 are skipped.
+Torrent files (`.torrent`) contribute display names, comments, announce
+URLs, and file paths. Piece hashes are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
