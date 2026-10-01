@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `pubspec.lock`: package names. Versions and
+  sha256 checksums are not indexed.
 - Full-text search indexes `Pipfile.lock`: package names. Versions and
   hashes are not indexed.
 - Full-text search indexes `Gemfile.lock`: gem names. Versions,

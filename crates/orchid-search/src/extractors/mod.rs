@@ -48,6 +48,7 @@ pub mod pod;
 pub mod poetry;
 pub mod pom;
 pub mod properties;
+pub mod pubspec;
 pub mod qt;
 pub mod rc;
 pub mod rdoc;
@@ -281,6 +282,13 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `pubspec.lock` is plain YAML, which would index sha256 checksums.
+        if pubspec::is_pubspec_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(pubspec::pubspec_lock_text(&text::decode_best_effort(
+                &raw,
+            ))));
         }
         // `Pipfile.lock` is plain JSON, which would index package hashes.
         if pipfile::is_pipfile_lock_name(name) {
