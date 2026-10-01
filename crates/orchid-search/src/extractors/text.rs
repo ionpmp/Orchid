@@ -51,6 +51,7 @@ impl ContentExtractor for TextExtractor {
         // RDoc is extracted separately. Leave it for [`super::rdoc`].
         // MSBuild projects are extracted separately. Leave them for [`super::msbuild`].
         // Unified diffs are extracted separately. Leave them for [`super::diff`].
+        // NuGet manifests are extracted separately. Leave them for [`super::nuspec`].
         if extension.is_some_and(super::man::is_man_ext)
             || extension.is_some_and(super::info::is_info_ext)
             || extension.is_some_and(super::unit::is_unit_ext)
@@ -102,6 +103,7 @@ impl ContentExtractor for TextExtractor {
                     | "vcxproj"
                     | "diff"
                     | "patch"
+                    | "nuspec"
             )
         }) {
             return false;

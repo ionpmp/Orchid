@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes NuGet manifests (`.nuspec`): package ids,
+  titles, descriptions, authors, and dependency ids. Versions, commits,
+  and packed files are not indexed.
 - Full-text search indexes diffs (`.diff`, `.patch`): changed paths and
   line text. Git blob hashes and binary patch bodies are not indexed.
 - Full-text search indexes MSBuild projects (`.csproj`, `.fsproj`,

@@ -111,6 +111,9 @@ assembly names, descriptions, SDK ids, and package or project references.
 Versions and source-file lists are skipped.
 Diffs (`.diff`, `.patch`) contribute changed paths and line text. Git
 blob hashes and binary patch bodies are skipped.
+NuGet manifests (`.nuspec`) contribute package ids, titles, descriptions,
+authors, and dependency ids. Versions, commits, and packed files are
+skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

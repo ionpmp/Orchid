@@ -26,6 +26,7 @@ pub mod mo;
 pub mod msbuild;
 pub mod nfo;
 pub mod notebook;
+pub mod nuspec;
 pub mod ooxml;
 pub mod opml;
 pub mod orchid;
@@ -134,6 +135,7 @@ impl Extractor {
                 Arc::new(rdoc::RdocExtractor),
                 Arc::new(msbuild::MsbuildExtractor),
                 Arc::new(diff::DiffExtractor),
+                Arc::new(nuspec::NuspecExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }
