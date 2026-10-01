@@ -21,6 +21,7 @@ pub mod ical;
 pub mod info;
 pub mod latex;
 pub mod man;
+pub mod manifest;
 pub mod mbox;
 pub mod mo;
 pub mod msbuild;
@@ -262,6 +263,9 @@ impl Extractor {
             }
             if pom::looks_like_pom(&decoded) {
                 return Ok(Some(pom::pom_text(&decoded)));
+            }
+            if manifest::looks_like_manifest(&decoded) {
+                return Ok(Some(manifest::manifest_text(&decoded)));
             }
             return Ok(Some(decoded));
         }

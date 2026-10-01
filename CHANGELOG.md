@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Android manifests (`AndroidManifest.xml`):
+  package names, labels, component names, and permissions. Versions and
+  resource references are not indexed.
 - Full-text search indexes XML solutions (`.slnx`): project paths,
   folder names, and solution-item paths. Build configurations are not
   indexed.
