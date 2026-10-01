@@ -27,6 +27,7 @@ pub mod pdf;
 pub mod playlist;
 pub mod properties;
 pub mod qt;
+pub mod rc;
 pub mod reg;
 pub mod resources;
 pub mod rtf;
@@ -98,6 +99,7 @@ impl Extractor {
                 Arc::new(resources::ResourceXmlExtractor),
                 Arc::new(strings::StringsExtractor),
                 Arc::new(qt::QtExtractor),
+                Arc::new(rc::RcExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

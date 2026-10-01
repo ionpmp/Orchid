@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Windows resource scripts (`.rc`): quoted
+  strings from string tables, dialogs, and menus. Comments and
+  `#include` lines are not indexed.
 - Full-text search indexes Android string resources (`strings.xml` and
   other `<resources>` files): resource names and visible text, including
   text inside `xliff` placeholders. Other `.xml` files stay plain text.

@@ -69,6 +69,9 @@ contribute context names, source strings, and translations. TypeScript
 Android resource XML (`<resources>` with `<string>`, `<plurals>`, or
 `<string-array>`) contributes resource names and visible text. Other
 `.xml` files stay plain text, unless they open as a feed.
+Windows resource scripts (`.rc`) contribute quoted UI strings from
+string tables, dialogs, and menus. Comments and `#include` lines are
+skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
