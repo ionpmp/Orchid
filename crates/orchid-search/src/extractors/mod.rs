@@ -41,6 +41,7 @@ pub mod mo;
 pub mod msbuild;
 pub mod nfo;
 pub mod notebook;
+pub mod npmrc;
 pub mod nugetlock;
 pub mod nuspec;
 pub mod ooxml;
@@ -285,6 +286,11 @@ impl Extractor {
         if docker::needs_name_dispatch(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(docker::docker_text(&text::decode_best_effort(&raw))));
+        }
+        // `.npmrc` is plain text, which would index auth tokens.
+        if npmrc::is_npmrc_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(npmrc::npmrc_text(&text::decode_best_effort(&raw))));
         }
         // `.env` is plain text, which would index secret values.
         if dotenv::is_dotenv_name(name) {

@@ -176,6 +176,7 @@ hashes are skipped.
 `requirements.txt` contributes package names. Versions and `--hash` values
 are skipped.
 `.env` contributes variable names. Values are skipped.
+`.npmrc` contributes registry URLs. Auth tokens and passwords are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:
