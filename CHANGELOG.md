@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Debian source control (`.dsc`, `.changes`):
+  package names, descriptions, and relationships. Checksums and file
+  hashes are not indexed.
 - Full-text search indexes RPM spec files (`.spec`): package names,
   summaries, descriptions, changelogs, and file lists. Build scripts are
   not indexed.

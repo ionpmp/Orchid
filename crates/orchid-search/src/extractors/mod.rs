@@ -8,6 +8,7 @@ pub mod android;
 pub mod audio;
 pub mod bib;
 pub mod cue;
+pub mod debian;
 pub mod docx;
 pub mod eml;
 pub mod epub_odf;
@@ -126,6 +127,7 @@ impl Extractor {
                 Arc::new(wix::WixExtractor),
                 Arc::new(torrent::TorrentExtractor),
                 Arc::new(spec::SpecExtractor),
+                Arc::new(debian::DebianExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }
