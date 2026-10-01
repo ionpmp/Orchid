@@ -38,6 +38,7 @@ pub mod storyboard;
 pub mod strings;
 pub mod subtitle;
 pub mod svg;
+pub mod texinfo;
 pub mod text;
 pub mod ui;
 pub mod xaml;
@@ -110,6 +111,7 @@ impl Extractor {
                 Arc::new(man::ManExtractor),
                 Arc::new(storyboard::StoryboardExtractor),
                 Arc::new(pod::PodExtractor),
+                Arc::new(texinfo::TexinfoExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

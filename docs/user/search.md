@@ -84,6 +84,8 @@ label text, placeholders, and user labels. Class names and object ids
 are skipped.
 Perl POD (`.pod`) contributes headings, items, and paragraphs. Code
 after `=cut` and `=begin comment` blocks are skipped.
+Texinfo manuals (`.texi`, `.texinfo`) contribute titles and body text.
+`@ignore` blocks and `@c` comments are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
