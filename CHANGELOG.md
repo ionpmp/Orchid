@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search extracts `.rtf` body text (Unicode and hex escapes;
+  font tables, pictures, and `\*` groups are skipped) when
+  `[search].extract-pdf` is enabled.
 - Full-text search extracts EPUB chapter text in spine order and
   OpenDocument (`.odt` / `.ods` / `.odp`) text from `content.xml` when
   `[search].extract-pdf` is enabled.

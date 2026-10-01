@@ -9,6 +9,7 @@ pub mod epub_odf;
 pub mod ooxml;
 pub mod orchid;
 pub mod pdf;
+pub mod rtf;
 pub mod text;
 
 use std::sync::Arc;
@@ -94,6 +95,12 @@ impl Extractor {
     #[must_use]
     pub fn with_odf(self) -> Self {
         self.with(Arc::new(epub_odf::OdfExtractor))
+    }
+
+    /// Convenience: enable Rich Text (`.rtf`) extraction.
+    #[must_use]
+    pub fn with_rtf(self) -> Self {
+        self.with(Arc::new(rtf::RtfExtractor))
     }
 
     /// Convenience: enable the `.orchid` Clean-Text extractor.

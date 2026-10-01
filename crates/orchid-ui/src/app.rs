@@ -485,7 +485,8 @@ impl OrchidApp {
                 .with_xlsx()
                 .with_pptx()
                 .with_epub()
-                .with_odf();
+                .with_odf()
+                .with_rtf();
         }
         let index_extractor = Arc::new(index_extractor);
         let index_subscriber = orchid_search::IndexFsSubscriber::new(
