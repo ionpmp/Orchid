@@ -35,6 +35,7 @@ impl ContentExtractor for TextExtractor {
         // Apple string tables are extracted separately. Leave them for [`super::strings`].
         // Windows resource scripts are extracted separately. Leave them for [`super::rc`].
         // Interface files are extracted separately. Leave them for [`super::ui`].
+        // XAML labels are extracted separately. Leave them for [`super::xaml`].
         if extension.is_some_and(|ext| {
             matches!(
                 ext.to_ascii_lowercase().as_str(),
@@ -54,6 +55,7 @@ impl ContentExtractor for TextExtractor {
                     | "stringsdict"
                     | "rc"
                     | "ui"
+                    | "xaml"
             )
         }) {
             return false;

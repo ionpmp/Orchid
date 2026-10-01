@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes XAML (`.xaml`) titles, text, content, and
+  headers. Element names and `x:Name` ids are not indexed.
 - Full-text search indexes Qt Designer and GTK Glade files (`.ui`):
   window titles, labels, and tooltips. Geometry and object ids are not
   indexed.

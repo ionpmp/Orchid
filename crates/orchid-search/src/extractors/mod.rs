@@ -37,6 +37,7 @@ pub mod subtitle;
 pub mod svg;
 pub mod text;
 pub mod ui;
+pub mod xaml;
 
 use std::sync::Arc;
 
@@ -102,6 +103,7 @@ impl Extractor {
                 Arc::new(qt::QtExtractor),
                 Arc::new(rc::RcExtractor),
                 Arc::new(ui::UiExtractor),
+                Arc::new(xaml::XamlExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

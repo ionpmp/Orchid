@@ -74,6 +74,8 @@ string tables, dialogs, and menus. Comments and `#include` lines are
 skipped.
 Qt Designer and GTK Glade files (`.ui`) contribute window titles, labels,
 and tooltips. Geometry and object ids are skipped.
+XAML files (`.xaml`) contribute titles, text, content, and headers.
+Element names and `x:Name` ids are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
