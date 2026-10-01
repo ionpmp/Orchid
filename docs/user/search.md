@@ -169,6 +169,8 @@ Revisions and versions are skipped.
 commits are skipped.
 `.terraform.lock.hcl` contributes provider addresses. Versions and hashes
 are skipped.
+`Chart.lock` contributes dependency names and repositories. Versions and
+the digest are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:

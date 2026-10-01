@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `Chart.lock`: dependency names and
+  repositories. Versions and the digest are not indexed.
 - Full-text search indexes `.terraform.lock.hcl`: provider addresses.
   Versions and hashes are not indexed.
 - Full-text search indexes `Cartfile.resolved`: repository names and URLs.

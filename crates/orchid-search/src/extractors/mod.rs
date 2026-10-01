@@ -10,6 +10,7 @@ pub mod bib;
 pub mod bun;
 pub mod cargo;
 pub mod cartfile;
+pub mod chart;
 pub mod composer;
 pub mod cue;
 pub mod debian;
@@ -293,6 +294,13 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `Chart.lock` is plain YAML, which would index the digest.
+        if chart::is_chart_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(chart::chart_lock_text(&text::decode_best_effort(
+                &raw,
+            ))));
         }
         // `.terraform.lock.hcl` is plain text, which would index provider hashes.
         if terraform::is_terraform_lock_name(name) {
