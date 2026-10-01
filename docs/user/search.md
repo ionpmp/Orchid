@@ -23,8 +23,8 @@ survives a restart. A real sentence model remains behind the reserved
 (empty → Documents), `excluded-patterns`, `max-file-size-mib`,
 `extract-text` / `extract-pdf` (PDF needs pdfium; the same switch also
 indexes DOCX, XLSX / XLSM cell text, PPTX / PPTM / PPSX slide and
-notes text, EPUB chapters, OpenDocument `.odt` / `.ods` / `.odp`, and
-RTF).
+notes text, EPUB chapters, OpenDocument `.odt` / `.ods` / `.odp`,
+RTF, and visible HTML text (scripts and styles are skipped)).
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

@@ -186,7 +186,7 @@ fn spine_chapters(opf: &str, opf_path: &str) -> Vec<String> {
         .collect()
 }
 
-fn html_text(xml: &str) -> String {
+pub(crate) fn html_text(xml: &str) -> String {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
     reader.config_mut().check_end_names = false;

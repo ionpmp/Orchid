@@ -6,6 +6,7 @@
 
 pub mod docx;
 pub mod epub_odf;
+pub mod html;
 pub mod ooxml;
 pub mod orchid;
 pub mod pdf;
@@ -101,6 +102,15 @@ impl Extractor {
     #[must_use]
     pub fn with_rtf(self) -> Self {
         self.with(Arc::new(rtf::RtfExtractor))
+    }
+
+    /// Enable HTML text extraction ahead of the plain-text fallback.
+    ///
+    /// Inserted at the front so `.html` is not indexed as raw markup.
+    #[must_use]
+    pub fn with_html(mut self) -> Self {
+        self.extractors.insert(0, Arc::new(html::HtmlTextExtractor));
+        self
     }
 
     /// Convenience: enable the `.orchid` Clean-Text extractor.

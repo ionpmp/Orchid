@@ -23,7 +23,13 @@ pub struct TextExtractor;
 impl ContentExtractor for TextExtractor {
     fn can_handle(&self, mime: Option<&str>, extension: Option<&str>) -> bool {
         if let Some(m) = mime {
-            if m.starts_with("text/") || m == "application/json" || m == "application/xml" {
+            let base = m.split(';').next().unwrap_or(m).trim();
+            // `.rtf` is `text/rtf` but is not plain text. Leave it for [`super::rtf`].
+            if base.eq_ignore_ascii_case("text/rtf") {
+                return false;
+            }
+            if base.starts_with("text/") || base == "application/json" || base == "application/xml"
+            {
                 return true;
             }
         }
@@ -46,7 +52,7 @@ impl ContentExtractor for TextExtractor {
     }
 }
 
-fn decode_best_effort(bytes: &[u8]) -> String {
+pub(crate) fn decode_best_effort(bytes: &[u8]) -> String {
     // UTF-8 BOM takes priority.
     if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
         let s = String::from_utf8_lossy(&bytes[3..]).into_owned();

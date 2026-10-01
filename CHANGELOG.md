@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes visible HTML / XHTML text and leaves `.rtf`
+  (`text/rtf`) to the RTF extractor instead of storing raw markup.
 - Full-text search extracts `.rtf` body text (Unicode and hex escapes;
   font tables, pictures, and `\*` groups are skipped) when
   `[search].extract-pdf` is enabled.
