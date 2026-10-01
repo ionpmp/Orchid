@@ -5,6 +5,7 @@
 //! handles. [`Extractor`] picks one per file.
 
 pub mod docx;
+pub mod epub_odf;
 pub mod ooxml;
 pub mod orchid;
 pub mod pdf;
@@ -81,6 +82,18 @@ impl Extractor {
     #[must_use]
     pub fn with_pptx(self) -> Self {
         self.with(Arc::new(ooxml::PptxExtractor))
+    }
+
+    /// Convenience: enable EPUB chapter text extraction.
+    #[must_use]
+    pub fn with_epub(self) -> Self {
+        self.with(Arc::new(epub_odf::EpubExtractor))
+    }
+
+    /// Convenience: enable OpenDocument (`.odt` / `.ods` / `.odp`) text extraction.
+    #[must_use]
+    pub fn with_odf(self) -> Self {
+        self.with(Arc::new(epub_odf::OdfExtractor))
     }
 
     /// Convenience: enable the `.orchid` Clean-Text extractor.

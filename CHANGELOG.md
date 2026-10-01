@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search extracts EPUB chapter text in spine order and
+  OpenDocument (`.odt` / `.ods` / `.odp`) text from `content.xml` when
+  `[search].extract-pdf` is enabled.
 - Full-text search extracts Excel cell text (shared strings, inline
   strings, numbers, sheet names) and PowerPoint slide plus speaker-notes
   text when `[search].extract-pdf` is enabled.

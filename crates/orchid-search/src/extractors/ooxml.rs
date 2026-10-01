@@ -63,7 +63,7 @@ impl ContentExtractor for PptxExtractor {
     }
 }
 
-async fn extract_zip<F>(
+pub(crate) async fn extract_zip<F>(
     provider: &dyn orchid_fs::FsProvider,
     path: &orchid_fs::FsPath,
     parse: F,
