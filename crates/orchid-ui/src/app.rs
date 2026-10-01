@@ -487,6 +487,7 @@ impl OrchidApp {
                 .with_epub()
                 .with_odf()
                 .with_rtf()
+                .with_audio()
                 .with_html();
         }
         let index_extractor = Arc::new(index_extractor);

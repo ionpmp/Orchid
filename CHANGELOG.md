@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes audio tags from MP3 / WAV / AIFF (ID3) and
+  FLAC / Ogg / Opus (Vorbis comments), including embedded lyrics.
 - Full-text search indexes visible HTML / XHTML text and leaves `.rtf`
   (`text/rtf`) to the RTF extractor instead of storing raw markup.
 - Full-text search extracts `.rtf` body text (Unicode and hex escapes;

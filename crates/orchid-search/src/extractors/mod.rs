@@ -4,6 +4,7 @@
 //! [`ContentExtractor`] and reports which MIME / extension combinations it
 //! handles. [`Extractor`] picks one per file.
 
+pub mod audio;
 pub mod docx;
 pub mod epub_odf;
 pub mod html;
@@ -102,6 +103,12 @@ impl Extractor {
     #[must_use]
     pub fn with_rtf(self) -> Self {
         self.with(Arc::new(rtf::RtfExtractor))
+    }
+
+    /// Convenience: enable ID3 and Vorbis-comment extraction for audio files.
+    #[must_use]
+    pub fn with_audio(self) -> Self {
+        self.with(Arc::new(audio::AudioTagExtractor))
     }
 
     /// Enable HTML text extraction ahead of the plain-text fallback.

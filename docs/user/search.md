@@ -24,7 +24,8 @@ survives a restart. A real sentence model remains behind the reserved
 `extract-text` / `extract-pdf` (PDF needs pdfium; the same switch also
 indexes DOCX, XLSX / XLSM cell text, PPTX / PPTM / PPSX slide and
 notes text, EPUB chapters, OpenDocument `.odt` / `.ods` / `.odp`,
-RTF, and visible HTML text (scripts and styles are skipped)).
+RTF, visible HTML text (scripts and styles are skipped), and audio
+tags (ID3 and Vorbis comments: title, artist, album, lyrics)).
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
