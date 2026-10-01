@@ -88,6 +88,8 @@ Texinfo manuals (`.texi`, `.texinfo`) contribute titles and body text.
 `@ignore` blocks and `@c` comments are skipped.
 Compiled gettext catalogs (`.mo`, `.gmo`) contribute message ids and
 translations. The catalog header is skipped.
+GNU Info manuals (`.info`, `.info-1`) contribute node titles and body
+text. Tag tables are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

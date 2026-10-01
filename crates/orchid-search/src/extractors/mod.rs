@@ -16,6 +16,7 @@ pub mod feed;
 pub mod gettext;
 pub mod html;
 pub mod ical;
+pub mod info;
 pub mod latex;
 pub mod man;
 pub mod mbox;
@@ -114,6 +115,7 @@ impl Extractor {
                 Arc::new(pod::PodExtractor),
                 Arc::new(texinfo::TexinfoExtractor),
                 Arc::new(mo::MoExtractor),
+                Arc::new(info::InfoExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

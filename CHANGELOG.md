@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes GNU Info manuals (`.info`, `.info-1`): node
+  titles and body text. Tag tables are not indexed.
 - Full-text search indexes compiled gettext catalogs (`.mo`, `.gmo`):
   message ids and translations. The catalog header is not indexed.
 - Full-text search indexes Texinfo manuals (`.texi`, `.texinfo`): titles
