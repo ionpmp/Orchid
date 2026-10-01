@@ -33,6 +33,7 @@ pub mod reg;
 pub mod resources;
 pub mod rtf;
 pub mod shortcut;
+pub mod storyboard;
 pub mod strings;
 pub mod subtitle;
 pub mod svg;
@@ -106,6 +107,7 @@ impl Extractor {
                 Arc::new(ui::UiExtractor),
                 Arc::new(xaml::XamlExtractor),
                 Arc::new(man::ManExtractor),
+                Arc::new(storyboard::StoryboardExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

@@ -78,6 +78,9 @@ XAML files (`.xaml`) contribute titles, text, content, and headers.
 Element names and `x:Name` ids are skipped.
 Manual pages (`.1`, `.3pm`, `.man`, and similar) contribute section titles
 and body text. Comments and `.ig` blocks are skipped.
+iOS storyboards and XIB files (`.storyboard`, `.xib`) contribute titles,
+label text, placeholders, and user labels. Class names and object ids
+are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

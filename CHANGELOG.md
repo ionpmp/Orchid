@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes iOS storyboards and XIB files
+  (`.storyboard`, `.xib`): titles, label text, placeholders, and user
+  labels. Class names and object ids are not indexed.
 - Full-text search indexes manual pages (`.1`, `.3pm`, `.man`, and
   similar): section titles and body text. Comments and `.ig` blocks are
   not indexed.
