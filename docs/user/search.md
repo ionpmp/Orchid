@@ -159,6 +159,8 @@ hashes are skipped.
 `mix.lock` contributes package names. Versions and checksums are skipped.
 `flake.lock` contributes node names, owners, repos, and refs. narHash
 values and revisions are skipped.
+`bun.lock` contributes package names. Versions and integrity hashes are
+skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:

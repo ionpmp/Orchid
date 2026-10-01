@@ -7,6 +7,7 @@
 pub mod android;
 pub mod audio;
 pub mod bib;
+pub mod bun;
 pub mod cargo;
 pub mod composer;
 pub mod cue;
@@ -288,6 +289,11 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `bun.lock` is plain JSON, which would index integrity hashes.
+        if bun::is_bun_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(bun::bun_lock_text(&text::decode_best_effort(&raw))));
         }
         // `flake.lock` is plain JSON, which would index narHash values and revisions.
         if flake::is_flake_lock_name(name) {

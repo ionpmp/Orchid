@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `bun.lock`: package names. Versions and
+  integrity hashes are not indexed.
 - Full-text search indexes `flake.lock`: node names, owners, repos, and
   refs. narHash values and revisions are not indexed.
 - Full-text search indexes `mix.lock`: package names. Versions and
