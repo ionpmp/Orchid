@@ -33,6 +33,7 @@ pub mod pod;
 pub mod properties;
 pub mod qt;
 pub mod rc;
+pub mod rdoc;
 pub mod reg;
 pub mod resources;
 pub mod rtf;
@@ -128,6 +129,7 @@ impl Extractor {
                 Arc::new(torrent::TorrentExtractor),
                 Arc::new(spec::SpecExtractor),
                 Arc::new(debian::DebianExtractor),
+                Arc::new(rdoc::RdocExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

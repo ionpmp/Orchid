@@ -48,6 +48,7 @@ impl ContentExtractor for TextExtractor {
         // Torrent metainfo is extracted separately. Leave it for [`super::torrent`].
         // RPM specs are extracted separately. Leave them for [`super::spec`].
         // Debian control files are extracted separately. Leave them for [`super::debian`].
+        // RDoc is extracted separately. Leave it for [`super::rdoc`].
         if extension.is_some_and(super::man::is_man_ext)
             || extension.is_some_and(super::info::is_info_ext)
             || extension.is_some_and(super::unit::is_unit_ext)
@@ -92,6 +93,7 @@ impl ContentExtractor for TextExtractor {
                     | "spec"
                     | "dsc"
                     | "changes"
+                    | "rdoc"
             )
         }) {
             return false;

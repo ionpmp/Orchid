@@ -104,6 +104,8 @@ RPM spec files (`.spec`) contribute package names, summaries,
 descriptions, changelogs, and file lists. Build scripts are skipped.
 Debian source control (`.dsc`, `.changes`) contributes package names,
 descriptions, and relationships. Checksums and file hashes are skipped.
+RDoc files (`.rdoc`) contribute headings, lists, and paragraphs. Rules
+and `:stopdoc:` blocks are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

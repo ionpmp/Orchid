@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes RDoc (`.rdoc`): headings, lists, and
+  paragraphs. Rules and `:stopdoc:` blocks are not indexed.
 - Full-text search indexes Debian source control (`.dsc`, `.changes`):
   package names, descriptions, and relationships. Checksums and file
   hashes are not indexed.
