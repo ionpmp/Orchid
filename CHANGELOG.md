@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes FictionBook (`.fb2` and `.fb2.zip`): title,
+  authors, annotation, and body text. Embedded cover images are skipped,
+  and `windows-1251` books are decoded from the XML declaration.
 - Full-text search indexes audio tags from MP3 / WAV / AIFF (ID3) and
   FLAC / Ogg / Opus (Vorbis comments), including embedded lyrics.
 - Full-text search indexes visible HTML / XHTML text and leaves `.rtf`

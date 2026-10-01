@@ -7,6 +7,7 @@
 pub mod audio;
 pub mod docx;
 pub mod epub_odf;
+pub mod fb2;
 pub mod html;
 pub mod ooxml;
 pub mod orchid;
@@ -111,6 +112,15 @@ impl Extractor {
         self.with(Arc::new(audio::AudioTagExtractor))
     }
 
+    /// Enable FictionBook extraction ahead of the plain-text XML fallback.
+    ///
+    /// `.fb2.zip` is recognized by file name in [`Extractor::extract`].
+    #[must_use]
+    pub fn with_fb2(mut self) -> Self {
+        self.extractors.insert(0, Arc::new(fb2::Fb2Extractor));
+        self
+    }
+
     /// Enable HTML text extraction ahead of the plain-text fallback.
     ///
     /// Inserted at the front so `.html` is not indexed as raw markup.
@@ -134,6 +144,14 @@ impl Extractor {
         path: &orchid_fs::FsPath,
         mime: Option<&str>,
     ) -> Result<Option<String>> {
+        let name = path.file_name().unwrap_or("");
+        if name.to_ascii_lowercase().ends_with(".fb2.zip") {
+            for e in &self.extractors {
+                if e.can_handle(None, Some("fb2")) {
+                    return Ok(Some(e.extract(provider, path).await?));
+                }
+            }
+        }
         let extension = path.extension().map(|e| e.to_ascii_lowercase());
         for e in &self.extractors {
             if e.can_handle(mime, extension.as_deref()) {
