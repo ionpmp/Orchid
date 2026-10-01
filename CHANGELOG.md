@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes BibTeX (`.bib`) and RIS (`.ris`) titles,
+  authors, abstracts, and related fields. Citation keys and `@string`
+  macros are not indexed.
 - Full-text search indexes iCalendar (`.ics`) and vCard (`.vcf`) fields
   (summary, location, name, email, notes). Folded lines are joined.
   `PHOTO` and `ATTACH` values are not indexed.

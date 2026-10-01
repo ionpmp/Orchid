@@ -5,6 +5,7 @@
 //! handles. [`Extractor`] picks one per file.
 
 pub mod audio;
+pub mod bib;
 pub mod docx;
 pub mod eml;
 pub mod epub_odf;
@@ -60,6 +61,8 @@ impl Extractor {
             extractors: vec![
                 Arc::new(ical::IcsExtractor),
                 Arc::new(ical::VcfExtractor),
+                Arc::new(bib::BibExtractor),
+                Arc::new(bib::RisExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }
