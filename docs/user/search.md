@@ -152,6 +152,8 @@ are skipped.
 are skipped.
 `packages.lock.json` contributes package ids. Versions and content hashes
 are skipped.
+`Podfile.lock` contributes pod names. Versions, commits, and checksums
+are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:

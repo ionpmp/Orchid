@@ -46,6 +46,7 @@ pub mod playlist;
 pub mod plist;
 pub mod pnpm;
 pub mod pod;
+pub mod podfile;
 pub mod poetry;
 pub mod pom;
 pub mod properties;
@@ -284,6 +285,13 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `Podfile.lock` is plain text, which would index checksums and commits.
+        if podfile::is_podfile_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(podfile::podfile_lock_text(&text::decode_best_effort(
+                &raw,
+            ))));
         }
         // `packages.lock.json` is plain JSON, which would index content hashes.
         if nugetlock::is_nuget_lock_name(name) {

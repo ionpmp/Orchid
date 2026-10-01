@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `Podfile.lock`: pod names. Versions, commits,
+  and checksums are not indexed.
 - Full-text search indexes `packages.lock.json`: package ids. Versions
   and content hashes are not indexed.
 - Full-text search indexes `uv.lock`: package and dependency names.
