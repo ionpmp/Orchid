@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes XSPF playlists (`.xspf`): titles, creators,
+  albums, and locations. Durations and vendor extensions are not indexed.
 - Full-text search indexes systemd units (`.service`, `.socket`, `.mount`,
   and similar): descriptions, documentation, and start commands.
   Environment variables and credentials are not indexed.

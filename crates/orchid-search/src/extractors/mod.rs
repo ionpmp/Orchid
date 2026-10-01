@@ -45,6 +45,7 @@ pub mod text;
 pub mod ui;
 pub mod unit;
 pub mod xaml;
+pub mod xspf;
 
 use std::sync::Arc;
 
@@ -118,6 +119,7 @@ impl Extractor {
                 Arc::new(mo::MoExtractor),
                 Arc::new(info::InfoExtractor),
                 Arc::new(unit::UnitExtractor),
+                Arc::new(xspf::XspfExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }
