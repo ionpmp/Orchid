@@ -26,6 +26,7 @@ pub mod pdf;
 pub mod playlist;
 pub mod properties;
 pub mod reg;
+pub mod resources;
 pub mod rtf;
 pub mod shortcut;
 pub mod subtitle;
@@ -91,6 +92,7 @@ impl Extractor {
                 Arc::new(svg::SvgExtractor),
                 Arc::new(reg::RegExtractor),
                 Arc::new(properties::PropertiesExtractor),
+                Arc::new(resources::ResourceXmlExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes .NET `.resx` files and XLIFF (`.xlf`,
+  `.xliff`): names, source strings, and translations. Embedded binary
+  values are not indexed.
 - Full-text search indexes Java property files (`.properties`): keys,
   values, and comments. `\\uXXXX` escapes are decoded, and a trailing
   backslash joins the next line.

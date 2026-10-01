@@ -31,10 +31,22 @@ impl ContentExtractor for TextExtractor {
         // `.svg` labels are extracted separately. Leave them for [`super::svg`].
         // `.reg` string values are extracted separately. Leave them for [`super::reg`].
         // `.properties` escapes are decoded separately. Leave them for [`super::properties`].
+        // `.resx` and XLIFF strings are extracted separately. Leave them for [`super::resources`].
         if extension.is_some_and(|ext| {
             matches!(
                 ext.to_ascii_lowercase().as_str(),
-                "srt" | "vtt" | "ass" | "ssa" | "lrc" | "nfo" | "svg" | "reg" | "properties"
+                "srt"
+                    | "vtt"
+                    | "ass"
+                    | "ssa"
+                    | "lrc"
+                    | "nfo"
+                    | "svg"
+                    | "reg"
+                    | "properties"
+                    | "resx"
+                    | "xlf"
+                    | "xliff"
             )
         }) {
             return false;
