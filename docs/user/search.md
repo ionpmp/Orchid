@@ -165,6 +165,8 @@ skipped.
 hashes and revisions are skipped.
 `Package.resolved` contributes package identities and repository URLs.
 Revisions and versions are skipped.
+`Cartfile.resolved` contributes repository names and URLs. Versions and
+commits are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:

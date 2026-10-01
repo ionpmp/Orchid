@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `Cartfile.resolved`: repository names and URLs.
+  Versions and commits are not indexed.
 - Full-text search indexes `Package.resolved`: package identities and
   repository URLs. Revisions and versions are not indexed.
 - Full-text search indexes `deno.lock`: package names and remote module

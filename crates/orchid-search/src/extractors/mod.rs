@@ -9,6 +9,7 @@ pub mod audio;
 pub mod bib;
 pub mod bun;
 pub mod cargo;
+pub mod cartfile;
 pub mod composer;
 pub mod cue;
 pub mod debian;
@@ -291,6 +292,13 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `Cartfile.resolved` is plain text, which would index commits.
+        if cartfile::is_cartfile_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(cartfile::cartfile_text(&text::decode_best_effort(
+                &raw,
+            ))));
         }
         // `Package.resolved` is plain JSON, which would index revisions.
         if resolved::is_resolved_name(name) {
