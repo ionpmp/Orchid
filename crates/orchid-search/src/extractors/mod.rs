@@ -4,6 +4,7 @@
 //! [`ContentExtractor`] and reports which MIME / extension combinations it
 //! handles. [`Extractor`] picks one per file.
 
+pub mod android;
 pub mod audio;
 pub mod bib;
 pub mod cue;
@@ -212,6 +213,9 @@ impl Extractor {
             let decoded = text::decode_best_effort(&raw);
             if feed::looks_like_feed(&decoded) {
                 return Ok(Some(feed::feed_text(&decoded)));
+            }
+            if android::looks_like_android(&decoded) {
+                return Ok(Some(android::android_text(&decoded)));
             }
             return Ok(Some(decoded));
         }

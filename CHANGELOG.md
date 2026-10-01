@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Android string resources (`strings.xml` and
+  other `<resources>` files): resource names and visible text, including
+  text inside `xliff` placeholders. Other `.xml` files stay plain text.
 - Full-text search indexes Qt Linguist catalogs stored as `.ts`:
   context names, source strings, and translations. A `.ts` file that is
   TypeScript is still indexed as source. Location filenames are skipped.

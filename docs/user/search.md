@@ -66,6 +66,9 @@ translations, and block comments. Line comments are skipped.
 Qt Linguist catalogs (a `.ts` file that opens as a translation file)
 contribute context names, source strings, and translations. TypeScript
 `.ts` files stay source text. Location filenames are skipped.
+Android resource XML (`<resources>` with `<string>`, `<plurals>`, or
+`<string-array>`) contributes resource names and visible text. Other
+`.xml` files stay plain text, unless they open as a feed.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
