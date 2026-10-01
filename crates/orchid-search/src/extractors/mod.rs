@@ -38,6 +38,7 @@ pub mod nuspec;
 pub mod ooxml;
 pub mod opml;
 pub mod orchid;
+pub mod pdm;
 pub mod pdf;
 pub mod pipfile;
 pub mod pkg;
@@ -285,6 +286,11 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `pdm.lock` is plain text, which would index file hashes.
+        if pdm::is_pdm_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(pdm::pdm_lock_text(&text::decode_best_effort(&raw))));
         }
         // `Podfile.lock` is plain text, which would index checksums and commits.
         if podfile::is_podfile_lock_name(name) {
