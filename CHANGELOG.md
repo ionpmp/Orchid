@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes shortcuts (`.url`, `.desktop`, `.webloc`):
+  names and URLs. `Exec` lines and icon paths are not indexed.
 - Full-text search indexes Gettext catalogs (`.po`, `.pot`): message
   ids, translations, and translator comments. Source locations (`#:`)
   and flags (`#,`) are not indexed.

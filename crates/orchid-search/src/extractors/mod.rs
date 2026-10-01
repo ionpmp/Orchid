@@ -24,6 +24,7 @@ pub mod orchid;
 pub mod pdf;
 pub mod playlist;
 pub mod rtf;
+pub mod shortcut;
 pub mod text;
 
 use std::sync::Arc;
@@ -79,6 +80,7 @@ impl Extractor {
                 Arc::new(latex::LatexExtractor),
                 Arc::new(cue::CueExtractor),
                 Arc::new(gettext::GettextExtractor),
+                Arc::new(shortcut::ShortcutExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

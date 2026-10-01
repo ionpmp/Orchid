@@ -46,6 +46,8 @@ CUE sheets (`.cue`) contribute album and track titles, performers, and
 file names. Index timestamps are skipped.
 Gettext catalogs (`.po`, `.pot`) contribute message ids, translations,
 and translator comments. Source locations and flags are skipped.
+Shortcuts (`.url`, `.desktop`, `.webloc`) contribute names and URLs.
+Launch commands and icon paths are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
