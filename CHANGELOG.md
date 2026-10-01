@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Java property files (`.properties`): keys,
+  values, and comments. `\\uXXXX` escapes are decoded, and a trailing
+  backslash joins the next line.
 - Full-text search indexes registry exports (`.reg`): key paths and
   string values, including UTF-16 files. `dword` and `hex` values are
   not indexed.

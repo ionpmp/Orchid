@@ -24,6 +24,7 @@ pub mod opml;
 pub mod orchid;
 pub mod pdf;
 pub mod playlist;
+pub mod properties;
 pub mod reg;
 pub mod rtf;
 pub mod shortcut;
@@ -89,6 +90,7 @@ impl Extractor {
                 Arc::new(nfo::NfoExtractor),
                 Arc::new(svg::SvgExtractor),
                 Arc::new(reg::RegExtractor),
+                Arc::new(properties::PropertiesExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

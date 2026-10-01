@@ -57,6 +57,8 @@ SVG drawings (`.svg`) contribute visible labels. Scripts, styles, and
 metadata are skipped.
 Registry exports (`.reg`) contribute key paths and string values,
 including UTF-16 files. `dword` and `hex` values are skipped.
+Java property files (`.properties`) contribute keys, values, and
+comments. `\\uXXXX` escapes are decoded.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
