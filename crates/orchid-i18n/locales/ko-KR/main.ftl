@@ -573,6 +573,7 @@ password-copy-username = 사용자 이름 복사
 password-copy-totp = TOTP 복사
 password-open-url = URL 열기
 password-password-copied = 비밀번호 복사됨(30초 후 지워짐)
+password-clipboard-unavailable = 클립보드에 복사할 수 없습니다
 password-totp-copied = TOTP 복사됨(30초 후 지워짐)
 password-totp-remaining = { $s }초
 

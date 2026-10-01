@@ -731,6 +731,9 @@ release yet.
 - Viewer dispatch sniffs OOXML `[Content_Types].xml` in ZIP heads so Word
   packages open in the document editor while Excel / PowerPoint open as
   archives (including misnamed `.docx` sheets/slides).
+- Password manager no longer pretends a secret was copied when the OS
+  clipboard is unavailable; copy failures surface a toast instead of a
+  silent success.
 - Terminal no longer leaves stale rows on screen after a UI stall: the
   retained raster diffs each buffer against the cells it shows instead of
   trusting the emulator's per-snapshot dirty lines (`f158f99f`).

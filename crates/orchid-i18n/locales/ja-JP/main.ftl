@@ -573,6 +573,7 @@ password-copy-username = ユーザー名をコピー
 password-copy-totp = TOTP をコピー
 password-open-url = URL を開く
 password-password-copied = パスワードをコピーしました（30 秒後に消去）
+password-clipboard-unavailable = クリップボードにコピーできませんでした
 password-totp-copied = TOTP をコピーしました（30 秒後に消去）
 password-totp-remaining = { $s } 秒
 

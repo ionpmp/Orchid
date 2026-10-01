@@ -563,6 +563,7 @@ password-copy-username = Скопировать логин
 password-copy-totp = Скопировать TOTP
 password-open-url = Открыть URL
 password-password-copied = Пароль скопирован (будет очищен через 30 с)
+password-clipboard-unavailable = Не удалось скопировать в буфер обмена
 password-totp-copied = TOTP скопирован (будет очищен через 30 с)
 password-totp-remaining = { $s } с
 

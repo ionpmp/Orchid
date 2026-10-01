@@ -360,21 +360,22 @@ impl OrchidApp {
             .register(orchid_widgets::builtin::video_player::descriptor())
             .map_err(|e| UiError::Slint(format!("register video-player: {e}")))?;
 
-        // Password manager: needs an unlocked database + a secure clipboard.
-        // For MVP we auto-create/unlock a dev database in debug builds. In release
-        // builds, if the database can't be opened yet, we still register the
-        // widget over an empty dev database so the UI can land; full unlock UI
-        // is a later task.
+        // Password manager: register over a (possibly locked) vault. Unlock UI
+        // lives in the widget; debug builds may auto-create a throwaway vault.
+        // When the OS clipboard is unavailable, copies must fail visibly — never
+        // pretend a secret was copied.
         #[derive(Debug)]
-        struct NullClipboard;
+        struct UnavailableClipboard;
         #[async_trait::async_trait]
-        impl orchid_crypto::SecureClipboard for NullClipboard {
+        impl orchid_crypto::SecureClipboard for UnavailableClipboard {
             async fn copy_with_auto_clear(
                 &self,
                 _secret: secrecy::SecretString,
                 _clear_after: std::time::Duration,
             ) -> orchid_crypto::Result<()> {
-                Ok(())
+                Err(orchid_crypto::CryptoError::Encoding(
+                    "clipboard unavailable".into(),
+                ))
             }
             async fn clear_if_ours(&self) -> orchid_crypto::Result<bool> {
                 Ok(false)
@@ -416,8 +417,8 @@ impl OrchidApp {
                 (cb, Some(sub))
             }
             Err(e) => {
-                warn!(error = %e, "clipboard unavailable; password copy will be disabled in this environment");
-                (Arc::new(NullClipboard), None)
+                warn!(error = %e, "clipboard unavailable; password copy will report an error");
+                (Arc::new(UnavailableClipboard), None)
             }
         };
 

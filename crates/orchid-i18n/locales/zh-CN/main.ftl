@@ -573,6 +573,7 @@ password-copy-username = 复制用户名
 password-copy-totp = 复制 TOTP
 password-open-url = 打开 URL
 password-password-copied = 密码已复制（30 秒后清除）
+password-clipboard-unavailable = 无法复制到剪贴板
 password-totp-copied = TOTP 已复制（30 秒后清除）
 password-totp-remaining = { $s } 秒
 

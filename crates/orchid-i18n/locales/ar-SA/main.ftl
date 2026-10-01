@@ -574,6 +574,7 @@ password-copy-username = نسخ اسم المستخدم
 password-copy-totp = نسخ TOTP
 password-open-url = فتح URL
 password-password-copied = تم نسخ كلمة المرور (تُمسح خلال 30 ث)
+password-clipboard-unavailable = تعذر النسخ إلى الحافظة
 password-totp-copied = تم نسخ TOTP (يُمسح خلال 30 ث)
 password-totp-remaining = { $s } ث
 

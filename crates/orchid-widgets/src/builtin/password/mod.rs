@@ -1,8 +1,9 @@
 //! Password-manager widget.
 //!
-//! Supports list, search, copy, create, edit, groups, and generate. The
-//! database is expected to already be unlocked — the unlock dialog is a
-//! separate piece of UI that the widget does not own.
+//! Supports list, search, copy, create, edit, groups, generate, and lock.
+//! When the vault is locked the UI shows an unlock surface (passphrase /
+//! Windows Hello); this module exposes [`unlock_with_passphrase`] /
+//! [`unlock_with_biometric`] for that chrome.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

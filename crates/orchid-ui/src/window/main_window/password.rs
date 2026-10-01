@@ -83,7 +83,7 @@ impl MainWindowController {
         let t = Arc::downgrade(self);
         let locale = self.locale.clone();
         spawn::spawn_local_compat(async move {
-            let toast_key = match kind {
+            let (toast_key, ok) = match kind {
                 PasswordCopyKind::Password => {
                     match orchid_widgets::builtin::password::copy_password(
                         inst_id,
@@ -92,20 +92,26 @@ impl MainWindowController {
                     )
                     .await
                     {
-                        Ok(()) => "password-password-copied",
+                        Ok(()) => ("password-password-copied", true),
                         Err(e) => {
                             warn!(?e, "copy password");
-                            return;
+                            match copy_failure_toast(&e) {
+                                Some(key) => (key, false),
+                                None => return,
+                            }
                         }
                     }
                 }
                 PasswordCopyKind::Username => {
                     match orchid_widgets::builtin::password::copy_username(inst_id, &entry_id).await
                     {
-                        Ok(()) => "password-username-copied",
+                        Ok(()) => ("password-username-copied", true),
                         Err(e) => {
                             warn!(?e, "copy username");
-                            return;
+                            match copy_failure_toast(&e) {
+                                Some(key) => (key, false),
+                                None => return,
+                            }
                         }
                     }
                 }
@@ -117,10 +123,13 @@ impl MainWindowController {
                     )
                     .await
                     {
-                        Ok(()) => "password-totp-copied",
+                        Ok(()) => ("password-totp-copied", true),
                         Err(e) => {
                             warn!(?e, "copy totp");
-                            return;
+                            match copy_failure_toast(&e) {
+                                Some(key) => (key, false),
+                                None => return,
+                            }
                         }
                     }
                 }
@@ -133,8 +142,8 @@ impl MainWindowController {
             let title = locale.tr("widget-password-name");
             c.password_toasts
                 .write()
-                .insert(inst_id, (msg.clone(), true));
-            c.push_notification(&title, &msg, 1);
+                .insert(inst_id, (msg.clone(), ok));
+            c.push_notification(&title, &msg, if ok { 1 } else { 2 });
             c.schedule_instance_patch(inst_id);
 
             let t2 = Arc::downgrade(&c);
@@ -446,6 +455,15 @@ impl MainWindowController {
                 return Some(inst.id);
             }
         }
+        None
+    }
+}
+
+fn copy_failure_toast(error: &str) -> Option<&'static str> {
+    let lower = error.to_ascii_lowercase();
+    if lower.contains("clipboard") {
+        Some("password-clipboard-unavailable")
+    } else {
         None
     }
 }

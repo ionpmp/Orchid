@@ -573,6 +573,7 @@ password-copy-username = Benutzernamen kopieren
 password-copy-totp = TOTP kopieren
 password-open-url = URL öffnen
 password-password-copied = Passwort kopiert (wird in 30s gelöscht)
+password-clipboard-unavailable = Kopieren in die Zwischenablage fehlgeschlagen
 password-totp-copied = TOTP kopiert (wird in 30s gelöscht)
 password-totp-remaining = { $s }s
 

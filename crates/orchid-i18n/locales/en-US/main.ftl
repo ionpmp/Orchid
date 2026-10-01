@@ -918,6 +918,7 @@ password-copy-username = Copy username
 password-copy-totp = Copy TOTP
 password-open-url = Open URL
 password-password-copied = Password copied (clears in 30s)
+password-clipboard-unavailable = Could not copy to the clipboard
 password-totp-copied = TOTP copied (clears in 30s)
 password-totp-remaining = { $s }s
 
