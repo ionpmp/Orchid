@@ -42,6 +42,8 @@ Playlists (`.m3u`, `.m3u8`, `.pls`) contribute track titles and paths.
 Durations and stream directives are skipped.
 LaTeX sources (`.tex`, `.ltx`) contribute the document with comments
 removed. Escaped percent signs and verbatim blocks are kept.
+CUE sheets (`.cue`) contribute album and track titles, performers, and
+file names. Index timestamps are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

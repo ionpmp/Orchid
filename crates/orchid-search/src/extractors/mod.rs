@@ -6,6 +6,7 @@
 
 pub mod audio;
 pub mod bib;
+pub mod cue;
 pub mod docx;
 pub mod eml;
 pub mod epub_odf;
@@ -75,6 +76,7 @@ impl Extractor {
                 Arc::new(mbox::MboxExtractor),
                 Arc::new(playlist::PlaylistExtractor),
                 Arc::new(latex::LatexExtractor),
+                Arc::new(cue::CueExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }
