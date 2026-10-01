@@ -63,6 +63,7 @@ pub mod qt;
 pub mod rc;
 pub mod rdoc;
 pub mod reg;
+pub mod requirements;
 pub mod resolved;
 pub mod resources;
 pub mod rtf;
@@ -293,6 +294,13 @@ impl Extractor {
         if composer::is_composer_lock_name(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(composer::composer_lock_text(
+                &text::decode_best_effort(&raw),
+            )));
+        }
+        // `requirements.txt` is plain text, which would index `--hash` values.
+        if requirements::is_requirements_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(requirements::requirements_text(
                 &text::decode_best_effort(&raw),
             )));
         }
