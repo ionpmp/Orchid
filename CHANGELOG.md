@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes compiled gettext catalogs (`.mo`, `.gmo`):
+  message ids and translations. The catalog header is not indexed.
 - Full-text search indexes Texinfo manuals (`.texi`, `.texinfo`): titles
   and body text. `@ignore` blocks and `@c` comments are not indexed.
 - Full-text search indexes Perl POD (`.pod`): headings, items, and

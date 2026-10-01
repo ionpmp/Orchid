@@ -39,6 +39,7 @@ impl ContentExtractor for TextExtractor {
         // Storyboards are extracted separately. Leave them for [`super::storyboard`].
         // Perl POD is extracted separately. Leave it for [`super::pod`].
         // Texinfo is extracted separately. Leave it for [`super::texinfo`].
+        // Compiled gettext catalogs are extracted separately. Leave them for [`super::mo`].
         // Manual pages are extracted separately. Leave them for [`super::man`].
         if extension.is_some_and(super::man::is_man_ext) {
             return false;
@@ -72,6 +73,8 @@ impl ContentExtractor for TextExtractor {
                     | "texi"
                     | "texinfo"
                     | "txi"
+                    | "mo"
+                    | "gmo"
             )
         }) {
             return false;

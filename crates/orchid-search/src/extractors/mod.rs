@@ -19,6 +19,7 @@ pub mod ical;
 pub mod latex;
 pub mod man;
 pub mod mbox;
+pub mod mo;
 pub mod nfo;
 pub mod notebook;
 pub mod ooxml;
@@ -112,6 +113,7 @@ impl Extractor {
                 Arc::new(storyboard::StoryboardExtractor),
                 Arc::new(pod::PodExtractor),
                 Arc::new(texinfo::TexinfoExtractor),
+                Arc::new(mo::MoExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

@@ -86,6 +86,8 @@ Perl POD (`.pod`) contributes headings, items, and paragraphs. Code
 after `=cut` and `=begin comment` blocks are skipped.
 Texinfo manuals (`.texi`, `.texinfo`) contribute titles and body text.
 `@ignore` blocks and `@c` comments are skipped.
+Compiled gettext catalogs (`.mo`, `.gmo`) contribute message ids and
+translations. The catalog header is skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
