@@ -38,6 +38,7 @@ pub mod ooxml;
 pub mod opml;
 pub mod orchid;
 pub mod pdf;
+pub mod pipfile;
 pub mod pkg;
 pub mod pkglock;
 pub mod playlist;
@@ -280,6 +281,13 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `Pipfile.lock` is plain JSON, which would index package hashes.
+        if pipfile::is_pipfile_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(pipfile::pipfile_lock_text(&text::decode_best_effort(
+                &raw,
+            ))));
         }
         // `Gemfile.lock` is plain text, which would index revisions and checksums.
         if gemfile::is_gemfile_lock_name(name) {

@@ -145,6 +145,7 @@ are skipped.
 file hashes are skipped.
 `Gemfile.lock` contributes gem names. Versions, revisions, and checksums
 are skipped.
+`Pipfile.lock` contributes package names. Versions and hashes are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:
