@@ -547,11 +547,16 @@ pub(crate) fn build_jyotish_model(
 }
 
 /// Update an existing [`JyotishModel`] in place, keeping nested `VecModel` identities.
+///
+/// Returns whether scalar fields changed. Those live on the parent frame row, so
+/// the caller must `set_row_data` or tab switches and titles never reach the UI.
+/// List models notify on their own and are left on the same `ModelRc`.
 pub(crate) fn patch_jyotish_model(
     model: &mut JyotishModel,
     p: &orchid_widgets::JyotishPayload,
     locale: &LocaleManager,
-) {
+) -> bool {
+    let previous = model.clone();
     let cities = model.cities.clone();
     let search_results = model.search_results.clone();
     let profiles = model.profiles.clone();
@@ -625,6 +630,9 @@ pub(crate) fn patch_jyotish_model(
     model.rectify.candidates = rectify_candidates;
     adopt_eq_rows(&rectify_window_labels, &model.rectify.window_labels);
     model.rectify.window_labels = rectify_window_labels;
+    // ModelRc equality is pointer identity; restored handles match `previous`,
+    // so this is true only when a scalar (tab, title, score, …) changed.
+    *model != previous
 }
 
 fn display_profile_name(name: &str, locale: &LocaleManager) -> SharedString {

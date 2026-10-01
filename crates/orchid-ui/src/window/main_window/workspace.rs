@@ -713,6 +713,7 @@ impl MainWindowController {
         let Some((r, mut row)) = find_frame_row(v, id) else {
             return false;
         };
+        let mut content_changed = false;
         let patched = match (type_id, &ws.payload) {
             (orchid_widgets::builtin::clock::TYPE_ID, WidgetPayload::Clock(p)) => {
                 patch_clock_model(&mut row.clock, p, &self.locale);
@@ -789,7 +790,7 @@ impl MainWindowController {
                 true
             }
             (orchid_widgets::builtin::jyotish::TYPE_ID, WidgetPayload::Jyotish(p)) => {
-                patch_jyotish_model(&mut row.jyotish, p, &self.locale);
+                content_changed = patch_jyotish_model(&mut row.jyotish, p, &self.locale);
                 true
             }
             (orchid_widgets::builtin::moon::TYPE_ID, WidgetPayload::Moon(p)) => {
@@ -813,10 +814,12 @@ impl MainWindowController {
         if !patched {
             return false;
         }
-        // Nested content ModelRcs are Arc-shared; only rewrite the frame
-        // when chrome scalars change. Group-tab rebuild is deferred to
-        // that same write so every content tick does not remount the
-        // tab strip.
+        // Nested content ModelRcs are Arc-shared and notify on their own.
+        // Jyotish scalars (active tab, titles, scores) live on this row, so a
+        // content change must be written back or the view stays on the old tab
+        // until the next full frame rebuild. Group-tab models are rebuilt only
+        // for chrome changes, and kept by pointer so that write does not
+        // remount the tab strip.
         let mut need_frame = false;
         if let Some(b) = bounds {
             if row.x != b.x || row.y != b.y || row.width != b.width || row.height != b.height {
@@ -842,6 +845,8 @@ impl MainWindowController {
             let (group_id, group_tabs) = self.build_group_tab_models(id);
             row.group_id = group_id;
             row.group_tabs = group_tabs;
+        }
+        if need_frame || content_changed {
             v.set_row_data(r, row);
         }
         if type_id == orchid_widgets::builtin::browser::TYPE_ID {
