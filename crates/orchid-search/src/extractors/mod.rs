@@ -22,6 +22,7 @@ pub mod latex;
 pub mod man;
 pub mod mbox;
 pub mod mo;
+pub mod msbuild;
 pub mod nfo;
 pub mod notebook;
 pub mod ooxml;
@@ -130,6 +131,7 @@ impl Extractor {
                 Arc::new(spec::SpecExtractor),
                 Arc::new(debian::DebianExtractor),
                 Arc::new(rdoc::RdocExtractor),
+                Arc::new(msbuild::MsbuildExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

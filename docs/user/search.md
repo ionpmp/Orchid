@@ -106,6 +106,9 @@ Debian source control (`.dsc`, `.changes`) contributes package names,
 descriptions, and relationships. Checksums and file hashes are skipped.
 RDoc files (`.rdoc`) contribute headings, lists, and paragraphs. Rules
 and `:stopdoc:` blocks are skipped.
+MSBuild projects (`.csproj`, `.fsproj`, `.vbproj`, `.vcxproj`) contribute
+assembly names, descriptions, SDK ids, and package or project references.
+Versions and source-file lists are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
