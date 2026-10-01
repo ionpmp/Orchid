@@ -35,6 +35,7 @@ contact (`.vcf`) fields. Photo and attachment blobs in those files are
 skipped. Bibliography files (`.bib`, `.ris`) contribute titles, authors,
 and abstracts. OPML lists (`.opml`) contribute outline titles and feed URLs.
 Jupyter notebooks (`.ipynb`) contribute markdown and code cells, not outputs.
+Unix mailboxes (`.mbox`) are split into messages and indexed like `.eml`.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

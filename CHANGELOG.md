@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Unix mailboxes (`.mbox`) as separate
+  messages, using the same subject and body rules as `.eml`. A `From `
+  line inside a paragraph is not treated as a message boundary.
 - Full-text search indexes Jupyter notebooks (`.ipynb`): markdown and
   code cell sources. Cell outputs and embedded images are skipped.
 - Full-text search indexes OPML (`.opml`) outline titles and feed URLs
