@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes RPM spec files (`.spec`): package names,
+  summaries, descriptions, changelogs, and file lists. Build scripts are
+  not indexed.
 - Full-text search indexes torrent files (`.torrent`): display names,
   comments, announce URLs, and file paths. Piece hashes are not indexed.
 - Full-text search indexes WiX sources (`.wxs`, `.wxl`): product names,

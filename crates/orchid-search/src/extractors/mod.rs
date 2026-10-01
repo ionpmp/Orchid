@@ -36,6 +36,7 @@ pub mod reg;
 pub mod resources;
 pub mod rtf;
 pub mod shortcut;
+pub mod spec;
 pub mod storyboard;
 pub mod strings;
 pub mod subtitle;
@@ -124,6 +125,7 @@ impl Extractor {
                 Arc::new(xspf::XspfExtractor),
                 Arc::new(wix::WixExtractor),
                 Arc::new(torrent::TorrentExtractor),
+                Arc::new(spec::SpecExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }
