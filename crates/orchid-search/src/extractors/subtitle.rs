@@ -1,9 +1,11 @@
 //! Subtitle and lyric cue extractor.
 //!
-//! Cue text is indexed. Timestamps, cue numbers, WebVTT notes, and ASS
-//! style overrides are not.
+//! Cue text is indexed. Timestamps, cue numbers, WebVTT notes, ASS style
+//! overrides, and SAMI or TTML style blocks are not.
 
 use async_trait::async_trait;
+use quick_xml::events::Event;
+use quick_xml::reader::Reader;
 
 use crate::error::Result;
 use crate::extractors::text::{decode_best_effort, MAX_CONTENT_BYTES};
@@ -26,6 +28,8 @@ impl ContentExtractor for SubtitleExtractor {
                     | "text/x-ssa"
                     | "application/x-ass"
                     | "text/x-lrc"
+                    | "application/x-sami"
+                    | "application/ttml+xml"
             )
         }) || extension.is_some_and(is_subtitle_ext)
     }
@@ -45,7 +49,7 @@ impl ContentExtractor for SubtitleExtractor {
 pub(crate) fn is_subtitle_ext(extension: &str) -> bool {
     matches!(
         extension.to_ascii_lowercase().as_str(),
-        "srt" | "vtt" | "ass" | "ssa" | "lrc"
+        "srt" | "vtt" | "ass" | "ssa" | "lrc" | "smi" | "ttml" | "dfxp"
     )
 }
 
@@ -53,6 +57,8 @@ pub(crate) fn subtitle_text(input: &str, extension: &str) -> String {
     match extension.to_ascii_lowercase().as_str() {
         "ass" | "ssa" => ass_text(input),
         "lrc" => lrc_text(input),
+        "smi" => sami_text(input),
+        "ttml" | "dfxp" => ttml_text(input),
         "vtt" => cue_text(input),
         _ => {
             let head = input.trim_start();
@@ -67,6 +73,156 @@ pub(crate) fn subtitle_text(input: &str, extension: &str) -> String {
             }
         }
     }
+}
+
+fn sami_text(xml: &str) -> String {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    reader.config_mut().check_end_names = false;
+    let mut buf = Vec::new();
+    let mut out = String::new();
+    let mut skip = 0i32;
+    let mut chunk = String::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                let local = local_name(e.name().as_ref());
+                if skip > 0 || matches!(local.as_str(), "style" | "script") {
+                    skip += 1;
+                } else if matches!(local.as_str(), "p" | "title") {
+                    push_line(&mut out, chunk.trim());
+                    chunk.clear();
+                }
+            }
+            Ok(Event::Text(t)) => {
+                if skip == 0 {
+                    push_chunk(&mut chunk, t.as_ref());
+                }
+            }
+            Ok(Event::GeneralRef(r)) => {
+                if skip == 0 {
+                    chunk.push(decode_ref(r.as_ref()));
+                }
+            }
+            Ok(Event::End(_)) => {
+                if skip > 0 {
+                    skip -= 1;
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    push_line(&mut out, chunk.trim());
+    out.trim().to_string()
+}
+
+fn ttml_text(xml: &str) -> String {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    reader.config_mut().check_end_names = false;
+    let mut buf = Vec::new();
+    let mut out = String::new();
+    let mut skip = 0i32;
+    let mut capture: Option<Capture> = None;
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                let local = local_name(e.name().as_ref());
+                if skip > 0 || matches!(local.as_str(), "styling" | "layout") {
+                    skip += 1;
+                } else if let Some(current) = capture.as_mut() {
+                    if local == current.tag {
+                        current.depth += 1;
+                    }
+                } else if matches!(local.as_str(), "p" | "span" | "title") {
+                    capture = Some(Capture::new(local));
+                }
+            }
+            Ok(Event::Text(t)) => {
+                if skip == 0 {
+                    if let Some(current) = capture.as_mut() {
+                        push_chunk(&mut current.buf, t.as_ref());
+                    }
+                }
+            }
+            Ok(Event::GeneralRef(r)) => {
+                if skip == 0 {
+                    if let Some(current) = capture.as_mut() {
+                        current.buf.push(decode_ref(r.as_ref()));
+                    }
+                }
+            }
+            Ok(Event::End(e)) => {
+                if skip > 0 {
+                    skip -= 1;
+                } else {
+                    let local = local_name(e.name().as_ref());
+                    let done = capture
+                        .as_ref()
+                        .is_some_and(|current| current.tag == local && current.depth == 0);
+                    if done {
+                        if let Some(finished) = capture.take() {
+                            push_line(&mut out, finished.buf.trim());
+                        }
+                    } else if let Some(current) = capture.as_mut() {
+                        if current.tag == local && current.depth > 0 {
+                            current.depth -= 1;
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    out.trim().to_string()
+}
+
+struct Capture {
+    tag: String,
+    depth: i32,
+    buf: String,
+}
+
+impl Capture {
+    fn new(tag: String) -> Self {
+        Self {
+            tag,
+            depth: 0,
+            buf: String::new(),
+        }
+    }
+}
+
+fn push_chunk(buf: &mut String, chunk: &str) {
+    if chunk.is_empty() {
+        return;
+    }
+    let needs_space = !buf.is_empty()
+        && !buf.ends_with(|c: char| c.is_whitespace())
+        && !chunk.starts_with(|c: char| c.is_whitespace());
+    if needs_space {
+        buf.push(' ');
+    }
+    buf.push_str(chunk);
+}
+
+fn decode_ref(name: &str) -> char {
+    match name {
+        "amp" => '&',
+        "lt" => '<',
+        "gt" => '>',
+        "quot" => '"',
+        "apos" => '\'',
+        _ => ' ',
+    }
+}
+
+fn local_name(name: &str) -> String {
+    name.rsplit(':').next().unwrap_or(name).to_string()
 }
 
 fn cue_text(input: &str) -> String {
@@ -325,5 +481,35 @@ mod tests {
         assert!(!text.contains("offset"), "{text}");
         assert!(!text.contains("00:01"), "{text}");
         assert!(!text.contains("+100"), "{text}");
+    }
+
+    #[test]
+    fn sami_and_ttml_keep_cues_and_skip_styles() {
+        let sami = subtitle_text(
+            "<SAMI><HEAD><TITLE>Night</TITLE>\
+             <STYLE TYPE=\"text/css\"><!-- .ENCC { Name: SECRET; } --></STYLE></HEAD>\
+             <BODY><SYNC Start=0><P Class=ENCC>Hello world\
+             <SYNC Start=1000><P Class=ENCC>Second line</BODY></SAMI>",
+            "smi",
+        );
+        assert!(sami.contains("Night"), "{sami}");
+        assert!(sami.contains("Hello world"), "{sami}");
+        assert!(sami.contains("Second line"), "{sami}");
+        assert!(!sami.contains("SECRET"), "{sami}");
+        assert!(!sami.contains("Start"), "{sami}");
+
+        let ttml = subtitle_text(
+            r#"<tt xmlns="http://www.w3.org/ns/ttml">
+              <head><styling><style xml:id="s1" tts:color="white"/></styling></head>
+              <body><div>
+                <p begin="00:00:01.000">Hello world</p>
+                <p begin="00:00:05.000">Second <span>line</span></p>
+              </div></body></tt>"#,
+            "ttml",
+        );
+        assert!(ttml.contains("Hello world"), "{ttml}");
+        assert!(ttml.contains("Second line"), "{ttml}");
+        assert!(!ttml.contains("00:00:01"), "{ttml}");
+        assert!(!ttml.contains("white"), "{ttml}");
     }
 }

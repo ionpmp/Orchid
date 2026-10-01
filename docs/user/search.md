@@ -48,7 +48,8 @@ Gettext catalogs (`.po`, `.pot`) contribute message ids, translations,
 and translator comments. Source locations and flags are skipped.
 Shortcuts (`.url`, `.desktop`, `.webloc`) contribute names and URLs.
 Launch commands and icon paths are skipped.
-Subtitles (`.srt`, `.vtt`, `.ass`, `.ssa`, `.lrc`) contribute cue text.
+Subtitles (`.srt`, `.vtt`, `.ass`, `.ssa`, `.lrc`, `.smi`, `.ttml`)
+contribute cue text.
 Timestamps, cue numbers, and style overrides are skipped.
 Media notes (`.nfo`) contribute titles, plots, and names when they are
 Kodi XML. Poster URLs and stream details are skipped. A plain-text

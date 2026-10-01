@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes SAMI (`.smi`) and TTML (`.ttml`, `.dfxp`)
+  cues. Style blocks and timestamps are not indexed.
 - Full-text search indexes iOS storyboards and XIB files
   (`.storyboard`, `.xib`): titles, label text, placeholders, and user
   labels. Class names and object ids are not indexed.
