@@ -43,6 +43,7 @@ pub mod playlist;
 pub mod plist;
 pub mod pnpm;
 pub mod pod;
+pub mod poetry;
 pub mod pom;
 pub mod properties;
 pub mod qt;
@@ -278,6 +279,13 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `poetry.lock` is plain text, which would index file hashes.
+        if poetry::is_poetry_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(poetry::poetry_lock_text(&text::decode_best_effort(
+                &raw,
+            ))));
         }
         // `pnpm-lock.yaml` is plain text, which would index integrity hashes.
         if pnpm::is_pnpm_name(name) {

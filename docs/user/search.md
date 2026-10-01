@@ -141,6 +141,8 @@ skipped.
 dist checksums are skipped.
 `pnpm-lock.yaml` contributes package names. Versions and integrity hashes
 are skipped.
+`poetry.lock` contributes package names and descriptions. Versions and
+file hashes are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:
