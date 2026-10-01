@@ -32,6 +32,7 @@ impl ContentExtractor for TextExtractor {
         // `.reg` string values are extracted separately. Leave them for [`super::reg`].
         // `.properties` escapes are decoded separately. Leave them for [`super::properties`].
         // `.resx` and XLIFF strings are extracted separately. Leave them for [`super::resources`].
+        // Apple string tables are extracted separately. Leave them for [`super::strings`].
         if extension.is_some_and(|ext| {
             matches!(
                 ext.to_ascii_lowercase().as_str(),
@@ -47,6 +48,8 @@ impl ContentExtractor for TextExtractor {
                     | "resx"
                     | "xlf"
                     | "xliff"
+                    | "strings"
+                    | "stringsdict"
             )
         }) {
             return false;

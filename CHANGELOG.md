@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Apple string tables (`.strings`,
+  `.stringsdict`): keys, translations, and block comments. Line comments
+  are not indexed.
 - Full-text search indexes .NET `.resx` files and XLIFF (`.xlf`,
   `.xliff`): names, source strings, and translations. Embedded binary
   values are not indexed.

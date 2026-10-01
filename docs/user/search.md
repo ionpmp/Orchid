@@ -61,6 +61,8 @@ Java property files (`.properties`) contribute keys, values, and
 comments. `\\uXXXX` escapes are decoded.
 .NET resource files (`.resx`) and XLIFF (`.xlf`, `.xliff`) contribute
 names, source text, and translations. Embedded binary values are skipped.
+Apple string tables (`.strings`, `.stringsdict`) contribute keys,
+translations, and block comments. Line comments are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
