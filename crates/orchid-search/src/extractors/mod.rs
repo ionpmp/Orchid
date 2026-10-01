@@ -13,6 +13,7 @@ pub mod fb2;
 pub mod feed;
 pub mod html;
 pub mod ical;
+pub mod latex;
 pub mod mbox;
 pub mod notebook;
 pub mod ooxml;
@@ -73,6 +74,7 @@ impl Extractor {
                 Arc::new(notebook::NotebookExtractor),
                 Arc::new(mbox::MboxExtractor),
                 Arc::new(playlist::PlaylistExtractor),
+                Arc::new(latex::LatexExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

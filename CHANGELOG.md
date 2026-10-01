@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes LaTeX sources (`.tex`, `.ltx`). Line
+  comments are omitted. A percent sign escaped with a backslash, and
+  the body of `verbatim`, `lstlisting`, and `minted`, are kept.
 - Full-text search indexes playlists (`.m3u`, `.m3u8`, `.pls`): track
   titles and file or stream paths. Durations and playlist directives
   are not indexed.
