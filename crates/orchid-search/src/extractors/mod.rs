@@ -19,6 +19,7 @@ pub mod deno;
 pub mod diff;
 pub mod docker;
 pub mod docx;
+pub mod dotenv;
 pub mod eml;
 pub mod epub_odf;
 pub mod fb2;
@@ -45,8 +46,8 @@ pub mod nuspec;
 pub mod ooxml;
 pub mod opml;
 pub mod orchid;
-pub mod pdm;
 pub mod pdf;
+pub mod pdm;
 pub mod pipfile;
 pub mod pkg;
 pub mod pkglock;
@@ -284,6 +285,11 @@ impl Extractor {
         if docker::needs_name_dispatch(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(docker::docker_text(&text::decode_best_effort(&raw))));
+        }
+        // `.env` is plain text, which would index secret values.
+        if dotenv::is_dotenv_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(dotenv::dotenv_text(&text::decode_best_effort(&raw))));
         }
         // `package.json` is plain JSON, which would index script commands.
         if pkg::is_pkg_name(name) {

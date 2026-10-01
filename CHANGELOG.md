@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `.env` files: variable names. Values are not
+  indexed.
 - Full-text search indexes `requirements.txt`: package names. Versions
   and `--hash` values are not indexed.
 - Full-text search indexes `MODULE.bazel.lock`: module and repository

@@ -175,6 +175,7 @@ the digest are skipped.
 hashes are skipped.
 `requirements.txt` contributes package names. Versions and `--hash` values
 are skipped.
+`.env` contributes variable names. Values are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:
