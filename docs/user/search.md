@@ -95,6 +95,9 @@ descriptions, documentation, and start commands. Environment variables
 and credentials are skipped.
 XSPF playlists (`.xspf`) contribute titles, creators, albums, and
 locations. Durations and vendor extensions are skipped.
+WiX sources (`.wxs`, `.wxl`) contribute product names, feature titles,
+dialog text, and localization strings. Component ids and property values
+are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

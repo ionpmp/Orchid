@@ -44,6 +44,7 @@ impl ContentExtractor for TextExtractor {
         // GNU Info is extracted separately. Leave it for [`super::info`].
         // systemd units are extracted separately. Leave them for [`super::unit`].
         // XSPF playlists are extracted separately. Leave them for [`super::xspf`].
+        // WiX sources are extracted separately. Leave them for [`super::wix`].
         if extension.is_some_and(super::man::is_man_ext)
             || extension.is_some_and(super::info::is_info_ext)
             || extension.is_some_and(super::unit::is_unit_ext)
@@ -82,6 +83,8 @@ impl ContentExtractor for TextExtractor {
                     | "mo"
                     | "gmo"
                     | "xspf"
+                    | "wxs"
+                    | "wxl"
             )
         }) {
             return false;

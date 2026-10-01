@@ -44,6 +44,7 @@ pub mod texinfo;
 pub mod text;
 pub mod ui;
 pub mod unit;
+pub mod wix;
 pub mod xaml;
 pub mod xspf;
 
@@ -120,6 +121,7 @@ impl Extractor {
                 Arc::new(info::InfoExtractor),
                 Arc::new(unit::UnitExtractor),
                 Arc::new(xspf::XspfExtractor),
+                Arc::new(wix::WixExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

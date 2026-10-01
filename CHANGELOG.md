@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes WiX sources (`.wxs`, `.wxl`): product names,
+  feature titles, dialog text, and localization strings. Component ids
+  and property values are not indexed.
 - Full-text search indexes XSPF playlists (`.xspf`): titles, creators,
   albums, and locations. Durations and vendor extensions are not indexed.
 - Full-text search indexes systemd units (`.service`, `.socket`, `.mount`,
