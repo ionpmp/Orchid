@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `deno.lock`: package names and remote module
+  URLs. Integrity hashes and revisions are not indexed.
 - Full-text search indexes `bun.lock`: package names. Versions and
   integrity hashes are not indexed.
 - Full-text search indexes `flake.lock`: node names, owners, repos, and

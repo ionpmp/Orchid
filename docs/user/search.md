@@ -161,6 +161,8 @@ hashes are skipped.
 values and revisions are skipped.
 `bun.lock` contributes package names. Versions and integrity hashes are
 skipped.
+`deno.lock` contributes package names and remote module URLs. Integrity
+hashes and revisions are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:
