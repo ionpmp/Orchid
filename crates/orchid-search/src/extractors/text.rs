@@ -12,11 +12,11 @@ pub const MAX_CONTENT_BYTES: usize = 2 * 1024 * 1024;
 /// Default text-ish extensions.
 const TEXT_EXTENSIONS: &[&str] = &[
     "txt", "text", "log", "md", "markdown", "rst", "adoc", "org", "csv", "tsv", "json", "jsonl",
-    "ndjson", "xml", "html", "htm", "ini", "toml", "yaml", "yml", "conf", "cfg", "env", "srt",
-    "vtt", "ass", "ssa", "rs", "py", "pyi", "js", "mjs", "cjs", "jsx", "ts", "tsx", "css", "scss",
-    "less", "c", "h", "cpp", "hpp", "cc", "hh", "cs", "java", "kt", "kts", "go", "rb", "php",
-    "swift", "lua", "pl", "sh", "bash", "zsh", "ps1", "psm1", "bat", "cmd", "sql", "vue", "svelte",
-    "dart", "ex", "exs", "erl", "hs", "ml", "cmake", "mk", "ftl", "slint", "gradle",
+    "ndjson", "xml", "html", "htm", "ini", "toml", "yaml", "yml", "conf", "cfg", "env", "rs", "py",
+    "pyi", "js", "mjs", "cjs", "jsx", "ts", "tsx", "css", "scss", "less", "c", "h", "cpp", "hpp",
+    "cc", "hh", "cs", "java", "kt", "kts", "go", "rb", "php", "swift", "lua", "pl", "sh", "bash",
+    "zsh", "ps1", "psm1", "bat", "cmd", "sql", "vue", "svelte", "dart", "ex", "exs", "erl", "hs",
+    "ml", "cmake", "mk", "ftl", "slint", "gradle",
 ];
 
 /// Extract readable text from plaintext-ish files.
@@ -26,10 +26,26 @@ pub struct TextExtractor;
 #[async_trait]
 impl ContentExtractor for TextExtractor {
     fn can_handle(&self, mime: Option<&str>, extension: Option<&str>) -> bool {
+        // Subtitles are timed text. Leave them for [`super::subtitle`].
+        if extension.is_some_and(|ext| {
+            matches!(
+                ext.to_ascii_lowercase().as_str(),
+                "srt" | "vtt" | "ass" | "ssa" | "lrc"
+            )
+        }) {
+            return false;
+        }
         if let Some(m) = mime {
             let base = m.split(';').next().unwrap_or(m).trim();
             // `.rtf` is `text/rtf` but is not plain text. Leave it for [`super::rtf`].
-            if base.eq_ignore_ascii_case("text/rtf") {
+            if base.eq_ignore_ascii_case("text/rtf")
+                || base.eq_ignore_ascii_case("text/vtt")
+                || base.eq_ignore_ascii_case("application/x-subrip")
+                || base.eq_ignore_ascii_case("application/x-srt")
+                || base.eq_ignore_ascii_case("text/x-ssa")
+                || base.eq_ignore_ascii_case("application/x-ass")
+                || base.eq_ignore_ascii_case("text/x-lrc")
+            {
                 return false;
             }
             if base.starts_with("text/") || base == "application/json" || base == "application/xml"
@@ -100,7 +116,8 @@ mod tests {
         assert!(e.can_handle(None, Some("md")));
         assert!(e.can_handle(None, Some("rs")));
         assert!(e.can_handle(None, Some("ps1")));
-        assert!(e.can_handle(None, Some("ass")));
+        assert!(!e.can_handle(None, Some("ass")));
+        assert!(!e.can_handle(Some("text/plain"), Some("srt")));
         assert!(e.can_handle(Some("text/plain"), None));
         assert!(!e.can_handle(Some("image/png"), Some("png")));
         assert!(!e.can_handle(None, Some("exe")));

@@ -25,6 +25,7 @@ pub mod pdf;
 pub mod playlist;
 pub mod rtf;
 pub mod shortcut;
+pub mod subtitle;
 pub mod text;
 
 use std::sync::Arc;
@@ -81,6 +82,7 @@ impl Extractor {
                 Arc::new(cue::CueExtractor),
                 Arc::new(gettext::GettextExtractor),
                 Arc::new(shortcut::ShortcutExtractor),
+                Arc::new(subtitle::SubtitleExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

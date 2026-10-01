@@ -29,8 +29,8 @@ tags (ID3 and Vorbis comments: title, artist, album, lyrics), and
 FictionBook (`.fb2` and `.fb2.zip`, including Windows-1251), and email
 (`.eml`: subject, from, to, and text or HTML bodies; attachments are
 skipped)).
-`extract-text` also indexes source and subtitle files (`.rs`, `.py`, `.js`,
-`.ts`, `.ps1`, `.sql`, `.ass`, and similar), plus calendar (`.ics`) and
+`extract-text` also indexes source files (`.rs`, `.py`, `.js`,
+`.ts`, `.ps1`, `.sql`, and similar), plus calendar (`.ics`) and
 contact (`.vcf`) fields. Photo and attachment blobs in those files are
 skipped. Bibliography files (`.bib`, `.ris`) contribute titles, authors,
 and abstracts. OPML lists (`.opml`) contribute outline titles and feed URLs.
@@ -48,6 +48,8 @@ Gettext catalogs (`.po`, `.pot`) contribute message ids, translations,
 and translator comments. Source locations and flags are skipped.
 Shortcuts (`.url`, `.desktop`, `.webloc`) contribute names and URLs.
 Launch commands and icon paths are skipped.
+Subtitles (`.srt`, `.vtt`, `.ass`, `.ssa`, `.lrc`) contribute cue text.
+Timestamps, cue numbers, and style overrides are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

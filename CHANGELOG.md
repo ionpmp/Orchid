@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes subtitle cues (`.srt`, `.vtt`, `.ass`, `.ssa`,
+  `.lrc`) without timestamps, cue numbers, or style overrides.
 - Full-text search indexes shortcuts (`.url`, `.desktop`, `.webloc`):
   names and URLs. `Exec` lines and icon paths are not indexed.
 - Full-text search indexes Gettext catalogs (`.po`, `.pot`): message
