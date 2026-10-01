@@ -167,6 +167,8 @@ hashes and revisions are skipped.
 Revisions and versions are skipped.
 `Cartfile.resolved` contributes repository names and URLs. Versions and
 commits are skipped.
+`.terraform.lock.hcl` contributes provider addresses. Versions and hashes
+are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:

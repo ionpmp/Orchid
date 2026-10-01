@@ -72,6 +72,7 @@ pub mod storyboard;
 pub mod strings;
 pub mod subtitle;
 pub mod svg;
+pub mod terraform;
 pub mod texinfo;
 pub mod text;
 pub mod torrent;
@@ -290,6 +291,13 @@ impl Extractor {
         if composer::is_composer_lock_name(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(composer::composer_lock_text(
+                &text::decode_best_effort(&raw),
+            )));
+        }
+        // `.terraform.lock.hcl` is plain text, which would index provider hashes.
+        if terraform::is_terraform_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(terraform::terraform_lock_text(
                 &text::decode_best_effort(&raw),
             )));
         }
