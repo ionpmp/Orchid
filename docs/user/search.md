@@ -29,6 +29,8 @@ tags (ID3 and Vorbis comments: title, artist, album, lyrics), and
 FictionBook (`.fb2` and `.fb2.zip`, including Windows-1251), and email
 (`.eml`: subject, from, to, and text or HTML bodies; attachments are
 skipped)).
+`extract-text` also indexes source and subtitle files (`.rs`, `.py`, `.js`,
+`.ts`, `.ps1`, `.sql`, `.ass`, and similar).
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

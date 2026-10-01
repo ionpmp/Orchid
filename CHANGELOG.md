@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes source and subtitle files (Rust, Python,
+  JavaScript, TypeScript, PowerShell, SQL, ASS/SSA, and similar) when
+  `[search].extract-text` is enabled.
 - Full-text search indexes `.eml` messages: subject, from, to, and
   text or HTML bodies. Quoted-printable, base64, and encoded-words are
   decoded; attachments are skipped.

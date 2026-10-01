@@ -11,8 +11,12 @@ pub const MAX_CONTENT_BYTES: usize = 2 * 1024 * 1024;
 
 /// Default text-ish extensions.
 const TEXT_EXTENSIONS: &[&str] = &[
-    "txt", "log", "md", "markdown", "csv", "tsv", "json", "xml", "html", "htm", "ini", "toml",
-    "yaml", "yml", "conf", "cfg", "srt", "vtt",
+    "txt", "text", "log", "md", "markdown", "rst", "adoc", "org", "csv", "tsv", "json", "jsonl",
+    "ndjson", "xml", "html", "htm", "ini", "toml", "yaml", "yml", "conf", "cfg", "env", "srt",
+    "vtt", "ass", "ssa", "rs", "py", "pyi", "js", "mjs", "cjs", "jsx", "ts", "tsx", "css", "scss",
+    "less", "c", "h", "cpp", "hpp", "cc", "hh", "cs", "java", "kt", "kts", "go", "rb", "php",
+    "swift", "lua", "pl", "sh", "bash", "zsh", "ps1", "psm1", "bat", "cmd", "sql", "vue", "svelte",
+    "dart", "ex", "exs", "erl", "hs", "ml", "cmake", "mk", "ftl", "slint", "gradle",
 ];
 
 /// Extract readable text from plaintext-ish files.
@@ -94,7 +98,11 @@ mod tests {
     fn handler_matches_extension() {
         let e = TextExtractor;
         assert!(e.can_handle(None, Some("md")));
+        assert!(e.can_handle(None, Some("rs")));
+        assert!(e.can_handle(None, Some("ps1")));
+        assert!(e.can_handle(None, Some("ass")));
         assert!(e.can_handle(Some("text/plain"), None));
         assert!(!e.can_handle(Some("image/png"), Some("png")));
+        assert!(!e.can_handle(None, Some("exe")));
     }
 }
