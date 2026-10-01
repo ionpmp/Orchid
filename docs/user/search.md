@@ -36,6 +36,8 @@ skipped. Bibliography files (`.bib`, `.ris`) contribute titles, authors,
 and abstracts. OPML lists (`.opml`) contribute outline titles and feed URLs.
 Jupyter notebooks (`.ipynb`) contribute markdown and code cells, not outputs.
 Unix mailboxes (`.mbox`) are split into messages and indexed like `.eml`.
+RSS and Atom feeds (`.rss`, `.atom`, and `.xml` that opens as a feed)
+contribute titles, authors, links, and article text. Markup is skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

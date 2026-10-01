@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes RSS and Atom feeds (`.rss`, `.atom`, and
+  `.xml` files that open as a feed). Titles, authors, links, and article
+  text are kept; markup, scripts, and dates are not.
 - Full-text search indexes Unix mailboxes (`.mbox`) as separate
   messages, using the same subject and body rules as `.eml`. A `From `
   line inside a paragraph is not treated as a message boundary.

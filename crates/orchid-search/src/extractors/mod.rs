@@ -10,6 +10,7 @@ pub mod docx;
 pub mod eml;
 pub mod epub_odf;
 pub mod fb2;
+pub mod feed;
 pub mod html;
 pub mod ical;
 pub mod mbox;
@@ -67,6 +68,7 @@ impl Extractor {
                 Arc::new(bib::BibExtractor),
                 Arc::new(bib::RisExtractor),
                 Arc::new(opml::OpmlExtractor),
+                Arc::new(feed::FeedExtractor),
                 Arc::new(notebook::NotebookExtractor),
                 Arc::new(mbox::MboxExtractor),
                 Arc::new(text::TextExtractor),
@@ -177,6 +179,16 @@ impl Extractor {
             }
         }
         let extension = path.extension().map(|e| e.to_ascii_lowercase());
+        // Feeds are often saved as `.xml`, which the plain-text extractor
+        // would otherwise index as markup.
+        if extension.as_deref() == Some("xml") {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            let decoded = text::decode_best_effort(&raw);
+            if feed::looks_like_feed(&decoded) {
+                return Ok(Some(feed::feed_text(&decoded)));
+            }
+            return Ok(Some(decoded));
+        }
         for e in &self.extractors {
             if e.can_handle(mime, extension.as_deref()) {
                 return Ok(Some(e.extract(provider, path).await?));
