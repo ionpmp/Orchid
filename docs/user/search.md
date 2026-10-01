@@ -143,6 +143,8 @@ dist checksums are skipped.
 are skipped.
 `poetry.lock` contributes package names and descriptions. Versions and
 file hashes are skipped.
+`Gemfile.lock` contributes gem names. Versions, revisions, and checksums
+are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:

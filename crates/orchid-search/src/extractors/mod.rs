@@ -18,6 +18,7 @@ pub mod eml;
 pub mod epub_odf;
 pub mod fb2;
 pub mod feed;
+pub mod gemfile;
 pub mod gettext;
 pub mod gomod;
 pub mod gosum;
@@ -279,6 +280,13 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `Gemfile.lock` is plain text, which would index revisions and checksums.
+        if gemfile::is_gemfile_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(gemfile::gemfile_lock_text(&text::decode_best_effort(
+                &raw,
+            ))));
         }
         // `poetry.lock` is plain text, which would index file hashes.
         if poetry::is_poetry_lock_name(name) {

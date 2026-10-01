@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `Gemfile.lock`: gem names. Versions,
+  revisions, and checksums are not indexed.
 - Full-text search indexes `poetry.lock`: package names and
   descriptions. Versions and file hashes are not indexed.
 - Full-text search indexes `pnpm-lock.yaml`: package names. Versions
