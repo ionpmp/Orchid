@@ -65,6 +65,7 @@ pub mod unit;
 pub mod wix;
 pub mod xaml;
 pub mod xspf;
+pub mod yarn;
 
 use std::sync::Arc;
 
@@ -268,6 +269,11 @@ impl Extractor {
         if pkg::is_pkg_name(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(pkg::pkg_text(&text::decode_best_effort(&raw))));
+        }
+        // `yarn.lock` is plain text, which would index integrity hashes.
+        if yarn::is_yarn_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(yarn::yarn_text(&text::decode_best_effort(&raw))));
         }
         // `package-lock.json` is plain JSON, which would index integrity hashes.
         if pkglock::is_pkglock_name(name) {

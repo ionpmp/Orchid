@@ -135,6 +135,8 @@ and dependency versions are skipped.
 `go.sum` contributes module paths. Versions and checksums are skipped.
 `package-lock.json` contributes package names. Versions and integrity
 hashes are skipped.
+`yarn.lock` contributes package names. Versions and integrity hashes are
+skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:
