@@ -33,6 +33,7 @@ pub mod opml;
 pub mod orchid;
 pub mod pdf;
 pub mod playlist;
+pub mod plist;
 pub mod pod;
 pub mod pom;
 pub mod properties;
@@ -142,6 +143,7 @@ impl Extractor {
                 Arc::new(nuspec::NuspecExtractor),
                 Arc::new(sln::SlnExtractor),
                 Arc::new(slnx::SlnxExtractor),
+                Arc::new(plist::PlistExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

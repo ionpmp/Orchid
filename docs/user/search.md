@@ -123,6 +123,9 @@ solution-item paths. Build configurations are skipped.
 Android manifests (`AndroidManifest.xml`) contribute package names,
 labels, component names, and permissions. Versions and resource
 references are skipped.
+Property lists (`.plist`) contribute display names, identifiers, and
+usage descriptions. Version and SDK values are skipped, and binary
+plists are ignored.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

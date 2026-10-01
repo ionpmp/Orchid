@@ -54,6 +54,7 @@ impl ContentExtractor for TextExtractor {
         // NuGet manifests are extracted separately. Leave them for [`super::nuspec`].
         // Visual Studio solutions are extracted separately. Leave them for [`super::sln`].
         // XML solutions are extracted separately. Leave them for [`super::slnx`].
+        // Property lists are extracted separately. Leave them for [`super::plist`].
         if extension.is_some_and(super::man::is_man_ext)
             || extension.is_some_and(super::info::is_info_ext)
             || extension.is_some_and(super::unit::is_unit_ext)
@@ -108,6 +109,7 @@ impl ContentExtractor for TextExtractor {
                     | "nuspec"
                     | "sln"
                     | "slnx"
+                    | "plist"
             )
         }) {
             return false;

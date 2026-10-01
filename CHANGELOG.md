@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes property lists (`.plist`): display names,
+  identifiers, and usage descriptions. Version and SDK values are not
+  indexed, and binary plists are ignored.
 - Full-text search indexes Android manifests (`AndroidManifest.xml`):
   package names, labels, component names, and permissions. Versions and
   resource references are not indexed.
