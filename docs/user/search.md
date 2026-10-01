@@ -130,6 +130,8 @@ Dockerfiles (`Dockerfile`, `.dockerfile`) contribute image names, labels,
 and copy paths. `ENV` and `ARG` values are skipped.
 `package.json` and `composer.json` contribute names, descriptions,
 keywords, and dependency names. Scripts and versions are skipped.
+`go.mod` contributes the module path and required module paths. Toolchain
+and dependency versions are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

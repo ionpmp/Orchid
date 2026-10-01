@@ -17,6 +17,7 @@ pub mod epub_odf;
 pub mod fb2;
 pub mod feed;
 pub mod gettext;
+pub mod gomod;
 pub mod html;
 pub mod ical;
 pub mod info;
@@ -264,6 +265,11 @@ impl Extractor {
         if pkg::is_pkg_name(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(pkg::pkg_text(&text::decode_best_effort(&raw))));
+        }
+        // `go.mod` is plain text, which would index dependency versions.
+        if gomod::is_gomod_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(gomod::gomod_text(&text::decode_best_effort(&raw))));
         }
         // Feeds are often saved as `.xml`, which the plain-text extractor
         // would otherwise index as markup.
