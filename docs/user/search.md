@@ -133,6 +133,8 @@ keywords, and dependency names. Scripts and versions are skipped.
 `go.mod` contributes the module path and required module paths. Toolchain
 and dependency versions are skipped.
 `go.sum` contributes module paths. Versions and checksums are skipped.
+`package-lock.json` contributes package names. Versions and integrity
+hashes are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:

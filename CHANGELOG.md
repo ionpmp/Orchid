@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `package-lock.json`: package names.
+  Versions and integrity hashes are not indexed.
 - Full-text search indexes `go.sum`: module paths. Versions and
   checksums are not indexed.
 - Full-text search indexes `Cargo.lock`: package names. Versions,

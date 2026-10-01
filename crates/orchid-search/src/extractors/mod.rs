@@ -37,6 +37,7 @@ pub mod opml;
 pub mod orchid;
 pub mod pdf;
 pub mod pkg;
+pub mod pkglock;
 pub mod playlist;
 pub mod plist;
 pub mod pod;
@@ -267,6 +268,11 @@ impl Extractor {
         if pkg::is_pkg_name(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(pkg::pkg_text(&text::decode_best_effort(&raw))));
+        }
+        // `package-lock.json` is plain JSON, which would index integrity hashes.
+        if pkglock::is_pkglock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(pkglock::pkglock_text(&text::decode_best_effort(&raw))));
         }
         // `go.mod` is plain text, which would index dependency versions.
         if gomod::is_gomod_name(name) {
