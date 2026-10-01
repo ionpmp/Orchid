@@ -21,7 +21,9 @@ survives a restart. A real sentence model remains behind the reserved
 
 `[search]` in `config.toml` (not the Settings panel): `included-roots`
 (empty → Documents), `excluded-patterns`, `max-file-size-mib`,
-`extract-text` / `extract-pdf` (PDF needs pdfium). Index path:
+`extract-text` / `extract-pdf` (PDF needs pdfium; the same switch also
+indexes DOCX, XLSX / XLSM cell text, and PPTX / PPTM / PPSX slide and
+notes text). Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
 

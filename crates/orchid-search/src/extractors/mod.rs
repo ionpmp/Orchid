@@ -5,6 +5,7 @@
 //! handles. [`Extractor`] picks one per file.
 
 pub mod docx;
+pub mod ooxml;
 pub mod orchid;
 pub mod pdf;
 pub mod text;
@@ -68,6 +69,18 @@ impl Extractor {
     #[must_use]
     pub fn with_docx(self) -> Self {
         self.with(Arc::new(docx::DocxExtractor))
+    }
+
+    /// Convenience: enable Excel (`.xlsx` / `.xlsm`) text extraction.
+    #[must_use]
+    pub fn with_xlsx(self) -> Self {
+        self.with(Arc::new(ooxml::XlsxExtractor))
+    }
+
+    /// Convenience: enable PowerPoint (`.pptx` / `.pptm` / `.ppsx`) text extraction.
+    #[must_use]
+    pub fn with_pptx(self) -> Self {
+        self.with(Arc::new(ooxml::PptxExtractor))
     }
 
     /// Convenience: enable the `.orchid` Clean-Text extractor.

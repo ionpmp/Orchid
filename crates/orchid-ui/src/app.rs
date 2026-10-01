@@ -479,7 +479,11 @@ impl OrchidApp {
             Arc::new(orchid_search::IndexScheduler::new(search_engine.clone(), 2));
         let mut index_extractor = orchid_search::Extractor::new().with_orchid();
         if config.read().search.extract_pdf {
-            index_extractor = index_extractor.with_pdf().with_docx();
+            index_extractor = index_extractor
+                .with_pdf()
+                .with_docx()
+                .with_xlsx()
+                .with_pptx();
         }
         let index_extractor = Arc::new(index_extractor);
         let index_subscriber = orchid_search::IndexFsSubscriber::new(

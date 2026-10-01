@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search extracts Excel cell text (shared strings, inline
+  strings, numbers, sheet names) and PowerPoint slide plus speaker-notes
+  text when `[search].extract-pdf` is enabled.
 - Viewer dispatch sniffs OOXML `[Content_Types].xml` in ZIP heads so Word
   packages open in the document editor while Excel / PowerPoint open as
   archives (including misnamed `.docx` sheets/slides).
