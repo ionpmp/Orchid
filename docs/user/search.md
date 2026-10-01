@@ -53,6 +53,8 @@ Timestamps, cue numbers, and style overrides are skipped.
 Media notes (`.nfo`) contribute titles, plots, and names when they are
 Kodi XML. Poster URLs and stream details are skipped. A plain-text
 scene note is indexed as text.
+SVG drawings (`.svg`) contribute visible labels. Scripts, styles, and
+metadata are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.

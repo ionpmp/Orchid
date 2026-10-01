@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes visible SVG (`.svg`) labels. Scripts, styles,
+  and metadata are not indexed.
 - Full-text search indexes media notes (`.nfo`). Kodi XML contributes
   titles, plots, and names; poster URLs and stream details are skipped.
   Plain-text scene notes are indexed as text.

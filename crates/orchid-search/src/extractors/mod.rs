@@ -27,6 +27,7 @@ pub mod playlist;
 pub mod rtf;
 pub mod shortcut;
 pub mod subtitle;
+pub mod svg;
 pub mod text;
 
 use std::sync::Arc;
@@ -85,6 +86,7 @@ impl Extractor {
                 Arc::new(shortcut::ShortcutExtractor),
                 Arc::new(subtitle::SubtitleExtractor),
                 Arc::new(nfo::NfoExtractor),
+                Arc::new(svg::SvgExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }
