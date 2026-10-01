@@ -148,6 +148,8 @@ are skipped.
 `Pipfile.lock` contributes package names. Versions and hashes are skipped.
 `pubspec.lock` contributes package names. Versions and sha256 checksums
 are skipped.
+`uv.lock` contributes package and dependency names. Versions and hashes
+are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:

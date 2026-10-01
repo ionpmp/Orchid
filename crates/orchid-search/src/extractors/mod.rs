@@ -68,6 +68,7 @@ pub mod text;
 pub mod torrent;
 pub mod ui;
 pub mod unit;
+pub mod uv;
 pub mod wix;
 pub mod xaml;
 pub mod xspf;
@@ -282,6 +283,11 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `uv.lock` is plain text, which would index package hashes.
+        if uv::is_uv_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(uv::uv_lock_text(&text::decode_best_effort(&raw))));
         }
         // `pubspec.lock` is plain YAML, which would index sha256 checksums.
         if pubspec::is_pubspec_lock_name(name) {
