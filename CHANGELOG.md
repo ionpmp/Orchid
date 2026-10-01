@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes Qt Linguist catalogs stored as `.ts`:
+  context names, source strings, and translations. A `.ts` file that is
+  TypeScript is still indexed as source. Location filenames are skipped.
 - Full-text search indexes Apple string tables (`.strings`,
   `.stringsdict`): keys, translations, and block comments. Line comments
   are not indexed.

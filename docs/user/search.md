@@ -63,6 +63,9 @@ comments. `\\uXXXX` escapes are decoded.
 names, source text, and translations. Embedded binary values are skipped.
 Apple string tables (`.strings`, `.stringsdict`) contribute keys,
 translations, and block comments. Line comments are skipped.
+Qt Linguist catalogs (a `.ts` file that opens as a translation file)
+contribute context names, source strings, and translations. TypeScript
+`.ts` files stay source text. Location filenames are skipped.
 Index path:
 `data\search_index`. Watcher + bootstrap crawl. `.orchid` Clean-Text is
 extracted when enabled.
