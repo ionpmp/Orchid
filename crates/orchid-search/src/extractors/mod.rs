@@ -43,6 +43,7 @@ pub mod resources;
 pub mod rtf;
 pub mod shortcut;
 pub mod sln;
+pub mod slnx;
 pub mod spec;
 pub mod storyboard;
 pub mod strings;
@@ -139,6 +140,7 @@ impl Extractor {
                 Arc::new(diff::DiffExtractor),
                 Arc::new(nuspec::NuspecExtractor),
                 Arc::new(sln::SlnExtractor),
+                Arc::new(slnx::SlnxExtractor),
                 Arc::new(text::TextExtractor),
             ],
         }

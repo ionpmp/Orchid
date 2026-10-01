@@ -728,6 +728,9 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes XML solutions (`.slnx`): project paths,
+  folder names, and solution-item paths. Build configurations are not
+  indexed.
 - Full-text search indexes Maven POM files (`pom.xml`): group ids,
   artifact ids, names, and descriptions. Versions and `properties`
   blocks are not indexed.
