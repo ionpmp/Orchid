@@ -18,6 +18,7 @@ pub mod eml;
 pub mod epub_odf;
 pub mod fb2;
 pub mod feed;
+pub mod flake;
 pub mod gemfile;
 pub mod gettext;
 pub mod gomod;
@@ -287,6 +288,13 @@ impl Extractor {
             return Ok(Some(composer::composer_lock_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `flake.lock` is plain JSON, which would index narHash values and revisions.
+        if flake::is_flake_lock_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(flake::flake_lock_text(&text::decode_best_effort(
+                &raw,
+            ))));
         }
         // `mix.lock` is plain text, which would index checksums.
         if mix::is_mix_lock_name(name) {

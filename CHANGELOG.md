@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `flake.lock`: node names, owners, repos, and
+  refs. narHash values and revisions are not indexed.
 - Full-text search indexes `mix.lock`: package names. Versions and
   checksums are not indexed.
 - Full-text search indexes `pdm.lock`: package names and summaries.
