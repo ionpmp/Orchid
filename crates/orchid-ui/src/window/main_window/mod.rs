@@ -877,6 +877,12 @@ impl MainWindowController {
         self.session_manager
             .set_grid(orchid_terminal::GridKind::parse(&cfg.terminal.grid));
         drop(cfg);
+        if crate::winlogon_shell::sync_shell(&mut self.config.write().shell) {
+            let snapshot = self.config.read().clone();
+            if let Err(e) = orchid_storage::ConfigLoader::save(&snapshot, &self.config_file_path) {
+                tracing::warn!(?e, "failed to persist the remembered sign-in shell");
+            }
+        }
         if retention_changed {
             self.last_history_retention_days
                 .store(retention_days, Ordering::Release);

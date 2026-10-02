@@ -140,6 +140,14 @@ hint-mode-enabled = false
 # auto-tag writes people/Name and event/Date/Title from folder names.
 # auto-tag = false
 # detect-faces = false
+
+# [shell]
+# Off until enabled. replace opens Orchid instead of Explorer at the next
+# sign-in for this Windows user only. previous is the HKCU Shell value to
+# put back; empty deletes that value. The machine shell is not changed.
+# orchid.exe --restore-shell clears replace and puts Explorer back.
+# replace = false
+# previous = ""
 "#;
 
 /// Load / save / reload API for the TOML configuration.

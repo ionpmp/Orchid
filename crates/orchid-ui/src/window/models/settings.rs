@@ -19,6 +19,7 @@ pub(crate) const SETTINGS_SECTION_IDS: &[&str] = &[
     "marketplace",
     "agent",
     "photos",
+    "shell",
 ];
 
 pub(crate) fn build_settings_sections(locale: &LocaleManager) -> Vec<SettingsSectionEntry> {
@@ -689,6 +690,22 @@ pub(crate) fn build_settings_fields(
                 "detect-faces",
                 "settings-field-photos-detect-faces",
                 cfg.photos.detect_faces,
+            );
+        }
+        "shell" => {
+            push_settings_readonly(
+                &mut rows,
+                locale,
+                "hint",
+                "settings-shell-note",
+                locale.tr("settings-shell-hint").into(),
+            );
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "replace",
+                "settings-field-shell-replace",
+                cfg.shell.replace,
             );
         }
         "marketplace" => {

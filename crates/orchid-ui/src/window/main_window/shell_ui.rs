@@ -138,6 +138,8 @@ impl MainWindowController {
             self.push_notification(&self.locale.tr("settings-panel-title"), &body, 2);
             return;
         }
+        let shell_notice = section == "shell" && key == "replace";
+        let shell_on = cfg.shell.replace;
         let snapshot = cfg.clone();
         drop(cfg);
         if let Err(e) = ConfigLoader::save(&snapshot, &self.config_file_path) {
@@ -150,20 +152,36 @@ impl MainWindowController {
             self.push_notification(&self.locale.tr("settings-panel-title"), &body, 3);
             return;
         }
-        if let Err(e) = self.apply_hot_config() {
-            warn!(?e, "settings apply after save");
-            let reason = ui_localized_error(&self.locale, &e);
-            let body = self.locale.tr_args(
-                "settings-config-reload-failed",
-                &orchid_i18n::FluentArgs::new().with("reason", reason),
-            );
-            self.push_notification(&self.locale.tr("settings-panel-title"), &body, 2);
-        }
+        let hot_ok = match self.apply_hot_config() {
+            Ok(()) => true,
+            Err(e) => {
+                warn!(?e, "settings apply after save");
+                let reason = ui_localized_error(&self.locale, &e);
+                let body = self.locale.tr_args(
+                    "settings-config-reload-failed",
+                    &orchid_i18n::FluentArgs::new().with("reason", reason),
+                );
+                self.push_notification(&self.locale.tr("settings-panel-title"), &body, 2);
+                false
+            }
+        };
         if section == "general"
             && matches!(key, "telemetry" | "telemetry-endpoint")
             && self.config.read().general.telemetry
         {
             self.report_telemetry_now();
+        }
+        if shell_notice && hot_ok {
+            let body_key = if shell_on {
+                "shell-replace-on"
+            } else {
+                "shell-replace-off"
+            };
+            self.push_notification(
+                &self.locale.tr("settings-section-shell"),
+                &self.locale.tr(body_key),
+                1,
+            );
         }
     }
 
@@ -1000,6 +1018,9 @@ fn apply_settings_field(
         }
         ("photos", "detect-faces") => {
             cfg.photos.detect_faces = parse_settings_bool(value)?;
+        }
+        ("shell", "replace") => {
+            cfg.shell.replace = parse_settings_bool(value)?;
         }
         _ => return Err(format!("field `{section}.{key}` is not editable")),
     }

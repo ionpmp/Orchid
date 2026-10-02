@@ -15,6 +15,12 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Sign-in shell:** Settings → Shell can open Orchid instead of Explorer
+  at the next sign-in for this Windows user. The previous per-user `Shell`
+  value is remembered and written back when the switch is off. An empty
+  remembered value deletes it, so the machine default returns. `orchid.exe
+  --restore-shell` does that without opening the window. The machine-wide
+  shell is not changed.
 - **Marketplace:** Settings installs the Ink, Dawn, Pine, and Ember palettes
   into the themes folder and can add a built-in widget to the workspace.
   Widget code is not downloaded.

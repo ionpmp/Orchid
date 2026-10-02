@@ -10,8 +10,8 @@ mod cli_open;
 mod commands;
 pub mod error;
 mod html_webview;
-mod marketplace;
 pub mod http;
+mod marketplace;
 mod os_notify;
 mod release;
 mod single_instance;
@@ -22,6 +22,7 @@ mod terminal_raster;
 pub mod theme;
 pub mod widgets;
 pub mod window;
+mod winlogon_shell;
 
 pub use app::OrchidApp;
 pub use cli_open::{collect_cli_open_paths, is_orchid_cli_path};
@@ -39,6 +40,7 @@ pub use widgets::terminal::{
 pub use widgets::view::{SlintPayload, SlintTerminalCell, WidgetView, WidgetViewDispatcher};
 pub use window::main_window::MainWindowController;
 pub use window::startup::StartupWindowController;
+pub use winlogon_shell::{restore_shell_requested, restore_winlogon_shell};
 
 /// Crate version.
 #[must_use]

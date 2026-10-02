@@ -19,6 +19,7 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 | Marketplace | Install Ink, Dawn, Pine, or Ember; add a built-in widget | — |
 | Agent | Enable Ollama or an OpenAI-compatible chat, endpoint, model, API key | — |
 | Photos | Auto-tag from folder names; find faces in the open folder | — |
+| Shell | Replace Explorer at the next sign-in for this Windows user | — |
 
 Widget options stay on each widget.
 
@@ -28,6 +29,16 @@ Settings → Agent. Off until enabled. Universal Search `? your question`
 sends one message to Ollama or an OpenAI-compatible server and posts the
 reply as a notification. Set the model name. Leave the API key blank to
 keep the saved key. **Clear key** removes it.
+
+## Shell
+
+Settings → Shell. **Replace Explorer at sign-in** is off until enabled.
+The next sign-in for this Windows user opens Orchid instead of Explorer.
+Open on startup still only adds a Run-key entry and leaves Explorer in
+place. Turning the shell switch off writes the previous per-user shell
+back. If there was none, Orchid deletes the per-user value and the machine
+default returns. If the desktop does not appear, open Task Manager, choose
+Run, and start `explorer.exe`. Then run `orchid.exe --restore-shell`.
 
 ## Photos
 

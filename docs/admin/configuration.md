@@ -96,3 +96,14 @@ is opened. `detect-faces` (false) asks Windows for face rectangles in
 images in the open folder and tags matches `people/unnamed`. It does not
 name the person. Rectangles are stored in `data/photo-faces.json`.
 Files → Photos groups `people/`, `event/`, and `album/` tags.
+
+## `[shell]`
+
+Settings → Shell, and `[shell]` in `config.toml`. `replace` (false) makes
+the next sign-in for this Windows user open Orchid instead of Explorer.
+`previous` stores the HKCU `Shell` value to write back. Empty deletes that
+value so the machine default is used. Orchid writes only
+`HKCU\Software\Microsoft\Windows NT\CurrentVersion\Winlogon`.
+`orchid.exe --restore-shell` clears `replace` and puts the previous shell
+back before the single-instance check, so it still works while Orchid is
+the running shell.

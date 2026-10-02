@@ -39,6 +39,8 @@ pub struct OrchidConfig {
     pub agent: AgentConfig,
     /// Photo library grouping and opt-in folder auto-tag.
     pub photos: PhotosConfig,
+    /// Per-user Windows sign-in shell. Off until enabled.
+    pub shell: ShellConfig,
 }
 
 /// Terminal grid selection.
@@ -119,6 +121,20 @@ impl Default for PhotosConfig {
             detect_faces: false,
         }
     }
+}
+
+/// Per-user replacement of `HKCU\...\Winlogon` `Shell`.
+///
+/// [`Self::replace`] is off until the user turns it on. [`Self::previous`] is
+/// the HKCU value to write back. An empty previous deletes the per-user value
+/// so Windows uses the machine default. The machine key (HKLM) is never written.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct ShellConfig {
+    /// Open Orchid instead of Explorer at the next sign-in for this user.
+    pub replace: bool,
+    /// HKCU `Shell` string to restore. Empty deletes the per-user value.
+    pub previous: String,
 }
 
 /// First-run onboarding tour and optional gesture hint overlays.
@@ -596,6 +612,8 @@ mod tests {
         assert!(cfg.agent.model.is_empty());
         assert!(!cfg.photos.auto_tag);
         assert!(!cfg.photos.detect_faces);
+        assert!(!cfg.shell.replace);
+        assert!(cfg.shell.previous.is_empty());
     }
 
     #[test]

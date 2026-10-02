@@ -8,7 +8,8 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use orchid_storage::OrchidPaths;
 use orchid_ui::{
-    claim_instance, collect_cli_open_paths, forward_open_paths, InstanceClaim, OrchidApp,
+    claim_instance, collect_cli_open_paths, forward_open_paths, restore_shell_requested,
+    restore_winlogon_shell, InstanceClaim, OrchidApp,
 };
 
 #[cfg(windows)]
@@ -31,6 +32,16 @@ fn init_tracing() -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    if restore_shell_requested(std::env::args_os()) {
+        init_tracing()?;
+        let paths = OrchidPaths::resolve().context("failed to resolve Orchid paths")?;
+        restore_winlogon_shell(&paths.config_file)
+            .map_err(|e| anyhow::anyhow!(e))
+            .context("restore the per-user sign-in shell")?;
+        tracing::info!("per-user sign-in shell restored; sign out to return to Explorer");
+        return Ok(());
+    }
+
     std::env::set_var("SLINT_BACKEND", "winit-skia");
     init_tracing()?;
 

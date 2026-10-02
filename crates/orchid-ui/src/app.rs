@@ -770,6 +770,12 @@ impl OrchidApp {
         apply_command_shortcut_overrides(&command_registry, &config.read().shortcuts);
 
         crate::autostart::sync_open_on_startup(&config.read().general);
+        if crate::winlogon_shell::sync_shell(&mut config.write().shell) {
+            let snapshot = config.read().clone();
+            if let Err(e) = ConfigLoader::save(&snapshot, &paths.config_file) {
+                tracing::warn!(?e, "failed to persist the remembered sign-in shell");
+            }
+        }
         crate::os_notify::prepare();
         crate::os_notify::sync(config.read().general.os_notifications);
 

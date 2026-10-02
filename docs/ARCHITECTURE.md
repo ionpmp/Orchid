@@ -2,7 +2,7 @@
 
 This document describes the **current** workspace: 13 crates, a single
 desktop process, rclone RC + CLI, PTY children, and WebView2 overlays.
-Planned systems (WASM plugins, Winlogon shell) are not in
+Planned systems (WASM plugins) are not in
 the tree — see [ROADMAP.md](ROADMAP.md).
 
 ## High-level diagram
