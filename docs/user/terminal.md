@@ -4,11 +4,11 @@ Catalog **Terminal** (`terminal`). PTY + custom VT emulator (SGR, cursor,
 erase, OSC 0/2/7, OSC 52 clipboard).
 
 Settings → Terminal → **Terminal grid** (`[terminal].grid`) chooses the
-grid for the next session. **Built-in** is the default and draws Sixel and
-Kitty images. **Alacritty** parses the same PTY bytes with
-`alacritty_terminal` and paints cells through the same view. It does not
-draw inline images, does not answer OSC 52, and does not report an OSC 7
-directory. A session keeps the grid it opened with.
+grid for the next session. **Built-in** is the default. **Alacritty** parses
+the same PTY bytes with `alacritty_terminal` and paints cells through the
+same view. Both grids draw Sixel and direct Kitty images, copy text with
+OSC 52, and store the OSC 7 directory. OSC 52 paste is ignored. zlib Kitty
+payloads are skipped. A session keeps the grid it opened with.
 
 **Backends:** PowerShell, cmd, WSL, SSH (`ssh://`), Custom. Custom and SSH
 extra args can spawn arbitrary processes.

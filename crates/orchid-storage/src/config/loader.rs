@@ -32,8 +32,8 @@ open-on-startup = false
 os-notifications = false
 
 [terminal]
-# orchid (built-in; sixel, kitty, OSC 7, OSC 52) or alacritty.
-# alacritty is used only by builds with the alacritty-grid feature.
+# orchid or alacritty. Both draw sixel and direct kitty, and handle
+# OSC 52 copy and OSC 7. alacritty needs the alacritty-grid feature.
 # Already-open sessions keep the grid they started with.
 grid = "orchid"
 

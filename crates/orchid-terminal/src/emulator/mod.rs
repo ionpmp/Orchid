@@ -3,7 +3,8 @@
 //! The default grid is a small state machine on top of [`vte`]. The
 //! `alacritty-grid` feature adds a second grid that feeds the same bytes
 //! into `alacritty_terminal` and copies cells back into [`GridSnapshot`].
-//! Sixel, Kitty, OSC 52, and OSC 7 stay on the built-in grid.
+//! Sixel, Kitty, OSC 52, and OSC 7 are handled on both grids. zlib Kitty
+//! payloads are skipped.
 
 #[cfg(feature = "alacritty-grid")]
 mod alacritty_grid;

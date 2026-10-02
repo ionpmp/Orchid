@@ -17,7 +17,7 @@ hot-reloaded). Keys are kebab-case.
 
 | Key | Default | Behavior |
 |-----|---------|----------|
-| `grid` | `orchid` | `orchid` is the built-in grid (Sixel, Kitty, OSC 7, OSC 52). `alacritty` feeds new sessions through `alacritty_terminal`. That grid has no inline images, no OSC 52, and no OSC 7 directory. Other values stay on `orchid`. Open sessions are left as they are. The desktop app compiles this grid in. A build of the terminal crate without the `alacritty-grid` feature ignores `alacritty`. |
+| `grid` | `orchid` | `orchid` is the built-in grid. `alacritty` feeds new sessions through `alacritty_terminal`. Both grids draw Sixel and direct Kitty images, accept OSC 52 copy, and store an OSC 7 directory. OSC 52 paste and zlib Kitty payloads are ignored. Other values stay on `orchid`. Open sessions are left as they are. The desktop app compiles this grid in. A build of the terminal crate without the `alacritty-grid` feature ignores `alacritty`. |
 
 ## `[appearance]`
 

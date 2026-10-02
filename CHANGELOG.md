@@ -15,6 +15,9 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Alacritty grid:** the optional grid draws Sixel and direct Kitty images,
+  copies text from OSC 52, and stores the OSC 7 directory. zlib Kitty
+  payloads and OSC 52 paste stay ignored.
 - **Text mode:** `orchid --tui` lists one local folder in the terminal and
   previews text files up to 256 KiB. It does not start the desktop window,
   network mounts, or the viewers. Labels follow the configured language.
@@ -142,7 +145,7 @@ release yet.
   universal search (files + commands + settings).
 
 #### Viewers
-- **Optional Alacritty grid:** Settings → Terminal, or `[terminal].grid = "alacritty"`, opens new sessions on `alacritty_terminal`. The built-in grid stays the default and still draws Sixel and Kitty. The Alacritty grid does not.
+- **Optional Alacritty grid:** Settings → Terminal, or `[terminal].grid = "alacritty"`, opens new sessions on `alacritty_terminal`. The built-in grid stays the default. Images, OSC 52 copy, and OSC 7 on the Alacritty grid are listed above.
 - **Terminal inline graphics:** Sixel and Kitty direct images (PNG, 24-bit RGB,
   32-bit RGBA) are drawn in the terminal pane. zlib Kitty payloads are skipped.
 - **HDR / OpenEXR display:** scene-linear `.hdr` and `.exr` pixels are

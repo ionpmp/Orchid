@@ -13,7 +13,7 @@ use crate::error::Result;
 /// Which VT grid a new session should use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GridKind {
-    /// Orchid's built-in grid. Sixel, Kitty, OSC 7, and OSC 52 live here.
+    /// Orchid's built-in grid.
     #[default]
     Orchid,
     /// `alacritty_terminal`, when the crate is built with `alacritty-grid`.
@@ -62,7 +62,7 @@ impl TerminalGrid {
             GridKind::Alacritty => {
                 #[cfg(feature = "alacritty-grid")]
                 {
-                    Self::Alacritty(AlacrittyGrid::new(cols, rows))
+                    Self::Alacritty(AlacrittyGrid::new(cols, rows, bus, session_id))
                 }
                 #[cfg(not(feature = "alacritty-grid"))]
                 {
@@ -107,8 +107,8 @@ impl TerminalGrid {
         }
     }
 
-    /// Pixel size of one cell. The Alacritty grid stores it for text-area
-    /// size replies. Inline images stay on the built-in grid.
+    /// Pixel size of one cell. Both grids use it for text-area size replies
+    /// and for how many rows an inline image spans.
     pub fn set_cell_px(&self, width: u16, height: u16) {
         match self {
             Self::Orchid(emulator) => emulator.set_cell_px(width, height),
@@ -137,13 +137,13 @@ impl TerminalGrid {
         }
     }
 
-    /// OSC 7 directory. The Alacritty grid does not report one.
+    /// OSC 7 directory.
     #[must_use]
     pub fn working_directory(&self) -> Option<PathBuf> {
         match self {
             Self::Orchid(emulator) => emulator.working_directory(),
             #[cfg(feature = "alacritty-grid")]
-            Self::Alacritty(_) => None,
+            Self::Alacritty(grid) => grid.working_directory(),
         }
     }
 }
