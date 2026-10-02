@@ -13,7 +13,7 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 | Terminal | Terminal grid (built-in or Alacritty) | — |
 | Appearance | Theme, density, font, reduce motion, follow system | — |
 | Input | Primary hand, mirror edge swipes, palm rejection, pen double-tap, haptic feedback | — |
-| Shortcuts | Profile, remaps, leader key/timeout | Leader **binding map** (TOML only) |
+| Shortcuts | Profile, remaps, leader key/timeout, leader map | — |
 | Locale | Language, date/time format, first day of week | — |
 | Privacy | History, retention, clipboard clear, vault auto-lock | — |
 | Search | Index roots, exclusions, size limit, text and PDF extraction, ONNX path | — |
@@ -89,6 +89,8 @@ refused. Turning telemetry off stops new lines and sends.
 
 Default leader **Ctrl+Shift+Space** then: `p` palette, `s` settings, `l`
 lock vault, `n`/`b` workspace next/prev. Empty `leader-key` disables it.
+Each letter in Settings is a command id. Clear the row to remove it.
+**Add leader binding** takes `p=command-palette`.
 
 ## Themes and language
 

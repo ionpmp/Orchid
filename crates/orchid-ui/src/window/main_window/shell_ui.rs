@@ -122,7 +122,14 @@ impl MainWindowController {
             return;
         }
         let mut cfg = self.config.write();
-        if let Err(reason) = apply_settings_field(&mut cfg, section, key, value, &self.locale) {
+        if let Err(reason) = apply_settings_field(
+            &mut cfg,
+            section,
+            key,
+            value,
+            &self.locale,
+            &self.command_registry,
+        ) {
             warn!(
                 section = %section,
                 key = %key,
@@ -811,6 +818,7 @@ fn apply_settings_field(
     key: &str,
     value: &str,
     locale: &LocaleManager,
+    registry: &orchid_core::CommandRegistry,
 ) -> Result<(), String> {
     match (section, key) {
         ("general", "auto-update") => {
@@ -940,6 +948,40 @@ fn apply_settings_field(
                 return Err("leader timeout must be between 200 and 10000 ms".into());
             }
             cfg.shortcuts.leader_timeout_ms = ms;
+        }
+        (section, key) if section == "shortcuts" && key.starts_with("leader:") => {
+            let Some(letter) = leader_letter(&key["leader:".len()..]) else {
+                return Err("leader key must be one letter".into());
+            };
+            let trimmed = value.trim();
+            let none = locale.tr("settings-value-none");
+            if trimmed.is_empty() || trimmed == none {
+                cfg.shortcuts.leader_bindings.remove(&letter);
+            } else if registry.get(trimmed).is_none() {
+                return Err(format!("unknown command `{trimmed}`"));
+            } else {
+                cfg.shortcuts
+                    .leader_bindings
+                    .insert(letter, trimmed.to_string());
+            }
+        }
+        ("shortcuts", "leader-add") => {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                let Some((letter_raw, cmd_raw)) = trimmed.split_once('=') else {
+                    return Err("leader binding must look like p=command-palette".into());
+                };
+                let Some(letter) = leader_letter(letter_raw.trim()) else {
+                    return Err("leader key must be one letter".into());
+                };
+                let cmd = cmd_raw.trim();
+                if registry.get(cmd).is_none() {
+                    return Err(format!("unknown command `{cmd}`"));
+                }
+                cfg.shortcuts
+                    .leader_bindings
+                    .insert(letter, cmd.to_string());
+            }
         }
         (section, key) if section == "shortcuts" && key.starts_with("bind:") => {
             let id = &key["bind:".len()..];
@@ -1100,6 +1142,15 @@ fn parse_settings_bool(value: &str) -> Result<bool, String> {
         "false" => Ok(false),
         other => Err(format!("expected true/false, got `{other}`")),
     }
+}
+
+fn leader_letter(raw: &str) -> Option<String> {
+    let mut chars = raw.trim().chars();
+    let ch = chars.next()?;
+    if chars.next().is_some() || !ch.is_ascii_alphabetic() {
+        return None;
+    }
+    Some(ch.to_ascii_lowercase().to_string())
 }
 
 fn split_settings_list(value: &str) -> Vec<String> {

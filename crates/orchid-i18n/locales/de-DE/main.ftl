@@ -2687,3 +2687,6 @@ settings-field-search-max-mib = Maximale Dateigröße (MiB)
 settings-field-search-extract-text = Text extrahieren
 settings-field-search-extract-pdf = PDF und Office-Dateien extrahieren
 settings-field-search-model = ONNX-Modellpfad
+settings-leader-map-note = Leader-Karte
+settings-leader-map-hint = Jede Zeile ist eine Befehls-ID. Leeren entfernt den Buchstaben. Neue Bindung: p=command-palette.
+settings-field-leader-add = Leader-Bindung hinzufügen

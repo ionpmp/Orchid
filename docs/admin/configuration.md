@@ -48,7 +48,10 @@ draw.
 ## `[shortcuts]`
 
 `profile`, `overrides`, `leader-key` (default `Ctrl+Shift+Space`; empty
-disables), `leader-timeout-ms` (1200), `leader-bindings`.
+disables), `leader-timeout-ms` (1200), `leader-bindings`. Settings shows
+each letter as a command id. Clearing a row removes it. **Add leader
+binding** takes `p=command-palette`. The next key after the leader uses
+the saved map.
 
 ## `[locale]`
 

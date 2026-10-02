@@ -2686,3 +2686,6 @@ settings-field-search-max-mib = Tamanho máximo do arquivo (MiB)
 settings-field-search-extract-text = Extrair texto
 settings-field-search-extract-pdf = Extrair PDF e arquivos de escritório
 settings-field-search-model = Caminho do modelo ONNX
+settings-leader-map-note = Mapa do líder
+settings-leader-map-hint = Cada linha é um id de comando. Limpar a linha remove a letra. Adicionar: p=command-palette.
+settings-field-leader-add = Adicionar atalho do líder

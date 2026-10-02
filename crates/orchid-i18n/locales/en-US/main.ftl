@@ -2703,3 +2703,6 @@ settings-field-search-max-mib = Max file size (MiB)
 settings-field-search-extract-text = Extract text
 settings-field-search-extract-pdf = Extract PDF and office files
 settings-field-search-model = ONNX model path
+settings-leader-map-note = Leader map
+settings-leader-map-hint = Each row is a command id. Clear a row to remove that letter. Add a binding as p=command-palette.
+settings-field-leader-add = Add leader binding

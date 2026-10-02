@@ -2688,3 +2688,6 @@ settings-field-search-max-mib = أقصى حجم للملف (MiB)
 settings-field-search-extract-text = استخراج النص
 settings-field-search-extract-pdf = استخراج PDF وملفات المكتب
 settings-field-search-model = مسار نموذج ONNX
+settings-leader-map-note = خريطة المفتاح القائد
+settings-leader-map-hint = كل صف معرّف أمر. إفراغ الصف يزيل الحرف. الإضافة بالشكل p=command-palette.
+settings-field-leader-add = إضافة ربط القائد

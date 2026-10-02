@@ -2686,3 +2686,6 @@ settings-field-search-max-mib = 最大文件大小 (MiB)
 settings-field-search-extract-text = 提取文本
 settings-field-search-extract-pdf = 提取 PDF 和 Office 文件
 settings-field-search-model = ONNX 模型路径
+settings-leader-map-note = 引导键映射
+settings-leader-map-hint = 每一行是命令 ID。清空该行会去掉这个字母。添加格式为 p=command-palette。
+settings-field-leader-add = 添加引导键

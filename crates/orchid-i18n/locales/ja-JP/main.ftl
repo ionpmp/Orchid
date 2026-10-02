@@ -2685,3 +2685,6 @@ settings-field-search-max-mib = 最大ファイルサイズ (MiB)
 settings-field-search-extract-text = テキストを抽出
 settings-field-search-extract-pdf = PDF と Office ファイルを抽出
 settings-field-search-model = ONNX モデルのパス
+settings-leader-map-note = リーダーマップ
+settings-leader-map-hint = 各行はコマンド ID です。行を空にするとその文字を外します。追加は p=command-palette です。
+settings-field-leader-add = リーダー割り当てを追加

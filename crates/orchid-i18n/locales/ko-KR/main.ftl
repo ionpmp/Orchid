@@ -2686,3 +2686,6 @@ settings-field-search-max-mib = 최대 파일 크기 (MiB)
 settings-field-search-extract-text = 텍스트 추출
 settings-field-search-extract-pdf = PDF 및 오피스 파일 추출
 settings-field-search-model = ONNX 모델 경로
+settings-leader-map-note = 리더 맵
+settings-leader-map-hint = 각 행은 명령 ID입니다. 행을 비우면 그 글자가 빠집니다. 추가는 p=command-palette 입니다.
+settings-field-leader-add = 리더 바인딩 추가

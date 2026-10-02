@@ -18,6 +18,9 @@ release yet.
 - **Text mode:** `orchid --tui` lists one local folder in the terminal and
   previews text files up to 256 KiB. It does not start the desktop window,
   network mounts, or the viewers. Labels follow the configured language.
+- **Leader map:** Settings → Shortcuts edits each leader letter as a
+  command id. Clearing a row removes it. A new row accepts
+  `letter=command-id`.
 - **Search settings:** Settings → Search edits index roots, exclusion
   patterns, the size limit, and the text and PDF extraction switches.
   Those apply to the running index. The ONNX path is read when the index

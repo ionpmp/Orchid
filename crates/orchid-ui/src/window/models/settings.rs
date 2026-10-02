@@ -484,29 +484,38 @@ pub(crate) fn build_settings_fields(
             push_settings_readonly(
                 &mut rows,
                 locale,
-                "leader-bindings",
-                "settings-field-leader-bindings",
-                if cfg.shortcuts.leader_bindings.is_empty() {
-                    locale.tr("settings-value-none").into()
-                } else {
-                    let mut pairs: Vec<_> = cfg.shortcuts.leader_bindings.iter().collect();
-                    pairs.sort_by_key(|(a, _)| *a);
-                    let sep = locale.tr("settings-shortcut-list-separator");
-                    pairs
-                        .into_iter()
-                        .map(|(key, cmd)| {
-                            let cmd_label = command_display_label(registry, locale, cmd);
-                            locale.tr_args(
-                                "settings-shortcut-binding",
-                                &orchid_i18n::FluentArgs::new()
-                                    .with("key", key.as_str())
-                                    .with("cmd", cmd_label),
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .join(&sep)
-                        .into()
-                },
+                "leader-map-hint",
+                "settings-leader-map-note",
+                locale.tr("settings-leader-map-hint").into(),
+            );
+            let mut pairs: Vec<_> = cfg.shortcuts.leader_bindings.iter().collect();
+            pairs.sort_by_key(|(letter, _)| *letter);
+            for (letter, cmd) in pairs {
+                let cmd_label = command_display_label(registry, locale, cmd);
+                rows.push(SettingsFieldRow {
+                    key: format!("leader:{letter}").into(),
+                    label: locale
+                        .tr_args(
+                            "settings-shortcut-binding",
+                            &orchid_i18n::FluentArgs::new()
+                                .with("key", letter.as_str())
+                                .with("cmd", cmd_label),
+                        )
+                        .into(),
+                    kind: SETTINGS_FIELD_TEXT,
+                    value: cmd.clone().into(),
+                    bool_value: false,
+                    combo_options: settings_strings_model(vec![]),
+                    combo_values: settings_strings_model(vec![]),
+                    combo_index: -1,
+                });
+            }
+            push_settings_text(
+                &mut rows,
+                locale,
+                "leader-add",
+                "settings-field-leader-add",
+                "",
             );
             for binding in orchid_core::PROFILE_BINDINGS {
                 let value = orchid_core::resolve_profile_shortcut(

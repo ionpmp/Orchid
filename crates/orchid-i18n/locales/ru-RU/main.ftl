@@ -2689,3 +2689,6 @@ settings-field-search-max-mib = Максимальный размер файла
 settings-field-search-extract-text = Извлекать текст
 settings-field-search-extract-pdf = Извлекать PDF и офисные файлы
 settings-field-search-model = Путь к модели ONNX
+settings-leader-map-note = Карта лидера
+settings-leader-map-hint = В каждой строке идентификатор команды. Очистите строку, чтобы убрать букву. Новая привязка: p=command-palette.
+settings-field-leader-add = Добавить привязку лидера
