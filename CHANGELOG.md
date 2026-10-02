@@ -15,6 +15,11 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Updates and telemetry:** startup checks the latest GitHub release and
+  notifies when a newer tag exists. Check for updates opens that page.
+  Orchid does not install the download. Telemetry is off by default; when
+  on, an anonymous app start (version, OS family, language) is appended
+  locally and posted only to an https endpoint.
 - **Pen and palm:** Settings shows haptic feedback, palm rejection, and pen
   double-tap. A finger is ignored while a pen is down. Double-tap toggles
   whether the pen drives edge gestures, or holds it in erase. Haptic feedback

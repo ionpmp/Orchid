@@ -26,10 +26,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 - [ ] Ship a quantized ONNX sentence model behind `orchid-embed`’s `ort`
       feature (today: `StubEmbedder` in universal-search hybrid)
 
-### Network & settings
-
-- [ ] Auto-update and telemetry pipelines (keys exist; UI shows Disabled)
-
 ### Notifications & storage
 
 - [ ] Reflink / NTFS hardlink ingest for managed folders
@@ -49,7 +45,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 - [ ] Graphical resource monitor with history
 - [ ] Theme and widget marketplace
 - [ ] Optional `alacritty_terminal` grid
-- [ ] Auto-update; opt-in telemetry (off by default)
 - [ ] ORT embeddings in production search
 - [ ] Managed-folder reflink / hardlink ingest
 

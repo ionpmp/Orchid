@@ -20,10 +20,12 @@ pub const DEFAULT_CONFIG_TOML: &str = r#"# Orchid configuration
 # defaults shown below.
 
 [general]
-# Automatically check for and download updates.
+# Check GitHub releases on startup. Orchid does not download or replace itself.
 auto-update = true
-# Opt-in anonymous telemetry. Off by default.
+# Opt-in anonymous app start (version, OS family, language). Off by default.
 telemetry = false
+# HTTPS collector. Empty keeps events in data/telemetry.jsonl only.
+# telemetry-endpoint = ""
 # Start Orchid on user login.
 open-on-startup = false
 # Mirror in-app alerts as Windows Action Center toasts (opt-in).

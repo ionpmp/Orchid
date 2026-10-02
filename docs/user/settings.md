@@ -9,7 +9,7 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 
 | Section | You can change | Shown but not wired |
 |---------|----------------|---------------------|
-| General | Open on startup, Windows notifications | Auto-update, telemetry (Disabled) |
+| General | Open on startup, Windows notifications, auto-update, telemetry | — |
 | Appearance | Theme, density, font, reduce motion, follow system | — |
 | Input | Primary hand, mirror edge swipes, palm rejection, pen double-tap, haptic feedback | — |
 | Shortcuts | Profile, remaps, leader key/timeout | Leader **binding map** (TOML only) |
@@ -17,6 +17,20 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 | Privacy | History, retention, clipboard clear, vault auto-lock | — |
 
 Widget options stay on each widget.
+
+## Updates and telemetry
+
+`[general].auto-update` (default on) asks GitHub for the latest
+`ionpmp/Orchid` release when the window opens. A newer tag shows a
+notification. **Check for updates** does the same and opens that release
+page. Orchid does not download or replace its own files.
+
+`[general].telemetry` is off by default. When on, each launch appends one
+line to `data\telemetry.jsonl`: event `app-start`, the app version, the OS
+family (`windows`, `macos`, `linux`), and the configured language. No paths
+or file names. If `telemetry-endpoint` is an `https://` URL, that same JSON
+is posted there and redirects are not followed. Any other endpoint is
+refused. Turning telemetry off stops new lines and sends.
 
 ## Profiles and leader key
 

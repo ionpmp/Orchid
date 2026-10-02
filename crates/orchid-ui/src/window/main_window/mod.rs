@@ -78,6 +78,7 @@ mod processes;
 mod shell_ui;
 mod system_file_clipboard;
 mod terminal;
+mod updates;
 mod weather;
 mod widget_settings;
 mod wire;
@@ -1266,6 +1267,10 @@ impl MainWindowController {
             self.open_config_file();
             return;
         }
+        if cmd_id == "settings.check_update" {
+            self.check_for_updates();
+            return;
+        }
         if cmd_id == "password.lock" {
             self.on_password_lock_vault();
             return;
@@ -1493,6 +1498,7 @@ impl MainWindowController {
         }
         self.update_gesture_bounds();
         self.drain_cli_open_paths();
+        self.begin_session_reports();
         slint::run_event_loop().map_err(|e| UiError::Slint(format!("loop: {e}")))?;
         self.persist_notifications();
         tracing::info!("Main window closed");

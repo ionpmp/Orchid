@@ -11,5 +11,7 @@ Full policy: [docs/SECURITY.md](../SECURITY.md).
   for re-encrypt on save.
 - **Chunks:** plaintext CAS. Do not treat as a vault.
 - **Terminal Custom / SSH extra args** = a shell.
-- Auto-update / telemetry are **stubs**. Report vulns via GitHub Security
+- Update checks read the public GitHub releases API and do not install
+  binaries. Telemetry is opt-in, off by default, and stays in
+  `data\telemetry.jsonl` unless `telemetry-endpoint` is https. Report vulns via GitHub Security
   Advisories, not public issues.

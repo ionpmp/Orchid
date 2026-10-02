@@ -155,6 +155,12 @@ impl MainWindowController {
             );
             self.push_notification(&self.locale.tr("settings-panel-title"), &body, 2);
         }
+        if section == "general"
+            && matches!(key, "telemetry" | "telemetry-endpoint")
+            && self.config.read().general.telemetry
+        {
+            self.report_telemetry_now();
+        }
     }
 
     pub(super) fn open_settings(self: &Arc<Self>, section: &str) {
@@ -662,6 +668,24 @@ fn apply_settings_field(
     locale: &LocaleManager,
 ) -> Result<(), String> {
     match (section, key) {
+        ("general", "auto-update") => {
+            cfg.general.auto_update = parse_settings_bool(value)?;
+        }
+        ("general", "telemetry") => {
+            cfg.general.telemetry = parse_settings_bool(value)?;
+        }
+        ("general", "telemetry-endpoint") => {
+            let trimmed = value.trim();
+            if !trimmed.is_empty()
+                && !matches!(
+                    crate::release::telemetry_target(trimmed),
+                    crate::release::TelemetryTarget::Https(_)
+                )
+            {
+                return Err("telemetry endpoint must be https".into());
+            }
+            cfg.general.telemetry_endpoint = trimmed.to_string();
+        }
         ("general", "open-on-startup") => {
             cfg.general.open_on_startup = parse_settings_bool(value)?;
         }

@@ -234,21 +234,26 @@ pub(crate) fn build_settings_fields(
 
     match section {
         "general" => {
-            // Auto-update / telemetry are reserved for a later release — keep
-            // them visible but read-only so toggles do not pretend to work.
-            push_settings_readonly(
+            push_settings_bool(
                 &mut rows,
                 locale,
                 "auto-update",
                 "settings-field-auto-update",
-                locale.tr("settings-value-disabled").into(),
+                cfg.general.auto_update,
             );
-            push_settings_readonly(
+            push_settings_bool(
                 &mut rows,
                 locale,
                 "telemetry",
                 "settings-field-telemetry",
-                locale.tr("settings-value-disabled").into(),
+                cfg.general.telemetry,
+            );
+            push_settings_text(
+                &mut rows,
+                locale,
+                "telemetry-endpoint",
+                "settings-field-telemetry-endpoint",
+                cfg.general.telemetry_endpoint.clone(),
             );
             push_settings_bool(
                 &mut rows,

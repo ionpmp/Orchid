@@ -7,8 +7,9 @@ hot-reloaded). Keys are kebab-case.
 
 | Key | Default | Behavior |
 |-----|---------|----------|
-| `auto-update` | `true` | **Not implemented.** Settings: Disabled |
-| `telemetry` | `false` | **Not implemented.** Settings: Disabled |
+| `auto-update` | `true` | On startup, check the public GitHub releases API. A newer tag notifies. The command **Check for updates** also opens the release page. Nothing is downloaded or installed. |
+| `telemetry` | `false` | Opt-in. When on, append `app-start` (version, OS family, language) to `data\telemetry.jsonl`. |
+| `telemetry-endpoint` | empty | `https` URL that receives that JSON. Empty keeps it on disk. Other schemes are refused. Redirects are not followed. |
 | `open-on-startup` | `false` | Autostart helper |
 | `os-notifications` | `false` | Mirror in-app alerts as Windows Action Center toasts. Writes a Start Menu `Orchid.lnk` with AppUserModelID `IonPmp.Orchid` when enabled. Failures stay in the in-app center. |
 

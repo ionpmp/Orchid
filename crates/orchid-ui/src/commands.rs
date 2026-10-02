@@ -13,6 +13,7 @@ pub fn build_ui_command_set() -> Vec<(CommandDescriptor, ActionFactory)> {
     vec![
         settings_open_command(),
         settings_open_config_file_command(),
+        settings_check_update_command(),
         password_lock_command(),
         diagnostics_export_command(),
         data_export_backup_command(),
@@ -57,6 +58,24 @@ fn settings_open_config_file_command() -> (CommandDescriptor, ActionFactory) {
     };
     let factory: ActionFactory =
         Arc::new(|_: ParsedCommand| Ok(Box::new(SettingsOpenConfigFileAction) as Box<dyn Action>));
+    (descriptor, factory)
+}
+
+fn settings_check_update_command() -> (CommandDescriptor, ActionFactory) {
+    let descriptor = CommandDescriptor {
+        id: "settings.check_update".into(),
+        display_name_key: "command-settings-check_update-name".into(),
+        description_key: Some("command-settings-check_update-desc".into()),
+        category: CommandCategory::Settings,
+        default_shortcut: None,
+        terminal_invocation: Some(TerminalInvocation {
+            verb: "settings check update".into(),
+            args: Vec::new(),
+        }),
+        icon_name: Some("settings".into()),
+    };
+    let factory: ActionFactory =
+        Arc::new(|_: ParsedCommand| Ok(Box::new(SettingsCheckUpdateAction) as Box<dyn Action>));
     (descriptor, factory)
 }
 
@@ -268,6 +287,24 @@ impl Action for DataExportBackupAction {
     }
     fn command_text(&self) -> String {
         "orc data export backup".into()
+    }
+    async fn execute(&self, _ctx: &ActionContext) -> orchid_core::Result<ActionOutcome> {
+        Ok(ActionOutcome::ok())
+    }
+}
+
+struct SettingsCheckUpdateAction;
+
+#[async_trait]
+impl Action for SettingsCheckUpdateAction {
+    fn id(&self) -> &'static str {
+        "settings.check_update"
+    }
+    fn display_name_key(&self) -> &'static str {
+        "command-settings-check_update-name"
+    }
+    fn command_text(&self) -> String {
+        "orc settings check update".into()
     }
     async fn execute(&self, _ctx: &ActionContext) -> orchid_core::Result<ActionOutcome> {
         Ok(ActionOutcome::ok())

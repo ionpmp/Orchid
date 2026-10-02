@@ -49,10 +49,13 @@ pub struct OnboardingConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct GeneralConfig {
-    /// Whether Orchid automatically checks for and downloads updates.
+    /// Whether Orchid checks GitHub releases on startup. It does not download
+    /// or replace its own files.
     pub auto_update: bool,
-    /// Whether anonymous telemetry is enabled. Off by default (opt-in only).
+    /// Whether an anonymous app-start event is recorded. Off by default.
     pub telemetry: bool,
+    /// HTTPS URL that receives the telemetry event. Empty keeps it on disk.
+    pub telemetry_endpoint: String,
     /// Whether Orchid should start automatically on user login.
     pub open_on_startup: bool,
     /// Mirror in-app notifications as Windows Action Center toasts. Off by default.
@@ -64,6 +67,7 @@ impl Default for GeneralConfig {
         Self {
             auto_update: true,
             telemetry: false,
+            telemetry_endpoint: String::new(),
             open_on_startup: false,
             os_notifications: false,
         }
@@ -486,6 +490,8 @@ mod tests {
     fn missing_sections_fall_back_to_defaults() {
         let cfg: OrchidConfig = toml::from_str("").unwrap();
         assert!(cfg.general.auto_update);
+        assert!(!cfg.general.telemetry);
+        assert!(cfg.general.telemetry_endpoint.is_empty());
         assert!(!cfg.general.os_notifications);
         assert!((cfg.appearance.font_scale - 1.0).abs() < f32::EPSILON);
         assert_eq!(cfg.locale.language, "en-US");
