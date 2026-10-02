@@ -18,6 +18,7 @@ pub(crate) const SETTINGS_SECTION_IDS: &[&str] = &[
     "privacy",
     "marketplace",
     "agent",
+    "photos",
 ];
 
 pub(crate) fn build_settings_sections(locale: &LocaleManager) -> Vec<SettingsSectionEntry> {
@@ -665,6 +666,22 @@ pub(crate) fn build_settings_fields(
                 locale.tr("settings-field-agent-key"),
                 locale.tr("settings-action-clear-agent-key"),
                 !cfg.agent.api_key.is_empty(),
+            );
+        }
+        "photos" => {
+            push_settings_readonly(
+                &mut rows,
+                locale,
+                "hint",
+                "settings-photos-note",
+                locale.tr("settings-photos-hint").into(),
+            );
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "auto-tag",
+                "settings-field-photos-auto-tag",
+                cfg.photos.auto_tag,
             );
         }
         "marketplace" => {

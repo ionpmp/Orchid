@@ -995,6 +995,9 @@ fn apply_settings_field(
         ("agent", "clear-key") => {
             cfg.agent.api_key.clear();
         }
+        ("photos", "auto-tag") => {
+            cfg.photos.auto_tag = parse_settings_bool(value)?;
+        }
         _ => return Err(format!("field `{section}.{key}` is not editable")),
     }
     Ok(())

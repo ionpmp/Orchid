@@ -24,7 +24,20 @@ Alt+F7 Find. Other shortcut profiles remap some of these.
 
 ## Virtual folders
 
-Recent, Starred, Tags, Search results, Recycle Bin, Categories, Network.
+Recent, Starred, Tags, Photos, Search results, Recycle Bin, Categories, Network.
+
+## Photos
+
+**Files → Photos** groups tags that contain a slash. `people/Ada` is a
+person, `event/2026-10-02/Picnic` is an event, `album/Vacation` is an
+album. Smart albums list every person, every event, and every other tag.
+The names `people`, `events`, and `other` are reserved under Albums.
+
+This does not detect faces. Settings → Photos can tag images from folder
+names: a picture in `People/Ada` becomes `people/ada`, and a picture in
+`Events/2026-10-02/Picnic` becomes `event/2026-10-02/picnic`. The switch
+is off until you enable `[photos].auto-tag`. A file sitting directly in
+`People` or `Events`, with no name folder under it, is left alone.
 
 ## Archives
 

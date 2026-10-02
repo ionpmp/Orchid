@@ -14,6 +14,7 @@ mod wrap_orchid;
 pub(crate) use image_share::{copy_loaded, paste_loaded};
 mod meta_edit;
 pub mod navigation;
+mod photos;
 pub mod selection;
 pub mod state;
 pub mod tools;

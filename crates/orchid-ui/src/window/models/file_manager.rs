@@ -411,6 +411,7 @@ fn fm_sidebar_id_for_path(path: &str) -> Option<&'static str> {
         "virtual:recent" => Some("fav:recent"),
         "virtual:starred" => Some("fav:starred"),
         "virtual:tags" => Some("fav:tags"),
+        "virtual:photos" => Some("fav:photos"),
         "virtual:search" => Some("fav:search"),
         "virtual:recycle" => Some("fav:recycle"),
         "virtual:categories/images" => Some("cat:images"),
@@ -708,6 +709,15 @@ pub(crate) fn build_sidebar_items(
             indent: 1,
             is_section_header: false,
             is_active: active_id == Some("fav:tags"),
+        },
+        FmSidebarItem {
+            id: "fav:photos".into(),
+            label: locale.tr("fm-virtual-photos").into(),
+            icon: "sidebar-images".into(),
+            indent: 1,
+            is_section_header: false,
+            is_active: active_path == "virtual:photos"
+                || active_path.starts_with("virtual:photos/"),
         },
         FmSidebarItem {
             id: "fav:recent".into(),

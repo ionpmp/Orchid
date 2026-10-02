@@ -37,6 +37,8 @@ pub struct OrchidConfig {
     pub terminal: TerminalConfig,
     /// One-shot chat agent (Ollama or an OpenAI-compatible API).
     pub agent: AgentConfig,
+    /// Photo library grouping and opt-in folder auto-tag.
+    pub photos: PhotosConfig,
 }
 
 /// Terminal grid selection.
@@ -91,6 +93,25 @@ impl Default for AgentConfig {
             model: String::new(),
             api_key: String::new(),
         }
+    }
+}
+
+/// Photo library in Files → Photos.
+///
+/// People, events, and albums are hierarchical tags (`people/ada`,
+/// `event/2026-10-02/picnic`, `album/vacation`). This does not detect faces.
+/// [`Self::auto_tag`] writes those tags when a folder named People or Events
+/// sits above an image.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct PhotosConfig {
+    /// Tag images from People and Events folder names while browsing.
+    pub auto_tag: bool,
+}
+
+impl Default for PhotosConfig {
+    fn default() -> Self {
+        Self { auto_tag: false }
     }
 }
 
@@ -567,6 +588,7 @@ mod tests {
         assert!(!cfg.agent.enabled);
         assert_eq!(cfg.agent.backend, "ollama");
         assert!(cfg.agent.model.is_empty());
+        assert!(!cfg.photos.auto_tag);
     }
 
     #[test]

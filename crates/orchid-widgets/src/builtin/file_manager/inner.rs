@@ -718,6 +718,7 @@ impl FileManagerInner {
             }
             self.tab_errors.write().insert(tab.id, result.error.clone());
             let mut entries = result.entries;
+            self.auto_tag_photo_entries(&entries);
             self.apply_entry_metadata(&mut entries);
             sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
             let entries = Arc::new(entries);
@@ -756,6 +757,7 @@ impl FileManagerInner {
             }
             self.tab_errors.write().insert(tab.id, result.error.clone());
             let mut entries = result.entries;
+            self.auto_tag_photo_entries(&entries);
             self.apply_entry_metadata(&mut entries);
             sort_entries(&mut entries, tab.sort_by, tab.sort_descending);
             let entries = Arc::new(entries);
@@ -1453,6 +1455,9 @@ impl FileManagerInner {
         if raw == "virtual:tags" {
             return self.list_tagged_paths().await;
         }
+        if raw == "virtual:photos" || raw.starts_with("virtual:photos/") {
+            return self.list_photos(raw).await;
+        }
         if raw == "virtual:network" {
             return self.list_network_mounts();
         }
@@ -1610,6 +1615,106 @@ impl FileManagerInner {
         self.hydrate_entries_metadata(&mut entries).await;
         self.apply_entry_metadata(&mut entries);
         entries
+    }
+
+    pub(super) async fn list_photos(&self, raw: &str) -> Vec<orchid_fs::FsEntry> {
+        let locale = &self.deps.locale;
+        let labels = super::photos::PhotoLabels {
+            people: locale.tr("fm-photos-people"),
+            events: locale.tr("fm-photos-events"),
+            albums: locale.tr("fm-photos-albums"),
+            tags: locale.tr("fm-photos-tags"),
+            album_people: locale.tr("fm-photos-album-people"),
+            album_events: locale.tr("fm-photos-album-events"),
+            album_other: locale.tr("fm-photos-album-other"),
+        };
+        let mut tagged = Vec::new();
+        for tag in self.deps.tag_manager.all_tags().unwrap_or_default() {
+            for path in self
+                .deps
+                .tag_manager
+                .paths_with_tag(&tag)
+                .unwrap_or_default()
+            {
+                tagged.push(super::photos::TaggedFile {
+                    tag: tag.clone(),
+                    path: path.as_str().to_string(),
+                });
+            }
+        }
+        let rows = super::photos::photo_listing(&tagged, raw, &labels);
+        let mut entries = Vec::with_capacity(rows.len());
+        for row in rows {
+            let Ok(path) = orchid_fs::FsPath::new(&row.path) else {
+                continue;
+            };
+            let kind = if row.directory {
+                orchid_fs::FsEntryKind::Directory
+            } else {
+                orchid_fs::FsEntryKind::File
+            };
+            entries.push(orchid_fs::FsEntry {
+                name: row.name,
+                path,
+                metadata: orchid_fs::FsMetadata {
+                    kind,
+                    size: 0,
+                    created: None,
+                    modified: None,
+                    accessed: None,
+                    readonly: false,
+                    hidden: false,
+                    system: false,
+                    mime: None,
+                    extended: orchid_fs::ExtendedAttributes::default(),
+                },
+            });
+        }
+        self.hydrate_entries_metadata(&mut entries).await;
+        self.apply_entry_metadata(&mut entries);
+        entries
+    }
+
+    fn auto_tag_photo_entries(&self, entries: &[orchid_fs::FsEntry]) {
+        if !self.deps.orchid_config.read().photos.auto_tag {
+            return;
+        }
+        let paths: Vec<orchid_fs::FsPath> = entries
+            .iter()
+            .filter(|e| matches!(e.metadata.kind, orchid_fs::FsEntryKind::File))
+            .map(|e| e.path.clone())
+            .collect();
+        if paths.is_empty() {
+            return;
+        }
+        let existing = self.deps.tag_manager.get_many(&paths).unwrap_or_default();
+        let mut batch = Vec::new();
+        for entry in entries {
+            if !matches!(entry.metadata.kind, orchid_fs::FsEntryKind::File) {
+                continue;
+            }
+            let wanted = super::photos::auto_tags_for_path(entry.path.as_str());
+            if wanted.is_empty() {
+                continue;
+            }
+            let have = existing.get(entry.path.as_str()).map(|tag| &tag.tags);
+            let missing: Vec<String> = wanted
+                .into_iter()
+                .filter(|tag| match have {
+                    Some(tags) => !tags.iter().any(|existing| existing == tag),
+                    None => true,
+                })
+                .collect();
+            if !missing.is_empty() {
+                batch.push((entry.path.clone(), missing));
+            }
+        }
+        if batch.is_empty() {
+            return;
+        }
+        if let Err(err) = self.deps.tag_manager.ensure_tags_batch(&batch) {
+            warn!(error = %err, "photo auto-tag failed");
+        }
     }
 
     pub(super) fn reapply_catalog_flags(&self) {

@@ -30,8 +30,8 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 
 ## v1.x
 
-- [ ] Photo library intelligence (hierarchical tags, opt-in auto-tag,
-      **People** view / faces, events, smart albums)
+- [ ] Face detection for the People view (Files → Photos already groups
+      `people/` tags and does not detect faces)
 
 ## v2.0
 

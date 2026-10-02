@@ -1447,6 +1447,7 @@ pub async fn navigate_virtual(instance_id: Uuid, pane: u8, virtual_id: &str) -> 
         "fav:recent" => orchid_fs::FsPath::new("virtual:recent").ok(),
         "fav:starred" => orchid_fs::FsPath::new("virtual:starred").ok(),
         "fav:tags" => orchid_fs::FsPath::new("virtual:tags").ok(),
+        "fav:photos" => orchid_fs::FsPath::new("virtual:photos").ok(),
         "cat:images" => orchid_fs::FsPath::new("virtual:categories/images").ok(),
         "cat:documents" => orchid_fs::FsPath::new("virtual:categories/documents").ok(),
         "cat:video" => orchid_fs::FsPath::new("virtual:categories/video").ok(),

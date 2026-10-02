@@ -50,6 +50,10 @@ release yet.
 - Nine bundled themes + JSON theme loader; 11 Fluent locales with RTL (ar-SA).
 
 #### File manager & storage
+- **Photos:** Files → Photos groups hierarchical tags (`people/Name`,
+  `event/Date/Title`, `album/Name`) into people, events, a tag tree, and
+  smart albums. It does not detect faces. Settings → Photos can tag images
+  from `People` and `Events` folder names; that switch is off by default.
 - **Managed-folder ingest:** chunk files are block-cloned from the source
   when the volume can share extents, and copied otherwise. Two whole files
   with the same content become one hard link.
@@ -58,8 +62,8 @@ release yet.
   The token stays in rclone's config.
 - Dual-pane FM with icons / list / details / gallery, tabs, breadcrumbs,
   drag-and-drop (including OS drop and FM→viewer), tags, colour labels, quick
-  filter, virtual folders (Recent, Starred, Tags, Search results, Recycle Bin,
-  categories, network). Browse the Recycle Bin, restore items, permanently
+  filter, virtual folders (Recent, Starred, Tags, Photos, Search results,
+  Recycle Bin, categories, network). Browse the Recycle Bin, restore items, permanently
   delete selected items, or empty the bin.
 - Find files (`Alt+F7` / Tools): name / mask / regex, size, date, attributes,
   content grep (literal or regex), case sensitivity, archives, indexed search
@@ -206,8 +210,8 @@ release yet.
   changes), fast EXIF/embedded-JPEG thumbs, and a contact-sheet PNG
   (`T`/`G`/`D`/`I`/`P`).
 - Image folder browse: Timeline (EXIF/mtime), Map (GPS pins), and Calendar
-  month grid (`Ctrl+Shift+T` / `M` / `C`, Esc). People view by faces is
-  planned for v1.x.
+  month grid (`Ctrl+Shift+T` / `M` / `C`, Esc). Faces are not detected;
+  **Files → Photos** groups `people/` tags.
 - Image chrome auto-hides after idle time (tap or vertical swipe to
   peek); mouse swipe / right-drag next-prev, double-click fit/actual;
   touch pinch, two-finger pan, swipe, tap, and double-tap.

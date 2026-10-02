@@ -17,7 +17,8 @@ Catalog **Document Editor** creates `Untitled.orchid` (linked when a
 
 Wide format set (JPEG/PNG/WebP/RAW/SVG/HEIC via WIC, …). Zoom/pan, folder
 playlist, thumbs, slideshow, Timeline/Map/Calendar, EXIF, sibling-file
-edits. **People view** is not implemented. The view stays 8-bit RGBA.
+edits. Faces are not detected; **Files → Photos** groups `people/` tags.
+The view stays 8-bit RGBA.
 Radiance HDR and OpenEXR are tone-mapped into that buffer (Reinhard, then
 sRGB) so pixels brighter than 1.0 are not clipped to white. The status
 line marks those files `tone-mapped`.

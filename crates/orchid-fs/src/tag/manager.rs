@@ -77,6 +77,43 @@ impl TagManager {
         Ok(())
     }
 
+    /// Add any missing tags for each path in one write.
+    ///
+    /// Paths that already have every requested tag are skipped. Returns the
+    /// paths that gained at least one tag.
+    ///
+    /// # Errors
+    ///
+    /// Propagates storage errors, or [`FsError::InvalidPath`] when a tag
+    /// normalises to an empty string.
+    pub fn ensure_tags_batch(&self, items: &[(FsPath, Vec<String>)]) -> Result<Vec<FsPath>> {
+        let mut changed = Vec::new();
+        let mut rows = Vec::new();
+        for (path, tags) in items {
+            if tags.is_empty() {
+                continue;
+            }
+            let mut existing = self.load_or_new(path)?;
+            let mut set: BTreeSet<String> = existing.tags.drain(..).collect();
+            let before = set.len();
+            for tag in tags {
+                set.insert(normalise_tag(tag)?);
+            }
+            if set.len() == before {
+                continue;
+            }
+            existing.tags = set.into_iter().collect();
+            existing.updated_at = Utc::now();
+            rows.push(existing);
+            changed.push(path.clone());
+        }
+        self.write_many(rows)?;
+        for path in &changed {
+            self.publish(path);
+        }
+        Ok(changed)
+    }
+
     /// Append a tag, preserving existing ones and de-duplicating.
     ///
     /// # Errors

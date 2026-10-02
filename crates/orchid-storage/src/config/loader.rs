@@ -134,6 +134,11 @@ hint-mode-enabled = false
 # endpoint = "http://127.0.0.1:11434"
 # model = "llama3.2"
 # api-key = ""                # OpenAI-compatible bearer; DPAPI-wrapped on save
+
+# [photos]
+# Files → Photos groups people/, event/, and album/ tags. No face detection.
+# auto-tag writes people/Name and event/Date/Title from folder names.
+# auto-tag = false
 "#;
 
 /// Load / save / reload API for the TOML configuration.

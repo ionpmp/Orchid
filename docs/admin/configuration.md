@@ -87,3 +87,10 @@ Settings → Agent, and `[agent]` in `config.toml`. `enabled` (false),
 `api-key`. Universal Search sends `? your question` and posts the reply
 as a notification. The key is a DPAPI blob after Orchid saves it.
 Redirects are not followed.
+
+## `[photos]`
+
+Settings → Photos, and `[photos]` in `config.toml`. `auto-tag` (false)
+tags an image from a `People/Name` or `Events/…` folder when that folder
+is opened. Files → Photos then groups `people/`, `event/`, and `album/`
+tags. Face detection is not included.
