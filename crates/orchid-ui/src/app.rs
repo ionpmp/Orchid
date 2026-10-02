@@ -262,11 +262,21 @@ impl OrchidApp {
             },
             async {
                 let dir = search_index_dir.clone();
-                tokio::task::spawn_blocking(move || orchid_search::SearchEngine::open(&dir))
-                    .await
-                    .map_err(|e| UiError::Slint(format!("search index join: {e}")))?
-                    .map_err(|e| UiError::Slint(format!("open search index: {e}")))
-                    .map(Arc::new)
+                let sentence_model = {
+                    let raw = config.read().search.sentence_model.trim().to_string();
+                    if raw.is_empty() {
+                        None
+                    } else {
+                        Some(std::path::PathBuf::from(raw))
+                    }
+                };
+                tokio::task::spawn_blocking(move || {
+                    orchid_search::SearchEngine::open_with_model(&dir, sentence_model.as_deref())
+                })
+                .await
+                .map_err(|e| UiError::Slint(format!("search index join: {e}")))?
+                .map_err(|e| UiError::Slint(format!("open search index: {e}")))
+                .map(Arc::new)
             },
         )?;
 

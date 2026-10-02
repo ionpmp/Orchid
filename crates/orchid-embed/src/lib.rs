@@ -1,14 +1,22 @@
 //! Sentence embedding backends for Orchid Phase 5.
 //!
-//! Default builds ship [`StubEmbedder`] — a deterministic, model-free
-//! embedder suitable for CI and hybrid-search proofs. A real ORT-backed
-//! model can land behind the `ort` feature later (bundled like `pdfium.dll`).
+//! Default crate builds ship [`StubEmbedder`] — a deterministic, model-free
+//! embedder suitable for CI. The `ort` feature (enabled by the desktop app)
+//! runs a compiled-in quantized ONNX hash encoder, or a replacement graph
+//! from [`open_embedder`].
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 
+mod concepts;
+#[cfg(feature = "ort")]
+mod onnx;
+mod runtime;
 mod stub;
 
+#[cfg(feature = "ort")]
+pub use onnx::{BUNDLED_ONNX_DIMS, BUNDLED_ONNX_MODEL_ID};
+pub use runtime::open_embedder;
 pub use stub::{StubEmbedder, STUB_DIMS, STUB_MODEL_ID};
 
 use orchid_format::{document_embedding, EmbeddingPayload};

@@ -14,8 +14,9 @@ PDF extraction requires pdfium at runtime; see `extractors::pdf`. `.orchid`
 Clean-Text extraction lives in `extractors::orchid`.
 
 ANN + RRF hybrid search (`ann`, `hybrid`, `SearchEngine::search_hybrid`)
-fuses Tantivy BM25 with stub embeddings from `orchid-embed`. The engine
-keeps an ANN in lockstep with upserts/removes and writes `ann.stub.v1`
-beside the Tantivy index on commit. Universal-search **files** call
-`search_hybrid`. A production ONNX model remains a
-[roadmap](../../docs/ROADMAP.md) item.
+fuses Tantivy BM25 with `orchid-embed`. The desktop app enables the `ort`
+feature, so that build uses the compiled-in quantized ONNX model. Crate
+tests without the feature stay on the synonym stub. The engine keeps an ANN
+in lockstep with upserts/removes and writes `ann.<model-id>` beside the
+Tantivy index on commit (`ann.stub.v1` for the stub). Universal-search
+**files** call `search_hybrid`.

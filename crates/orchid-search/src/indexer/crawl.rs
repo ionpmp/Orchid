@@ -134,7 +134,10 @@ async fn build_document(
         None
     };
 
-    let embedding = orchid_embedding(path, extension.as_deref());
+    let (embedding_model, embedding) = match orchid_embedding(path, extension.as_deref()) {
+        Some((model, vector)) => (Some(model), Some(vector)),
+        None => (None, None),
+    };
 
     Ok(IndexDocument {
         path: path.as_str().to_string(),
@@ -149,10 +152,11 @@ async fn build_document(
         kind: DocumentKind::File,
         in_archive: None,
         embedding,
+        embedding_model,
     })
 }
 
-fn orchid_embedding(path: &FsPath, extension: Option<&str>) -> Option<Vec<f32>> {
+fn orchid_embedding(path: &FsPath, extension: Option<&str>) -> Option<(String, Vec<f32>)> {
     if !extension.is_some_and(|e| e.eq_ignore_ascii_case("orchid")) || !path.is_local() {
         return None;
     }

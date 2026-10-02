@@ -237,16 +237,21 @@ impl IndexFsSubscriber {
             DocumentKind::File
         };
 
-        let embedding = if extension
+        let (embedding_model, embedding) = if extension
             .as_deref()
             .is_some_and(|e| e.eq_ignore_ascii_case("orchid"))
             && path.is_local()
         {
-            path.to_local()
+            match path
+                .to_local()
                 .ok()
                 .and_then(|os| crate::extractors::orchid::document_vector_local(&os))
+            {
+                Some((model, vector)) => (Some(model), Some(vector)),
+                None => (None, None),
+            }
         } else {
-            None
+            (None, None)
         };
 
         let doc = IndexDocument {
@@ -262,6 +267,7 @@ impl IndexFsSubscriber {
             kind,
             in_archive: None,
             embedding,
+            embedding_model,
         };
         self.inner.scheduler.enqueue_upsert(doc).await?;
         Ok(())

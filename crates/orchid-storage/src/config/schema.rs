@@ -340,6 +340,13 @@ pub struct SearchConfig {
     pub extract_text: bool,
     /// Extract PDF text when `pdfium.dll` is available.
     pub extract_pdf: bool,
+    /// Optional path to a replacement ONNX sentence graph.
+    ///
+    /// Empty uses the compiled-in quantized model when the desktop app's
+    /// `ort` feature is on, and the synonym stub otherwise. The file must
+    /// accept `features` (`float32[1, 32]`) and return `embedding`. The
+    /// index reads this path when it opens.
+    pub sentence_model: String,
 }
 
 impl Default for SearchConfig {
@@ -355,6 +362,7 @@ impl Default for SearchConfig {
             max_file_size_mib: 50,
             extract_text: true,
             extract_pdf: true,
+            sentence_model: String::new(),
         }
     }
 }
@@ -519,6 +527,7 @@ mod tests {
         assert!((cfg.appearance.font_scale - 1.0).abs() < f32::EPSILON);
         assert_eq!(cfg.locale.language, "en-US");
         assert_eq!(cfg.terminal.grid, "orchid");
+        assert!(cfg.search.sentence_model.is_empty());
     }
 
     #[test]

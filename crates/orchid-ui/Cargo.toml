@@ -34,7 +34,7 @@ orchid-storage.workspace = true
 orchid-terminal = { workspace = true, features = ["alacritty-grid"] }
 orchid-viewers.workspace = true
 orchid-widgets.workspace = true
-orchid-search.workspace = true
+orchid-search = { workspace = true, features = ["ort"] }
 opener.workspace = true
 rfd.workspace = true
 reqwest.workspace = true

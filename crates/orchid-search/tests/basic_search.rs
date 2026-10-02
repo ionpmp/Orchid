@@ -22,6 +22,7 @@ fn mk_doc(
         kind: DocumentKind::File,
         in_archive: None,
         embedding: None,
+        embedding_model: None,
     }
 }
 

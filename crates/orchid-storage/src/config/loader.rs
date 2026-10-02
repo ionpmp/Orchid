@@ -124,6 +124,7 @@ hint-mode-enabled = false
 # max-file-size-mib = 50
 # extract-text = true
 # extract-pdf = true
+# sentence-model = "C:/models/sentence.onnx"
 "#;
 
 /// Load / save / reload API for the TOML configuration.

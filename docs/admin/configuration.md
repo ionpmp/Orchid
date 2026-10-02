@@ -74,4 +74,7 @@ disables), `leader-timeout-ms` (1200), `leader-bindings`.
 Not in the Settings panel. `included-roots` (empty → Documents),
 `excluded-patterns`, `max-file-size-mib` (50), `extract-text`,
 `extract-pdf`. Roots are Orchid `FsPath` strings
-(`local:c:/Users/Alice/Documents`).
+(`local:c:/Users/Alice/Documents`). `sentence-model` is an optional path
+to a replacement ONNX graph (`features` in, `embedding` out). Empty uses
+the compiled-in quantized model in the desktop app. The index reads the
+path at startup.

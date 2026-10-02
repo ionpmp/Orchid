@@ -3,8 +3,7 @@
 //! Tokens that share a concept (e.g. `canine` / `dog`) land in the same
 //! dense dimensions so ANN can retrieve paraphrases that BM25 misses.
 
-use std::collections::HashMap;
-
+use crate::concepts::{fnv1a64, fold_concept, l2_normalize};
 use crate::{EmbedError, Embedder, Result};
 
 /// Default stub model id (recorded in Embedding region metadata).
@@ -14,39 +13,14 @@ pub const STUB_MODEL_ID: &str = "orchid.stub.synonym.v1";
 pub const STUB_DIMS: usize = 64;
 
 /// Deterministic bag-of-concepts embedder.
-#[derive(Debug, Clone)]
-pub struct StubEmbedder {
-    synonyms: HashMap<&'static str, &'static str>,
-}
-
-impl Default for StubEmbedder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+#[derive(Debug, Clone, Copy, Default)]
+pub struct StubEmbedder;
 
 impl StubEmbedder {
     /// Build with the built-in synonym table.
     #[must_use]
     pub fn new() -> Self {
-        let mut synonyms = HashMap::new();
-        // canine family
-        for w in ["canine", "dog", "puppy", "hound", "pup"] {
-            synonyms.insert(w, "dog");
-        }
-        // feline family
-        for w in ["feline", "cat", "kitten", "kitty"] {
-            synonyms.insert(w, "cat");
-        }
-        // vehicle
-        for w in ["automobile", "car", "vehicle", "auto"] {
-            synonyms.insert(w, "car");
-        }
-        Self { synonyms }
-    }
-
-    fn normalize_token<'a>(&'a self, tok: &'a str) -> &'a str {
-        self.synonyms.get(tok).copied().unwrap_or(tok)
+        Self
     }
 }
 
@@ -68,7 +42,7 @@ impl Embedder for StubEmbedder {
                 continue;
             }
             any = true;
-            let concept = self.normalize_token(raw);
+            let concept = fold_concept(raw);
             let h = fnv1a64(concept.as_bytes());
             let i0 = (h as usize) % STUB_DIMS;
             let i1 = ((h >> 32) as usize) % STUB_DIMS;
@@ -80,24 +54,6 @@ impl Embedder for StubEmbedder {
         }
         l2_normalize(&mut v);
         Ok(v)
-    }
-}
-
-fn fnv1a64(bytes: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in bytes {
-        h ^= u64::from(*b);
-        h = h.wrapping_mul(0x0100_0000_01b3);
-    }
-    h
-}
-
-fn l2_normalize(v: &mut [f32]) {
-    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if norm > 0.0 {
-        for x in v.iter_mut() {
-            *x /= norm;
-        }
     }
 }
 

@@ -21,11 +21,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 
 ## Remaining gaps in what already shipped
 
-### Search & embeddings
-
-- [ ] Ship a quantized ONNX sentence model behind `orchid-embed`’s `ort`
-      feature (today: `StubEmbedder` in universal-search hybrid)
-
 ### i18n
 
 - [~] Keep Fluent key parity across 11 locales
@@ -38,7 +33,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 - [ ] AI agents (Ollama + OpenAI API) on `BackgroundJobQueue`
 - [ ] Photo library intelligence (hierarchical tags, opt-in auto-tag,
       **People** view / faces, events, smart albums)
-- [ ] ORT embeddings in production search
 
 ## v2.0
 

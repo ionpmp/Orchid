@@ -9,9 +9,9 @@ use tantivy::query::{BooleanQuery, Occur, Query as TantivyQuery, RangeQuery, Ter
 use tantivy::schema::IndexRecordOption;
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Term};
 
-use orchid_embed::{Embedder, StubEmbedder};
+use orchid_embed::Embedder;
 
-use crate::ann::{AnnIndex, ANN_SNAPSHOT_NAME};
+use crate::ann::{ann_snapshot_name, AnnIndex};
 use crate::error::{Result, SearchError};
 use crate::hybrid::fuse_rrf;
 use crate::query::builder::Query;
@@ -64,6 +64,12 @@ pub struct IndexDocument {
     pub in_archive: Option<String>,
     /// Document-level vector from a `.orchid` Embedding region, when present.
     pub embedding: Option<Vec<f32>>,
+    /// Model id of [`Self::embedding`], when the file recorded one.
+    ///
+    /// A stored vector is reused only when this is absent or equal to the
+    /// active embedder. A different id is ignored and the text is embedded
+    /// again, so a model change does not mix geometries that share a width.
+    pub embedding_model: Option<String>,
 }
 
 /// Handle to a live search index.
@@ -83,8 +89,11 @@ struct SearchEngineInner {
     /// Parser for the `path_prefix` wildcard filter.
     path_query_parser: tantivy::query::QueryParser,
     /// Document vectors, kept in lockstep with Tantivy upserts.
-    /// Snapshotted to `ann.stub.v1` on [`SearchEngine::commit`].
+    /// Snapshotted beside the index on [`SearchEngine::commit`]. The file
+    /// name follows the embedder model id (`ann.stub.v1` for the stub).
     ann: parking_lot::RwLock<AnnIndex>,
+    ann_snapshot: String,
+    embedder: std::sync::Arc<dyn Embedder>,
     index_dir: std::path::PathBuf,
 }
 
@@ -97,10 +106,26 @@ impl std::fmt::Debug for SearchEngine {
 impl SearchEngine {
     /// Open (or create) an index at `index_dir`.
     ///
+    /// Uses the process embedder: the bundled ONNX model when `ort` is
+    /// enabled, otherwise the synonym stub.
+    ///
     /// # Errors
     ///
     /// Propagates Tantivy errors.
     pub fn open(index_dir: &Path) -> Result<Self> {
+        Self::open_with_model(index_dir, None)
+    }
+
+    /// Open an index, preferring `sentence_model` when that file loads.
+    ///
+    /// A missing path, a graph the runtime rejects, or a build without the
+    /// `ort` feature falls back to the bundled model or the stub. The choice
+    /// is fixed for this handle; restart to pick up a different file.
+    ///
+    /// # Errors
+    ///
+    /// Propagates Tantivy errors.
+    pub fn open_with_model(index_dir: &Path, sentence_model: Option<&Path>) -> Result<Self> {
         std::fs::create_dir_all(index_dir)?;
         let schema = Schema::new();
         let index = if index_dir.read_dir()?.next().is_some() {
@@ -122,6 +147,9 @@ impl SearchEngine {
         );
         let path_query_parser =
             tantivy::query::QueryParser::for_index(&index, vec![schema.field_path]);
+        let embedder = orchid_embed::open_embedder(sentence_model);
+        let ann_snapshot = ann_snapshot_name(embedder.model_id());
+        let dims = embedder.dimensions();
         Ok(Self {
             inner: Arc::new(SearchEngineInner {
                 schema,
@@ -130,13 +158,18 @@ impl SearchEngine {
                 writer: Mutex::new(Some(writer)),
                 text_query_parser,
                 path_query_parser,
-                ann: parking_lot::RwLock::new(load_ann_snapshot(
-                    index_dir,
-                    StubEmbedder::new().dimensions(),
-                )),
+                ann: parking_lot::RwLock::new(load_ann_snapshot(index_dir, &ann_snapshot, dims)),
+                ann_snapshot,
+                embedder,
                 index_dir: index_dir.to_path_buf(),
             }),
         })
+    }
+
+    /// Model id of the embedder this index was opened with.
+    #[must_use]
+    pub fn embedder_model_id(&self) -> &str {
+        self.inner.embedder.model_id()
     }
 
     /// Documents currently held in the in-memory ANN.
@@ -275,11 +308,14 @@ impl SearchEngine {
                 ..Query::empty()
             })
             .await?;
-        let embedder = StubEmbedder::new();
-        let qvec = embedder.embed(text).map_err(|e| SearchError::Extraction {
-            path: String::new(),
-            reason: format!("embed query: {e}"),
-        })?;
+        let qvec = self
+            .inner
+            .embedder
+            .embed(text)
+            .map_err(|e| SearchError::Extraction {
+                path: String::new(),
+                reason: format!("embed query: {e}"),
+            })?;
         let ann_hits = self.inner.ann.read().search(&qvec, limit.max(50));
         Ok(fuse_rrf(bm25, &ann_hits, limit, started))
     }
@@ -379,8 +415,8 @@ fn upsert_batch_sync(inner: &SearchEngineInner, docs: &[IndexDocument]) -> Resul
     Ok(())
 }
 
-fn load_ann_snapshot(index_dir: &Path, dims: usize) -> AnnIndex {
-    let path = index_dir.join(ANN_SNAPSHOT_NAME);
+fn load_ann_snapshot(index_dir: &Path, snapshot: &str, dims: usize) -> AnnIndex {
+    let path = index_dir.join(snapshot);
     match AnnIndex::load(&path, dims) {
         Ok(ann) => ann,
         Err(e) => {
@@ -396,17 +432,20 @@ fn persist_ann_snapshot(inner: &SearchEngineInner) -> Result<()> {
     inner
         .ann
         .read()
-        .persist(&inner.index_dir.join(ANN_SNAPSHOT_NAME))
+        .persist(&inner.index_dir.join(&inner.ann_snapshot))
 }
 
 fn upsert_ann(inner: &SearchEngineInner, docs: &[IndexDocument]) {
-    let embedder = StubEmbedder::new();
     let mut ann = inner.ann.write();
     for d in docs {
+        let model_matches = d
+            .embedding_model
+            .as_deref()
+            .is_none_or(|model| model == inner.embedder.model_id());
         if let Some(vector) = d
             .embedding
             .as_ref()
-            .filter(|v| v.len() == ann.dims())
+            .filter(|v| model_matches && v.len() == ann.dims())
             .cloned()
         {
             if let Err(e) = ann.upsert(&d.path, vector) {
@@ -418,7 +457,7 @@ fn upsert_ann(inner: &SearchEngineInner, docs: &[IndexDocument]) {
             ann.remove(&d.path);
             continue;
         };
-        match embedder.embed(content) {
+        match inner.embedder.embed(content) {
             Ok(vector) => {
                 if let Err(e) = ann.upsert(&d.path, vector) {
                     tracing::debug!(error = %e, path = %d.path, "ann upsert skipped");
@@ -635,4 +674,19 @@ fn get_u64(d: &TantivyDocument, field: tantivy::schema::Field) -> Option<u64> {
 fn get_i64(d: &TantivyDocument, field: tantivy::schema::Field) -> Option<i64> {
     use tantivy::schema::Value;
     d.get_first(field).and_then(|v| v.as_i64())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn opened_index_snapshots_under_the_embedder_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = SearchEngine::open(dir.path()).unwrap();
+        assert_eq!(
+            engine.inner.ann_snapshot,
+            ann_snapshot_name(engine.embedder_model_id())
+        );
+    }
 }

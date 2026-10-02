@@ -27,6 +27,13 @@ release yet.
   double-tap. A finger is ignored while a pen is down. Double-tap toggles
   whether the pen drives edge gestures, or holds it in erase. Haptic feedback
   keeps Windows touch and pen tap feedback on the window.
+- **Search embeddings:** hybrid file search in the desktop app runs a
+  compiled-in quantized ONNX model (`orchid.onnx.hash.q.v1`, 64-d).
+  Builds without the `ort` feature stay on the synonym stub. A
+  `[search].sentence-model` path replaces the graph when it accepts
+  `features` and returns `embedding`. A stored `.orchid` vector is reused
+  only when its model id matches. The ANN file follows that id
+  (`ann.stub.v1` for the stub).
 - In-app **window manager**: undock / dock widgets, floating placement, z-order,
   minimize / maximize / restore, in-app taskbar, Ctrl+Tab cycle, edge snap,
   schema v2 persistence.

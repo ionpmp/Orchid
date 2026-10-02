@@ -24,7 +24,7 @@ the tree — see [ROADMAP.md](ROADMAP.md).
 │  orchid-fs — local + rclone (rcd keep-alive + CLI)          │
 │  orchid-search — Tantivy + ANN/RRF hybrid (universal search) │
 │  orchid-format — native .orchid (Phases 1–5)                │
-│  orchid-embed — StubEmbedder (ORT feature reserved)            │
+│  orchid-embed — stub, or bundled ONNX when `ort` is on     │
 │  orchid-crypto — age, KDBX4, BLAKE3 chunks, Hello / DPAPI   │
 │  orchid-storage — redb state + TOML config + OrchidPaths    │
 │  orchid-i18n — Fluent catalogues (11 locales)               │
@@ -84,7 +84,7 @@ argv paths over a Windows named pipe and exits.
 | `state.redb` | `…\data\state.redb` | Workspaces, widgets, groups, history, session, cache, tags. Schema **v2**. Extra: `crypto_chunk_refs`, `widget_groups` |
 | `passwords.kdbx` | `…\data\passwords.kdbx` | KeePass vault |
 | chunks | `…\data\chunks` | BLAKE3 + FastCDC (plaintext by design) |
-| search index | `…\data\search_index` | Tantivy + `ann.stub.v1` |
+| search index | `…\data\search_index` | Tantivy + `ann.<model-id>` (`ann.stub.v1` for the stub) |
 | logs | `…\data\logs` | Default filter `orchid=info` |
 | network bookmarks | `…\data\network-bookmarks.toml` | Runtime mounts |
 

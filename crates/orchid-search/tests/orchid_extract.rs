@@ -60,6 +60,7 @@ async fn orchid_extractor_feeds_search_content() {
             kind: DocumentKind::File,
             in_archive: None,
             embedding: None,
+            embedding_model: None,
         })
         .await
         .unwrap();

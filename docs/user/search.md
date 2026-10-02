@@ -9,13 +9,18 @@ Top edge swipe, or the Search widget. Sources: **files** (Tantivy BM25 fused
 with in-memory ANN via reciprocal rank fusion, plus snippets), **commands**,
 **settings**, **calculator** (`=`), **calendar**, **Jyotish**.
 
-File hits use [`StubEmbedder`](../../crates/orchid-embed) today (synonym-aware
-vectors, no ONNX model). Semantic recall works for indexed text after the
-indexer has extracted it. `.orchid` files reuse the stored Embedding region
-when present (same width as the stub). The ANN is snapshotted to
-`ann.stub.v1` next to `data\search_index` on commit, so hybrid ranking
-survives a restart. A real sentence model remains behind the reserved
-`ort` feature.
+The desktop app embeds those file hits with a compiled-in
+quantized ONNX model (`orchid.onnx.hash.q.v1`, 64 dimensions): concept
+tokens are hashed into 32 bins and an int8 matrix projects them. Builds
+without the `ort` feature stay on the synonym stub (`orchid.stub.synonym.v1`).
+Semantic recall works for indexed text after the indexer has extracted it.
+A `.orchid` Embedding region is reused only when its model id matches the
+embedder that opened the index; otherwise the extracted text is embedded
+again. The ANN snapshot sits next to `data\search_index` and is named
+`ann.stub.v1` for the stub, or `ann.<model-id>` for any other model, so a
+model change does not mix vectors. Set `[search].sentence-model` to a
+replacement graph that accepts `features` (`float32[1, 32]`) and returns
+`embedding`. The path is read when the index opens.
 
 ## Index
 

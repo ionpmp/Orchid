@@ -27,6 +27,14 @@ third-party/pdfium/win-x64/pdfium.dll
 
 The `orchid-app` build script copies this DLL next to `orchid.exe` under `target/<profile>/`. Without it, the PDF viewer shows an explanatory error and PDF text extraction in search is skipped.
 
+**ONNX embeddings**
+
+The desktop app enables `orchid-embed`'s `ort` feature. That build downloads
+ONNX Runtime and compiles in `crates/orchid-embed/models/hash-q.onnx` (a
+quantized 64-d hash encoder). No extra DLL has to be copied by hand.
+`[search].sentence-model` can point at a replacement graph; see
+[search.md](user/search.md).
+
 **libmpv (in-app audio / video playback)**
 
 Orchid loads libmpv at runtime for the Media viewer. Download a prebuilt Windows

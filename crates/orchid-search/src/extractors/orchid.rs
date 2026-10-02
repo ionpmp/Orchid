@@ -64,13 +64,14 @@ fn extract_bytes(bytes: &[u8]) -> Result<String> {
 }
 
 /// Document-level vector from a sealed `.orchid` Embedding region, if any.
+///
+/// Returns the recorded model id and the document vector.
 #[must_use]
-pub fn document_vector_local(path: &std::path::Path) -> Option<Vec<f32>> {
+pub fn document_vector_local(path: &std::path::Path) -> Option<(String, Vec<f32>)> {
     let file = SealedFile::open(path).ok()?;
-    file.embeddings(None)
-        .ok()?
-        .document_vector()
-        .map(|v| v.to_vec())
+    let payload = file.embeddings(None).ok()?;
+    let vector = payload.document_vector()?.to_vec();
+    Some((payload.model_id, vector))
 }
 
 fn clean_text_truncated(file: &SealedFile) -> Result<String> {

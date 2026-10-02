@@ -10,8 +10,32 @@ use orchid_embed::cosine_similarity;
 
 use crate::error::{Result, SearchError};
 
-/// On-disk ANN snapshot next to the Tantivy index (`ann.stub.v1`).
+/// On-disk ANN snapshot for the synonym stub (`ann.stub.v1`).
 pub const ANN_SNAPSHOT_NAME: &str = "ann.stub.v1";
+
+/// File name of the ANN snapshot for `model_id`.
+///
+/// The synonym stub keeps [`ANN_SNAPSHOT_NAME`]. Every other model gets
+/// `ann.` plus the model id, so a model change does not reuse another
+/// model's vectors.
+#[must_use]
+pub fn ann_snapshot_name(model_id: &str) -> String {
+    if model_id == "orchid.stub.synonym.v1" {
+        return ANN_SNAPSHOT_NAME.to_string();
+    }
+    let mut safe = String::new();
+    for c in model_id.chars() {
+        if c.is_ascii_alphanumeric() || c == '.' || c == '-' {
+            safe.push(c.to_ascii_lowercase());
+        } else {
+            safe.push('_');
+        }
+    }
+    if safe.is_empty() {
+        safe.push_str("model");
+    }
+    format!("ann.{safe}")
+}
 const ANN_MAGIC: &[u8; 8] = b"ORANN001";
 
 /// In-memory path → L2-normalised document vector index.
@@ -182,5 +206,17 @@ mod tests {
         assert_eq!(back.len(), 2);
         let hits = back.search(&[1.0, 0.0], 1);
         assert_eq!(hits[0].0, "local:/a");
+    }
+
+    #[test]
+    fn snapshot_name_keeps_the_stub_file() {
+        assert_eq!(
+            ann_snapshot_name("orchid.stub.synonym.v1"),
+            ANN_SNAPSHOT_NAME
+        );
+        assert_eq!(
+            ann_snapshot_name("orchid.onnx.hash.q.v1"),
+            "ann.orchid.onnx.hash.q.v1"
+        );
     }
 }

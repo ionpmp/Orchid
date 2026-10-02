@@ -10,13 +10,14 @@ authors.workspace = true
 
 [features]
 default = []
-# Future: enable ONNX Runtime + bundled quantized model (like pdfium.dll).
-ort = []
+# ONNX Runtime plus the compiled-in quantized hash encoder.
+ort = ["dep:ort"]
 
 [dependencies]
 orchid-format.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+ort = { version = "=2.0.0-rc.12", optional = true, default-features = false, features = ["std", "download-binaries", "copy-dylibs", "tls-native"] }
 
 [dev-dependencies]
 tempfile.workspace = true

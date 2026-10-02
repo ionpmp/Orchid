@@ -21,7 +21,7 @@ const COMMIT_COALESCE: Duration = Duration::from_millis(750);
 #[derive(Debug, Clone)]
 pub enum IndexTask {
     /// Add or replace a document.
-    Upsert(IndexDocument),
+    Upsert(Box<IndexDocument>),
     /// Remove a document by path.
     Remove(String),
     /// Flush pending work to disk.
@@ -66,7 +66,7 @@ impl IndexScheduler {
     /// down.
     pub async fn enqueue_upsert(&self, doc: IndexDocument) -> Result<()> {
         self.tx
-            .send(IndexTask::Upsert(doc))
+            .send(IndexTask::Upsert(Box::new(doc)))
             .map_err(|_| SearchError::IndexClosed)
     }
 
@@ -123,7 +123,7 @@ async fn worker_loop(engine: Arc<SearchEngine>, mut rx: mpsc::UnboundedReceiver<
         let mut batch: Vec<IndexDocument> = Vec::new();
         let mut force_commit = false;
         match task {
-            IndexTask::Upsert(doc) => batch.push(doc),
+            IndexTask::Upsert(doc) => batch.push(*doc),
             IndexTask::Remove(path) => {
                 if let Err(e) = engine.remove(&path).await {
                     warn!(error = %e, %path, "index remove failed");
@@ -140,7 +140,7 @@ async fn worker_loop(engine: Arc<SearchEngine>, mut rx: mpsc::UnboundedReceiver<
         // Drain any additional upserts already queued.
         while batch.len() < BATCH_MAX {
             match rx.try_recv() {
-                Ok(IndexTask::Upsert(d)) => batch.push(d),
+                Ok(IndexTask::Upsert(d)) => batch.push(*d),
                 Ok(IndexTask::Remove(path)) => {
                     // Apply the pending upsert batch first so remove-after-upsert
                     // ordering stays correct, then remove + commit below.

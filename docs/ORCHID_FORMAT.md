@@ -7,8 +7,9 @@ design source of truth for implementers. Phase 1 sealed framing ships in
 [ROADMAP.md](ROADMAP.md).
 
 Status: **Phase 1–5 implemented** (sealed + linked + age + C2PA + CRDT Structured +
-Embedding region + stub hybrid search); ORT-bundled sentence model remains an
-optional follow-up behind `orchid-embed`’s `ort` feature. Version targets below
+Embedding region + hybrid search). The desktop app embeds with a compiled-in
+quantized ONNX hash model behind `orchid-embed`’s `ort` feature; crate builds
+without that feature stay on `StubEmbedder`. Version targets below
 refer to the *format* version carried in the file header, not the Orchid
 application release.
 
@@ -475,10 +476,12 @@ for agents that cannot decrypt the full private text.
 
 ### Bundled inference asset
 
-Orchid ships a quantized sentence embedding model loaded via **ORT**
-(ONNX Runtime), analogous to how `pdfium.dll` is a bundled native asset for
-PDF (see [BUILDING.md](BUILDING.md)). Model id and dimension are recorded in
-TOC `content_type` / Embedding metadata so indexes invalidate on model bump.
+The desktop build loads a quantized ONNX graph through ONNX Runtime
+(`orchid.onnx.hash.q.v1`): 32 concept-hash features, an int8 weight matrix,
+64-d L2-normalised output. It is compiled into `orchid-embed`, not downloaded
+at runtime. `[search].sentence-model` can point at a replacement graph with
+the same input and output names. Model id and dimension are recorded in
+Embedding metadata so a stored vector is reused only when the id matches.
 
 ### Hybrid search
 
@@ -707,12 +710,13 @@ identical materialized document hash).
 - ANN (`instant-distance` or `hnsw_rs`) fused with Tantivy BM25 in
   `orchid-search`
 
-**Status (implemented, stub embedder):** Embedding wire (`OREM` /
-`orchid.embedding.hier.f32.v1`) in `orchid-format`; `orchid-embed` ships
-[`StubEmbedder`](../crates/orchid-embed) for CI (synonym-aware bag-of-concepts);
-`orchid-search` adds brute-force [`AnnIndex`](../crates/orchid-search), RRF
-hybrid fusion, and a `.orchid` Clean-Text extractor. ORT + HNSW remain
-optional upgrades when a quantized model asset is bundled.
+**Status:** Embedding wire (`OREM` / `orchid.embedding.hier.f32.v1`) in
+`orchid-format`. `orchid-embed` ships [`StubEmbedder`](../crates/orchid-embed)
+for builds without `ort`, and the desktop app enables `ort` so hybrid search
+runs the compiled-in quantized graph. `orchid-search` keeps a brute-force
+[`AnnIndex`](../crates/orchid-search) whose snapshot file follows the model
+id, plus RRF fusion and a `.orchid` Clean-Text extractor. HNSW is not
+shipped.
 
 **DONE:** A semantic query finds a relevant `.orchid` document that a pure
 BM25 query misses on the same corpus
