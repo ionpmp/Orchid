@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `.git-credentials`: host names. Usernames and
+  passwords are not indexed.
 - Full-text search indexes `.pypirc`: server names and repository URLs.
   Usernames and passwords are not indexed.
 - Full-text search indexes `.netrc`: machine names. Logins, passwords, and

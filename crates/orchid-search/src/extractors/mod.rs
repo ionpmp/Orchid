@@ -27,6 +27,7 @@ pub mod feed;
 pub mod flake;
 pub mod gemfile;
 pub mod gettext;
+pub mod gitcred;
 pub mod gomod;
 pub mod gosum;
 pub mod html;
@@ -298,6 +299,13 @@ impl Extractor {
         if pypirc::is_pypirc_name(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(pypirc::pypirc_text(&text::decode_best_effort(&raw))));
+        }
+        // `.git-credentials` is plain text, which would index passwords.
+        if gitcred::is_git_credentials_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(gitcred::git_credentials_text(
+                &text::decode_best_effort(&raw),
+            )));
         }
         // `.npmrc` is plain text, which would index auth tokens.
         if npmrc::is_npmrc_name(name) {

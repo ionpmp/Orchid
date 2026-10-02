@@ -181,6 +181,8 @@ are skipped.
 skipped.
 `.pypirc` contributes server names and repository URLs. Usernames and
 passwords are skipped.
+`.git-credentials` contributes host names. Usernames and passwords are
+skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:
