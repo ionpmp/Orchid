@@ -57,10 +57,11 @@ pub use operations::{
 };
 pub use path::FsPath;
 pub use provider::{
-    is_rclone_scheme, list_local_with_preview, normalize_mount_uri, rclone_backend, rclone_sync,
-    read_prefix, register_archive_provider, register_rclone_providers, ArchiveProvider,
-    FsCapabilities, FsChange, FsChangeKind, FsProvider, FsProviderRegistry, FsWatcherHandle,
-    LocalProvider, ProviderId, RcloneProvider, RCLONE_SCHEMES,
+    create_cloud_remote, is_rclone_scheme, list_local_with_preview, normalize_mount_uri,
+    parse_cloud_connect, rclone_backend, rclone_sync, read_prefix, register_archive_provider,
+    register_rclone_providers, ArchiveProvider, CloudConnect, FsCapabilities, FsChange,
+    FsChangeKind, FsProvider, FsProviderRegistry, FsWatcherHandle, LocalProvider, ProviderId,
+    RcloneProvider, RCLONE_SCHEMES,
 };
 pub use tag::{TagManager, TagsChangedEvent};
 pub use watcher::{

@@ -1276,6 +1276,12 @@ fn tools_menu(
             "action-copy",
             true,
         ),
+        item(
+            "fs.cloud-oauth",
+            "fm-action-cloud-oauth",
+            "action-copy",
+            true,
+        ),
         item("fs.merge-to-other", "fm-action-merge", "action-copy", dual),
         item(
             "fs.split",

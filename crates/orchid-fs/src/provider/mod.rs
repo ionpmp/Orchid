@@ -6,6 +6,7 @@
 //! transparently.
 
 pub mod archive;
+pub mod cloud_oauth;
 pub mod local;
 pub mod rclone;
 mod rclone_rc;
@@ -24,6 +25,7 @@ use crate::operations::progress::ProgressSink;
 use crate::path::FsPath;
 
 pub use archive::{register_archive_provider, ArchiveProvider};
+pub use cloud_oauth::{create_cloud_remote, parse_cloud_connect, CloudConnect};
 pub use local::{list_local_with_preview, LocalProvider};
 pub use rclone::{
     is_rclone_scheme, normalize_mount_uri, rclone_backend, rclone_sync, register_rclone_providers,

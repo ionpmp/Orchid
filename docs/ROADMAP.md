@@ -28,8 +28,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 
 ### Network & settings
 
-- [ ] In-app OAuth wizard (Drive / OneDrive / Dropbox). Today: named
-      `rclone-remote` only
 - [ ] Pen + haptic stack (`haptic-feedback`, `palm-rejection`,
       `pen-double-tap-action`). Keys stay in `config.toml`; Settings hides
       the dead rows.
@@ -55,7 +53,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 - [ ] Theme and widget marketplace
 - [ ] Optional `alacritty_terminal` grid
 - [ ] Auto-update; opt-in telemetry (off by default)
-- [ ] In-app cloud OAuth wizard
 - [ ] ORT embeddings in production search
 - [ ] Managed-folder reflink / hardlink ingest
 

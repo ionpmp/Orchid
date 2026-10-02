@@ -5,8 +5,11 @@ keep-alive). Copy/move/`sync` still spawn the rclone CLI.
 
 ## Prerequisites
 
-`rclone` on `PATH` or `RCLONE_BIN`. OAuth clouds need a remote already
-created with `rclone config` — no in-app wizard.
+`rclone` on `PATH` or `RCLONE_BIN`. **Connect cloud…** in Files runs
+`rclone config create` for Google Drive (`scope drive`), personal OneDrive
+(`drive_type personal`), and Dropbox, with `config_is_local true` so rclone
+opens the browser. The token stays in rclone.conf. A bookmark stores only
+the remote name. OneDrive for Business still needs `rclone config`.
 
 ## `config.toml`
 

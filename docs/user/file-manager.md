@@ -43,6 +43,11 @@ dialog for quota / excludes. Reflink ingest is not implemented.
 use rclone RC when available; copies still use the CLI. Prefer
 `rclone-remote`. See [admin/network.md](../admin/network.md).
 
+**Connect cloud…** signs in to Google Drive, personal OneDrive, or Dropbox
+in the browser through rclone. The token stays in rclone's config. Orchid
+bookmarks the remote (`drive://Name/`, `onedrive://Name/`, `dropbox://Name/`).
+OneDrive for Business is not part of this wizard.
+
 ## Find (`Alt+F7`)
 
 Name/mask/regex, content grep, size/date/attrs, archives, Windows Search

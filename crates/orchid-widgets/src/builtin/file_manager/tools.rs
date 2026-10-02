@@ -30,6 +30,7 @@ pub(super) async fn run(
         "fs.cloud-sync" => cloud_sync(inner, opts).await,
         "fs.network-bookmark" => network_bookmark(inner, input).await,
         "fs.network-connect" => network_connect(inner, input).await,
+        "fs.cloud-oauth" => cloud_oauth(inner, input).await,
         "fs.merge-to-other" => sync_dirs(inner, SyncMode::MergeToRight, opts).await,
         "fs.split" => split_file(inner, paths, input).await,
         "fs.join" => join_files(inner, paths).await,
@@ -1135,6 +1136,37 @@ async fn network_connect(
     let mount = parse_connect_line(raw)
         .ok_or_else(|| WidgetError::InvalidStateForOperation("fm-network-connect-bad".into()))?;
     persist_network_place(inner, mount)?;
+    inner.refresh_all_tabs().await;
+    Ok(ActionOutcome::Done)
+}
+
+async fn cloud_oauth(
+    inner: &Arc<FileManagerInner>,
+    input: Option<&str>,
+) -> WidgetResult<ActionOutcome> {
+    let Some(raw) = input.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(prompt(
+            "fs.cloud-oauth",
+            &[],
+            "Work | drive",
+            inner.deps.locale.tr("fm-cloud-oauth-title"),
+            inner.deps.locale.tr("fm-cloud-oauth-hint"),
+        ));
+    };
+    let spec = orchid_fs::parse_cloud_connect(raw)
+        .ok_or_else(|| WidgetError::InvalidStateForOperation("fm-cloud-oauth-bad".into()))?;
+    orchid_fs::create_cloud_remote(&spec)
+        .await
+        .map_err(map_fs_error)?;
+    persist_network_place(
+        inner,
+        orchid_storage::NetworkMountConfig {
+            name: spec.display_name.clone(),
+            uri: format!("{}://{}/", spec.backend, spec.remote),
+            rclone_remote: Some(spec.remote),
+            ..orchid_storage::NetworkMountConfig::default()
+        },
+    )?;
     inner.refresh_all_tabs().await;
     Ok(ActionOutcome::Done)
 }

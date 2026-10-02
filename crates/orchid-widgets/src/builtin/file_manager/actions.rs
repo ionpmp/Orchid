@@ -791,6 +791,7 @@ pub(crate) fn is_tools_action(id: &str) -> bool {
             | "fs.cloud-sync"
             | "fs.network-bookmark"
             | "fs.network-connect"
+            | "fs.cloud-oauth"
             | "fs.merge-to-other"
             | "fs.split"
             | "fs.join"

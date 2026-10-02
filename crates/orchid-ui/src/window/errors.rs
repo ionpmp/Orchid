@@ -220,7 +220,9 @@ pub(crate) fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
         | "fm-error-undo-empty"
         | "fm-error-redo-empty"
         | "fm-error-undo-failed"
-        | "fm-error-redo-failed" => return locale.tr(msg),
+        | "fm-error-redo-failed"
+        | "fm-cloud-oauth-bad"
+        | "fm-cloud-oauth-failed" => return locale.tr(msg),
         "invalid tab id" => return locale.tr("fm-error-invalid-tab"),
         "invalid sort column" => return locale.tr("fm-error-invalid-sort"),
         "file-manager widget not live" => return locale.tr("fm-error-unavailable"),
@@ -229,6 +231,7 @@ pub(crate) fn fm_localized_error(locale: &LocaleManager, err: &str) -> String {
     let lower = msg.to_ascii_lowercase();
     match msg {
         _ if msg.contains("no provider for scheme") => locale.tr("fm-network-no-provider"),
+        _ if msg.contains("fm-cloud-oauth-failed") => locale.tr("fm-cloud-oauth-failed"),
         _ if msg.contains("not found; install rclone") => locale.tr("fm-network-rclone-missing"),
         _ if lower.contains("invalid mount uri") => locale.tr("fm-network-invalid-mount"),
         // Local FS access failures (Windows "Access is denied. (os error 5)").

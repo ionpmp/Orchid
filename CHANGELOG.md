@@ -26,6 +26,9 @@ release yet.
 - Nine bundled themes + JSON theme loader; 11 Fluent locales with RTL (ar-SA).
 
 #### File manager & storage
+- **Cloud sign-in:** Files → Connect cloud… opens rclone's browser flow for
+  Google Drive, personal OneDrive, and Dropbox, then bookmarks the remote.
+  The token stays in rclone's config.
 - Dual-pane FM with icons / list / details / gallery, tabs, breadcrumbs,
   drag-and-drop (including OS drop and FM→viewer), tags, colour labels, quick
   filter, virtual folders (Recent, Starred, Tags, Search results, Recycle Bin,
