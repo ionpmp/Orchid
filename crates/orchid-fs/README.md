@@ -5,9 +5,9 @@ Filesystem layer for Orchid. Exposes a pluggable provider abstraction (with a wo
 Network listing uses a long-lived `rclone rcd` on localhost when available,
 falling back to per-operation CLI. Transfers still spawn the CLI.
 
-## Managed-folder MVP trade-off
+## Managed folders
 
-Managed folders mirror every tracked file into the content-addressed `ChunkStore` while leaving the original file on disk. This preserves compatibility with external tools (Explorer, editors, Git, backups) at the cost of redundant storage; real on-disk savings only kick in when the same content recurs across files. The reflink / NTFS-hardlink-based strategy that would eliminate the redundant copy is planned for v1.x.
+Tracked files are recorded in the content-addressed `ChunkStore`. The chunk file is a block clone of the source range when the volume allows it, and a normal copy otherwise. Two whole files that still hash the same become one hard link, so an in-place edit changes every name. A save that replaces the file by rename breaks that link.
 
 ## Security posture
 

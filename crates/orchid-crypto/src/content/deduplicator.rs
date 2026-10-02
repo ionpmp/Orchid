@@ -67,11 +67,21 @@ pub struct DedupStats {
     pub unique_chunks: u64,
 }
 
+/// Clone `src` at `src_offset` into `dest` when it matches `expected`.
+///
+/// The filesystem layer supplies the real implementation. The default refuses.
+pub type RangeCloner = fn(&Path, u64, &Path, &[u8]) -> bool;
+
+pub(crate) fn refuse_clone(_src: &Path, _src_offset: u64, _dest: &Path, _expected: &[u8]) -> bool {
+    false
+}
+
 /// Ingest / reconstruct / release pipeline.
 pub struct Deduplicator {
     store: Arc<ChunkStore>,
     chunker: Chunker,
     config: ChunkerConfig,
+    cloner: RangeCloner,
 }
 
 impl std::fmt::Debug for Deduplicator {
@@ -90,7 +100,15 @@ impl Deduplicator {
             store,
             chunker: Chunker::new(config),
             config,
+            cloner: refuse_clone,
         }
+    }
+
+    /// Use `cloner` when a new chunk can share extents with its source file.
+    #[must_use]
+    pub fn with_range_cloner(mut self, cloner: RangeCloner) -> Self {
+        self.cloner = cloner;
+        self
     }
 
     /// Ingest a file: chunk, store each chunk (bumping refcount on dupes),
@@ -104,13 +122,23 @@ impl Deduplicator {
         let total_size = meta.len();
 
         let store = Arc::clone(&self.store);
+        let source = path.to_path_buf();
+        let cloner = self.cloner;
         let mut refs: Vec<ChunkRef> = Vec::new();
         let (chunks_meta, content_hash) = self
             .chunker
             .chunk_file_hashed(path, |chunk, data| {
                 let store = Arc::clone(&store);
+                let source = source.clone();
                 async move {
-                    store.put_with_hash(chunk.hash, data.as_slice()).await?;
+                    store
+                        .put_with_hash_from(
+                            chunk.hash,
+                            data.as_slice(),
+                            Some((source.as_path(), chunk.offset)),
+                            cloner,
+                        )
+                        .await?;
                     Ok(())
                 }
             })
@@ -268,6 +296,7 @@ mod tests {
             ),
             chunker: Chunker::new(ChunkerConfig::default()),
             config: ChunkerConfig::default(),
+            cloner: refuse_clone,
         };
         let s = rt.block_on(d.stats(&m)).unwrap();
         assert_eq!(s.chunk_count, 3);

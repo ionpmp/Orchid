@@ -28,10 +28,10 @@ fn engine(storage: &Arc<orchid_storage::StateStore>) -> ManagedFolderEngine {
     let td = tempfile::tempdir().unwrap();
     let chunk_store =
         Arc::new(ChunkStore::new(td.path().join("chunks"), Arc::clone(storage)).unwrap());
-    let dedup = Arc::new(Deduplicator::new(
-        Arc::clone(&chunk_store),
-        ChunkerConfig::default(),
-    ));
+    let dedup = Arc::new(
+        Deduplicator::new(Arc::clone(&chunk_store), ChunkerConfig::default())
+            .with_range_cloner(orchid_fs::try_clone_range),
+    );
     let bus = bus();
     let registry = registry_with_local();
     let watcher = Arc::new(FileWatcher::new(Arc::clone(&bus), Arc::clone(&registry)));
@@ -131,4 +131,35 @@ async fn managed_engine_rejects_ingest_when_quota_exceeded() {
         err,
         orchid_fs::FsError::ManagedQuotaExceeded { .. }
     ));
+}
+
+#[tokio::test]
+async fn identical_whole_files_share_one_hardlink() {
+    let storage = storage();
+    let engine = engine(&storage);
+    let td = tempfile::tempdir().unwrap();
+    let root = FsPath::from_local(td.path()).unwrap();
+    std::fs::write(td.path().join("a.txt"), b"duplicate-body").unwrap();
+    std::fs::write(td.path().join("b.txt"), b"duplicate-body").unwrap();
+    std::fs::write(td.path().join("c.txt"), b"different-body").unwrap();
+    engine
+        .add_folder(ManagedFolderConfig {
+            path: root.clone(),
+            chunk_size: ChunkerConfig::default(),
+            enabled: true,
+            auto_ingest: true,
+            policy: None,
+        })
+        .await
+        .unwrap();
+    engine.ingest(&root.join("a.txt")).await.unwrap();
+    engine.ingest(&root.join("b.txt")).await.unwrap();
+    engine.ingest(&root.join("c.txt")).await.unwrap();
+
+    let a = td.path().join("a.txt");
+    let b = td.path().join("b.txt");
+    let c = td.path().join("c.txt");
+    assert!(orchid_fs::paths_share_data(&a, &b));
+    assert!(!orchid_fs::paths_share_data(&a, &c));
+    assert_eq!(std::fs::read(&b).unwrap(), b"duplicate-body");
 }

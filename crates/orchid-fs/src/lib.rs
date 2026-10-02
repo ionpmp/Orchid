@@ -32,8 +32,9 @@ pub use entry::{ExtendedAttributes, FsEntry, FsEntryKind, FsMetadata};
 pub use error::{FsError, Result};
 pub use icon::{shell_icon, ShellIcon, ShellIconSize};
 pub use managed::{
-    ManagedFileIngestFailedEvent, ManagedFileIngestStartedEvent, ManagedFileIngestedEvent,
-    ManagedFolderConfig, ManagedFolderEngine, ManagedFolderPolicy, ManagedFolderStats,
+    paths_share_data, try_clone_range, ManagedFileIngestFailedEvent, ManagedFileIngestStartedEvent,
+    ManagedFileIngestedEvent, ManagedFolderConfig, ManagedFolderEngine, ManagedFolderPolicy,
+    ManagedFolderStats,
 };
 pub use mime::guess_mime;
 pub use operations::{

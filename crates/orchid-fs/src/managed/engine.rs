@@ -58,12 +58,9 @@ impl orchid_core::Event for ManagedFileIngestedEvent {
 
 /// Primary engine for managed folders.
 ///
-/// **MVP trade-off:** for tool-compatibility reasons the engine does *not*
-/// replace the user's on-disk file with a manifest reference. Files stay in
-/// place; the chunk store holds an additional, deduplicated copy. Actual
-/// on-disk savings kick in only when the same content recurs. A full
-/// reflink-based strategy (avoiding the redundant copy) is planned for
-/// v1.x; see [`crate::managed`] module docs.
+/// Chunk blobs are cloned from the source when the filesystem can share
+/// extents. Identical whole files in one folder are hard-linked together.
+/// See [`crate::managed`].
 pub struct ManagedFolderEngine {
     inner: Arc<ManagedEngineInner>,
 }
@@ -198,7 +195,8 @@ impl ManagedFolderEngine {
         Ok(out)
     }
 
-    /// Ingest a single file manually. Does not move / delete the original.
+    /// Ingest a single file. Identical whole files in the folder become one
+    /// hard link. The chunk store keeps a copy either way.
     ///
     /// # Errors
     ///
@@ -275,7 +273,64 @@ impl ManagedFolderEngine {
                 manifest_id,
             },
         );
+        self.link_identical_whole_file(path, &manifest).await;
         Ok(manifest)
+    }
+
+    async fn link_identical_whole_file(&self, path: &FsPath, manifest: &FileManifest) {
+        if !is_whole_file(manifest) {
+            return;
+        }
+        let Ok(local) = path.to_local() else {
+            return;
+        };
+        if !file_matches(&local, &manifest.content_hash, manifest.total_size).await {
+            return;
+        }
+        let Ok(siblings) = self.whole_file_siblings(path, manifest).await else {
+            return;
+        };
+        for other in siblings {
+            if !file_matches(&other, &manifest.content_hash, manifest.total_size).await {
+                continue;
+            }
+            match crate::managed::link::link_duplicate(&other, &local) {
+                Ok(_) => {
+                    debug!(%path, other = %other.display(), "managed hardlink");
+                    return;
+                }
+                Err(e) => debug!(error = %e, %path, "managed hardlink skipped"),
+            }
+        }
+    }
+
+    async fn whole_file_siblings(
+        &self,
+        path: &FsPath,
+        manifest: &FileManifest,
+    ) -> Result<Vec<std::path::PathBuf>> {
+        let db = self.inner.storage.raw_database();
+        let txn = db.begin_read().map_err(|e| FsError::Storage(e.into()))?;
+        let table = match txn.open_table(MANAGED_MANIFESTS) {
+            Ok(t) => t,
+            Err(redb::TableError::TableDoesNotExist(_)) => return Ok(Vec::new()),
+            Err(e) => return Err(FsError::Storage(e.into())),
+        };
+        let mut out = Vec::new();
+        for item in table.iter().map_err(|e| FsError::Storage(e.into()))? {
+            let (k, v) = item.map_err(|e| FsError::Storage(e.into()))?;
+            if k.value() == path.as_str() {
+                continue;
+            }
+            let other = v.value();
+            if other.content_hash != manifest.content_hash || !is_whole_file(&other) {
+                continue;
+            }
+            if let Some(original) = other.original_path {
+                out.push(std::path::PathBuf::from(original));
+            }
+        }
+        Ok(out)
     }
 
     /// Compute aggregate stats for a managed folder.
@@ -411,6 +466,26 @@ impl ManagedFolderEngine {
             .into_iter()
             .find(|f| f.enabled && f.auto_ingest && p.starts_with(f.path.as_str())))
     }
+}
+
+fn is_whole_file(manifest: &FileManifest) -> bool {
+    match manifest.chunks.as_slice() {
+        [only] => only.offset == 0 && u64::from(only.length) == manifest.total_size,
+        _ => false,
+    }
+}
+
+async fn file_matches(path: &std::path::Path, hash: &[u8; 32], size: u64) -> bool {
+    let Ok(meta) = tokio::fs::metadata(path).await else {
+        return false;
+    };
+    if !meta.is_file() || meta.len() != size {
+        return false;
+    }
+    orchid_crypto::hash_file(path)
+        .await
+        .ok()
+        .is_some_and(|got| got == *hash)
 }
 
 // For compile-time access to the registry field even if we don't use it in

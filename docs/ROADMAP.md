@@ -26,10 +26,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 - [ ] Ship a quantized ONNX sentence model behind `orchid-embed`’s `ort`
       feature (today: `StubEmbedder` in universal-search hybrid)
 
-### Notifications & storage
-
-- [ ] Reflink / NTFS hardlink ingest for managed folders
-
 ### i18n
 
 - [~] Keep Fluent key parity across 11 locales
@@ -46,7 +42,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 - [ ] Theme and widget marketplace
 - [ ] Optional `alacritty_terminal` grid
 - [ ] ORT embeddings in production search
-- [ ] Managed-folder reflink / hardlink ingest
 
 ## v2.0
 

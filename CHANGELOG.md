@@ -35,6 +35,9 @@ release yet.
 - Nine bundled themes + JSON theme loader; 11 Fluent locales with RTL (ar-SA).
 
 #### File manager & storage
+- **Managed-folder ingest:** chunk files are block-cloned from the source
+  when the volume can share extents, and copied otherwise. Two whole files
+  with the same content become one hard link.
 - **Cloud sign-in:** Files → Connect cloud… opens rclone's browser flow for
   Google Drive, personal OneDrive, and Dropbox, then bookmarks the remote.
   The token stays in rclone's config.

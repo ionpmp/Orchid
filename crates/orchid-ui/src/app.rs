@@ -525,10 +525,13 @@ impl OrchidApp {
             started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
 
-        let deduplicator = Arc::new(orchid_crypto::Deduplicator::new(
-            chunk_store.clone(),
-            orchid_crypto::ChunkerConfig::default(),
-        ));
+        let deduplicator = Arc::new(
+            orchid_crypto::Deduplicator::new(
+                chunk_store.clone(),
+                orchid_crypto::ChunkerConfig::default(),
+            )
+            .with_range_cloner(orchid_fs::try_clone_range),
+        );
         let file_watcher_managed = Arc::new(orchid_fs::FileWatcher::new(
             bus.clone(),
             fs_registry.clone(),

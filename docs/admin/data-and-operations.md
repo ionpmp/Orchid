@@ -38,3 +38,8 @@ Qualifier `com` / org `Orchid` / app `Orchid` (`directories` crate).
 
 Chunks are **plaintext**. Encrypt live files or the volume if the disk is
 untrusted.
+
+Managed-folder ingest clones a chunk from the source when the volume
+supports block clone (Windows) or `copy_file_range` (Linux), and copies
+the bytes otherwise. Identical whole files on one volume become a hard
+link. The chunk store still keeps the content.

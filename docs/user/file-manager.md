@@ -34,8 +34,12 @@ and SFX use **7-Zip** when installed. Viewer preview: ZIP / 7z / TAR(+gz/xz).
 ## Encryption and managed folders
 
 age encrypt / decrypt / **reveal**. Hello can store the FM passphrase.
-Managed folders ingest into CAS **and keep the original file**. Policy
-dialog for quota / excludes. Reflink ingest is not implemented.
+Managed folders ingest into the chunk store and keep the file readable.
+On a volume that can share extents, the chunk is a block clone of the
+source; otherwise the bytes are copied. Two whole files in that folder
+with the same content become one hard link: an in-place edit changes
+every name, and a save that renames a new file over the path breaks the
+link. Policy dialog for quota / excludes.
 
 ## Network
 

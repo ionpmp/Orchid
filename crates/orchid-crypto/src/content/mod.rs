@@ -11,6 +11,6 @@ pub mod hash;
 pub mod store;
 
 pub use chunker::{Chunk, Chunker, ChunkerConfig};
-pub use deduplicator::{ChunkRef, DedupStats, Deduplicator, FileManifest};
+pub use deduplicator::{ChunkRef, DedupStats, Deduplicator, FileManifest, RangeCloner};
 pub use hash::{from_hex, hash_bytes, hash_file, hex, StreamHasher};
 pub use store::{ChunkRefInfo, ChunkStore, Clock, FixedClock, GcStats, SystemClock};

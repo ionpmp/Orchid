@@ -192,6 +192,28 @@ impl ChunkStore {
     ///
     /// Propagates I/O and redb errors.
     pub async fn put_with_hash(&self, hash: [u8; 32], bytes: &[u8]) -> Result<()> {
+        self.put_with_hash_from(
+            hash,
+            bytes,
+            None,
+            crate::content::deduplicator::refuse_clone,
+        )
+        .await
+    }
+
+    /// Insert a chunk. `cloner` may create the temp blob by sharing extents
+    /// with `source`; otherwise the bytes are written.
+    ///
+    /// # Errors
+    ///
+    /// Propagates I/O and redb errors.
+    pub async fn put_with_hash_from(
+        &self,
+        hash: [u8; 32],
+        bytes: &[u8],
+        source: Option<(&std::path::Path, u64)>,
+        cloner: crate::content::deduplicator::RangeCloner,
+    ) -> Result<()> {
         let key = hex(&hash);
         let path = self.chunk_path(&key);
         let now = self.clock.now();
@@ -221,16 +243,20 @@ impl ChunkStore {
             drop(txn);
         }
 
-        // Slow path: new blob. Write it atomically to disk first.
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).await?;
-        }
+        // Slow path: new blob. Clone the source range when the volume can
+        // share extents; otherwise write the bytes. Either way the blob is
+        // renamed into place only after the refcount row commits.
         let tmp = path.with_extension("bin.tmp");
-        let mut f = fs::File::create(&tmp).await?;
-        f.write_all(bytes).await?;
-        f.flush().await?;
-        f.sync_all().await?;
-        drop(f);
+        let cloned = source.is_some_and(|(src, offset)| cloner(src, offset, &tmp, bytes));
+        if !cloned {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).await?;
+            }
+            let mut f = fs::File::create(&tmp).await?;
+            f.write_all(bytes).await?;
+            f.flush().await?;
+            f.sync_all().await?;
+        }
 
         // Now try to insert. If the insert fails, clean up the blob file.
         let info = ChunkRefInfo {

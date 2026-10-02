@@ -1,26 +1,29 @@
 //! Managed folders — automatic deduplication of tracked files.
 //!
-//! ## MVP trade-off
+//! Each tracked file is still recorded in the content-addressed
+//! [`orchid_crypto::ChunkStore`]. When the volume can share extents, the
+//! chunk file is a block clone of the source range (Windows) or a
+//! `copy_file_range` (Linux) instead of a userspace copy. Otherwise the
+//! bytes are written as before.
 //!
-//! A managed folder has every file mirrored into the content-addressed
-//! [`orchid_crypto::ChunkStore`]. **Orchid leaves the original files on
-//! disk** so external tools (Explorer, text editors, Git, backup software)
-//! keep seeing regular files. That means on-disk savings only kick in when
-//! the same content recurs across files or folders; single-copy files
-//! consume storage twice (once on disk, once as chunks).
-//!
-//! The full reflink / NTFS-hardlink strategy that removes the redundant
-//! copy is planned for v1.x and tracked in the roadmap; it requires careful
-//! handling of ReFS / NTFS semantics that is out of scope for MVP.
+//! Two whole files in the same folder that still hash the same become one
+//! hard link. An in-place edit changes every name. A program that saves by
+//! writing a new file and renaming it over the path breaks the link, and
+//! the next ingest stores that file on its own. The chunk store keeps the
+//! content either way, so deleting a name does not drop the only copy.
 
+mod clone;
 pub mod config;
 pub mod engine;
 pub(crate) mod index;
+mod link;
 pub mod policy;
 
+pub use clone::try_clone_range;
 pub use config::{ManagedFolderConfig, ManagedFolderStats};
 pub use engine::{
     ManagedFileIngestFailedEvent, ManagedFileIngestStartedEvent, ManagedFileIngestedEvent,
     ManagedFolderEngine,
 };
+pub use link::paths_share_data;
 pub use policy::ManagedFolderPolicy;

@@ -54,7 +54,7 @@ pub use biometric::{
 };
 pub use content::{
     from_hex, hash_bytes, hash_file, hex, Chunk, ChunkRef, ChunkRefInfo, ChunkStore, Chunker,
-    ChunkerConfig, Clock, DedupStats, Deduplicator, FileManifest, FixedClock, GcStats,
+    ChunkerConfig, Clock, DedupStats, Deduplicator, FileManifest, FixedClock, GcStats, RangeCloner,
     StreamHasher, SystemClock,
 };
 pub use error::{CryptoError, Result};
