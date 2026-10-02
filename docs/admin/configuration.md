@@ -28,6 +28,11 @@ hot-reloaded). Keys are kebab-case.
 User JSON themes: `config\themes\` — `id`, `display_name`, `is_dark`,
 `tokens.color` hex (`#RRGGBB` / `#RRGGBBAA`).
 
+Settings → Marketplace writes `market-ink`, `market-dawn`, `market-pine`,
+or `market-ember` into that folder and sets `theme` to the new id. Remove
+deletes the file only when the JSON id matches. It does not download widget
+code; **Add widget** creates an instance of a built-in widget.
+
 ## `[input]`
 
 `primary-hand`, `mirror-edge-swipes`, `palm-rejection` (default true: finger

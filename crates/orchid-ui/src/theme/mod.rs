@@ -3,7 +3,8 @@
 //! Nine colour themes are bundled: the default Orchid pair plus Solarized,
 //! Nord, Catppuccin, and high-contrast variants. Additional themes may be
 //! installed as JSON files under [`paths.themes_dir`](orchid_storage::paths::OrchidPaths::themes_dir);
-//! they are loaded when [`ThemeManager::new`] is constructed.
+//! they are loaded when [`ThemeManager::new`] is constructed and again from
+//! [`ThemeManager::reload_installed`] after the marketplace installs one.
 
 pub mod bundled;
 pub mod loader;
@@ -41,7 +42,6 @@ pub struct Theme {
 pub struct ThemeManager {
     themes: RwLock<Vec<Theme>>,
     current: RwLock<Arc<Theme>>,
-    #[allow(dead_code)]
     extra_dir: Option<PathBuf>,
 }
 
@@ -101,6 +101,32 @@ impl ThemeManager {
     #[must_use]
     pub fn current(&self) -> Arc<Theme> {
         Arc::clone(&*self.current.read())
+    }
+
+    /// Directory of user-installed JSON themes, when the manager has one.
+    #[must_use]
+    pub fn themes_dir(&self) -> Option<&std::path::Path> {
+        self.extra_dir.as_deref()
+    }
+
+    /// Replace user-installed themes with the JSON files currently in
+    /// [`Self::themes_dir`]. Bundled themes stay. If the active theme
+    /// disappeared, the manager switches to `orchid-dark`.
+    pub fn reload_installed(&self) {
+        let mut themes = bundled::all_bundled_themes();
+        if let Some(dir) = &self.extra_dir {
+            for theme in loader::load_themes_from_dir(dir) {
+                if themes.iter().any(|t| t.meta.id == theme.meta.id) {
+                    continue;
+                }
+                themes.push(theme);
+            }
+        }
+        let current_id = self.current.read().meta.id.clone();
+        *self.themes.write() = themes;
+        if self.set_current(&current_id).is_err() {
+            let _ = self.set_current("orchid-dark");
+        }
     }
 
     /// Every theme currently registered.

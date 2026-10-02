@@ -10,6 +10,7 @@ mod cli_open;
 mod commands;
 pub mod error;
 mod html_webview;
+mod marketplace;
 pub mod http;
 mod os_notify;
 mod release;

@@ -15,6 +15,9 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Marketplace:** Settings installs the Ink, Dawn, Pine, and Ember palettes
+  into the themes folder and can add a built-in widget to the workspace.
+  Widget code is not downloaded.
 - **Updates and telemetry:** startup checks the latest GitHub release and
   notifies when a newer tag exists. Check for updates opens that page.
   Orchid does not install the download. Telemetry is off by default; when

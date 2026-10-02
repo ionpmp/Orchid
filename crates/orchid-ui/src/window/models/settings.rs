@@ -16,6 +16,7 @@ pub(crate) const SETTINGS_SECTION_IDS: &[&str] = &[
     "shortcuts",
     "locale",
     "privacy",
+    "marketplace",
 ];
 
 pub(crate) fn build_settings_sections(locale: &LocaleManager) -> Vec<SettingsSectionEntry> {
@@ -49,6 +50,7 @@ const SETTINGS_FIELD_READONLY: i32 = 0;
 const SETTINGS_FIELD_BOOL: i32 = 1;
 const SETTINGS_FIELD_TEXT: i32 = 2;
 const SETTINGS_FIELD_COMBO: i32 = 3;
+const SETTINGS_FIELD_BUTTON: i32 = 4;
 
 fn settings_strings_model(values: Vec<SharedString>) -> ModelRc<SharedString> {
     ModelRc::new(VecModel::from(values))
@@ -67,6 +69,25 @@ fn push_settings_readonly(
         kind: SETTINGS_FIELD_READONLY,
         value,
         bool_value: false,
+        combo_options: settings_strings_model(vec![]),
+        combo_values: settings_strings_model(vec![]),
+        combo_index: -1,
+    });
+}
+
+fn push_settings_button(
+    rows: &mut Vec<SettingsFieldRow>,
+    key: &str,
+    label: impl Into<SharedString>,
+    caption: impl Into<SharedString>,
+    active: bool,
+) {
+    rows.push(SettingsFieldRow {
+        key: key.into(),
+        label: label.into(),
+        kind: SETTINGS_FIELD_BUTTON,
+        value: caption.into(),
+        bool_value: active,
         combo_options: settings_strings_model(vec![]),
         combo_values: settings_strings_model(vec![]),
         combo_index: -1,
@@ -579,6 +600,50 @@ pub(crate) fn build_settings_fields(
                 "vault-auto-lock-seconds",
                 "settings-field-vault-auto-lock",
                 format!("{}", cfg.privacy.vault_auto_lock_seconds),
+            );
+        }
+        "marketplace" => {
+            push_settings_readonly(
+                &mut rows,
+                locale,
+                "hint",
+                "settings-marketplace-note",
+                locale.tr("settings-marketplace-hint").into(),
+            );
+            let dir = themes.themes_dir();
+            for offer in crate::marketplace::catalog_themes() {
+                let installed =
+                    dir.is_some_and(|path| crate::marketplace::theme_installed(path, offer.id));
+                let action = if installed {
+                    "settings-action-remove"
+                } else {
+                    "settings-action-install"
+                };
+                push_settings_button(
+                    &mut rows,
+                    &format!("theme-{}", offer.id),
+                    offer.display_name,
+                    locale.tr(action),
+                    installed,
+                );
+            }
+            let mut widget_options = vec![(
+                SharedString::from(""),
+                locale.tr("settings-value-add-widget-none").into(),
+            )];
+            for id in crate::marketplace::catalog_widgets() {
+                widget_options.push((
+                    (*id).into(),
+                    locale.tr(crate::marketplace::widget_label_key(id)).into(),
+                ));
+            }
+            push_settings_combo(
+                &mut rows,
+                locale,
+                "add-widget",
+                "settings-field-add-widget",
+                &widget_options,
+                "",
             );
         }
         _ => {}

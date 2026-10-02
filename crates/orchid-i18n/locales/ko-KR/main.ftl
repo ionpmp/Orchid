@@ -381,6 +381,17 @@ settings-section-input = 입력
 settings-section-shortcuts = 단축키
 settings-section-locale = 언어
 settings-section-privacy = 개인정보
+settings-section-marketplace = 마켓
+settings-marketplace-note = 카탈로그
+settings-marketplace-hint = 테마 폴더에 팔레트를 설치하거나 기본 위젯을 작업 공간에 추가합니다. Orchid는 위젯 코드를 내려받지 않습니다.
+settings-action-install = 설치
+settings-action-remove = 제거
+settings-field-add-widget = 위젯 추가
+settings-value-add-widget-none = 위젯 선택
+settings-marketplace-installed = 설치함: { $name }
+settings-marketplace-removed = 제거함: { $name }
+settings-marketplace-widget-added = 추가함: { $name }
+settings-marketplace-failed = 마켓 작업 실패: { $reason }
 settings-section-terminal = 터미널
 
 # ---- Settings panel ----

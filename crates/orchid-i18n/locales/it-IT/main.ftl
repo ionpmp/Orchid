@@ -381,6 +381,17 @@ settings-section-input = Input
 settings-section-shortcuts = Scorciatoie
 settings-section-locale = Lingua
 settings-section-privacy = Privacy
+settings-section-marketplace = Negozio
+settings-marketplace-note = Catalogo
+settings-marketplace-hint = Installa una tavolozza nella cartella dei temi oppure aggiungi un widget integrato allo spazio di lavoro. Orchid non scarica codice dei widget.
+settings-action-install = Installa
+settings-action-remove = Rimuovi
+settings-field-add-widget = Aggiungi widget
+settings-value-add-widget-none = Scegli un widget
+settings-marketplace-installed = Installato: { $name }
+settings-marketplace-removed = Rimosso: { $name }
+settings-marketplace-widget-added = Aggiunto: { $name }
+settings-marketplace-failed = Azione del negozio non riuscita: { $reason }
 settings-section-terminal = Terminale
 
 # ---- Settings panel ----

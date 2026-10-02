@@ -103,6 +103,10 @@ impl MainWindowController {
         if !self.settings.read().visible {
             return;
         }
+        if section == "marketplace" {
+            self.apply_marketplace_field(key, value);
+            return;
+        }
         let mut cfg = self.config.write();
         if let Err(reason) = apply_settings_field(&mut cfg, section, key, value, &self.locale) {
             warn!(
@@ -161,6 +165,98 @@ impl MainWindowController {
         {
             self.report_telemetry_now();
         }
+    }
+
+    fn apply_marketplace_field(self: &Arc<Self>, key: &str, value: &str) {
+        let title = self.locale.tr("settings-section-marketplace");
+        if key == "add-widget" {
+            if value.is_empty() {
+                return;
+            }
+            if !crate::marketplace::catalog_widgets().contains(&value) {
+                self.marketplace_failed(&title, &format!("unknown widget `{value}`"));
+                return;
+            }
+            let name = self.locale.tr(crate::marketplace::widget_label_key(value));
+            self.spawn_add_widget(value, super::AddWidgetPlacement::AutoSlot);
+            self.sync_settings_global();
+            self.push_notification(
+                &title,
+                &self.locale.tr_args(
+                    "settings-marketplace-widget-added",
+                    &orchid_i18n::FluentArgs::new().with("name", name),
+                ),
+                0,
+            );
+            return;
+        }
+        let Some(id) = key.strip_prefix("theme-") else {
+            return;
+        };
+        let Some(dir) = self.theme.themes_dir().map(std::path::Path::to_path_buf) else {
+            self.marketplace_failed(&title, "themes directory is not configured");
+            return;
+        };
+        let name = crate::marketplace::catalog_themes()
+            .iter()
+            .find(|theme| theme.id == id)
+            .map(|theme| theme.display_name)
+            .unwrap_or(id)
+            .to_string();
+        let result = match value {
+            "install" => crate::marketplace::install_theme(&dir, id),
+            "remove" => crate::marketplace::remove_theme(&dir, id),
+            _ => return,
+        };
+        if let Err(reason) = result {
+            self.marketplace_failed(&title, &reason);
+            return;
+        }
+        self.theme.reload_installed();
+        if value == "install" || self.config.read().appearance.theme == id {
+            let next = if value == "install" {
+                id.to_string()
+            } else {
+                "orchid-dark".to_string()
+            };
+            let snapshot = {
+                let mut cfg = self.config.write();
+                cfg.appearance.theme = next;
+                cfg.clone()
+            };
+            if let Err(e) = ConfigLoader::save(&snapshot, &self.config_file_path) {
+                warn!(?e, "marketplace theme save failed");
+                self.marketplace_failed(&title, &e.to_string());
+                return;
+            }
+        }
+        if let Err(e) = self.apply_hot_config() {
+            warn!(?e, "marketplace theme apply failed");
+        }
+        self.sync_settings_global();
+        let notice = if value == "install" {
+            "settings-marketplace-installed"
+        } else {
+            "settings-marketplace-removed"
+        };
+        self.push_notification(
+            &title,
+            &self
+                .locale
+                .tr_args(notice, &orchid_i18n::FluentArgs::new().with("name", name)),
+            0,
+        );
+    }
+
+    fn marketplace_failed(self: &Arc<Self>, title: &str, reason: &str) {
+        self.push_notification(
+            title,
+            &self.locale.tr_args(
+                "settings-marketplace-failed",
+                &orchid_i18n::FluentArgs::new().with("reason", reason),
+            ),
+            2,
+        );
     }
 
     pub(super) fn open_settings(self: &Arc<Self>, section: &str) {

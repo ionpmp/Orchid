@@ -381,6 +381,17 @@ settings-section-input = Eingabe
 settings-section-shortcuts = Tastenkürzel
 settings-section-locale = Sprache
 settings-section-privacy = Datenschutz
+settings-section-marketplace = Marktplatz
+settings-marketplace-note = Katalog
+settings-marketplace-hint = Installieren Sie eine Palette in den Themenordner oder fügen Sie ein eingebautes Widget zum Arbeitsbereich hinzu. Orchid lädt keinen Widget-Code herunter.
+settings-action-install = Installieren
+settings-action-remove = Entfernen
+settings-field-add-widget = Widget hinzufügen
+settings-value-add-widget-none = Widget wählen
+settings-marketplace-installed = Installiert: { $name }
+settings-marketplace-removed = Entfernt: { $name }
+settings-marketplace-widget-added = Hinzugefügt: { $name }
+settings-marketplace-failed = Marktplatzaktion fehlgeschlagen: { $reason }
 settings-section-terminal = Terminal
 
 # ---- Settings panel ----

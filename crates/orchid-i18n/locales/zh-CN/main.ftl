@@ -381,6 +381,17 @@ settings-section-input = 输入
 settings-section-shortcuts = 快捷键
 settings-section-locale = 语言
 settings-section-privacy = 隐私
+settings-section-marketplace = 商店
+settings-marketplace-note = 目录
+settings-marketplace-hint = 把配色安装到主题文件夹，或把内置小组件加到工作区。Orchid 不会下载小组件代码。
+settings-action-install = 安装
+settings-action-remove = 移除
+settings-field-add-widget = 添加小组件
+settings-value-add-widget-none = 选择小组件
+settings-marketplace-installed = 已安装：{ $name }
+settings-marketplace-removed = 已移除：{ $name }
+settings-marketplace-widget-added = 已添加：{ $name }
+settings-marketplace-failed = 商店操作失败：{ $reason }
 settings-section-terminal = 终端
 
 # ---- Settings panel ----

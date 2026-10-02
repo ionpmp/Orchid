@@ -381,6 +381,17 @@ settings-section-input = 入力
 settings-section-shortcuts = ショートカット
 settings-section-locale = 言語
 settings-section-privacy = プライバシー
+settings-section-marketplace = マーケット
+settings-marketplace-note = カタログ
+settings-marketplace-hint = テーマフォルダーにパレットを入れるか、組み込みウィジェットをワークスペースに追加します。Orchid はウィジェットのコードをダウンロードしません。
+settings-action-install = インストール
+settings-action-remove = 削除
+settings-field-add-widget = ウィジェットを追加
+settings-value-add-widget-none = ウィジェットを選択
+settings-marketplace-installed = インストールしました: { $name }
+settings-marketplace-removed = 削除しました: { $name }
+settings-marketplace-widget-added = 追加しました: { $name }
+settings-marketplace-failed = マーケットの操作に失敗しました: { $reason }
 settings-section-terminal = ターミナル
 
 # ---- Settings panel ----

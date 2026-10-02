@@ -381,6 +381,17 @@ settings-section-input = الإدخال
 settings-section-shortcuts = الاختصارات
 settings-section-locale = اللغة
 settings-section-privacy = الخصوصية
+settings-section-marketplace = المتجر
+settings-marketplace-note = الفهرس
+settings-marketplace-hint = ثبّت لوحة ألوان في مجلد السمات، أو أضف ودجة مدمجة إلى مساحة العمل. لا ينزّل Orchid رمز الودجات.
+settings-action-install = تثبيت
+settings-action-remove = إزالة
+settings-field-add-widget = إضافة ودجة
+settings-value-add-widget-none = اختر ودجة
+settings-marketplace-installed = تم التثبيت: { $name }
+settings-marketplace-removed = تمت الإزالة: { $name }
+settings-marketplace-widget-added = تمت الإضافة: { $name }
+settings-marketplace-failed = فشل إجراء المتجر: { $reason }
 settings-section-terminal = الطرفية
 
 # ---- Settings panel ----

@@ -376,6 +376,17 @@ settings-section-input = Ввод
 settings-section-shortcuts = Горячие клавиши
 settings-section-locale = Язык и регион
 settings-section-privacy = Конфиденциальность
+settings-section-marketplace = Магазин
+settings-marketplace-note = Каталог
+settings-marketplace-hint = Установите палитру в папку тем или добавьте встроенный виджет на рабочий стол. Orchid не скачивает код виджетов.
+settings-action-install = Установить
+settings-action-remove = Удалить
+settings-field-add-widget = Добавить виджет
+settings-value-add-widget-none = Выберите виджет
+settings-marketplace-installed = Установлено: { $name }
+settings-marketplace-removed = Удалено: { $name }
+settings-marketplace-widget-added = Добавлено: { $name }
+settings-marketplace-failed = Действие магазина не выполнено: { $reason }
 settings-section-terminal = Терминал
 
 # ---- Settings panel ----

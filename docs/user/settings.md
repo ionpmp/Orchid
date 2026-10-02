@@ -16,8 +16,17 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 | Shortcuts | Profile, remaps, leader key/timeout | Leader **binding map** (TOML only) |
 | Locale | Language, date/time format, first day of week | — |
 | Privacy | History, retention, clipboard clear, vault auto-lock | — |
+| Marketplace | Install Ink, Dawn, Pine, or Ember; add a built-in widget | — |
 
 Widget options stay on each widget.
+
+## Marketplace
+
+Settings → Marketplace installs one of four palettes (Ink, Dawn, Pine,
+Ember) as `config/themes/<id>.json` and switches `[appearance].theme` to it.
+Remove deletes that file only when its id matches the catalog. Removing the
+active palette switches back to `orchid-dark`. **Add widget** places a
+built-in widget on the workspace. Orchid does not download widget code.
 
 ## Updates and telemetry
 

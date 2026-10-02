@@ -114,6 +114,13 @@ export component WidgetSettingsDialog inherits Rectangle {
                                 root.field-changed(row.key, row.combo-values[self.current-index]);
                             }
                         }
+
+                        if row.kind == 4 : TouchButton {
+                            text: row.value;
+                            clicked => {
+                                root.field-changed(row.key, row.bool-value ? "remove" : "install");
+                            }
+                        }
                     }
                 }
             }

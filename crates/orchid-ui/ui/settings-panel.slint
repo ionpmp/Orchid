@@ -210,6 +210,18 @@ export component SettingsPanel inherits Rectangle {
                                     );
                                 }
                             }
+
+                            if row.kind == 4 : TouchButton {
+                                text: row.value;
+                                size: ControlSize.sm;
+                                clicked => {
+                                    root.field-changed(
+                                        SettingsGlobal.current-section-id,
+                                        row.key,
+                                        row.bool-value ? "remove" : "install",
+                                    );
+                                }
+                            }
                         }
                     }
                 }
