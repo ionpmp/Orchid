@@ -85,6 +85,8 @@ release yet.
   universal search (files + commands + settings).
 
 #### Viewers
+- **Terminal inline graphics:** Sixel and Kitty direct images (PNG, 24-bit RGB,
+  32-bit RGBA) are drawn in the terminal pane. zlib Kitty payloads are skipped.
 - **HDR / OpenEXR display:** scene-linear `.hdr` and `.exr` pixels are
   tone-mapped into the 8-bit image buffer so highlights above 1.0 stay
   visible. The status line marks them tone-mapped.

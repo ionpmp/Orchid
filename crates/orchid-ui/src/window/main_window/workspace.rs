@@ -348,6 +348,7 @@ impl MainWindowController {
                     p.cursor_col,
                     p.cursor_row,
                     p.cursor_visible,
+                    &p.images,
                 );
                 pane.left = p.left;
                 pane.top = p.top;

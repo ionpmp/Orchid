@@ -129,6 +129,11 @@ impl TerminalSession {
     pub fn resize(&self, size: PtySize) -> Result<()> {
         pty::resize(&self.pty, size)?;
         self.emulator.resize(size.cols, size.rows)?;
+        if size.pixel_width > 0 && size.pixel_height > 0 {
+            let cw = (size.pixel_width / size.cols).max(1);
+            let ch = (size.pixel_height / size.rows).max(1);
+            self.emulator.set_cell_px(cw, ch);
+        }
         Ok(())
     }
 

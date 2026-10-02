@@ -108,6 +108,7 @@ mod tests {
             content_generation: 1,
             dirty_lines: (0..rows).collect(),
             full_redraw: true,
+            images: Vec::new(),
         }
     }
 

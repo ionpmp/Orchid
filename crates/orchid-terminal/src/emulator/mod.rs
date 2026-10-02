@@ -10,9 +10,11 @@
 
 pub mod color;
 pub mod cursor;
+mod graphics;
 pub mod grid;
 pub mod selection;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -28,7 +30,7 @@ use crate::search::SearchMatch;
 
 pub use color::{resolve_color, xterm_256_color, CellColor, ColorRole, Rgba, TerminalPalette};
 pub use cursor::{CursorState, CursorStyle};
-pub use grid::{empty_row, Cell, CellFlags, GridLine, GridSnapshot, ScrollPosition};
+pub use grid::{empty_row, Cell, CellFlags, GridLine, GridSnapshot, InlineImage, ScrollPosition};
 pub use selection::{GridPoint, Selection};
 
 /// Default retained scrollback lines.
@@ -79,15 +81,24 @@ impl TerminalEmulator {
     /// (e.g. DSR cursor-position reports) or incomplete escape fragments.
     pub fn feed(&self, bytes: &[u8]) -> Vec<u8> {
         let mut state = self.inner.lock();
+        let events = state.apc.push(bytes);
         let mut parser = state.parser.take().unwrap_or_default();
-        let mut handler = Handler {
-            state: &mut state,
-            responses: Vec::new(),
-            bus: &self.bus,
-            session_id: self.session_id,
-        };
-        parser.advance(&mut handler, bytes);
-        let responses = handler.responses;
+        let mut responses = Vec::new();
+        for event in events {
+            match event {
+                graphics::StreamEvent::Vt(clean) => {
+                    let mut handler = Handler {
+                        state: &mut state,
+                        responses: Vec::new(),
+                        bus: &self.bus,
+                        session_id: self.session_id,
+                    };
+                    parser.advance(&mut handler, &clean);
+                    responses.extend(handler.responses);
+                }
+                graphics::StreamEvent::Apc(payload) => state.handle_apc(&payload),
+            }
+        }
         state.parser = Some(parser);
         responses
     }
@@ -103,6 +114,20 @@ impl TerminalEmulator {
         }
         self.inner.lock().resize(cols, rows);
         Ok(())
+    }
+
+    /// Cell size in logical pixels, used to advance the cursor past an inline image.
+    ///
+    /// Zero is ignored for that axis. The UI sets this from the monospace metrics
+    /// whenever the pane is resized with a real pixel size.
+    pub fn set_cell_px(&self, width: u16, height: u16) {
+        let mut state = self.inner.lock();
+        if width > 0 {
+            state.cell_w = width;
+        }
+        if height > 0 {
+            state.cell_h = height;
+        }
     }
 
     /// Point-in-time snapshot of the visible grid for rendering.
@@ -207,6 +232,38 @@ struct EmulatorState {
     dirty_lines: Vec<bool>,
     /// Force a full raster on the next snapshot (resize, viewport scroll, …).
     full_redraw: bool,
+    /// Splits Kitty APC payloads out of the PTY byte stream.
+    apc: graphics::ApcSplitter,
+    /// Collecting a sixel DCS body.
+    dcs_sixel: bool,
+    /// Sixel body exceeded the size cap and will be dropped.
+    dcs_overflow: bool,
+    dcs_buf: Vec<u8>,
+    /// Logical cell size used to move the cursor past an image.
+    cell_w: u16,
+    cell_h: u16,
+    /// Images anchored to an absolute line (`scrollback index`, or
+    /// `scrollback.len() + grid row` for the live grid).
+    images: Vec<StoredImage>,
+    /// In-progress Kitty chunks keyed by image id.
+    kitty_acc: HashMap<u32, Vec<u8>>,
+    /// Completed Kitty images that `a=p` can place again.
+    kitty_lib: HashMap<u32, StoredBlob>,
+}
+
+struct StoredImage {
+    id: u32,
+    abs_line: usize,
+    col: u16,
+    width: u32,
+    height: u32,
+    rgba: Arc<Vec<u8>>,
+}
+
+struct StoredBlob {
+    width: u32,
+    height: u32,
+    rgba: Arc<Vec<u8>>,
 }
 
 impl EmulatorState {
@@ -233,6 +290,15 @@ impl EmulatorState {
             content_generation: 1,
             dirty_lines: vec![true; rows as usize],
             full_redraw: true,
+            apc: graphics::ApcSplitter::default(),
+            dcs_sixel: false,
+            dcs_overflow: false,
+            dcs_buf: Vec::new(),
+            cell_w: 8,
+            cell_h: 16,
+            images: Vec::new(),
+            kitty_acc: HashMap::new(),
+            kitty_lib: HashMap::new(),
         }
     }
 
@@ -310,12 +376,27 @@ impl EmulatorState {
 
     fn push_scrollback(&mut self, line: Arc<[Cell]>) {
         if self.scrollback_cap == 0 {
+            self.shift_image_anchors();
             return;
         }
-        if self.scrollback.len() >= self.scrollback_cap {
+        let popped = self.scrollback.len() >= self.scrollback_cap;
+        if popped {
             self.scrollback.pop_front();
         }
         self.scrollback.push_back(line);
+        if popped {
+            self.shift_image_anchors();
+        }
+    }
+
+    fn shift_image_anchors(&mut self) {
+        self.images.retain_mut(|img| {
+            if img.abs_line == 0 {
+                return false;
+            }
+            img.abs_line -= 1;
+            true
+        });
     }
 
     fn snapshot(&mut self) -> GridSnapshot {
@@ -362,6 +443,7 @@ impl EmulatorState {
         self.dirty_lines.fill(false);
         self.full_redraw = false;
 
+        let images = self.visible_images();
         GridSnapshot {
             cols: self.cols,
             rows: self.rows,
@@ -372,7 +454,160 @@ impl EmulatorState {
             content_generation: self.content_generation,
             dirty_lines,
             full_redraw,
+            images,
         }
+    }
+
+    fn visible_images(&self) -> Vec<InlineImage> {
+        let total = self.scrollback.len() + self.grid.len();
+        let top = if self.viewport_offset == 0 {
+            self.scrollback.len()
+        } else {
+            let bottom = total.saturating_sub(self.viewport_offset);
+            bottom.saturating_sub(self.rows as usize)
+        };
+        let rows = i64::from(self.rows);
+        self.images
+            .iter()
+            .filter_map(|img| {
+                let row = img.abs_line as i64 - top as i64;
+                let ch = i64::from(self.cell_h.max(1));
+                let span = (i64::from(img.height) + ch - 1) / ch;
+                if row + span <= 0 || row >= rows {
+                    return None;
+                }
+                Some(InlineImage {
+                    col: img.col,
+                    row: row as i32,
+                    width: img.width,
+                    height: img.height,
+                    rgba: Arc::clone(&img.rgba),
+                })
+            })
+            .collect()
+    }
+
+    fn handle_apc(&mut self, payload: &[u8]) {
+        if payload.first() != Some(&b'G') {
+            return;
+        }
+        let body = &payload[1..];
+        let split = body.iter().position(|b| *b == b';').unwrap_or(body.len());
+        let header = String::from_utf8_lossy(&body[..split]);
+        let data = if split < body.len() {
+            &body[split + 1..]
+        } else {
+            &[]
+        };
+        let cmd = graphics::parse_kitty_command(&header);
+        if cmd.skip {
+            self.kitty_acc.remove(&cmd.id);
+            return;
+        }
+        match cmd.action {
+            b'd' => {
+                self.images.retain(|img| img.id != cmd.id);
+                self.kitty_lib.remove(&cmd.id);
+                self.kitty_acc.remove(&cmd.id);
+                self.mark_full_redraw();
+                self.bump_generation();
+            }
+            b'p' => {
+                let placed = self.kitty_lib.get(&cmd.id).map(|blob| StoredBlob {
+                    width: blob.width,
+                    height: blob.height,
+                    rgba: Arc::clone(&blob.rgba),
+                });
+                if let Some(blob) = placed {
+                    self.place_rgba(cmd.id, blob.width, blob.height, blob.rgba, cmd.move_cursor);
+                }
+            }
+            b't' | b'T' => {
+                let chunk = graphics::decode_base64(data);
+                let too_big = {
+                    let acc = self.kitty_acc.entry(cmd.id).or_default();
+                    let too_big = acc.len().saturating_add(chunk.len()) > graphics::KITTY_CAP;
+                    if !too_big {
+                        acc.extend(chunk);
+                    }
+                    too_big
+                };
+                if too_big {
+                    self.kitty_acc.remove(&cmd.id);
+                    return;
+                }
+                if cmd.more {
+                    return;
+                }
+                let bytes = self.kitty_acc.remove(&cmd.id).unwrap_or_default();
+                let Some((w, h, rgba)) =
+                    graphics::decode_kitty_bytes(cmd.format, cmd.width, cmd.height, &bytes)
+                else {
+                    return;
+                };
+                let rgba = Arc::new(rgba);
+                self.kitty_lib.insert(
+                    cmd.id,
+                    StoredBlob {
+                        width: w,
+                        height: h,
+                        rgba: Arc::clone(&rgba),
+                    },
+                );
+                if self.kitty_lib.len() > 16 {
+                    if let Some(drop_id) = self.kitty_lib.keys().copied().find(|k| *k != cmd.id) {
+                        self.kitty_lib.remove(&drop_id);
+                    }
+                }
+                if cmd.action == b'T' {
+                    self.place_rgba(cmd.id, w, h, rgba, cmd.move_cursor);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn place_sixel(&mut self, body: &[u8]) {
+        let Some((w, h, rgba)) = graphics::decode_sixel(body) else {
+            return;
+        };
+        self.place_rgba(u32::MAX, w, h, Arc::new(rgba), true);
+    }
+
+    fn place_rgba(
+        &mut self,
+        id: u32,
+        width: u32,
+        height: u32,
+        rgba: Arc<Vec<u8>>,
+        move_cursor: bool,
+    ) {
+        if width == 0 || height == 0 {
+            return;
+        }
+        let abs_line = self.scrollback.len() + self.cursor.row as usize;
+        let col = self.cursor.col.min(self.cols.saturating_sub(1));
+        self.images.push(StoredImage {
+            id,
+            abs_line,
+            col,
+            width,
+            height,
+            rgba,
+        });
+        if self.images.len() > 32 {
+            self.images.remove(0);
+        }
+        if move_cursor {
+            self.cursor.col = 0;
+            let ch = u32::from(self.cell_h.max(1));
+            let span = height.div_ceil(ch).max(1);
+            for _ in 0..span {
+                self.line_feed();
+            }
+        }
+        self.mark_full_redraw();
+        self.bump_generation();
     }
 
     fn scroll_to(&mut self, pos: ScrollPosition) {
@@ -998,9 +1233,32 @@ impl<'a> Perform for Handler<'a> {
         }
     }
 
-    fn hook(&mut self, _params: &Params, _intermediates: &[u8], _ignore: bool, _action: char) {}
-    fn put(&mut self, _byte: u8) {}
-    fn unhook(&mut self) {}
+    fn hook(&mut self, _params: &Params, _intermediates: &[u8], ignore: bool, action: char) {
+        self.state.dcs_buf.clear();
+        self.state.dcs_overflow = false;
+        self.state.dcs_sixel = !ignore && action == 'q';
+    }
+
+    fn put(&mut self, byte: u8) {
+        if !self.state.dcs_sixel {
+            return;
+        }
+        if self.state.dcs_buf.len() >= graphics::SIXEL_CAP {
+            self.state.dcs_overflow = true;
+            return;
+        }
+        self.state.dcs_buf.push(byte);
+    }
+
+    fn unhook(&mut self) {
+        if self.state.dcs_sixel && !self.state.dcs_overflow {
+            let body = std::mem::take(&mut self.state.dcs_buf);
+            self.state.place_sixel(&body);
+        }
+        self.state.dcs_buf.clear();
+        self.state.dcs_sixel = false;
+        self.state.dcs_overflow = false;
+    }
 }
 
 fn decode_osc52_base64(input: &str) -> std::result::Result<Vec<u8>, ()> {
@@ -1175,5 +1433,29 @@ mod tests {
         e.feed(b"abc def ghi");
         let hits = e.search_in_scrollback("def", true);
         assert_eq!(hits.len(), 1);
+    }
+
+    #[test]
+    fn sixel_places_a_pixel_and_advances_the_cursor() {
+        let e = TerminalEmulator::new(20, 6, 100, bus(), Uuid::nil());
+        e.feed(b"\x1bPq#1;2;100;0;0@\x1b\\Z");
+        let s = e.snapshot();
+        assert_eq!(s.images.len(), 1);
+        assert_eq!(s.images[0].width, 1);
+        assert_eq!(&s.images[0].rgba[..4], &[255, 0, 0, 255]);
+        assert_eq!(s.cursor.row, 1);
+        assert_eq!(s.lines[1].cells[0].ch, 'Z');
+    }
+
+    #[test]
+    fn kitty_rgba_places_a_pixel_and_keeps_surrounding_text() {
+        let e = TerminalEmulator::new(20, 6, 100, bus(), Uuid::nil());
+        e.feed(b"A\x1b_Ga=T,f=32,s=1,v=1,C=1;/wAA/w==\x1b\\B");
+        let s = e.snapshot();
+        assert_eq!(s.lines[0].cells[0].ch, 'A');
+        assert_eq!(s.images.len(), 1);
+        assert_eq!(s.images[0].col, 1);
+        assert_eq!(&s.images[0].rgba[..4], &[255, 0, 0, 255]);
+        assert_eq!(s.lines[1].cells[0].ch, 'B');
     }
 }

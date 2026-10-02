@@ -10,5 +10,7 @@ extra args can spawn arbitrary processes.
 Orchid-profile defaults: `Ctrl+Shift+H`/`J` split, `Ctrl+Shift+T` tab,
 `Ctrl+Shift+W` close, `Ctrl+PageUp`/`PageDown` tabs.
 
-Sixel / kitty graphics are not implemented. On Windows, PTY children join
-a Job Object so the tree dies with Orchid.
+Inline images: Sixel (`DCS q`) and Kitty graphics direct pixels (24-bit RGB,
+32-bit RGBA, and PNG). zlib Kitty payloads (`o=z`) are skipped. Sixel, and
+Kitty when `C=1`, move the cursor past the image. On Windows, PTY children
+join a Job Object so the tree dies with Orchid.

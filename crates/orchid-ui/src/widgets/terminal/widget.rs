@@ -23,9 +23,9 @@ use orchid_terminal::{
     SessionManager, SplitDirection, TerminalPalette,
 };
 use orchid_widgets::{
-    widget::config, Result, TerminalDividerPayload, TerminalPanePayload, TerminalPayload,
-    TerminalPayloadCell, TerminalTabPayload, Widget, WidgetCapabilities, WidgetContext,
-    WidgetError, WidgetPayload, WidgetSnapshot, WidgetStatus,
+    widget::config, Result, TerminalDividerPayload, TerminalImage, TerminalPanePayload,
+    TerminalPayload, TerminalPayloadCell, TerminalTabPayload, Widget, WidgetCapabilities,
+    WidgetContext, WidgetError, WidgetPayload, WidgetSnapshot, WidgetStatus,
 };
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
@@ -382,6 +382,7 @@ impl Widget for TerminalWidget {
                         content_generation: pane_terminal.content_generation,
                         dirty_lines: pane_terminal.dirty_lines,
                         full_redraw: pane_terminal.full_redraw,
+                        images: pane_terminal.images,
                     });
                 }
             }
@@ -421,6 +422,7 @@ impl Widget for TerminalWidget {
                 content_generation: p.content_generation,
                 dirty_lines: p.dirty_lines.clone(),
                 full_redraw: p.full_redraw,
+                images: p.images.clone(),
                 tabs: Vec::new(),
                 active_tab: 0,
                 panes: Vec::new(),
@@ -604,6 +606,17 @@ fn grid_to_payload(
         content_generation: grid.content_generation,
         dirty_lines: grid.dirty_lines.clone(),
         full_redraw: grid.full_redraw,
+        images: grid
+            .images
+            .iter()
+            .map(|img| TerminalImage {
+                col: img.col,
+                row: img.row,
+                width: img.width,
+                height: img.height,
+                rgba: Arc::clone(&img.rgba),
+            })
+            .collect(),
         tabs: Vec::new(),
         active_tab: 0,
         panes: Vec::new(),

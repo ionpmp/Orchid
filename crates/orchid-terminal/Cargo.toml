@@ -31,6 +31,7 @@ bitflags.workspace = true
 
 orchid-core.workspace = true
 orchid-storage.workspace = true
+image.workspace = true
 
 [target.'cfg(windows)'.dependencies.windows]
 workspace = true

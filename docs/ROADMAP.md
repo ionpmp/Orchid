@@ -26,11 +26,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 - [ ] Ship a quantized ONNX sentence model behind `orchid-embed`’s `ort`
       feature (today: `StubEmbedder` in universal-search hybrid)
 
-### Viewers / terminal
-
-- [ ] Terminal inline graphics (sixel + kitty) and optional
-      `alacritty_terminal` grid — v1.x
-
 ### Network & settings
 
 - [ ] In-app OAuth wizard (Drive / OneDrive / Dropbox). Today: named
@@ -58,7 +53,7 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
       **People** view / faces, events, smart albums)
 - [ ] Graphical resource monitor with history
 - [ ] Theme and widget marketplace
-- [ ] Terminal sixel + kitty; optional `alacritty_terminal`
+- [ ] Optional `alacritty_terminal` grid
 - [ ] Auto-update; opt-in telemetry (off by default)
 - [ ] In-app cloud OAuth wizard
 - [ ] ORT embeddings in production search

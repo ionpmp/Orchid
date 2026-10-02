@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 
 use fontdue::Font;
+use orchid_widgets::TerminalImage;
 use orchid_widgets::TerminalPayload;
 use orchid_widgets::TerminalPayloadCell;
 use parking_lot::Mutex;
@@ -167,6 +168,8 @@ struct PaintedBuffer {
     cells: Vec<TerminalPayloadCell>,
     /// Cursor cell tinted into `pixels`, if any.
     cursor: Option<(u16, u16)>,
+    /// Images last blitted into `pixels`.
+    image_stamps: Vec<ImageStamp>,
 }
 
 /// Retained RGBA buffers for incremental terminal updates.
@@ -192,6 +195,8 @@ pub struct RetainedRaster {
     fallback: usize,
     cursor_color: [u8; 4],
 }
+
+type ImageStamp = (u16, i32, u32, u32, usize);
 
 impl RetainedRaster {
     #[allow(clippy::too_many_arguments)]
@@ -383,6 +388,7 @@ pub fn render_terminal_cells_retained(
     cell_h: u32,
     content_scale: f32,
     cursor_color: [u8; 4],
+    images: &[TerminalImage],
 ) -> Option<Image> {
     if cols == 0 || rows == 0 {
         *retained = None;
@@ -441,6 +447,7 @@ pub fn render_terminal_cells_retained(
         if let Some(cur) = cursor {
             paint_cursor(&mut a, &ctx, cur, cursor_color);
         }
+        blit_images(&mut a, cell_wp, cell_hp, s, images);
         let b = SharedPixelBuffer::clone_from_slice(a.as_bytes(), tw, th);
         let painted = normalized_cells(cells, n_cells);
         let image = Image::from_rgba8(a.clone());
@@ -450,11 +457,13 @@ pub fn render_terminal_cells_retained(
                     pixels: a,
                     cells: painted.clone(),
                     cursor,
+                    image_stamps: image_stamps(images),
                 },
                 PaintedBuffer {
                     pixels: b,
                     cells: painted,
                     cursor,
+                    image_stamps: image_stamps(images),
                 },
             ],
             front: 0,
@@ -471,18 +480,24 @@ pub fn render_terminal_cells_retained(
     }
 
     let rast = retained.as_mut().expect("checked above");
+    let stamps = image_stamps(images);
     let back = 1 - rast.front;
     let buf = &mut rast.buffers[back];
+    let images_changed = buf.image_stamps != stamps;
     let cols_us = cols as usize;
-    let mut paint: Vec<u16> = (0..rows)
-        .filter(|&r| {
-            let start = r as usize * cols_us;
-            let end = start + cols_us;
-            cells
-                .get(start..end)
-                .is_none_or(|src| src != &buf.cells[start..end])
-        })
-        .collect();
+    let mut paint: Vec<u16> = if images_changed {
+        (0..rows).collect()
+    } else {
+        (0..rows)
+            .filter(|&r| {
+                let start = r as usize * cols_us;
+                let end = start + cols_us;
+                cells
+                    .get(start..end)
+                    .is_none_or(|src| src != &buf.cells[start..end])
+            })
+            .collect()
+    };
     // Repaint old + new cursor rows so the tint is cleared / redrawn.
     if buf.cursor != cursor {
         paint.extend(buf.cursor.map(|(_, r)| r));
@@ -496,6 +511,8 @@ pub fn render_terminal_cells_retained(
         if let Some(cur) = cursor.filter(|(_, r)| paint.binary_search(r).is_ok()) {
             paint_cursor(&mut buf.pixels, &ctx, cur, cursor_color);
         }
+        blit_images(&mut buf.pixels, cell_wp, cell_hp, s, images);
+        buf.image_stamps = stamps;
         for &r in &paint {
             let start = r as usize * cols_us;
             let end = start + cols_us;
@@ -516,6 +533,83 @@ pub fn render_terminal_cells_retained(
     Some(image)
 }
 
+fn image_stamps(images: &[TerminalImage]) -> Vec<ImageStamp> {
+    images
+        .iter()
+        .map(|img| {
+            (
+                img.col,
+                img.row,
+                img.width,
+                img.height,
+                std::sync::Arc::as_ptr(&img.rgba) as usize,
+            )
+        })
+        .collect()
+}
+
+fn blit_images(
+    buffer: &mut SharedPixelBuffer<Rgba8Pixel>,
+    cell_wp: u32,
+    cell_hp: u32,
+    scale: f32,
+    images: &[TerminalImage],
+) {
+    if images.is_empty() {
+        return;
+    }
+    let tw = buffer.width() as i32;
+    let th = buffer.height() as i32;
+    if tw <= 0 || th <= 0 {
+        return;
+    }
+    let stride = tw as usize * 4;
+    let bytes = buffer.make_mut_bytes();
+    for img in images {
+        if img.width == 0 || img.height == 0 {
+            continue;
+        }
+        let need = img.width as usize * img.height as usize * 4;
+        if img.rgba.len() < need {
+            continue;
+        }
+        let dw = ((img.width as f32) * scale).round().max(1.0) as i32;
+        let dh = ((img.height as f32) * scale).round().max(1.0) as i32;
+        let x0 = i32::from(img.col) * cell_wp as i32;
+        let y0 = img.row * cell_hp as i32;
+        for dy in 0..dh {
+            let dst_y = y0 + dy;
+            if dst_y < 0 || dst_y >= th {
+                continue;
+            }
+            let sy = (dy as u64 * u64::from(img.height) / dh as u64) as u32;
+            for dx in 0..dw {
+                let dst_x = x0 + dx;
+                if dst_x < 0 || dst_x >= tw {
+                    continue;
+                }
+                let sx = (dx as u64 * u64::from(img.width) / dw as u64) as u32;
+                let si = (sy * img.width + sx) as usize * 4;
+                let a = img.rgba[si + 3] as u32;
+                if a == 0 {
+                    continue;
+                }
+                let di = dst_y as usize * stride + dst_x as usize * 4;
+                if a == 255 {
+                    bytes[di..di + 4].copy_from_slice(&img.rgba[si..si + 4]);
+                } else {
+                    for c in 0..3 {
+                        let dst = bytes[di + c] as u32;
+                        bytes[di + c] =
+                            ((u32::from(img.rgba[si + c]) * a + dst * (255 - a)) / 255) as u8;
+                    }
+                    bytes[di + 3] = 255;
+                }
+            }
+        }
+    }
+}
+
 /// Raster terminal cells to an RGBA image in **physical** pixels (full redraw).
 #[allow(clippy::too_many_arguments)]
 #[allow(dead_code)]
@@ -533,6 +627,7 @@ pub fn render_terminal_cells(
     cell_h: u32,
     content_scale: f32,
     cursor_color: [u8; 4],
+    images: &[TerminalImage],
 ) -> Option<Image> {
     let mut retained = None;
     render_terminal_cells_retained(
@@ -550,6 +645,7 @@ pub fn render_terminal_cells(
         cell_h,
         content_scale,
         cursor_color,
+        images,
     )
 }
 
@@ -580,6 +676,7 @@ pub fn render_terminal(
         cell_h,
         content_scale,
         cursor_color,
+        &t.images,
     )
 }
 
@@ -633,8 +730,21 @@ mod tests {
         cursor: (u16, u16, bool),
     ) -> Vec<u8> {
         render_terminal_cells_retained(
-            retained, COLS, ROWS, cells, cursor.0, cursor.1, cursor.2, font, None, 14.0, 8, 16,
-            1.25, CURSOR,
+            retained,
+            COLS,
+            ROWS,
+            cells,
+            cursor.0,
+            cursor.1,
+            cursor.2,
+            font,
+            None,
+            14.0,
+            8,
+            16,
+            1.25,
+            CURSOR,
+            &[],
         )
         .and_then(|img| img.to_rgba8())
         .expect("raster")

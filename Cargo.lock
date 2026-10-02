@@ -6789,6 +6789,7 @@ dependencies = [
  "bytes",
  "chrono",
  "dashmap",
+ "image",
  "orchid-core",
  "orchid-storage",
  "parking_lot",

@@ -28,7 +28,7 @@ pub mod session;
 pub use backend::{BackendKind, BackendSpec, SshTarget};
 pub use emulator::{
     resolve_color, xterm_256_color, Cell, CellColor, CellFlags, ColorRole, CursorState,
-    CursorStyle, GridLine, GridPoint, GridSnapshot, Rgba, ScrollPosition, Selection,
+    CursorStyle, GridLine, GridPoint, GridSnapshot, InlineImage, Rgba, ScrollPosition, Selection,
     TerminalEmulator, TerminalPalette,
 };
 pub use error::{Result, TerminalError};

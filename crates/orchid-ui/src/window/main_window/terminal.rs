@@ -86,6 +86,7 @@ impl MainWindowController {
             t.cursor_col,
             t.cursor_row,
             t.cursor_visible,
+            &t.images,
         )
     }
 
@@ -106,6 +107,7 @@ impl MainWindowController {
         cursor_col: u16,
         cursor_row: u16,
         cursor_visible: bool,
+        images: &[orchid_widgets::TerminalImage],
     ) -> Image {
         if let Some(ref f) = self.mono_font {
             let size_md = self.theme.current().tokens.typography.size_md;
@@ -135,6 +137,7 @@ impl MainWindowController {
                 ch,
                 scale,
                 ccol,
+                images,
             )
             .unwrap_or_default()
         } else {
@@ -166,6 +169,7 @@ impl MainWindowController {
                     t.cursor_col,
                     t.cursor_row,
                     t.cursor_visible,
+                    &t.images,
                 ),
                 cursor_col: i32::from(t.cursor_col),
                 cursor_row: i32::from(t.cursor_row),
@@ -199,6 +203,7 @@ impl MainWindowController {
                             p.cursor_col,
                             p.cursor_row,
                             p.cursor_visible,
+                            &p.images,
                         ),
                         cursor_col: i32::from(p.cursor_col),
                         cursor_row: i32::from(p.cursor_row),

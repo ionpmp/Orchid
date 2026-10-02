@@ -117,6 +117,33 @@ pub struct TerminalPayload {
     pub panes: Vec<TerminalPanePayload>,
     /// Draggable split dividers in the active tab.
     pub dividers: Vec<TerminalDividerPayload>,
+    /// Inline images composited over the cell bitmap.
+    pub images: Vec<TerminalImage>,
+}
+
+/// One sixel or Kitty image in cell coordinates.
+#[derive(Debug, Clone)]
+pub struct TerminalImage {
+    /// Column of the cell where the image origin sits.
+    pub col: u16,
+    /// Visible row. Negative when the image starts above the viewport.
+    pub row: i32,
+    /// Width in logical pixels.
+    pub width: u32,
+    /// Height in logical pixels.
+    pub height: u32,
+    /// Row-major RGBA8 (`width * height * 4` bytes).
+    pub rgba: std::sync::Arc<Vec<u8>>,
+}
+
+impl PartialEq for TerminalImage {
+    fn eq(&self, other: &Self) -> bool {
+        self.col == other.col
+            && self.row == other.row
+            && self.width == other.width
+            && self.height == other.height
+            && std::sync::Arc::ptr_eq(&self.rgba, &other.rgba)
+    }
 }
 
 /// One pane in the active tab's split tree.
@@ -154,6 +181,8 @@ pub struct TerminalPanePayload {
     pub dirty_lines: Vec<u16>,
     /// When true the entire pane grid must be re-rasterized.
     pub full_redraw: bool,
+    /// Inline images composited over this pane.
+    pub images: Vec<TerminalImage>,
 }
 
 /// Draggable divider between two terminal panes.

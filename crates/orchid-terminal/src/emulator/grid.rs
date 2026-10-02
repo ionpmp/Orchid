@@ -104,6 +104,23 @@ pub struct GridSnapshot {
     /// When true the entire visible grid must be re-rasterized (resize,
     /// viewport scroll, first frame after open).
     pub full_redraw: bool,
+    /// Inline images that intersect this viewport.
+    pub images: Vec<InlineImage>,
+}
+
+/// One sixel or Kitty image intersecting the visible viewport.
+#[derive(Debug, Clone)]
+pub struct InlineImage {
+    /// Column of the cursor when the image was placed.
+    pub col: u16,
+    /// Visible row. Negative when the image starts above the viewport.
+    pub row: i32,
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+    /// Row-major RGBA8 (`width * height * 4` bytes).
+    pub rgba: Arc<Vec<u8>>,
 }
 
 /// Where to position the viewport after a scroll operation.

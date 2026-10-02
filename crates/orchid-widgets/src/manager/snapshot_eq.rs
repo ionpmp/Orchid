@@ -409,6 +409,7 @@ fn panes_eq(a: &[TerminalPanePayload], b: &[TerminalPanePayload]) -> bool {
                 && x.cursor_row == y.cursor_row
                 && x.cursor_visible == y.cursor_visible
                 && x.content_generation == y.content_generation
+                && x.images == y.images
                 && (x.content_generation != 0 && y.content_generation != 0 || x.cells == y.cells)
         })
 }

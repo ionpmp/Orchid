@@ -125,6 +125,7 @@ pub(crate) fn pane_payload_to_terminal(p: &TerminalPanePayload) -> TerminalPaylo
         content_generation: p.content_generation,
         dirty_lines: p.dirty_lines.clone(),
         full_redraw: p.full_redraw,
+        images: p.images.clone(),
         tabs: Vec::new(),
         active_tab: 0,
         panes: Vec::new(),
