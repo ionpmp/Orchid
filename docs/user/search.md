@@ -32,7 +32,10 @@ skipped)).
 `extract-text` also indexes source files (`.rs`, `.py`, `.js`,
 `.ts`, `.ps1`, `.sql`, and similar), plus calendar (`.ics`) and
 contact (`.vcf`) fields. Photo and attachment blobs in those files are
-skipped. Bibliography files (`.bib`, `.ris`) contribute titles, authors,
+skipped. Protocol Buffers (`.proto`), GraphQL (`.graphql`, `.gql`),
+Prisma (`.prisma`), Nix (`.nix`), Terraform (`.tf`), HCL (`.hcl`), and
+Zig (`.zig`) are indexed as source text. `.terraform.lock.hcl` still
+contributes only provider addresses. Bibliography files (`.bib`, `.ris`) contribute titles, authors,
 and abstracts. OPML lists (`.opml`) contribute outline titles and feed URLs.
 Jupyter notebooks (`.ipynb`) contribute markdown and code cells, not outputs.
 Unix mailboxes (`.mbox`) are split into messages and indexed like `.eml`.

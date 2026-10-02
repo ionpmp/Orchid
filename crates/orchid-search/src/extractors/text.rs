@@ -16,7 +16,8 @@ const TEXT_EXTENSIONS: &[&str] = &[
     "pyi", "js", "mjs", "cjs", "jsx", "ts", "tsx", "css", "scss", "less", "c", "h", "cpp", "hpp",
     "cc", "hh", "cs", "java", "kt", "kts", "go", "rb", "php", "swift", "lua", "pl", "sh", "bash",
     "zsh", "ps1", "psm1", "bat", "cmd", "sql", "vue", "svelte", "dart", "ex", "exs", "erl", "hs",
-    "ml", "cmake", "mk", "ftl", "slint", "gradle",
+    "ml", "cmake", "mk", "ftl", "slint", "gradle", "proto", "graphql", "gql", "prisma", "nix",
+    "tf", "hcl", "zig",
 ];
 
 /// Extract readable text from plaintext-ish files.
@@ -198,6 +199,14 @@ mod tests {
         assert!(e.can_handle(None, Some("md")));
         assert!(e.can_handle(None, Some("rs")));
         assert!(e.can_handle(None, Some("ps1")));
+        assert!(e.can_handle(None, Some("proto")));
+        assert!(e.can_handle(None, Some("graphql")));
+        assert!(e.can_handle(None, Some("gql")));
+        assert!(e.can_handle(None, Some("prisma")));
+        assert!(e.can_handle(None, Some("nix")));
+        assert!(e.can_handle(None, Some("tf")));
+        assert!(e.can_handle(None, Some("hcl")));
+        assert!(e.can_handle(None, Some("zig")));
         assert!(!e.can_handle(None, Some("ass")));
         assert!(!e.can_handle(Some("text/plain"), Some("srt")));
         assert!(e.can_handle(Some("text/plain"), None));

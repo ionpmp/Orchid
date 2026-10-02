@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `.proto`, `.graphql`, `.gql`, `.prisma`,
+  `.nix`, `.tf`, `.hcl`, and `.zig` as source text.
 - Full-text search indexes `.aws/credentials`: profile names and regions.
   Access keys and secrets are not indexed.
 - Full-text search indexes `.git-credentials`: host names. Usernames and
