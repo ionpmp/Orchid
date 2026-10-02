@@ -62,6 +62,7 @@ pub mod poetry;
 pub mod pom;
 pub mod properties;
 pub mod pubspec;
+pub mod pypirc;
 pub mod qt;
 pub mod rc;
 pub mod rdoc;
@@ -292,6 +293,11 @@ impl Extractor {
         if netrc::is_netrc_name(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(netrc::netrc_text(&text::decode_best_effort(&raw))));
+        }
+        // `.pypirc` is plain text, which would index passwords.
+        if pypirc::is_pypirc_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(pypirc::pypirc_text(&text::decode_best_effort(&raw))));
         }
         // `.npmrc` is plain text, which would index auth tokens.
         if npmrc::is_npmrc_name(name) {

@@ -179,6 +179,8 @@ are skipped.
 `.npmrc` contributes registry URLs. Auth tokens and passwords are skipped.
 `.netrc` contributes machine names. Logins, passwords, and accounts are
 skipped.
+`.pypirc` contributes server names and repository URLs. Usernames and
+passwords are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:
