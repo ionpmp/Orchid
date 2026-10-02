@@ -6,6 +6,7 @@
 
 pub mod android;
 pub mod audio;
+pub mod aws;
 pub mod bazel;
 pub mod bib;
 pub mod bun;
@@ -306,6 +307,16 @@ impl Extractor {
             return Ok(Some(gitcred::git_credentials_text(
                 &text::decode_best_effort(&raw),
             )));
+        }
+        // `.aws/credentials` is plain text, which would index access keys.
+        let parent = path
+            .parent()
+            .and_then(|parent| parent.file_name().map(str::to_string));
+        if aws::is_aws_credentials_name(name, parent.as_deref()) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(aws::aws_credentials_text(&text::decode_best_effort(
+                &raw,
+            ))));
         }
         // `.npmrc` is plain text, which would index auth tokens.
         if npmrc::is_npmrc_name(name) {

@@ -183,6 +183,8 @@ skipped.
 passwords are skipped.
 `.git-credentials` contributes host names. Usernames and passwords are
 skipped.
+`.aws/credentials` contributes profile names and regions. Access keys and
+secrets are skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:
