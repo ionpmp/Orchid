@@ -15,6 +15,7 @@ use crate::error::{Result, ViewerError};
 use crate::html::HtmlViewer;
 use crate::image::ImageViewer;
 use crate::media::MediaViewer;
+use crate::office::OfficeViewer;
 use crate::pdf::PdfViewer;
 use crate::text::{SyntaxHighlighter, TextViewer};
 use crate::viewer_trait::Viewer;
@@ -30,6 +31,8 @@ pub enum ViewerKind {
     Document,
     Media,
     Html,
+    /// Read-only spreadsheet or presentation preview.
+    Office,
 }
 
 /// Viewer instance plus the path that should be passed to [`Viewer::open`].
@@ -127,6 +130,9 @@ fn kind_from_mime(content_type: Option<&str>) -> Option<ViewerKind> {
     if base == "text/html" || base == "application/xhtml+xml" {
         return Some(ViewerKind::Html);
     }
+    if base.contains("spreadsheetml") || base.contains("presentationml") {
+        return Some(ViewerKind::Office);
+    }
     if base.starts_with("text/") {
         return Some(ViewerKind::Text);
     }
@@ -187,8 +193,8 @@ fn kind_from_extension(ext: &str) -> Option<ViewerKind> {
     match ext {
         "pdf" => Some(ViewerKind::Pdf),
         "docx" | "docm" => Some(ViewerKind::Document),
-        // No dedicated sheet/slide viewers yet — browse as archives.
-        "xlsx" | "xlsm" | "xlsb" | "pptx" | "pptm" | "ppsx" => Some(ViewerKind::Archive),
+        "xlsb" => Some(ViewerKind::Archive),
+        "xlsx" | "xlsm" | "pptx" | "pptm" | "ppsx" => Some(ViewerKind::Office),
         "orchid" => Some(ViewerKind::Document),
         "zip" | "7z" | "tar" | "tgz" | "gz" | "xz" | "txz" => Some(ViewerKind::Archive),
         other if crate::html::is_html_file_extension(other) => Some(ViewerKind::Html),
@@ -205,12 +211,15 @@ fn kind_for_ooxml(path: &orchid_fs::FsPath, sample: &[u8]) -> Option<ViewerKind>
 
     match sniff_ooxml_family(sample) {
         Some(OoxmlFamily::Word) => Some(ViewerKind::Document),
-        Some(OoxmlFamily::Excel | OoxmlFamily::PowerPoint) => Some(ViewerKind::Archive),
+        Some(OoxmlFamily::Excel) if is_xlsb_path(path) => Some(ViewerKind::Archive),
+        Some(OoxmlFamily::Excel | OoxmlFamily::PowerPoint) => Some(ViewerKind::Office),
         None => {
             if is_docx_path(path) {
                 Some(ViewerKind::Document)
-            } else if is_sheet_or_slide_path(path) {
+            } else if is_xlsb_path(path) {
                 Some(ViewerKind::Archive)
+            } else if is_office_preview_path(path) {
+                Some(ViewerKind::Office)
             } else {
                 None
             }
@@ -329,6 +338,7 @@ fn viewer_for_kind(kind: ViewerKind, highlighter: Arc<SyntaxHighlighter>) -> Box
         ViewerKind::Document => Box::new(DocumentViewer::new()),
         ViewerKind::Media => Box::new(MediaViewer::new()),
         ViewerKind::Html => Box::new(HtmlViewer::new()),
+        ViewerKind::Office => Box::new(OfficeViewer::new()),
     }
 }
 
@@ -342,10 +352,14 @@ fn is_docx_path(path: &orchid_fs::FsPath) -> bool {
     matches!(extension_of(path).as_deref(), Some("docx") | Some("docm"))
 }
 
-fn is_sheet_or_slide_path(path: &orchid_fs::FsPath) -> bool {
+fn is_xlsb_path(path: &orchid_fs::FsPath) -> bool {
+    matches!(extension_of(path).as_deref(), Some("xlsb"))
+}
+
+fn is_office_preview_path(path: &orchid_fs::FsPath) -> bool {
     matches!(
         extension_of(path).as_deref(),
-        Some("xlsx") | Some("xlsm") | Some("xlsb") | Some("pptx") | Some("pptm") | Some("ppsx")
+        Some("xlsx") | Some("xlsm") | Some("pptx") | Some("pptm") | Some("ppsx")
     )
 }
 
@@ -437,14 +451,20 @@ mod tests {
     }
 
     #[test]
-    fn xlsx_extension_with_zip_magic_is_archive_not_document() {
+    fn xlsx_extension_with_zip_magic_is_office_preview() {
         let kind = kind_for(&path("local:/a/b.xlsx"), b"PK\x03\x04rest").unwrap();
-        assert_eq!(kind, ViewerKind::Archive);
+        assert_eq!(kind, ViewerKind::Office);
     }
 
     #[test]
-    fn pptx_extension_fallback_is_archive() {
+    fn pptx_extension_fallback_is_office_preview() {
         let kind = kind_for(&path("local:/a/b.pptx"), b"").unwrap();
+        assert_eq!(kind, ViewerKind::Office);
+    }
+
+    #[test]
+    fn xlsb_stays_archive() {
+        let kind = kind_for(&path("local:/a/b.xlsb"), b"PK\x03\x04rest").unwrap();
         assert_eq!(kind, ViewerKind::Archive);
     }
 
@@ -461,8 +481,7 @@ mod tests {
         let mut cursor = Cursor::new(Vec::new());
         {
             let mut zip = ZipWriter::new(&mut cursor);
-            let opts =
-                SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+            let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
             zip.start_file("[Content_Types].xml", opts).unwrap();
             zip.write_all(excel_types.as_bytes()).unwrap();
             zip.start_file("xl/workbook.xml", opts).unwrap();
@@ -470,9 +489,9 @@ mod tests {
             zip.finish().unwrap();
         }
         let bytes = cursor.into_inner();
-        // Misnamed as .docx — sniff must not open the sheet in the document editor.
+        // Misnamed as .docx — sniff must open the sheet preview, not the editor.
         let kind = kind_for(&path("local:/a/fake.docx"), &bytes).unwrap();
-        assert_eq!(kind, ViewerKind::Archive);
+        assert_eq!(kind, ViewerKind::Office);
 
         let word_types = r#"<?xml version="1.0"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -481,8 +500,7 @@ mod tests {
         let mut cursor = Cursor::new(Vec::new());
         {
             let mut zip = ZipWriter::new(&mut cursor);
-            let opts =
-                SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+            let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
             zip.start_file("[Content_Types].xml", opts).unwrap();
             zip.write_all(word_types.as_bytes()).unwrap();
             zip.start_file("word/document.xml", opts).unwrap();

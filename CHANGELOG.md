@@ -85,6 +85,9 @@ release yet.
   universal search (files + commands + settings).
 
 #### Viewers
+- **Spreadsheet and slide preview:** `.xlsx` / `.xlsm` open as tables and
+  `.pptx` / `.pptm` / `.ppsx` open as slide cards (speaker notes included).
+  `.xlsb` still opens in the archive browser.
 - **Browser widget:** catalog **Browser** with an address bar, tabs, Back /
   Forward / Home / Reload (Stop while loading), bookmarks, find-in-page, a
   homepage setting, zoom (Ctrl++/−/0, Ctrl+wheel), drag-reorder tabs, tab
