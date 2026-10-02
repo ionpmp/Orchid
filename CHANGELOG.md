@@ -728,6 +728,8 @@ release yet.
 
 ### Fixed
 
+- Full-text search indexes `.netrc`: machine names. Logins, passwords, and
+  accounts are not indexed.
 - Full-text search indexes `.npmrc`: registry URLs. Auth tokens and
   passwords are not indexed.
 - Full-text search indexes `.env` files: variable names. Values are not

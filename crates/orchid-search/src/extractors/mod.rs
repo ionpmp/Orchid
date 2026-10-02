@@ -39,6 +39,7 @@ pub mod mbox;
 pub mod mix;
 pub mod mo;
 pub mod msbuild;
+pub mod netrc;
 pub mod nfo;
 pub mod notebook;
 pub mod npmrc;
@@ -286,6 +287,11 @@ impl Extractor {
         if docker::needs_name_dispatch(name) {
             let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
             return Ok(Some(docker::docker_text(&text::decode_best_effort(&raw))));
+        }
+        // `.netrc` is plain text, which would index passwords.
+        if netrc::is_netrc_name(name) {
+            let raw = orchid_fs::read_prefix(provider, path, text::MAX_CONTENT_BYTES).await?;
+            return Ok(Some(netrc::netrc_text(&text::decode_best_effort(&raw))));
         }
         // `.npmrc` is plain text, which would index auth tokens.
         if npmrc::is_npmrc_name(name) {

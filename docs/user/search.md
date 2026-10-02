@@ -177,6 +177,8 @@ hashes are skipped.
 are skipped.
 `.env` contributes variable names. Values are skipped.
 `.npmrc` contributes registry URLs. Auth tokens and passwords are skipped.
+`.netrc` contributes machine names. Logins, passwords, and accounts are
+skipped.
 `Cargo.lock` contributes package names. Versions, sources, and checksums
 are skipped.
 Index path:
