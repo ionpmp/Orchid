@@ -6,6 +6,8 @@ Qualifier `com` / org `Orchid` / app `Orchid` (`directories` crate).
 |------|----------------|
 | Config | `%APPDATA%\Orchid\Orchid\config` |
 | `config.toml` | `…\config\config.toml` |
+| `policy.toml` | `…\config\policy.toml` (read-only settings; optional) |
+| `audit.log` | `…\config\audit.log` (local; not uploaded) |
 | Themes / locale overlays | `…\config\themes\`, `…\config\locales\` |
 | Data | `%APPDATA%\Orchid\Orchid\data` |
 | `state.redb` | `…\data\state.redb` (schema **v2**) |

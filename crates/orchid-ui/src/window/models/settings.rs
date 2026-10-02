@@ -3,7 +3,8 @@
 use orchid_core::CommandRegistry;
 use orchid_i18n::{LocaleId, LocaleManager};
 use orchid_storage::OrchidConfig;
-use slint::{ModelRc, SharedString, VecModel};
+use orchid_storage::PolicyLocks;
+use slint::{Model, ModelRc, SharedString, VecModel};
 
 use crate::slint_generated::{SettingsFieldRow, SettingsSectionEntry};
 use crate::theme::ThemeManager;
@@ -20,6 +21,7 @@ pub(crate) const SETTINGS_SECTION_IDS: &[&str] = &[
     "agent",
     "photos",
     "shell",
+    "policy",
 ];
 
 pub(crate) fn build_settings_sections(locale: &LocaleManager) -> Vec<SettingsSectionEntry> {
@@ -254,6 +256,7 @@ pub(crate) fn build_settings_fields(
     locale: &LocaleManager,
     themes: &ThemeManager,
     registry: &CommandRegistry,
+    locks: &PolicyLocks,
 ) -> Vec<SettingsFieldRow> {
     let mut rows = Vec::new();
 
@@ -708,6 +711,22 @@ pub(crate) fn build_settings_fields(
                 cfg.shell.replace,
             );
         }
+        "policy" => {
+            push_settings_readonly(
+                &mut rows,
+                locale,
+                "hint",
+                "settings-policy-note",
+                locale.tr("settings-policy-hint").into(),
+            );
+            push_settings_text(
+                &mut rows,
+                locale,
+                "url",
+                "settings-field-policy-url",
+                cfg.policy.url.clone(),
+            );
+        }
         "marketplace" => {
             push_settings_readonly(
                 &mut rows,
@@ -754,5 +773,31 @@ pub(crate) fn build_settings_fields(
         }
         _ => {}
     }
+    freeze_locked_rows(&mut rows, section, locks);
     rows
+}
+
+fn freeze_locked_rows(rows: &mut [SettingsFieldRow], section: &str, locks: &PolicyLocks) {
+    for row in rows {
+        if row.kind == SETTINGS_FIELD_READONLY || row.kind == SETTINGS_FIELD_BUTTON {
+            continue;
+        }
+        if !locks.is_locked(section, row.key.as_str()) {
+            continue;
+        }
+        if row.kind == SETTINGS_FIELD_BOOL {
+            row.value = if row.bool_value {
+                "true".into()
+            } else {
+                "false".into()
+            };
+        } else if row.kind == SETTINGS_FIELD_COMBO && row.combo_index >= 0 {
+            if let Some(label) = row.combo_options.row_data(row.combo_index as usize) {
+                row.value = label;
+            }
+        }
+        row.kind = SETTINGS_FIELD_READONLY;
+        row.bool_value = false;
+        row.combo_index = -1;
+    }
 }

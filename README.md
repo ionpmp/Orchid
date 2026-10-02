@@ -28,6 +28,7 @@ Every gesture has a textual command. Every command can spawn a graphical widget.
 - **Security** — KDBX4 vault, Windows Hello, age encrypt/reveal
 - **Theming & i18n** — nine bundled themes + JSON user themes, 11 Fluent locales including RTL (`ar-SA`)
 - **Text mode** — `orchid --tui` lists a local folder and previews small text files. It does not open the desktop window
+- **Policy** — `policy.toml` beside the config file makes listed settings read-only. An optional https address refreshes that file at startup. `audit.log` stays on this computer
 
 How to use it: [User guide](docs/user/README.md). How to deploy and configure it: [Admin guide](docs/admin/README.md).
 

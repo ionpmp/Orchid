@@ -35,6 +35,7 @@ pub mod config;
 pub mod diagnostics;
 pub mod error;
 pub mod paths;
+pub mod policy;
 pub mod state;
 
 pub use backup::{default_backup_filename, write_backup_zip};
@@ -42,12 +43,16 @@ pub use config::{
     load_network_bookmarks, merge_network_places, save_network_bookmarks, AgentConfig,
     AppearanceConfig, Config, ConfigLoader, ConfigWatcher, Density, FileManagerSectionConfig,
     GeneralConfig, Hand, InputConfig, LocaleConfig, NetworkMountConfig, OnboardingConfig,
-    OrchidConfig, PenDoubleTapAction, PhotosConfig, PrivacyConfig, SearchConfig, ShellConfig,
-    ShortcutsConfig, TerminalConfig, DEFAULT_CONFIG_TOML,
+    OrchidConfig, PenDoubleTapAction, PhotosConfig, PolicyConfig, PrivacyConfig, SearchConfig,
+    ShellConfig, ShortcutsConfig, TerminalConfig, DEFAULT_CONFIG_TOML,
 };
 pub use diagnostics::{default_support_filename, write_support_bundle, SupportBundleExtras};
 pub use error::{Result, StorageError};
 pub use paths::OrchidPaths;
+pub use policy::{
+    append_audit, audit_path, install_policy_body, load_policy, locks_from_file, policy_path,
+    policy_url_allowed, InstallPolicy, PolicyDocument, PolicyLoad, PolicyLocks, POLICY_MAX_BYTES,
+};
 pub use state::{
     bincode_decode, bincode_encode, CacheEntry, CacheKind, ColorLabel, FileManagerTab, FileTag,
     GridPosition, HistoryEntry, LifecycleState, Migration, NotificationCenterItem,

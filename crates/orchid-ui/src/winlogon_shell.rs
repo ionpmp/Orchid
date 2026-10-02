@@ -53,7 +53,13 @@ pub fn restore_winlogon_shell(config_file: &Path) -> Result<(), String> {
     let _remembered = sync_shell(&mut cfg.shell);
     #[cfg(not(windows))]
     cfg.shell.previous.clear();
-    ConfigLoader::save(&cfg, config_file).map_err(|e| e.to_string())
+    ConfigLoader::save(&cfg, config_file).map_err(|e| e.to_string())?;
+    let _ = orchid_storage::append_audit(
+        &orchid_storage::audit_path(config_file),
+        "shell-replace",
+        "off",
+    );
+    Ok(())
 }
 
 /// Apply `shell` to the HKCU Winlogon value. Returns whether `previous` changed.

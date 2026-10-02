@@ -12,7 +12,10 @@ use slint::VecModel;
 use tracing::warn;
 
 use orchid_i18n::LocaleManager;
-use orchid_storage::{ConfigLoader, OrchidConfig};
+use orchid_storage::{
+    append_audit, audit_path, locks_from_file, policy_path, policy_url_allowed, ConfigLoader,
+    OrchidConfig,
+};
 
 use crate::error::{Result, UiError};
 use crate::slint_generated::{
@@ -69,12 +72,14 @@ impl MainWindowController {
         let hint = self.locale.tr("settings-panel-hint").into();
         let coming_soon = SharedString::default();
         let cfg = self.config.read();
+        let locks = locks_from_file(&policy_path(&self.config_file_path));
         let fields = build_settings_fields(
             &section,
             &cfg,
             &self.locale,
             &self.theme,
             &self.command_registry,
+            &locks,
         );
         drop(cfg);
         sync_vec_model(
@@ -105,6 +110,15 @@ impl MainWindowController {
         }
         if section == "marketplace" {
             self.apply_marketplace_field(key, value);
+            return;
+        }
+        let locks = locks_from_file(&policy_path(&self.config_file_path));
+        if locks.is_locked(section, key) {
+            self.push_notification(
+                &self.locale.tr("settings-section-policy"),
+                &self.locale.tr("settings-policy-locked"),
+                2,
+            );
             return;
         }
         let mut cfg = self.config.write();
@@ -182,6 +196,23 @@ impl MainWindowController {
                 &self.locale.tr(body_key),
                 1,
             );
+            let detail = if shell_on { "on" } else { "off" };
+            if let Err(err) =
+                append_audit(&audit_path(&self.config_file_path), "shell-replace", detail)
+            {
+                warn!(error = %err, "audit shell");
+            }
+        }
+        if section == "policy" && key == "url" && hot_ok {
+            let url = self.config.read().policy.url.clone();
+            let config_file = self.config_file_path.clone();
+            let this = Arc::downgrade(self);
+            spawn::spawn_local_compat(async move {
+                crate::policy::refresh_policy(&config_file, &url).await;
+                if let Some(c) = this.upgrade() {
+                    c.sync_settings_global();
+                }
+            });
         }
     }
 
@@ -1021,6 +1052,13 @@ fn apply_settings_field(
         }
         ("shell", "replace") => {
             cfg.shell.replace = parse_settings_bool(value)?;
+        }
+        ("policy", "url") => {
+            let trimmed = value.trim();
+            if !policy_url_allowed(trimmed) {
+                return Err("policy address must be empty or https".into());
+            }
+            cfg.policy.url = trimmed.to_string();
         }
         _ => return Err(format!("field `{section}.{key}` is not editable")),
     }

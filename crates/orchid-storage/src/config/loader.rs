@@ -148,6 +148,11 @@ hint-mode-enabled = false
 # orchid.exe --restore-shell clears replace and puts Explorer back.
 # replace = false
 # previous = ""
+
+# [policy]
+# Optional https address of a policy.toml. Orchid reads it at startup into
+# policy.toml beside this file. A failed read leaves the previous file.
+# url = "https://example.com/orchid/policy.toml"
 "#;
 
 /// Load / save / reload API for the TOML configuration.

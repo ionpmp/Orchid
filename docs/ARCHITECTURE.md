@@ -3,7 +3,8 @@
 This document describes the **current** workspace: 13 crates, a single
 desktop process, rclone RC + CLI, PTY children, and WebView2 overlays.
 Planned systems (WASM plugins, mobile companion) are not in
-the tree — see [ROADMAP.md](ROADMAP.md).
+the tree — see [ROADMAP.md](ROADMAP.md). A local `policy.toml` can lock
+settings; it is not a management server.
 
 ## High-level diagram
 

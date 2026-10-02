@@ -769,6 +769,9 @@ impl OrchidApp {
 
         apply_command_shortcut_overrides(&command_registry, &config.read().shortcuts);
 
+        let policy_url = config.read().policy.url.clone();
+        crate::policy::refresh_policy(&paths.config_file, &policy_url).await;
+
         crate::autostart::sync_open_on_startup(&config.read().general);
         if crate::winlogon_shell::sync_shell(&mut config.write().shell) {
             let snapshot = config.read().clone();

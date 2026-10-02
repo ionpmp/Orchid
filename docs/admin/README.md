@@ -3,7 +3,9 @@
 Operator docs for the current pre-alpha binary. End-user how-to:
 [user guide](../user/README.md). Planned work: [roadmap](../ROADMAP.md).
 
-There is no enterprise control plane. Update checks use public GitHub
+There is no management server. `policy.toml` beside `config.toml` can lock
+a few settings, and an optional https address refreshes that file at
+startup. Update checks use public GitHub
 releases and do not install binaries. Telemetry is opt-in.
 
 | Chapter | Contents |

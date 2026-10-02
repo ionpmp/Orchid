@@ -58,6 +58,21 @@ impl MainWindowController {
             let Some(c) = this.upgrade() else {
                 return;
             };
+            let audit_detail = match &result {
+                Ok(ReleaseOffer::Newer { .. }) => "newer",
+                Ok(ReleaseOffer::Current) => "current",
+                Ok(ReleaseOffer::None) => "none",
+                Err(()) => "failed",
+            };
+            if let Ok(paths) = orchid_storage::OrchidPaths::resolve() {
+                if let Err(err) = orchid_storage::append_audit(
+                    &orchid_storage::audit_path(&paths.config_file),
+                    "update-check",
+                    audit_detail,
+                ) {
+                    warn!(error = %err, "audit update check");
+                }
+            }
             let title = c.locale.tr("update-check-title");
             match result {
                 Ok(ReleaseOffer::Newer { version, page }) => {

@@ -13,6 +13,7 @@ mod html_webview;
 pub mod http;
 mod marketplace;
 mod os_notify;
+mod policy;
 mod release;
 mod single_instance;
 mod slint_generated;

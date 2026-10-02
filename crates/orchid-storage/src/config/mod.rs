@@ -20,8 +20,8 @@ pub use loader::{ConfigLoader, DEFAULT_CONFIG_TOML};
 pub use schema::{
     AgentConfig, AppearanceConfig, Density, FileManagerSectionConfig, GeneralConfig, Hand,
     InputConfig, LocaleConfig, NetworkMountConfig, OnboardingConfig, OrchidConfig,
-    PenDoubleTapAction, PhotosConfig, PrivacyConfig, SearchConfig, ShellConfig, ShortcutsConfig,
-    TerminalConfig,
+    PenDoubleTapAction, PhotosConfig, PolicyConfig, PrivacyConfig, SearchConfig, ShellConfig,
+    ShortcutsConfig, TerminalConfig,
 };
 pub use watcher::ConfigWatcher;
 

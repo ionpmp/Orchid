@@ -32,4 +32,3 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 
 - [ ] Mobile companion (Android / iOS)
 - [ ] Plugin system (WASM, capability-based)
-- [ ] Enterprise edition (centralized management)

@@ -106,7 +106,36 @@ value so the machine default is used. Orchid writes only
 `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Winlogon`.
 `orchid.exe --restore-shell` clears `replace` and puts the previous shell
 back before the single-instance check, so it still works while Orchid is
-the running shell.
+the running shell. Turning the switch on or off, and `--restore-shell`,
+append a line to `audit.log`.
+
+## `[policy]`
+
+Settings → Policy, and `[policy]` in `config.toml`. `url` is an optional
+https address. Empty uses only the local file. At startup Orchid reads
+that address into `policy.toml` in the same directory. A network error, a
+redirect, or a document that does not parse leaves the previous file.
+The audit log is `audit.log` beside `config.toml`. It records policy
+apply, update checks, and shell changes, and it is not sent anywhere.
+
+`policy.toml` marks settings read-only. It does not change their values:
+
+```toml
+[lock]
+auto-update = true
+telemetry = true
+telemetry-endpoint = false
+open-on-startup = true
+os-notifications = false
+theme = false
+language = false
+shell-replace = true
+policy-url = false
+```
+
+A missing key stays editable. Unknown keys are ignored. Editing
+`config.toml` by hand still changes a locked value; the Settings panel
+refuses the change.
 
 ## Text mode
 

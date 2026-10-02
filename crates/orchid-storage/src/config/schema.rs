@@ -41,6 +41,20 @@ pub struct OrchidConfig {
     pub photos: PhotosConfig,
     /// Per-user Windows sign-in shell. Off until enabled.
     pub shell: ShellConfig,
+    /// Optional HTTPS address of a `policy.toml`. Empty uses only the local file.
+    pub policy: PolicyConfig,
+}
+
+/// Where to read `policy.toml` from at startup.
+///
+/// The document itself lives beside `config.toml`. [`Self::url`] is stored
+/// here so a fetched policy cannot erase the address. Empty means the local
+/// file is the only source. A failed fetch leaves that file unchanged.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct PolicyConfig {
+    /// HTTPS URL of a policy document. Empty skips the fetch.
+    pub url: String,
 }
 
 /// Terminal grid selection.
@@ -614,6 +628,7 @@ mod tests {
         assert!(!cfg.photos.detect_faces);
         assert!(!cfg.shell.replace);
         assert!(cfg.shell.previous.is_empty());
+        assert!(cfg.policy.url.is_empty());
     }
 
     #[test]

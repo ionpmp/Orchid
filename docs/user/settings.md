@@ -20,6 +20,7 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 | Agent | Enable Ollama or an OpenAI-compatible chat, endpoint, model, API key | — |
 | Photos | Auto-tag from folder names; find faces in the open folder | — |
 | Shell | Replace Explorer at the next sign-in for this Windows user | — |
+| Policy | HTTPS address of a policy file | — |
 
 Widget options stay on each widget.
 
@@ -39,6 +40,16 @@ place. Turning the shell switch off writes the previous per-user shell
 back. If there was none, Orchid deletes the per-user value and the machine
 default returns. If the desktop does not appear, open Task Manager, choose
 Run, and start `explorer.exe`. Then run `orchid.exe --restore-shell`.
+
+## Policy
+
+Settings → Policy. `policy.toml` sits next to `config.toml`. Entries under
+`[lock]` make those settings read-only in this panel. The values in
+`config.toml` are not rewritten. An empty policy address uses only that
+local file. An https address is read when Orchid starts and when you save
+the address. If the read fails, the previous `policy.toml` stays.
+`audit.log` in the same folder records policy apply, update checks, and
+shell changes. It is not uploaded.
 
 ## Photos
 
