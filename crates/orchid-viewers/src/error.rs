@@ -104,6 +104,22 @@ pub enum ViewerError {
     #[error("viewer-pdf-comment-empty")]
     PdfCommentEmpty,
 
+    /// A form fill was requested without a `Name=value` assignment.
+    #[error("viewer-pdf-form-empty")]
+    PdfFormEmpty,
+
+    /// No AcroForm field has the requested name.
+    #[error("viewer-pdf-form-missing")]
+    PdfFormMissing,
+
+    /// The named field is not a text box, checkbox, or radio button.
+    #[error("viewer-pdf-form-unsupported")]
+    PdfFormUnsupported,
+
+    /// The named field is marked read-only.
+    #[error("viewer-pdf-form-readonly")]
+    PdfFormReadOnly,
+
     /// libmpv shared library could not be loaded.
     #[error(
         "Media playback unavailable: place mpv-1.dll (or libmpv-2.dll) next to the executable or see docs/BUILDING.md"

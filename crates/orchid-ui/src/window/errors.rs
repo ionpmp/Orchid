@@ -22,6 +22,10 @@ pub(crate) fn viewer_localized_error(locale: &LocaleManager, err: &str) -> Strin
         | "viewer-archive-cannot-extract-folder"
         | "viewer-pdf-highlight-empty"
         | "viewer-pdf-comment-empty"
+        | "viewer-pdf-form-empty"
+        | "viewer-pdf-form-missing"
+        | "viewer-pdf-form-unsupported"
+        | "viewer-pdf-form-readonly"
         | "viewer-document-passphrase-required" => locale.tr(msg),
         _ if msg.starts_with("unsupported file type") => locale.tr("viewer-unsupported"),
         _ if msg.contains("identity required") => locale.tr("viewer-document-passphrase-required"),

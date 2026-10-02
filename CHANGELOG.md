@@ -85,6 +85,10 @@ release yet.
   universal search (files + commands + settings).
 
 #### Viewers
+- **PDF AcroForm fill-in:** the Form bar lists existing fields and writes
+  `Name=value` into text boxes, checkboxes, and radio buttons. The page
+  reloads in place, or a sibling `*-form.pdf` is written when the file is
+  not writable.
 - **Spreadsheet and slide preview:** `.xlsx` / `.xlsm` open as tables and
   `.pptx` / `.pptm` / `.ppsx` open as slide cards (speaker notes included).
   `.xlsb` still opens in the archive browser.

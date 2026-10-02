@@ -1109,6 +1109,14 @@ viewer-pdf-highlighted = Saved { $path }
 viewer-pdf-commented = Saved { $path }
 viewer-pdf-highlight-empty = Select text to highlight
 viewer-pdf-comment-empty = Select text to comment
+viewer-pdf-form = Form
+viewer-pdf-form-placeholder = Name=value
+viewer-pdf-form-fill = Fill
+viewer-pdf-filled = Saved { $path }
+viewer-pdf-form-empty = Enter Name=value
+viewer-pdf-form-missing = No form field with that name
+viewer-pdf-form-unsupported = That field cannot be filled
+viewer-pdf-form-readonly = That field is read-only
 viewer-pdf-match-case = Match case
 viewer-image-info = { $width } × { $height } · { $size } · { $format }
 viewer-image-format-png = PNG

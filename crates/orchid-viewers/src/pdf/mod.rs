@@ -71,6 +71,7 @@ pub struct PdfViewer {
     find_hits: RwLock<Vec<FindHit>>,
     find_index: RwLock<i32>,
     highlight_rects: RwLock<Vec<PtsRect>>,
+    form_fields: RwLock<Vec<ops::FormField>>,
 }
 
 impl std::fmt::Debug for PdfViewer {
@@ -115,6 +116,7 @@ impl PdfViewer {
             find_hits: RwLock::new(Vec::new()),
             find_index: RwLock::new(0),
             highlight_rects: RwLock::new(Vec::new()),
+            form_fields: RwLock::new(Vec::new()),
         }
     }
 
@@ -128,6 +130,7 @@ impl PdfViewer {
         *self.find_match_case.write() = false;
         self.outline.write().clear();
         *self.layer.write() = None;
+        self.form_fields.write().clear();
     }
 
     /// Update the viewport used for fit-width / fit-page math.
@@ -693,15 +696,52 @@ impl PdfViewer {
         Ok(dest)
     }
 
+    /// Write `Name=value` into an existing AcroForm field.
+    ///
+    /// Text, checkbox (`true` / `yes` / `on` / `1`), and radio (export value)
+    /// fields are filled. Falls back to a sibling `*-form.pdf` when the open
+    /// file is not writable. Reloads the payload when the write stays in place.
+    ///
+    /// # Errors
+    ///
+    /// Empty assignment, unknown / read-only / unsupported fields, or Pdfium / I/O.
+    pub async fn fill_form(&self, assignment: &str) -> Result<PathBuf> {
+        let (name, value) = ops::split_form_assignment(assignment)?;
+        let name = name.to_string();
+        let value = value.to_string();
+        let src = self.local_path()?;
+        let bytes = self.payload_bytes()?;
+        let page = (*self.current_page.read()).max(1);
+        let dest = tokio::task::spawn_blocking({
+            let src = src.clone();
+            move || match ops::save_form_value(bytes.as_slice(), &name, &value, &src) {
+                Ok(path) => Ok(path),
+                Err(error) if form_error_can_fallback(&error) => {
+                    tracing::debug!(error = %error, path = %src.display(), "in-place form fill failed");
+                    ops::save_form_value_sibling(bytes.as_slice(), &name, &value, &src)
+                }
+                Err(error) => Err(error),
+            }
+        })
+        .await
+        .map_err(|e| ViewerError::PdfRender {
+            page,
+            reason: format!("join: {e}"),
+        })??;
+        if dest == src {
+            let fresh = tokio::fs::read(&dest).await.map_err(ViewerError::from)?;
+            self.adopt_bytes(Arc::new(fresh), page).await?;
+        }
+        Ok(dest)
+    }
+
     async fn adopt_bytes(&self, bytes: Arc<Vec<u8>>, page: u32) -> Result<()> {
         let viewport = *self.viewport.read();
         let fit_mode = *self.fit_mode.read();
         let zoom = *self.zoom.read();
         let bytes_for_worker = Arc::clone(&bytes);
-        let (session, rendered) = tokio::task::spawn_blocking(move || {
-            let (session, _) = render::open_document(bytes_for_worker)?;
-            let rendered = render::render_page(session, page, viewport, fit_mode, zoom)?;
-            Ok::<_, ViewerError>((session, rendered))
+        let (session, rendered, fields) = tokio::task::spawn_blocking(move || {
+            open_rendered(bytes_for_worker, page, viewport, fit_mode, zoom)
         })
         .await
         .map_err(|e| ViewerError::PdfRender {
@@ -716,9 +756,33 @@ impl PdfViewer {
         *self.current_page.write() = rendered.current_page;
         *self.zoom.write() = rendered.zoom;
         *self.rendered.write() = Some(rendered);
+        *self.form_fields.write() = fields;
         self.reload_layer().await;
         Ok(())
     }
+}
+
+fn open_rendered(
+    bytes: Arc<Vec<u8>>,
+    page: u32,
+    viewport: (f32, f32),
+    fit_mode: FitMode,
+    zoom: f32,
+) -> Result<(render::PdfSessionId, RenderedPage, Vec<ops::FormField>)> {
+    let fields = ops::list_form_fields(bytes.as_slice()).unwrap_or_default();
+    let (session, _) = render::open_document(bytes)?;
+    let rendered = render::render_page(session, page, viewport, fit_mode, zoom)?;
+    Ok((session, rendered, fields))
+}
+
+fn form_error_can_fallback(error: &ViewerError) -> bool {
+    !matches!(
+        error,
+        ViewerError::PdfFormEmpty
+            | ViewerError::PdfFormMissing
+            | ViewerError::PdfFormUnsupported
+            | ViewerError::PdfFormReadOnly
+    )
 }
 
 #[async_trait]
@@ -750,10 +814,8 @@ impl Viewer for PdfViewer {
         let path_for_task = path.clone();
         let bytes = Arc::new(bytes);
         let bytes_for_worker = Arc::clone(&bytes);
-        let (session, rendered) = tokio::task::spawn_blocking(move || {
-            let (session, _) = render::open_document(bytes_for_worker)?;
-            let rendered = render::render_page(session, 1, viewport, fit_mode, zoom)?;
-            Ok::<_, ViewerError>((session, rendered))
+        let (session, rendered, fields) = tokio::task::spawn_blocking(move || {
+            open_rendered(bytes_for_worker, 1, viewport, fit_mode, zoom)
         })
         .await
         .map_err(|e| ViewerError::PdfRender {
@@ -776,6 +838,7 @@ impl Viewer for PdfViewer {
         self.find_hits.write().clear();
         self.find_query.write().clear();
         *self.find_index.write() = 0;
+        *self.form_fields.write() = fields;
         self.reload_outline().await;
         self.reload_layer().await;
         Ok(())
@@ -844,6 +907,7 @@ impl Viewer for PdfViewer {
             find_match_index: *self.find_index.read(),
             find_match_count,
             has_selection,
+            form_summary: ops::form_summary(&self.form_fields.read()),
         })
     }
 

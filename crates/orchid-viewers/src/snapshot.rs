@@ -394,6 +394,8 @@ pub struct PdfSnapshot {
     /// Total matches for the last find query.
     pub find_match_count: i32,
     pub has_selection: bool,
+    /// `Name=value` pairs for AcroForm fields, capped for the status line.
+    pub form_summary: String,
 }
 
 /// Text snapshot.

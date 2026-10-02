@@ -423,6 +423,11 @@ fn empty_viewer_pdf_model(locale: &LocaleManager) -> ViewerPdfModel {
         highlight_label: locale.tr("viewer-pdf-highlight").into(),
         comment_label: locale.tr("viewer-pdf-comment").into(),
         match_case_label: locale.tr("viewer-pdf-match-case").into(),
+        has_form: false,
+        form_summary: SharedString::new(),
+        form_label: locale.tr("viewer-pdf-form").into(),
+        form_placeholder: locale.tr("viewer-pdf-form-placeholder").into(),
+        form_fill_label: locale.tr("viewer-pdf-form-fill").into(),
     }
 }
 
@@ -2147,7 +2152,14 @@ fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -
         page_image: image,
         zoom: s.zoom,
         fit_mode: i32::from(s.fit_mode),
-        info_text: locale.tr_args("viewer-pdf-info", &info_args).into(),
+        info_text: {
+            let base = locale.tr_args("viewer-pdf-info", &info_args);
+            if s.form_summary.is_empty() {
+                base.into()
+            } else {
+                format!("{base} · {}", s.form_summary).into()
+            }
+        },
         path_display: s.path_display.clone().into(),
         available,
         unavailable_reason: if available {
@@ -2194,6 +2206,11 @@ fn build_pdf_snapshot(s: &orchid_viewers::PdfSnapshot, locale: &LocaleManager) -
         highlight_label: locale.tr("viewer-pdf-highlight").into(),
         comment_label: locale.tr("viewer-pdf-comment").into(),
         match_case_label: locale.tr("viewer-pdf-match-case").into(),
+        has_form: !s.form_summary.is_empty(),
+        form_summary: s.form_summary.clone().into(),
+        form_label: locale.tr("viewer-pdf-form").into(),
+        form_placeholder: locale.tr("viewer-pdf-form-placeholder").into(),
+        form_fill_label: locale.tr("viewer-pdf-form-fill").into(),
     }
 }
 

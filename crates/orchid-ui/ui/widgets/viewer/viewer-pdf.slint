@@ -22,12 +22,15 @@ export component ViewerPdfView inherits Rectangle {
     callback print();
     callback highlight();
     callback comment();
+    callback fill-form(string);
 
     background: transparent;
 
     property <string> page-draft: "" + model.current-page;
     property <bool> page-editing: false;
     property <bool> find-open: false;
+    property <bool> form-open: false;
+    property <string> form-draft: "";
     property <string> find-query: "";
     property <bool> find-match-case: false;
     property <bool> outline-open: false;
@@ -59,7 +62,7 @@ export component ViewerPdfView inherits Rectangle {
 
         key-pressed(event) => {
             // Let the page-number / find fields keep arrows / digits.
-            if (page-input.has-focus || find-input.has-focus) {
+            if (page-input.has-focus || find-input.has-focus || form-input.has-focus) {
                 return reject;
             }
             if (event.modifiers.control && (event.text == "f" || event.text == "F")) {
@@ -242,6 +245,21 @@ export component ViewerPdfView inherits Rectangle {
                         clicked => { root.comment(); pdf-keys.focus(); }
                     }
 
+                    DocToolBtn {
+                        label: model.form-label;
+                        tip: model.form-label;
+                        enabled: model.has-form;
+                        active: root.form-open;
+                        clicked => {
+                            root.form-open = !root.form-open;
+                            if (root.form-open) {
+                                form-input.focus();
+                            } else {
+                                pdf-keys.focus();
+                            }
+                        }
+                    }
+
                     Rectangle {
                         width: Theme.hairline;
                         height: Theme.space-8;
@@ -390,6 +408,89 @@ export component ViewerPdfView inherits Rectangle {
             }
 
             if root.find-open : Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
+
+            Rectangle {
+                height: root.form-open ? Theme.control-xs + Theme.space-2 : 0px;
+                clip: true;
+                background: Theme.surface-sunken;
+
+                animate height { duration: Theme.motion-fast; easing: ease-out; }
+
+                HorizontalLayout {
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-2;
+                    spacing: Theme.space-1;
+                    alignment: center;
+
+                    Text {
+                        text: model.form-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+
+                    if model.form-summary != "" : Text {
+                        min-width: 80px;
+                        max-width: 220px;
+                        text: model.form-summary;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: Theme.control-xs;
+                        y: (parent.height - self.height) / 2;
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        border-width: Theme.hairline;
+                        border-color: Theme.border-default;
+
+                        if root.form-draft == "" : Text {
+                            x: Theme.space-2;
+                            width: parent.width - Theme.space-4;
+                            height: 100%;
+                            text: model.form-placeholder;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                        }
+
+                        form-input := TextInput {
+                            x: Theme.space-2;
+                            width: parent.width - Theme.space-4;
+                            height: 100%;
+                            text <=> root.form-draft;
+                            single-line: true;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            key-pressed(event) => {
+                                if (event.text == Key.Return) {
+                                    root.fill-form(root.form-draft);
+                                    return accept;
+                                }
+                                if (event.text == Key.Escape) {
+                                    root.form-open = false;
+                                    pdf-keys.focus();
+                                    return accept;
+                                }
+                                return reject;
+                            }
+                        }
+                    }
+
+                    DocToolBtn {
+                        label: model.form-fill-label;
+                        tip: model.form-fill-label;
+                        clicked => { root.fill-form(root.form-draft); }
+                    }
+                }
+            }
+
+            if root.form-open : Rectangle { height: Theme.hairline; background: Theme.border-subtle; }
 
             // Page canvas + outline
             Rectangle {

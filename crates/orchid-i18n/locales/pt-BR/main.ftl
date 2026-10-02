@@ -764,6 +764,14 @@ viewer-pdf-highlighted = Salvo { $path }
 viewer-pdf-commented = Salvo { $path }
 viewer-pdf-highlight-empty = Selecione texto para realçar
 viewer-pdf-comment-empty = Selecione texto para comentar
+viewer-pdf-form = Formulário
+viewer-pdf-form-placeholder = Name=value
+viewer-pdf-form-fill = Preencher
+viewer-pdf-filled = Salvo { $path }
+viewer-pdf-form-empty = Digite Name=value
+viewer-pdf-form-missing = Não há campo com esse nome
+viewer-pdf-form-unsupported = Esse campo não pode ser preenchido
+viewer-pdf-form-readonly = Esse campo é somente leitura
 viewer-pdf-match-case = Diferenciar maiúsculas
 viewer-image-info = { $width } × { $height } · { $size } · { $format }
 viewer-image-format-avif = AVIF

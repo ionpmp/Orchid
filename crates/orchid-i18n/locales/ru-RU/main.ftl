@@ -754,6 +754,14 @@ viewer-pdf-highlighted = Сохранено { $path }
 viewer-pdf-commented = Сохранено { $path }
 viewer-pdf-highlight-empty = Выберите текст для выделения
 viewer-pdf-comment-empty = Выберите текст для комментария
+viewer-pdf-form = Форма
+viewer-pdf-form-placeholder = Name=value
+viewer-pdf-form-fill = Заполнить
+viewer-pdf-filled = Сохранено { $path }
+viewer-pdf-form-empty = Введите Name=value
+viewer-pdf-form-missing = Поля с таким именем нет
+viewer-pdf-form-unsupported = Это поле нельзя заполнить
+viewer-pdf-form-readonly = Это поле только для чтения
 viewer-pdf-match-case = Учитывать регистр
 viewer-image-info = { $width } × { $height } · { $size } · { $format }
 viewer-image-format-avif = AVIF

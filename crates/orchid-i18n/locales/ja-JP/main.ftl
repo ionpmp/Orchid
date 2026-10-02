@@ -764,6 +764,14 @@ viewer-pdf-highlighted = 保存しました { $path }
 viewer-pdf-commented = 保存しました { $path }
 viewer-pdf-highlight-empty = ハイライトするテキストを選択してください
 viewer-pdf-comment-empty = コメントするテキストを選択してください
+viewer-pdf-form = フォーム
+viewer-pdf-form-placeholder = Name=value
+viewer-pdf-form-fill = 入力
+viewer-pdf-filled = 保存しました { $path }
+viewer-pdf-form-empty = Name=value を入力してください
+viewer-pdf-form-missing = その名前のフィールドはありません
+viewer-pdf-form-unsupported = このフィールドは入力できません
+viewer-pdf-form-readonly = このフィールドは読み取り専用です
 viewer-pdf-match-case = 大文字と小文字を区別
 viewer-image-info = { $width } × { $height } · { $size } · { $format }
 viewer-image-format-avif = AVIF

@@ -764,6 +764,14 @@ viewer-pdf-highlighted = Gespeichert { $path }
 viewer-pdf-commented = Gespeichert { $path }
 viewer-pdf-highlight-empty = Text zum Hervorheben auswählen
 viewer-pdf-comment-empty = Text zum Kommentieren auswählen
+viewer-pdf-form = Formular
+viewer-pdf-form-placeholder = Name=value
+viewer-pdf-form-fill = Ausfüllen
+viewer-pdf-filled = Gespeichert { $path }
+viewer-pdf-form-empty = Name=Wert eingeben
+viewer-pdf-form-missing = Kein Formularfeld mit diesem Namen
+viewer-pdf-form-unsupported = Dieses Feld kann nicht ausgefüllt werden
+viewer-pdf-form-readonly = Dieses Feld ist schreibgeschützt
 viewer-pdf-match-case = Groß/Klein
 viewer-image-info = { $width } × { $height } · { $size } · { $format }
 viewer-image-format-avif = AVIF

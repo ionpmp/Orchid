@@ -41,6 +41,7 @@ export component ViewerView inherits Rectangle {
     callback pdf-print();
     callback pdf-highlight();
     callback pdf-comment();
+    callback pdf-fill-form(string);
 
     callback archive-navigate-into(string);
     callback archive-navigate-up();
@@ -161,6 +162,7 @@ export component ViewerView inherits Rectangle {
         print => { root.pdf-print(); }
         highlight => { root.pdf-highlight(); }
         comment => { root.pdf-comment(); }
+        fill-form(assignment) => { root.pdf-fill-form(assignment); }
     }
 
     if model.kind == 5 : ViewerTextView {

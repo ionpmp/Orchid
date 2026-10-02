@@ -273,6 +273,7 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-pdf-print(string);
     callback viewer-pdf-highlight(string);
     callback viewer-pdf-comment(string);
+    callback viewer-pdf-fill(string, string);
 
     callback viewer-archive-navigate-into(string, string);
     callback viewer-archive-navigate-up(string);
@@ -1002,6 +1003,7 @@ export component WidgetFrame inherits Rectangle {
                         pdf-print => { root.viewer-pdf-print(root.model.instance-id); }
                         pdf-highlight => { root.viewer-pdf-highlight(root.model.instance-id); }
                         pdf-comment => { root.viewer-pdf-comment(root.model.instance-id); }
+                        pdf-fill-form(assignment) => { root.viewer-pdf-fill(root.model.instance-id, assignment); }
 
                         archive-navigate-into(path) => { root.viewer-archive-navigate-into(root.model.instance-id, path); }
                         archive-navigate-up => { root.viewer-archive-navigate-up(root.model.instance-id); }

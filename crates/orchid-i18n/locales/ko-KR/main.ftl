@@ -764,6 +764,14 @@ viewer-pdf-highlighted = 저장됨 { $path }
 viewer-pdf-commented = 저장됨 { $path }
 viewer-pdf-highlight-empty = 강조할 텍스트를 선택하세요
 viewer-pdf-comment-empty = 메모할 텍스트를 선택하세요
+viewer-pdf-form = 양식
+viewer-pdf-form-placeholder = Name=value
+viewer-pdf-form-fill = 입력
+viewer-pdf-filled = 저장됨 { $path }
+viewer-pdf-form-empty = Name=value를 입력하세요
+viewer-pdf-form-missing = 해당 이름의 필드가 없습니다
+viewer-pdf-form-unsupported = 이 필드는 입력할 수 없습니다
+viewer-pdf-form-readonly = 이 필드는 읽기 전용입니다
 viewer-pdf-match-case = 대/소문자 구분
 viewer-image-info = { $width } × { $height } · { $size } · { $format }
 viewer-image-format-avif = AVIF

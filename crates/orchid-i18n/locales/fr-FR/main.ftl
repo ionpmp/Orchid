@@ -764,6 +764,14 @@ viewer-pdf-highlighted = Enregistré { $path }
 viewer-pdf-commented = Enregistré { $path }
 viewer-pdf-highlight-empty = Sélectionnez du texte à surligner
 viewer-pdf-comment-empty = Sélectionnez du texte à commenter
+viewer-pdf-form = Formulaire
+viewer-pdf-form-placeholder = Name=value
+viewer-pdf-form-fill = Remplir
+viewer-pdf-filled = Enregistré { $path }
+viewer-pdf-form-empty = Saisissez Name=value
+viewer-pdf-form-missing = Aucun champ de ce nom
+viewer-pdf-form-unsupported = Ce champ ne peut pas être rempli
+viewer-pdf-form-readonly = Ce champ est en lecture seule
 viewer-pdf-match-case = Respecter la casse
 viewer-image-info = { $width } × { $height } · { $size } · { $format }
 viewer-image-format-avif = AVIF

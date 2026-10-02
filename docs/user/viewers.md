@@ -31,7 +31,12 @@ you can stack marks). If that path is not writable, it falls back to a
 sibling `*-hl.pdf`. **Comment** pins a sticky note whose text is the
 current selection (`*-note.pdf` if the open file is not writable).
 
-No AcroForm fill-in.
+**Form** lists existing AcroForm fields (`Name=value`) and fills a text
+box, checkbox (`true` / `yes` / `on` / `1`), or radio button (the value
+must match that button's export value). Type `Name=value` and press
+Fill. The write stays in the open file and the page reloads; if that
+path is not writable, it falls back to a sibling `*-form.pdf`. Combo
+boxes, list boxes, and signatures are shown but not filled.
 
 ## Text
 

@@ -764,6 +764,14 @@ viewer-pdf-highlighted = 已保存 { $path }
 viewer-pdf-commented = 已保存 { $path }
 viewer-pdf-highlight-empty = 请选择要高亮的文本
 viewer-pdf-comment-empty = 请选择要批注的文本
+viewer-pdf-form = 表单
+viewer-pdf-form-placeholder = Name=value
+viewer-pdf-form-fill = 填写
+viewer-pdf-filled = 已保存 { $path }
+viewer-pdf-form-empty = 请输入 Name=value
+viewer-pdf-form-missing = 没有这个名称的字段
+viewer-pdf-form-unsupported = 该字段无法填写
+viewer-pdf-form-readonly = 该字段为只读
 viewer-pdf-match-case = 区分大小写
 viewer-image-info = { $width } × { $height } · { $size } · { $format }
 viewer-image-format-avif = AVIF

@@ -765,6 +765,14 @@ viewer-pdf-highlighted = تم الحفظ { $path }
 viewer-pdf-commented = تم الحفظ { $path }
 viewer-pdf-highlight-empty = حدد نصًا للتمييز
 viewer-pdf-comment-empty = حدد نصًا للتعليق
+viewer-pdf-form = نموذج
+viewer-pdf-form-placeholder = Name=value
+viewer-pdf-form-fill = تعبئة
+viewer-pdf-filled = تم الحفظ { $path }
+viewer-pdf-form-empty = أدخل Name=value
+viewer-pdf-form-missing = لا يوجد حقل بهذا الاسم
+viewer-pdf-form-unsupported = لا يمكن تعبئة هذا الحقل
+viewer-pdf-form-readonly = هذا الحقل للقراءة فقط
 viewer-pdf-match-case = مطابقة حالة الأحرف
 viewer-image-info = { $width } × { $height } · { $size } · { $format }
 viewer-image-format-avif = AVIF
