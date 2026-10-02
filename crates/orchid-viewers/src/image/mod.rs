@@ -21,6 +21,7 @@ pub mod pages;
 pub mod print;
 pub mod raw;
 pub mod slideshow;
+pub mod tonemap;
 pub mod transform;
 pub mod vector;
 

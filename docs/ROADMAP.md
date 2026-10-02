@@ -28,7 +28,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 
 ### Viewers / terminal
 
-- [ ] HDR framebuffer for images (Slint remains 8-bit RGBA)
 - [ ] Terminal inline graphics (sixel + kitty) and optional
       `alacritty_terminal` grid — v1.x
 

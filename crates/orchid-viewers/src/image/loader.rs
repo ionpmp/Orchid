@@ -398,8 +398,13 @@ fn finish_decoded(
     let (bit_depth, color_model) = crate::image::metadata::color_type_label(&img);
     let img = crate::image::exif::apply_orientation(img, orientation);
     let (w, h) = img.dimensions();
-    let mut rgba = img.into_rgba8().into_raw();
+    let (mut rgba, tone_mapped) = crate::image::tonemap::to_display_rgba(img);
     let color = crate::image::color::apply_embedded_icc(&mut rgba, file_bytes);
+    let color_model = if tone_mapped {
+        format!("{color_model} tone-mapped")
+    } else {
+        color_model.to_string()
+    };
     LoadedImage {
         rgba: Arc::new(rgba),
         width: w,
@@ -410,7 +415,7 @@ fn finish_decoded(
         color_dest: color.dest_profile,
         orientation,
         bit_depth,
-        color_model: color_model.to_string(),
+        color_model,
     }
 }
 
@@ -861,6 +866,16 @@ mod tests {
             let loaded = decode_bytes(&bytes, bytes.len() as u64, Some(ext)).unwrap();
             assert_eq!(loaded.format, label, "{ext}");
             assert_eq!(loaded.width, 4);
+            assert!(
+                loaded.color_model.contains("tone-mapped"),
+                "{ext} float pixels should be tone-mapped, model {}",
+                loaded.color_model
+            );
+            assert!(
+                loaded.rgba[0] < 250,
+                "{ext} highlight 1.5 should not clamp to white, got {}",
+                loaded.rgba[0]
+            );
         }
     }
 

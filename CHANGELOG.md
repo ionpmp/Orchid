@@ -85,6 +85,9 @@ release yet.
   universal search (files + commands + settings).
 
 #### Viewers
+- **HDR / OpenEXR display:** scene-linear `.hdr` and `.exr` pixels are
+  tone-mapped into the 8-bit image buffer so highlights above 1.0 stay
+  visible. The status line marks them tone-mapped.
 - **PDF AcroForm fill-in:** the Form bar lists existing fields and writes
   `Name=value` into text boxes, checkboxes, and radio buttons. The page
   reloads in place, or a sibling `*-form.pdf` is written when the file is
@@ -148,8 +151,8 @@ release yet.
   (no upscale), theme / black / white / gray / custom / checkerboard
   backgrounds (alpha), EXIF orientation auto-rotate, ICC color management
   toward the Windows monitor profile (or sRGB). Fullscreen (F11),
-  borderless kiosk, and next-monitor (M). Slint stays 8-bit RGBA — HDR
-  framebuffer presentation is still pending.
+  borderless kiosk, and next-monitor (M). Slint stays 8-bit RGBA; Radiance
+  HDR and OpenEXR are tone-mapped into that buffer.
 - Image folder navigation: next/prev/first/last, go-to-N, random, loop
   at the ends, skip unreadable files, recently viewed list, and jump to
   the folder in the file manager. PgUp/PgDn / Space / arrows (when
