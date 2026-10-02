@@ -11,7 +11,7 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 |---------|----------------|---------------------|
 | General | Open on startup, Windows notifications | Auto-update, telemetry (Disabled) |
 | Appearance | Theme, density, font, reduce motion, follow system | — |
-| Input | Primary hand, mirror edge swipes | Haptics, palm, pen double-tap (TOML only; hidden here) |
+| Input | Primary hand, mirror edge swipes, palm rejection, pen double-tap, haptic feedback | — |
 | Shortcuts | Profile, remaps, leader key/timeout | Leader **binding map** (TOML only) |
 | Locale | Language, date/time format, first day of week | — |
 | Privacy | History, retention, clipboard clear, vault auto-lock | — |

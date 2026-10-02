@@ -407,6 +407,10 @@ settings-value-hand-right = Rechts
 settings-value-pen-double-tap-none = Keine
 settings-value-pen-double-tap-switch-tool = Werkzeug wechseln
 settings-value-pen-double-tap-erase = Radieren
+settings-pen-mode = Stift
+settings-pen-navigates = Der Stift löst Randgesten aus
+settings-pen-held = Der Stift löst keine Gesten aus
+settings-pen-erase = Radieren: der Stift löst keine Gesten aus
 settings-value-sunday = Sonntag
 settings-value-monday = Montag
 

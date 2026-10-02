@@ -407,6 +407,10 @@ settings-value-hand-right = Droite
 settings-value-pen-double-tap-none = Aucun
 settings-value-pen-double-tap-switch-tool = Changer d'outil
 settings-value-pen-double-tap-erase = Effacer
+settings-pen-mode = Stylet
+settings-pen-navigates = Le stylet déclenche les gestes de bord
+settings-pen-held = Le stylet ne déclenche pas de gestes
+settings-pen-erase = Effacer : le stylet ne déclenche pas de gestes
 settings-value-sunday = Dimanche
 settings-value-monday = Lundi
 

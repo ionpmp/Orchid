@@ -407,6 +407,10 @@ settings-value-hand-right = يمين
 settings-value-pen-double-tap-none = لا شيء
 settings-value-pen-double-tap-switch-tool = تبديل الأداة
 settings-value-pen-double-tap-erase = مسح
+settings-pen-mode = القلم
+settings-pen-navigates = القلم يشغّل إيماءات الحافة
+settings-pen-held = القلم لا يشغّل الإيماءات
+settings-pen-erase = مسح: القلم لا يشغّل الإيماءات
 settings-value-sunday = الأحد
 settings-value-monday = الاثنين
 

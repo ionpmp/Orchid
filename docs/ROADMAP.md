@@ -28,9 +28,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 
 ### Network & settings
 
-- [ ] Pen + haptic stack (`haptic-feedback`, `palm-rejection`,
-      `pen-double-tap-action`). Keys stay in `config.toml`; Settings hides
-      the dead rows.
 - [ ] Auto-update and telemetry pipelines (keys exist; UI shows Disabled)
 
 ### Notifications & storage

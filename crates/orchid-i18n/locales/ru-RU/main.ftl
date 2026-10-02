@@ -402,6 +402,10 @@ settings-value-hand-right = Правая
 settings-value-pen-double-tap-none = Нет
 settings-value-pen-double-tap-switch-tool = Сменить инструмент
 settings-value-pen-double-tap-erase = Стереть
+settings-pen-mode = Перо
+settings-pen-navigates = Перо вызывает жесты от края
+settings-pen-held = Перо не вызывает жесты
+settings-pen-erase = Стирание: перо не вызывает жесты
 settings-value-sunday = Воскресенье
 settings-value-monday = Понедельник
 

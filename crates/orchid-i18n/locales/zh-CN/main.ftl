@@ -407,6 +407,10 @@ settings-value-hand-right = 右
 settings-value-pen-double-tap-none = 无
 settings-value-pen-double-tap-switch-tool = 切换工具
 settings-value-pen-double-tap-erase = 擦除
+settings-pen-mode = 笔
+settings-pen-navigates = 笔会触发边缘手势
+settings-pen-held = 笔不会触发手势
+settings-pen-erase = 擦除：笔不会触发手势
 settings-value-sunday = 星期日
 settings-value-monday = 星期一
 

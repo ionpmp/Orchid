@@ -248,6 +248,7 @@ pub struct MainWindowController {
     notifications_persist_due: Mutex<Option<Instant>>,
     onboarding: Arc<RwLock<OnboardingUiState>>,
     gesture_recognizer: Arc<Mutex<GestureRecognizer>>,
+    pen_session: Mutex<orchid_core::PenSession>,
     input_mapper: Arc<InputMapper>,
     recent_files: Arc<RecentFilesStore>,
     password_vault: Arc<orchid_crypto::PasswordVault>,
@@ -567,6 +568,7 @@ impl MainWindowController {
             notifications_persist_due: Mutex::new(None),
             onboarding: Arc::new(RwLock::new(OnboardingUiState::default())),
             gesture_recognizer,
+            pen_session: Mutex::new(orchid_core::PenSession::new()),
             input_mapper,
             recent_files,
             password_vault,
@@ -578,6 +580,7 @@ impl MainWindowController {
             ipc_open_rx: Mutex::new(None),
         });
         this.apply_input_gesture_bindings();
+        this.apply_pen_feedback();
         this.apply_theme()?;
         this.apply_strings()?;
         this.sync_widget_catalog_global();
@@ -864,6 +867,7 @@ impl MainWindowController {
         }
         self.apply_command_shortcut_overrides();
         self.apply_input_gesture_bindings();
+        self.apply_pen_feedback();
         self.apply_theme()?;
         self.apply_strings()?;
         self.apply_app_state_status()?;
@@ -1428,38 +1432,48 @@ impl MainWindowController {
                         if let Some(c) = tw.upgrade() {
                             if let Some(ev) = input::winit_touch_to_orchid(touch, c.window.window())
                             {
-                                let actions = image_touch::on_touch(&ev);
-                                if let Some(inst) = image_touch::last_viewer() {
-                                    for action in actions {
-                                        match action {
-                                            image_touch::ImageTouchAction::Zoom(factor) => {
-                                                spawn::spawn_local_compat(async move {
-                                                    if let Err(e) =
-                                                        orchid_widgets::builtin::viewer::image_zoom_by(
-                                                            inst, factor,
-                                                        )
-                                                        .await
-                                                    {
-                                                        warn!(?e, "viewer pinch zoom");
+                                let kind = input::contact_kind(touch.id);
+                                match c.classify_pointer(ev, kind) {
+                                    orchid_core::PenEffect::Ignore => {}
+                                    orchid_core::PenEffect::ToolChanged {
+                                        gestures_enabled,
+                                        erase,
+                                    } => c.notify_pen_tool(gestures_enabled, erase),
+                                    orchid_core::PenEffect::Forward(ev) => {
+                                        let actions = image_touch::on_touch(&ev);
+                                        if let Some(inst) = image_touch::last_viewer() {
+                                            for action in actions {
+                                                match action {
+                                                    image_touch::ImageTouchAction::Zoom(factor) => {
+                                                        spawn::spawn_local_compat(async move {
+                                                            if let Err(e) =
+                                                                orchid_widgets::builtin::viewer::image_zoom_by(
+                                                                    inst, factor,
+                                                                )
+                                                                .await
+                                                            {
+                                                                warn!(?e, "viewer pinch zoom");
+                                                            }
+                                                        });
                                                     }
-                                                });
-                                            }
-                                            image_touch::ImageTouchAction::Pan(dx, dy) => {
-                                                spawn::spawn_local_compat(async move {
-                                                    if let Err(e) =
-                                                        orchid_widgets::builtin::viewer::image_pan(
-                                                            inst, dx, dy,
-                                                        )
-                                                        .await
-                                                    {
-                                                        warn!(?e, "viewer two-finger pan");
+                                                    image_touch::ImageTouchAction::Pan(dx, dy) => {
+                                                        spawn::spawn_local_compat(async move {
+                                                            if let Err(e) =
+                                                                orchid_widgets::builtin::viewer::image_pan(
+                                                                    inst, dx, dy,
+                                                                )
+                                                                .await
+                                                            {
+                                                                warn!(?e, "viewer two-finger pan");
+                                                            }
+                                                        });
                                                     }
-                                                });
+                                                }
                                             }
                                         }
+                                        c.feed_touch_input(ev);
                                     }
                                 }
-                                c.feed_touch_input(ev);
                             }
                         }
                     }

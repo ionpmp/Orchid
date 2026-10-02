@@ -724,6 +724,20 @@ fn apply_settings_field(
         ("input", "mirror-edge-swipes") => {
             cfg.input.mirror_edge_swipes = parse_settings_bool(value)?;
         }
+        ("input", "haptic-feedback") => {
+            cfg.input.haptic_feedback = parse_settings_bool(value)?;
+        }
+        ("input", "palm-rejection") => {
+            cfg.input.palm_rejection = parse_settings_bool(value)?;
+        }
+        ("input", "pen-double-tap-action") => {
+            cfg.input.pen_double_tap_action = match value {
+                "none" => orchid_storage::PenDoubleTapAction::None,
+                "switch-tool" => orchid_storage::PenDoubleTapAction::SwitchTool,
+                "erase" => orchid_storage::PenDoubleTapAction::Erase,
+                other => return Err(format!("unknown pen double-tap `{other}`")),
+            };
+        }
         ("shortcuts", "profile") => {
             let Some(profile) = orchid_core::ShortcutProfile::parse(value) else {
                 return Err(format!("unknown shortcut profile `{value}`"));

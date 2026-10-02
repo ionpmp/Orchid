@@ -7,8 +7,8 @@ use slint::ComponentHandle;
 use tracing::{debug, warn};
 
 use orchid_core::{
-    default_bindings_mirrored, CommandRegistry, InputEvent, RecognizedGesture, ScreenBounds,
-    Shortcut, TouchEvent,
+    default_bindings_mirrored, CommandRegistry, Contact, ContactKind, InputEvent, PenDoubleTap,
+    PenEffect, PenPrefs, RecognizedGesture, ScreenBounds, Shortcut, TouchEvent,
 };
 use orchid_widgets::WidgetPayload;
 
@@ -240,6 +240,65 @@ impl MainWindowController {
             .lock()
             .feed(&InputEvent::Touch(touch));
         self.handle_recognized_gestures(gestures);
+    }
+
+    /// Palm-filter a contact, then feed gestures. A pen double-tap may change
+    /// the pen tool instead of producing a gesture.
+    pub(super) fn classify_pointer(
+        self: &Arc<Self>,
+        touch: TouchEvent,
+        kind: ContactKind,
+    ) -> PenEffect {
+        let (palm_rejection, double_tap) = {
+            let cfg = self.config.read();
+            (
+                cfg.input.palm_rejection,
+                map_pen_double_tap(cfg.input.pen_double_tap_action),
+            )
+        };
+        let contact = Contact {
+            id: touch.pointer_id,
+            kind,
+            phase: touch.phase,
+            position: touch.position,
+            pressure: touch.pressure,
+            size: touch.size,
+            timestamp: touch.timestamp,
+        };
+        let prefs = PenPrefs {
+            palm_rejection,
+            double_tap,
+        };
+        self.pen_session.lock().handle(&contact, prefs)
+    }
+
+    pub(super) fn notify_pen_tool(self: &Arc<Self>, gestures_enabled: bool, erase: bool) {
+        let body = if erase {
+            self.locale.tr("settings-pen-erase")
+        } else if gestures_enabled {
+            self.locale.tr("settings-pen-navigates")
+        } else {
+            self.locale.tr("settings-pen-held")
+        };
+        self.push_notification(&self.locale.tr("settings-pen-mode"), &body, 0);
+    }
+
+    /// Ask Windows to keep or suppress touch and pen tap feedback for this window.
+    pub(super) fn apply_pen_feedback(&self) {
+        let enabled = self.config.read().input.haptic_feedback;
+        crate::window::pen_feedback::apply(self.window.window(), enabled);
+    }
+}
+
+pub(super) fn contact_kind(pointer_id: u64) -> ContactKind {
+    crate::window::pen_feedback::contact_kind(pointer_id)
+}
+
+fn map_pen_double_tap(action: orchid_storage::PenDoubleTapAction) -> PenDoubleTap {
+    match action {
+        orchid_storage::PenDoubleTapAction::None => PenDoubleTap::None,
+        orchid_storage::PenDoubleTapAction::SwitchTool => PenDoubleTap::SwitchTool,
+        orchid_storage::PenDoubleTapAction::Erase => PenDoubleTap::Erase,
     }
 }
 

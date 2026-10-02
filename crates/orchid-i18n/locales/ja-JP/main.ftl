@@ -407,6 +407,10 @@ settings-value-hand-right = 右
 settings-value-pen-double-tap-none = なし
 settings-value-pen-double-tap-switch-tool = ツール切替
 settings-value-pen-double-tap-erase = 消去
+settings-pen-mode = ペン
+settings-pen-navigates = ペンで端のジェスチャを実行します
+settings-pen-held = ペンはジェスチャを実行しません
+settings-pen-erase = 消去: ペンはジェスチャを実行しません
 settings-value-sunday = 日曜日
 settings-value-monday = 月曜日
 

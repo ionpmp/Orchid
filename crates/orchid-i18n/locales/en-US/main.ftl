@@ -716,6 +716,10 @@ settings-value-hand-right = Right
 settings-value-pen-double-tap-none = None
 settings-value-pen-double-tap-switch-tool = Switch tool
 settings-value-pen-double-tap-erase = Erase
+settings-pen-mode = Pen
+settings-pen-navigates = The pen will trigger edge gestures
+settings-pen-held = The pen will not trigger gestures
+settings-pen-erase = Erase: the pen will not trigger gestures
 settings-value-sunday = Sunday
 settings-value-monday = Monday
 

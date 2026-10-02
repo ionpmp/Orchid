@@ -357,8 +357,47 @@ pub(crate) fn build_settings_fields(
                 "settings-field-mirror-edge-swipes",
                 cfg.input.mirror_edge_swipes,
             );
-            // Haptics / palm rejection / pen double-tap stay in config.toml for
-            // a future pen stack. Do not show dead Disabled rows in Settings.
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "haptic-feedback",
+                "settings-field-haptic-feedback",
+                cfg.input.haptic_feedback,
+            );
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "palm-rejection",
+                "settings-field-palm-rejection",
+                cfg.input.palm_rejection,
+            );
+            push_settings_combo(
+                &mut rows,
+                locale,
+                "pen-double-tap-action",
+                "settings-field-pen-double-tap",
+                &[
+                    (
+                        "none".into(),
+                        locale.tr("settings-value-pen-double-tap-none").into(),
+                    ),
+                    (
+                        "switch-tool".into(),
+                        locale
+                            .tr("settings-value-pen-double-tap-switch-tool")
+                            .into(),
+                    ),
+                    (
+                        "erase".into(),
+                        locale.tr("settings-value-pen-double-tap-erase").into(),
+                    ),
+                ],
+                match cfg.input.pen_double_tap_action {
+                    orchid_storage::PenDoubleTapAction::None => "none",
+                    orchid_storage::PenDoubleTapAction::SwitchTool => "switch-tool",
+                    orchid_storage::PenDoubleTapAction::Erase => "erase",
+                },
+            );
         }
         "shortcuts" => {
             let profile = orchid_core::ShortcutProfile::parse(&cfg.shortcuts.profile)

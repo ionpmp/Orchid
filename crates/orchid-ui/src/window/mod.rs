@@ -3,6 +3,7 @@
 pub mod errors;
 pub mod main_window;
 pub mod models;
+mod pen_feedback;
 pub mod spawn;
 pub mod startup;
 

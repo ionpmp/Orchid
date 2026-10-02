@@ -14,6 +14,7 @@
 pub mod event;
 pub mod gesture;
 pub mod mapper;
+pub mod pen;
 pub mod zone;
 
 pub use event::{
@@ -25,4 +26,5 @@ pub use mapper::{
     default_bindings, default_bindings_mirrored, edge_panels_mirrored, GesturePattern,
     InputBindings, InputMapper,
 };
+pub use pen::{Contact, ContactKind, PenDoubleTap, PenEffect, PenPrefs, PenSession};
 pub use zone::{ScreenBounds, ScreenZone};

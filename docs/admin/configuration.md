@@ -23,8 +23,15 @@ User JSON themes: `config\themes\` — `id`, `display_name`, `is_dark`,
 
 ## `[input]`
 
-Wired: `primary-hand`, `mirror-edge-swipes`. Stored but unused (no Settings
-rows): `haptic-feedback`, `palm-rejection`, `pen-double-tap-action`.
+`primary-hand`, `mirror-edge-swipes`, `palm-rejection` (default true: finger
+contacts are ignored while a pen is down, including a finger that was already
+moving), `pen-double-tap-action` (`none`, `switch-tool`, `erase`; default
+`switch-tool`). Switch tool toggles whether the pen drives edge gestures.
+Erase holds the pen so it does not drive gestures until the next double-tap.
+`haptic-feedback` (default true) keeps Windows touch and pen tap feedback on
+the Orchid window; off suppresses those four feedbacks. Devices without OS
+tap feedback stay quiet either way. There is no ink canvas: the pen does not
+draw.
 
 ## `[shortcuts]`
 

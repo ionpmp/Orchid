@@ -407,6 +407,10 @@ settings-value-hand-right = Destra
 settings-value-pen-double-tap-none = Nessuno
 settings-value-pen-double-tap-switch-tool = Cambia strumento
 settings-value-pen-double-tap-erase = Cancella
+settings-pen-mode = Penna
+settings-pen-navigates = La penna attiva i gesti dal bordo
+settings-pen-held = La penna non attiva gesti
+settings-pen-erase = Cancella: la penna non attiva gesti
 settings-value-sunday = Domenica
 settings-value-monday = Lunedì
 

@@ -407,6 +407,10 @@ settings-value-hand-right = 오른손
 settings-value-pen-double-tap-none = 없음
 settings-value-pen-double-tap-switch-tool = 도구 전환
 settings-value-pen-double-tap-erase = 지우기
+settings-pen-mode = 펜
+settings-pen-navigates = 펜으로 가장자리 제스처를 실행합니다
+settings-pen-held = 펜은 제스처를 실행하지 않습니다
+settings-pen-erase = 지우기: 펜은 제스처를 실행하지 않습니다
 settings-value-sunday = 일요일
 settings-value-monday = 월요일
 

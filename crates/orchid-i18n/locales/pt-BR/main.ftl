@@ -407,6 +407,10 @@ settings-value-hand-right = Direita
 settings-value-pen-double-tap-none = Nenhum
 settings-value-pen-double-tap-switch-tool = Trocar ferramenta
 settings-value-pen-double-tap-erase = Apagar
+settings-pen-mode = Caneta
+settings-pen-navigates = A caneta dispara gestos de borda
+settings-pen-held = A caneta não dispara gestos
+settings-pen-erase = Apagar: a caneta não dispara gestos
 settings-value-sunday = Domingo
 settings-value-monday = Segunda-feira
 

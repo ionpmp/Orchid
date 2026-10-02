@@ -52,7 +52,7 @@ pub enum InputEvent {
 // ---------------------------------------------------------------------------
 
 /// Touch frame for a single pointer.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TouchEvent {
     /// OS-assigned pointer id, stable for the lifetime of a touch.
     pub pointer_id: u32,

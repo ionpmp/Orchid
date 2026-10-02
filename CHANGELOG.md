@@ -15,6 +15,10 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Pen and palm:** Settings shows haptic feedback, palm rejection, and pen
+  double-tap. A finger is ignored while a pen is down. Double-tap toggles
+  whether the pen drives edge gestures, or holds it in erase. Haptic feedback
+  keeps Windows touch and pen tap feedback on the window.
 - In-app **window manager**: undock / dock widgets, floating placement, z-order,
   minimize / maximize / restore, in-app taskbar, Ctrl+Tab cycle, edge snap,
   schema v2 persistence.

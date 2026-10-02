@@ -407,6 +407,10 @@ settings-value-hand-right = Derecha
 settings-value-pen-double-tap-none = Ninguno
 settings-value-pen-double-tap-switch-tool = Cambiar herramienta
 settings-value-pen-double-tap-erase = Borrar
+settings-pen-mode = Lápiz
+settings-pen-navigates = El lápiz activará gestos de borde
+settings-pen-held = El lápiz no activará gestos
+settings-pen-erase = Borrar: el lápiz no activará gestos
 settings-value-sunday = Domingo
 settings-value-monday = Lunes
 
