@@ -13,6 +13,7 @@ that are not built yet live in the [roadmap](../ROADMAP.md), not here.
 | [Search](search.md) | Universal search and indexed files |
 | [Passwords](passwords.md) | KDBX vault, Hello, TOTP |
 | [Settings](settings.md) | Themes, locales, shortcuts, gestures |
+| [Text mode](tui.md) | `orchid --tui` local folder list |
 
 Jyotish: [jyotish.md](../jyotish.md). Install and `config.toml`:
 [admin guide](../admin/README.md).

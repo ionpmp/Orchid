@@ -27,6 +27,7 @@ Every gesture has a textual command. Every command can spawn a graphical widget.
 - **`.orchid` container** — sealed and linked (CAS) files, age encryption, C2PA, CRDT structured region, stub embeddings (`orchid-format` / `orchid-embed`)
 - **Security** — KDBX4 vault, Windows Hello, age encrypt/reveal
 - **Theming & i18n** — nine bundled themes + JSON user themes, 11 Fluent locales including RTL (`ar-SA`)
+- **Text mode** — `orchid --tui` lists a local folder and previews small text files. It does not open the desktop window
 
 How to use it: [User guide](docs/user/README.md). How to deploy and configure it: [Admin guide](docs/admin/README.md).
 
@@ -35,7 +36,7 @@ How to use it: [User guide](docs/user/README.md). How to deploy and configure it
 | Layer | Technology |
 |---|---|
 | Language | Rust (MSRV 1.98) |
-| GUI | Slint + Skia (Ganesh, winit-skia) |
+| GUI | Slint + Skia (Ganesh, winit-skia); `orchid --tui` uses ratatui |
 | Storage | redb (state) + KDBX4 (passwords) + files (CAS chunks) |
 | Terminal | portable-pty + custom vte emulator |
 | Encryption | age (rage) |
@@ -50,7 +51,7 @@ How to use it: [User guide](docs/user/README.md). How to deploy and configure it
 
 ## Status
 
-**Pre-alpha.** Active development toward v0.1. Planned work (TUI, mobile companion, …): [`docs/ROADMAP.md`](docs/ROADMAP.md). Release notes: [`CHANGELOG.md`](CHANGELOG.md).
+**Pre-alpha.** Active development toward v0.1. Planned work (mobile companion, …): [`docs/ROADMAP.md`](docs/ROADMAP.md). Release notes: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## System requirements
 

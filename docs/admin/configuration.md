@@ -107,3 +107,9 @@ value so the machine default is used. Orchid writes only
 `orchid.exe --restore-shell` clears `replace` and puts the previous shell
 back before the single-instance check, so it still works while Orchid is
 the running shell.
+
+## Text mode
+
+`orchid --tui [path]` lists a local folder in the terminal. See
+[user/tui.md](../user/tui.md). It reads `[locale].language` and does not
+write config.

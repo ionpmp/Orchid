@@ -12,6 +12,8 @@ use orchid_ui::{
     restore_winlogon_shell, InstanceClaim, OrchidApp,
 };
 
+mod tui;
+
 #[cfg(windows)]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -39,6 +41,13 @@ fn main() -> Result<()> {
             .map_err(|e| anyhow::anyhow!(e))
             .context("restore the per-user sign-in shell")?;
         tracing::info!("per-user sign-in shell restored; sign out to return to Explorer");
+        return Ok(());
+    }
+
+    if let Some(launch) = tui::tui_launch(std::env::args_os()) {
+        tui::run_tui(launch)
+            .map_err(|e| anyhow::anyhow!(e))
+            .context("text-mode file browser")?;
         return Ok(());
     }
 

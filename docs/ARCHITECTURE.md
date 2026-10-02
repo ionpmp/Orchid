@@ -2,7 +2,7 @@
 
 This document describes the **current** workspace: 13 crates, a single
 desktop process, rclone RC + CLI, PTY children, and WebView2 overlays.
-Planned systems (WASM plugins) are not in
+Planned systems (WASM plugins, mobile companion) are not in
 the tree — see [ROADMAP.md](ROADMAP.md).
 
 ## High-level diagram
@@ -15,7 +15,7 @@ the tree — see [ROADMAP.md](ROADMAP.md).
 ├─────────────────────────────────────────────────────────────┤
 │  orchid-ui — composition root (OrchidApp) + window + themes   │
 │  orchid-app — thin binary (tracing, Tokio, mimalloc,        │
-│               single-instance named pipe)                  │
+│               single-instance named pipe, `--tui` browser) │
 ├─────────────────────────────────────────────────────────────┤
 │  orchid-widgets — managers + builtins (incl. browser)      │
 │  orchid-viewers — image / PDF / text / archive / DOCX /      │

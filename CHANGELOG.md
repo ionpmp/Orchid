@@ -15,6 +15,9 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Text mode:** `orchid --tui` lists one local folder in the terminal and
+  previews text files up to 256 KiB. It does not start the desktop window,
+  network mounts, or the viewers. Labels follow the configured language.
 - **Sign-in shell:** Settings → Shell can open Orchid instead of Explorer
   at the next sign-in for this Windows user. The previous per-user `Shell`
   value is remembered and written back when the switch is off. An empty
