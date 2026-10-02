@@ -18,6 +18,10 @@ release yet.
 - **Text mode:** `orchid --tui` lists one local folder in the terminal and
   previews text files up to 256 KiB. It does not start the desktop window,
   network mounts, or the viewers. Labels follow the configured language.
+- **Search settings:** Settings → Search edits index roots, exclusion
+  patterns, the size limit, and the text and PDF extraction switches.
+  Those apply to the running index. The ONNX path is read when the index
+  opens. The same fields can be locked from `policy.toml`.
 - **Policy:** `policy.toml` beside `config.toml` marks a fixed set of
   settings read-only in Settings. An optional https address in `[policy]`
   is read at startup into that same file. A failed read leaves the previous

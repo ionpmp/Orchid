@@ -52,10 +52,11 @@ struct DeferredSearchIndex {
     extractor: Arc<orchid_search::Extractor>,
     tags: Arc<orchid_fs::TagManager>,
     registry: Arc<FsProviderRegistry>,
-    scope: orchid_search::IndexScope,
-    roots: Vec<orchid_fs::FsPath>,
+    scope: Arc<Mutex<orchid_search::IndexScope>>,
+    roots: Arc<Mutex<Vec<orchid_fs::FsPath>>>,
     handles: Arc<Mutex<Vec<orchid_fs::WatchHandle>>>,
     started: Arc<std::sync::atomic::AtomicBool>,
+    generation: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl DeferredSearchIndex {
@@ -68,17 +69,51 @@ impl DeferredSearchIndex {
         {
             return;
         }
+        self.schedule_watch(true);
+    }
+
+    /// Apply a new `[search]` scope when it differs. After the first crawl,
+    /// that also replaces directory watches and crawls again. The sentence-model
+    /// path and the extractor set stay as they were when the index opened.
+    fn retarget(&self, scope: orchid_search::IndexScope, roots: Vec<orchid_fs::FsPath>) {
+        let changed = {
+            let mut current_scope = self.scope.lock();
+            let mut current_roots = self.roots.lock();
+            if *current_scope == scope && *current_roots == roots {
+                false
+            } else {
+                *current_scope = scope;
+                *current_roots = roots;
+                true
+            }
+        };
+        if changed && self.started.load(std::sync::atomic::Ordering::SeqCst) {
+            self.schedule_watch(false);
+        }
+    }
+
+    fn schedule_watch(&self, initial_delay: bool) {
+        use std::sync::atomic::Ordering;
+        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let generation_slot = self.generation.clone();
         let watcher = self.watcher.clone();
         let scheduler = self.scheduler.clone();
         let extractor = self.extractor.clone();
         let tags = self.tags.clone();
         let registry = self.registry.clone();
-        let scope = self.scope.clone();
-        let roots = self.roots.clone();
+        let scope_slot = self.scope.clone();
+        let roots_slot = self.roots.clone();
         let handles = self.handles.clone();
         tokio::spawn(async move {
-            // Let the Slint event loop paint the first frame first.
-            tokio::time::sleep(std::time::Duration::from_millis(750)).await;
+            if initial_delay {
+                // Let the Slint event loop paint the first frame first.
+                tokio::time::sleep(std::time::Duration::from_millis(750)).await;
+            }
+            if generation_slot.load(Ordering::SeqCst) != generation {
+                return;
+            }
+            let scope = scope_slot.lock().clone();
+            let roots = roots_slot.lock().clone();
             let mut watch_handles = Vec::new();
             for root in &roots {
                 match watcher.watch(root.clone(), true).await {
@@ -87,6 +122,9 @@ impl DeferredSearchIndex {
                         warn!(error = %e, %root, "search: failed to watch index root");
                     }
                 }
+            }
+            if generation_slot.load(Ordering::SeqCst) != generation {
+                return;
             }
             *handles.lock() = watch_handles;
             if let Err(e) = orchid_search::crawl_roots(
@@ -151,7 +189,7 @@ pub struct OrchidApp {
     #[allow(dead_code)]
     _index_subscriber: orchid_search::IndexFsSubscriber,
     /// Search root watches + crawl, started after the main window opens.
-    deferred_index: DeferredSearchIndex,
+    deferred_index: Arc<DeferredSearchIndex>,
     /// Application-wide recent-files list.
     recent_files: Arc<orchid_widgets::RecentFilesStore>,
     /// KDBX password vault (unlock via passphrase or Windows Hello).
@@ -539,17 +577,18 @@ impl OrchidApp {
             bus.clone(),
             fs_registry.clone(),
         ));
-        let deferred_index = DeferredSearchIndex {
+        let deferred_index = Arc::new(DeferredSearchIndex {
             watcher: index_watcher,
             scheduler: index_scheduler.clone(),
             extractor: index_extractor,
             tags: tag_manager.clone(),
             registry: fs_registry.clone(),
-            scope: index_scope,
-            roots: index_roots,
+            scope: Arc::new(Mutex::new(index_scope)),
+            roots: Arc::new(Mutex::new(index_roots)),
             handles: Arc::new(Mutex::new(Vec::new())),
             started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        };
+            generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        });
 
         let deduplicator = Arc::new(
             orchid_crypto::Deduplicator::new(
@@ -795,11 +834,16 @@ impl OrchidApp {
         let mounts_reload = network_mounts.clone();
         let bookmarks_reload = paths.network_bookmarks_file.clone();
         let bus_reload = bus.clone();
+        let search_reload = index_subscriber.clone();
+        let deferred_reload = deferred_index.clone();
         tokio::spawn(async move {
             loop {
                 match config_rx.recv().await {
                     Ok(new_cfg) => {
                         info!("config.toml reloaded");
+                        let (scope, roots) = build_search_index_scope(&new_cfg.search);
+                        search_reload.set_scope(scope.clone());
+                        deferred_reload.retarget(scope, roots);
                         *config_reload.write() = new_cfg.clone();
                         *mounts_reload.write() = merge_network_places(
                             &new_cfg.file_manager.network_mounts,

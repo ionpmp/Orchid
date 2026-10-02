@@ -45,6 +45,18 @@ pub struct PolicyLocks {
     pub shell_replace: bool,
     /// Settings → Policy, the HTTPS address itself.
     pub policy_url: bool,
+    /// Settings → Search, index roots.
+    pub search_roots: bool,
+    /// Settings → Search, exclusion patterns.
+    pub search_excludes: bool,
+    /// Settings → Search, content size limit.
+    pub search_max_mib: bool,
+    /// Settings → Search, plain-text extraction.
+    pub search_extract_text: bool,
+    /// Settings → Search, PDF and office extraction.
+    pub search_extract_pdf: bool,
+    /// Settings → Search, replacement ONNX path.
+    pub search_model: bool,
 }
 
 impl PolicyLocks {
@@ -61,6 +73,12 @@ impl PolicyLocks {
             ("locale", "language") => self.language,
             ("shell", "replace") => self.shell_replace,
             ("policy", "url") => self.policy_url,
+            ("search", "included-roots") => self.search_roots,
+            ("search", "excluded-patterns") => self.search_excludes,
+            ("search", "max-file-size-mib") => self.search_max_mib,
+            ("search", "extract-text") => self.search_extract_text,
+            ("search", "extract-pdf") => self.search_extract_pdf,
+            ("search", "sentence-model") => self.search_model,
             _ => false,
         }
     }
@@ -78,6 +96,12 @@ impl PolicyLocks {
             self.language,
             self.shell_replace,
             self.policy_url,
+            self.search_roots,
+            self.search_excludes,
+            self.search_max_mib,
+            self.search_extract_text,
+            self.search_extract_pdf,
+            self.search_model,
         ];
         flags.iter().filter(|flag| **flag).count() as u32
     }
@@ -257,7 +281,10 @@ mod tests {
         assert!(locks.is_locked("general", "telemetry"));
         assert!(locks.is_locked("shell", "replace"));
         assert!(!locks.is_locked("shell", "previous"));
-        assert_eq!(locks.count(), 2);
+        assert!(!locks.is_locked("search", "included-roots"));
+        locks.search_roots = true;
+        assert!(locks.is_locked("search", "included-roots"));
+        assert_eq!(locks.count(), 3);
     }
 
     #[test]

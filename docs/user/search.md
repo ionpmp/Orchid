@@ -32,7 +32,7 @@ DPAPI after you save it; leaving the key field blank keeps the saved key.
 
 ## Index
 
-`[search]` in `config.toml` (not the Settings panel): `included-roots`
+Settings → Search, and `[search]` in `config.toml`: `included-roots`
 (empty → Documents), `excluded-patterns`, `max-file-size-mib`,
 `extract-text` / `extract-pdf` (PDF needs pdfium; the same switch also
 indexes DOCX, XLSX / XLSM cell text, PPTX / PPTM / PPSX slide and

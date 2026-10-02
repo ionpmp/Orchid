@@ -14,7 +14,7 @@ use crate::extractors::Extractor;
 use crate::indexer::scheduler::IndexScheduler;
 
 /// Index-coverage policy.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct IndexScope {
     /// Only paths under one of these roots are indexed.
     pub included_roots: Vec<orchid_fs::FsPath>,

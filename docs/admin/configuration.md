@@ -71,13 +71,15 @@ disables), `leader-timeout-ms` (1200), `leader-bindings`.
 
 ## `[search]`
 
-Not in the Settings panel. `included-roots` (empty → Documents),
-`excluded-patterns`, `max-file-size-mib` (50), `extract-text`,
-`extract-pdf`. Roots are Orchid `FsPath` strings
-(`local:c:/Users/Alice/Documents`). `sentence-model` is an optional path
+Settings → Search, and `[search]` in `config.toml`. `included-roots`
+(empty → Documents), `excluded-patterns`, `max-file-size-mib` (50, range
+1–4096), `extract-text`, `extract-pdf`. In the panel, lists are separated
+by semicolons. Roots are Orchid `FsPath` strings
+(`local:c:/Users/Alice/Documents`). Saving roots, exclusions, or the size
+limit updates the running index. `sentence-model` is an optional path
 to a replacement ONNX graph (`features` in, `embedding` out). Empty uses
-the compiled-in quantized model in the desktop app. The index reads the
-path at startup.
+the compiled-in quantized model in the desktop app. That path, and which
+extractors were built, are read when the index opens.
 
 ## `[agent]`
 
@@ -133,7 +135,9 @@ shell-replace = true
 policy-url = false
 ```
 
-A missing key stays editable. Unknown keys are ignored. Editing
+A missing key stays editable. Unknown keys are ignored. Search fields use
+`search-roots`, `search-excludes`, `search-max-mib`, `search-extract-text`,
+`search-extract-pdf`, and `search-model`. Editing
 `config.toml` by hand still changes a locked value; the Settings panel
 refuses the change.
 

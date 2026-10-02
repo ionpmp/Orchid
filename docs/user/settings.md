@@ -16,6 +16,7 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 | Shortcuts | Profile, remaps, leader key/timeout | Leader **binding map** (TOML only) |
 | Locale | Language, date/time format, first day of week | — |
 | Privacy | History, retention, clipboard clear, vault auto-lock | — |
+| Search | Index roots, exclusions, size limit, text and PDF extraction, ONNX path | — |
 | Marketplace | Install Ink, Dawn, Pine, or Ember; add a built-in widget | — |
 | Agent | Enable Ollama or an OpenAI-compatible chat, endpoint, model, API key | — |
 | Photos | Auto-tag from folder names; find faces in the open folder | — |

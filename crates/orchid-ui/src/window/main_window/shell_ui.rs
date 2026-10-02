@@ -1012,6 +1012,35 @@ fn apply_settings_field(
                 .parse::<u32>()
                 .map_err(|_| format!("invalid vault auto-lock `{value}`"))?;
         }
+        ("search", "included-roots") => {
+            let lines = split_settings_list(value);
+            for line in &lines {
+                orchid_fs::FsPath::new(line).map_err(|e| e.to_string())?;
+            }
+            cfg.search.included_roots = lines;
+        }
+        ("search", "excluded-patterns") => {
+            cfg.search.excluded_patterns = split_settings_list(value);
+        }
+        ("search", "max-file-size-mib") => {
+            let n = value
+                .trim()
+                .parse::<u64>()
+                .map_err(|_| format!("invalid max file size `{value}`"))?;
+            if !(1..=4096).contains(&n) {
+                return Err("max file size must be between 1 and 4096 MiB".into());
+            }
+            cfg.search.max_file_size_mib = n;
+        }
+        ("search", "extract-text") => {
+            cfg.search.extract_text = parse_settings_bool(value)?;
+        }
+        ("search", "extract-pdf") => {
+            cfg.search.extract_pdf = parse_settings_bool(value)?;
+        }
+        ("search", "sentence-model") => {
+            cfg.search.sentence_model = value.trim().to_string();
+        }
         ("agent", "enabled") => {
             cfg.agent.enabled = parse_settings_bool(value)?;
         }
@@ -1071,6 +1100,15 @@ fn parse_settings_bool(value: &str) -> Result<bool, String> {
         "false" => Ok(false),
         other => Err(format!("expected true/false, got `{other}`")),
     }
+}
+
+fn split_settings_list(value: &str) -> Vec<String> {
+    value
+        .split([';', '\n'])
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 pub(super) fn density_i18n_key(density: orchid_storage::Density) -> &'static str {

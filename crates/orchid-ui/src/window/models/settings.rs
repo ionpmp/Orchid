@@ -17,6 +17,7 @@ pub(crate) const SETTINGS_SECTION_IDS: &[&str] = &[
     "shortcuts",
     "locale",
     "privacy",
+    "search",
     "marketplace",
     "agent",
     "photos",
@@ -606,6 +607,57 @@ pub(crate) fn build_settings_fields(
                 "vault-auto-lock-seconds",
                 "settings-field-vault-auto-lock",
                 format!("{}", cfg.privacy.vault_auto_lock_seconds),
+            );
+        }
+        "search" => {
+            push_settings_readonly(
+                &mut rows,
+                locale,
+                "hint",
+                "settings-search-note",
+                locale.tr("settings-search-hint").into(),
+            );
+            push_settings_text(
+                &mut rows,
+                locale,
+                "included-roots",
+                "settings-field-search-roots",
+                cfg.search.included_roots.join("; "),
+            );
+            push_settings_text(
+                &mut rows,
+                locale,
+                "excluded-patterns",
+                "settings-field-search-excludes",
+                cfg.search.excluded_patterns.join("; "),
+            );
+            push_settings_text(
+                &mut rows,
+                locale,
+                "max-file-size-mib",
+                "settings-field-search-max-mib",
+                cfg.search.max_file_size_mib.to_string(),
+            );
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "extract-text",
+                "settings-field-search-extract-text",
+                cfg.search.extract_text,
+            );
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "extract-pdf",
+                "settings-field-search-extract-pdf",
+                cfg.search.extract_pdf,
+            );
+            push_settings_text(
+                &mut rows,
+                locale,
+                "sentence-model",
+                "settings-field-search-model",
+                cfg.search.sentence_model.clone(),
             );
         }
         "agent" => {
