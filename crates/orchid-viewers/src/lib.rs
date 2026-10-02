@@ -110,9 +110,9 @@ pub use media::{
 pub use pdf::PdfViewer;
 pub use snapshot::{
     ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ArchiveStatus, CalDayItem, DocumentSnapshot,
-    HtmlSnapshot, ImageSnapshot, ImageThumbItem, MapPinItem, MediaChapterItem, MediaPlaylistItem,
-    MediaSnapshot, PdfOutlineItem, PdfOverlayRect, PdfSnapshot, SelectionRange, SyntaxLine,
-    SyntaxScope, SyntaxSegment, TextSnapshot, ViewerSnapshot,
+    HtmlSnapshot, ImageFaceRect, ImageSnapshot, ImageThumbItem, MapPinItem, MediaChapterItem,
+    MediaPlaylistItem, MediaSnapshot, PdfOutlineItem, PdfOverlayRect, PdfSnapshot, SelectionRange,
+    SyntaxLine, SyntaxScope, SyntaxSegment, TextSnapshot, ViewerSnapshot,
 };
 pub use text::{
     CursorPos, FindOptions, LineEnding, SyntaxHighlighter, TextBuffer, TextDisplayMode, TextOp,

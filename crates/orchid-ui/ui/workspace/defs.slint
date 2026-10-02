@@ -1183,6 +1183,13 @@ export struct ViewerCalDay {
     thumbnail: image,
 }
 
+export struct ViewerFaceBox {
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+}
+
 export struct ViewerImageModel {
     width-px: int,
     height-px: int,
@@ -1409,6 +1416,8 @@ export struct ViewerImageModel {
     cal-prev-label: string,
     cal-next-label: string,
     overlay-autohide-label: string,
+    /// Stored face rectangles, fractions of the decoded image.
+    faces: [ViewerFaceBox],
 }
 
 export struct ViewerPdfOutlineRow {

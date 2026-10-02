@@ -764,6 +764,7 @@ impl Viewer for ImageViewer {
             cal_days: Vec::new(),
             map_pins: Vec::new(),
             timeline: Vec::new(),
+            faces: Vec::new(),
         })
     }
 

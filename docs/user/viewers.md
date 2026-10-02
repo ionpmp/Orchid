@@ -18,8 +18,9 @@ Catalog **Document Editor** creates `Untitled.orchid` (linked when a
 Wide format set (JPEG/PNG/WebP/RAW/SVG/HEIC via WIC, …). Zoom/pan, folder
 playlist, thumbs, slideshow, Timeline/Map/Calendar, EXIF, sibling-file
 edits. **Files → Photos** can ask Windows for face rectangles and groups
-`people/` tags. The viewer itself does not draw face boxes. The view stays
-8-bit RGBA.
+`people/` tags. The image viewer draws those stored rectangles on the
+decoded picture. A rotated or flipped view hides them. The boxes do not
+name the person. The view stays 8-bit RGBA.
 Radiance HDR and OpenEXR are tone-mapped into that buffer (Reinhard, then
 sRGB) so pixels brighter than 1.0 are not clipped to white. The status
 line marks those files `tone-mapped`.

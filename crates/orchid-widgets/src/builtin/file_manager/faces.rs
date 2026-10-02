@@ -376,6 +376,17 @@ impl FaceStore {
         self.db.lock().files.get(path).map(|file| file.faces.len())
     }
 
+    /// Stored rectangles for `path`. Empty when this file has not been scanned.
+    #[must_use]
+    pub fn boxes(&self, path: &str) -> Vec<FaceBox> {
+        self.db
+            .lock()
+            .files
+            .get(path)
+            .map(|file| file.faces.clone())
+            .unwrap_or_default()
+    }
+
     /// Replace the stored scan for `path` and write the file.
     pub fn put(&self, path: &str, mtime_secs: i64, faces: Vec<FaceBox>) {
         let mut db = self.db.lock();
@@ -465,6 +476,8 @@ mod tests {
         assert!(loaded.is_current("local:c:/a.jpg", 10));
         assert!(!loaded.is_current("local:c:/a.jpg", 11));
         assert_eq!(loaded.face_count("local:c:/a.jpg"), Some(1));
+        assert!((loaded.boxes("local:c:/a.jpg")[0].w - 0.3).abs() < 0.001);
+        assert!(loaded.boxes("local:c:/missing.jpg").is_empty());
     }
 
     #[cfg(windows)]

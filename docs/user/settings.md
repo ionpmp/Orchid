@@ -57,8 +57,8 @@ shell changes. It is not uploaded.
 Settings → Photos. **Files → Photos** groups `people/`, `event/`, and
 `album/` tags. **Auto-tag from folder names** is off until enabled.
 **Find faces in open folders** is also off until enabled. Windows then
-stores face rectangles and tags those files `people/unnamed`. It does
-not decide who the person is.
+stores face rectangles and tags those files `people/unnamed`. The image
+viewer draws the stored rectangles. It does not decide who the person is.
 
 ## Marketplace
 

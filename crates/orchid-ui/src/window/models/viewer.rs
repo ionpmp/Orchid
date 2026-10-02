@@ -8,9 +8,9 @@ use super::super::errors::viewer_localized_error;
 use super::file_manager::empty_passphrase_state;
 use crate::slint_generated::{
     FmPassphraseState, ViewerArchiveEntry, ViewerArchiveModel, ViewerCalDay, ViewerDocumentModel,
-    ViewerEmptyModel, ViewerHtmlModel, ViewerImageModel, ViewerImageThumb, ViewerMapPin,
-    ViewerMediaChapterItem, ViewerMediaModel, ViewerMediaPlaylistItem, ViewerModel, ViewerPdfModel,
-    ViewerPdfOutlineRow, ViewerPdfOverlay, ViewerStatusModel, ViewerSyntaxLine,
+    ViewerEmptyModel, ViewerFaceBox, ViewerHtmlModel, ViewerImageModel, ViewerImageThumb,
+    ViewerMapPin, ViewerMediaChapterItem, ViewerMediaModel, ViewerMediaPlaylistItem, ViewerModel,
+    ViewerPdfModel, ViewerPdfOutlineRow, ViewerPdfOverlay, ViewerStatusModel, ViewerSyntaxLine,
     ViewerSyntaxSegment, ViewerTextModel,
 };
 
@@ -388,6 +388,7 @@ fn empty_viewer_image_model(locale: &LocaleManager) -> ViewerImageModel {
         cal_prev_label: locale.tr("viewer-image-cal-prev").into(),
         cal_next_label: locale.tr("viewer-image-cal-next").into(),
         overlay_autohide_label: locale.tr("viewer-image-overlay-autohide").into(),
+        faces: ModelRc::new(VecModel::default()),
     }
 }
 
@@ -2059,6 +2060,17 @@ fn build_image_snapshot(
         cal_prev_label: locale.tr("viewer-image-cal-prev").into(),
         cal_next_label: locale.tr("viewer-image-cal-next").into(),
         overlay_autohide_label: locale.tr("viewer-image-overlay-autohide").into(),
+        faces: ModelRc::new(VecModel::from(
+            s.faces
+                .iter()
+                .map(|face| ViewerFaceBox {
+                    x: face.x,
+                    y: face.y,
+                    w: face.w,
+                    h: face.h,
+                })
+                .collect::<Vec<_>>(),
+        )),
     }
 }
 

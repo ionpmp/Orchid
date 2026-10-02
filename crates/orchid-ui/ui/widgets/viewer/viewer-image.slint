@@ -1339,6 +1339,18 @@ export component ViewerImageView inherits Rectangle {
                 transform-scale-y: model.flipped-v ? -1 : 1;
             }
 
+            for face in model.faces : Rectangle {
+                x: canvas.img-left + face.x * canvas.img-w;
+                y: canvas.img-top + face.y * canvas.img-h;
+                width: max(2px, face.w * canvas.img-w);
+                height: max(2px, face.h * canvas.img-h);
+                visible: canvas.axis-aligned && model.browse-mode == 0;
+                border-width: 2px;
+                border-color: Theme.accent-brand;
+                background: transparent;
+                z: 4;
+            }
+
             if model.meta-overlay && model.meta-overlay-text != "" : Rectangle {
                 x: 16px;
                 y: 16px;

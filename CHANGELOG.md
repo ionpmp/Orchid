@@ -15,6 +15,9 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Face boxes:** the image viewer draws the rectangles stored in
+  `photo-faces.json` on the open picture. A rotated or flipped view hides
+  them. The boxes do not name the person.
 - **Alacritty grid:** the optional grid draws Sixel and direct Kitty images,
   copies text from OSC 52, and stores the OSC 7 directory. zlib Kitty
   payloads and OSC 52 paste stay ignored.

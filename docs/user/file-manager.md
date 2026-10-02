@@ -38,7 +38,8 @@ have not added a `people/Name` tag.
 This finds faces. It does not name the person. Settings → Photos →
 **Find faces in open folders** is off until you enable `[photos].detect-faces`.
 Orchid then scans images in the folder you open, up to 24 per pass, and
-writes rectangles to `data/photo-faces.json`. Files larger than 40 MiB are
+writes rectangles to `data/photo-faces.json`. The image viewer draws
+those rectangles on the open picture. Files larger than 40 MiB are
 skipped. Builds that are not Windows, or a Windows edition without the
 face detector, find nothing. Add a `people/Name` tag to move a picture
 out of Unnamed.

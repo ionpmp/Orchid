@@ -234,6 +234,8 @@ pub struct ViewerDeps {
     pub thumbnails: Option<Arc<ThumbnailService>>,
     /// Content-addressed store for linked `.orchid` document I/O.
     pub chunk_store: Option<Arc<orchid_crypto::ChunkStore>>,
+    /// Face rectangles written by the file manager (`photo-faces.json`).
+    pub photo_faces: Option<Arc<crate::builtin::file_manager::FaceStore>>,
 }
 
 impl std::fmt::Debug for ViewerDeps {
@@ -707,6 +709,28 @@ impl Widget for ViewerWidget {
                 ViewerSnapshot::Loading { path_display: pd }
             }
         };
+        let mut snap = snap;
+        if let ViewerSnapshot::Image(image) = &mut snap {
+            image.faces = self
+                .inner
+                .deps
+                .photo_faces
+                .as_ref()
+                .map(|store| {
+                    store
+                        .boxes(&image.path_display)
+                        .into_iter()
+                        .take(64)
+                        .map(|face| orchid_viewers::ImageFaceRect {
+                            x: face.x,
+                            y: face.y,
+                            w: face.w,
+                            h: face.h,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+        }
         let title = match &snap {
             ViewerSnapshot::Image(s) => title_from(&s.path_display),
             ViewerSnapshot::Pdf(s) => title_from(&s.path_display),

@@ -300,6 +300,22 @@ pub struct ImageSnapshot {
     pub cal_days: Vec<CalDayItem>,
     pub map_pins: Vec<MapPinItem>,
     pub timeline: Vec<ImageThumbItem>,
+    /// Stored face rectangles as fractions of the decoded image. Empty when
+    /// this file has no scan. A rotated or flipped view does not draw them.
+    pub faces: Vec<ImageFaceRect>,
+}
+
+/// One stored face rectangle, as fractions of the decoded image.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ImageFaceRect {
+    /// Left edge, `0.0..=1.0`.
+    pub x: f32,
+    /// Top edge, `0.0..=1.0`.
+    pub y: f32,
+    /// Width, `0.0..=1.0`.
+    pub w: f32,
+    /// Height, `0.0..=1.0`.
+    pub h: f32,
 }
 
 /// One folder sibling in the image thumbnail strip or grid.

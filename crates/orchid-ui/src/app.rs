@@ -515,6 +515,9 @@ impl OrchidApp {
         )));
         register_rclone_providers(&fs_registry, network_mounts.clone())
             .map_err(|e| UiError::Slint(format!("register rclone providers: {e}")))?;
+        let photo_faces = Arc::new(orchid_widgets::builtin::file_manager::FaceStore::open(
+            paths.data_dir.join("photo-faces.json"),
+        ));
         let syntax_highlighter = Arc::new(orchid_viewers::SyntaxHighlighter::new());
         let thumbnails = Arc::new(
             orchid_viewers::ThumbnailService::new(paths.cache_dir.join("thumbnails"))
@@ -531,6 +534,7 @@ impl OrchidApp {
                     highlighter: syntax_highlighter,
                     thumbnails: Some(thumbnails.clone()),
                     chunk_store: Some(chunk_store.clone()),
+                    photo_faces: Some(photo_faces.clone()),
                 },
             ))
             .map_err(|e| UiError::Slint(format!("register viewer: {e}")))?;
@@ -705,11 +709,7 @@ impl OrchidApp {
             orchid_config: config.clone(),
             locale: locale.clone(),
             file_watcher: Some(fm_file_watcher),
-            photo_faces: Some(Arc::new(
-                orchid_widgets::builtin::file_manager::FaceStore::open(
-                    paths.data_dir.join("photo-faces.json"),
-                ),
-            )),
+            photo_faces: Some(photo_faces),
         };
         widget_registry
             .register(orchid_widgets::builtin::file_manager::descriptor(fm_deps))

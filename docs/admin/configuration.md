@@ -99,7 +99,8 @@ Settings → Photos, and `[photos]` in `config.toml`. `auto-tag` (false)
 tags an image from a `People/Name` or `Events/…` folder when that folder
 is opened. `detect-faces` (false) asks Windows for face rectangles in
 images in the open folder and tags matches `people/unnamed`. It does not
-name the person. Rectangles are stored in `data/photo-faces.json`.
+name the person. Rectangles are stored in `data/photo-faces.json` and
+drawn on the open image.
 Files → Photos groups `people/`, `event/`, and `album/` tags.
 
 ## `[shell]`
