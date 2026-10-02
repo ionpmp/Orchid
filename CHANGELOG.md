@@ -328,6 +328,9 @@ release yet.
   protection.
 
 #### Built-in widgets
+- **System graphs:** CPU, memory, disk, network, and battery rows draw the
+  last 60 samples. Network is scaled to the peak in that window. The samples
+  stay in memory for the widget instance.
 - **Audio Player**: local music library (Songs / Artists / Albums / Folders / Genres),
   playlists (create / rename / delete / add tracks) and favorites, shuffle /
   repeat, sleep timer, EQ presets, ReplayGain, playback speed presets, soft

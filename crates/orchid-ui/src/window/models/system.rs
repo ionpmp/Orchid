@@ -13,6 +13,7 @@ pub(crate) fn empty_system_model(locale: &LocaleManager) -> SystemModel {
             status: 0,
             status_hint: SharedString::new(),
             segments: ModelRc::new(VecModel::from(Vec::<f32>::new())),
+            history: ModelRc::new(VecModel::from(Vec::<f32>::new())),
         }])),
     }
 }
@@ -51,6 +52,7 @@ fn indicator_entries(
             status: 0,
             status_hint: SharedString::new(),
             segments: ModelRc::new(VecModel::from(Vec::<f32>::new())),
+            history: ModelRc::new(VecModel::from(Vec::<f32>::new())),
         }];
     }
     if p.indicators.is_empty() {
@@ -62,6 +64,7 @@ fn indicator_entries(
             status: 0,
             status_hint: SharedString::new(),
             segments: ModelRc::new(VecModel::from(Vec::<f32>::new())),
+            history: ModelRc::new(VecModel::from(Vec::<f32>::new())),
         }];
     }
     p.indicators
@@ -76,6 +79,11 @@ fn indicator_entries(
                 .iter()
                 .map(|pct| (*pct / 100.0).clamp(0.0, 1.0))
                 .collect();
+            let history: Vec<f32> = i
+                .history
+                .iter()
+                .map(|pct| (*pct / 100.0).clamp(0.0, 1.0))
+                .collect();
             SystemIndicatorEntry {
                 label,
                 value_text,
@@ -87,6 +95,7 @@ fn indicator_entries(
                 status,
                 status_hint,
                 segments: ModelRc::new(VecModel::from(segments)),
+                history: ModelRc::new(VecModel::from(history)),
             }
         })
         .collect()
@@ -112,6 +121,7 @@ fn sync_system_indicators(
                 continue;
             };
             sync_f32_segments(&old.segments, segment_values(&new_row.segments));
+            sync_f32_segments(&old.history, segment_values(&new_row.history));
             if old.label == new_row.label
                 && old.value_text == new_row.value_text
                 && old.percent == new_row.percent

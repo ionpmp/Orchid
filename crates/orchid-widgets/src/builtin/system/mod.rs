@@ -3,6 +3,7 @@
 pub mod config;
 #[cfg(windows)]
 mod cpu_windows;
+mod history;
 pub mod provider;
 pub mod types;
 
@@ -27,6 +28,8 @@ use crate::{
 };
 use orchid_storage::{LifecycleState, WidgetSize};
 
+use history::ResourceHistory;
+
 pub use config::SystemConfig;
 pub use provider::SystemProvider;
 pub use types::{BatteryStatus, DiskUsage, NetworkRate, SystemSnapshot};
@@ -40,6 +43,7 @@ struct SystemHandle {
     instance_id: Uuid,
     config: Arc<RwLock<SystemConfig>>,
     snapshot: Arc<RwLock<Option<SystemSnapshot>>>,
+    history: Mutex<ResourceHistory>,
     provider: Arc<SystemProvider>,
     refresh: Mutex<PeriodicRefresh>,
     bus: Arc<orchid_core::EventBus>,
@@ -81,6 +85,7 @@ impl SystemHandle {
                         return;
                     }
                 };
+                handle.history.lock().record(&snap);
                 *snap_slot.write() = Some(snap);
                 // Always publish: render-equality gating dropped live updates when
                 // coarse labels (e.g. "71%", "10.3 GB") stayed identical.
@@ -147,6 +152,7 @@ impl SystemWidget {
             instance_id,
             config: Arc::new(RwLock::new(cfg)),
             snapshot: Arc::new(RwLock::new(None)),
+            history: Mutex::new(ResourceHistory::default()),
             provider: Arc::new(SystemProvider::new()),
             refresh: Mutex::new(PeriodicRefresh::new(interval)),
             bus,
@@ -179,6 +185,7 @@ impl Widget for SystemWidget {
                 .map_err(|e| {
                     WidgetError::CreationFailed(format!("system metrics initial refresh: {e}"))
                 })?;
+            self.handle.history.lock().record(&snap);
             *self.handle.snapshot.write() = Some(snap);
         }
         self.handle.schedule_refresh();
@@ -204,8 +211,9 @@ impl Widget for SystemWidget {
     }
     fn snapshot(&self) -> Option<WidgetSnapshot> {
         let cfg = self.handle.config.read().clone();
+        let history = self.handle.history.lock();
         let indicators = match self.handle.snapshot.read().clone() {
-            Some(snap) => build_indicators(&cfg, &snap, &self.handle.locale),
+            Some(snap) => build_indicators(&cfg, &snap, &history, &self.handle.locale),
             None => vec![SystemIndicator {
                 kind: SystemIndicatorKind::Cpu,
                 name_suffix: None,
@@ -214,6 +222,7 @@ impl Widget for SystemWidget {
                 network_down: None,
                 percent: None,
                 segments: Vec::new(),
+                history: Vec::new(),
                 icon: "system-cpu",
                 status: IndicatorStatus::Normal,
             }],
@@ -280,6 +289,7 @@ fn bucket_low(pct: f32, warn: f32, crit: f32) -> IndicatorStatus {
 fn build_indicators(
     cfg: &SystemConfig,
     snap: &SystemSnapshot,
+    history: &ResourceHistory,
     locale: &orchid_i18n::LocaleManager,
 ) -> Vec<SystemIndicator> {
     let mut out = Vec::new();
@@ -298,6 +308,7 @@ fn build_indicators(
             network_down: None,
             percent: Some(snap.cpu_total_percent),
             segments,
+            history: history.cpu(),
             icon: "system-cpu",
             status: bucket_pct(snap.cpu_total_percent, 75.0, 90.0),
         });
@@ -328,6 +339,7 @@ fn build_indicators(
             network_down: None,
             percent: Some(pct),
             segments: Vec::new(),
+            history: history.memory(),
             icon: "system-memory",
             status: bucket_pct(pct, 80.0, 95.0),
         });
@@ -357,6 +369,7 @@ fn build_indicators(
                 network_down: None,
                 percent: Some(pct),
                 segments: Vec::new(),
+                history: history.disk(&d.mount),
                 icon: "system-disk",
                 status: bucket_pct(pct, 85.0, 95.0),
             });
@@ -382,6 +395,7 @@ fn build_indicators(
             if !nets.is_empty() {
                 let upload: f64 = nets.iter().map(|n| n.upload_bps).sum();
                 let download: f64 = nets.iter().map(|n| n.download_bps).sum();
+                let names: Vec<String> = nets.iter().map(|n| n.interface.clone()).collect();
                 out.push(SystemIndicator {
                     kind: SystemIndicatorKind::Network,
                     name_suffix: None,
@@ -390,6 +404,7 @@ fn build_indicators(
                     network_down: Some(locale.format_byte_size(download.max(0.0) as u64)),
                     percent: None,
                     segments: Vec::new(),
+                    history: history.network_sum(&names),
                     icon: "system-network",
                     status: IndicatorStatus::Normal,
                 });
@@ -404,6 +419,7 @@ fn build_indicators(
                     network_down: Some(locale.format_byte_size(n.download_bps.max(0.0) as u64)),
                     percent: None,
                     segments: Vec::new(),
+                    history: history.network(&n.interface),
                     icon: "system-network",
                     status: IndicatorStatus::Normal,
                 });
@@ -438,6 +454,7 @@ fn build_indicators(
                 network_down: None,
                 percent: Some(pct),
                 segments: Vec::new(),
+                history: history.battery(),
                 icon: if b.charging {
                     "system-battery-charging"
                 } else {
@@ -457,6 +474,7 @@ fn build_indicators(
             network_down: None,
             percent: None,
             segments: Vec::new(),
+            history: Vec::new(),
             icon: "system-uptime",
             status: IndicatorStatus::Normal,
         });
@@ -529,7 +547,12 @@ mod tests {
     fn cpu_thresholds_bucket_correctly() {
         let cfg = SystemConfig::default();
         let locale = test_locale();
-        let indicators = build_indicators(&cfg, &snap(20.0), &locale);
+        let indicators = build_indicators(
+            &cfg,
+            &snap(20.0),
+            &super::history::ResourceHistory::default(),
+            &locale,
+        );
         let cpu = indicators
             .iter()
             .find(|i| i.kind == SystemIndicatorKind::Cpu)
@@ -537,7 +560,12 @@ mod tests {
         assert_eq!(cpu.status, IndicatorStatus::Normal);
         assert_eq!(cpu.segments.len(), 4);
 
-        let indicators = build_indicators(&cfg, &snap(80.0), &locale);
+        let indicators = build_indicators(
+            &cfg,
+            &snap(80.0),
+            &super::history::ResourceHistory::default(),
+            &locale,
+        );
         assert_eq!(
             indicators
                 .iter()
@@ -547,7 +575,12 @@ mod tests {
             IndicatorStatus::Warning
         );
 
-        let indicators = build_indicators(&cfg, &snap(95.0), &locale);
+        let indicators = build_indicators(
+            &cfg,
+            &snap(95.0),
+            &super::history::ResourceHistory::default(),
+            &locale,
+        );
         assert_eq!(
             indicators
                 .iter()
@@ -570,7 +603,12 @@ mod tests {
             ..Default::default()
         };
         let locale = test_locale();
-        let indicators = build_indicators(&cfg, &snap(50.0), &locale);
+        let indicators = build_indicators(
+            &cfg,
+            &snap(50.0),
+            &super::history::ResourceHistory::default(),
+            &locale,
+        );
         assert!(indicators[0].segments.is_empty());
     }
 
@@ -609,7 +647,12 @@ mod tests {
             },
         ];
         let locale = test_locale();
-        let indicators = build_indicators(&cfg, &s, &locale);
+        let indicators = build_indicators(
+            &cfg,
+            &s,
+            &super::history::ResourceHistory::default(),
+            &locale,
+        );
         assert_eq!(indicators.len(), 1);
         assert!(indicators[0].name_suffix.is_none());
     }
@@ -628,7 +671,12 @@ mod tests {
         s.swap_total_bytes = 4 * 1024 * 1024 * 1024;
         s.swap_used_bytes = 1024 * 1024 * 1024;
         let locale = test_locale();
-        let indicators = build_indicators(&cfg, &s, &locale);
+        let indicators = build_indicators(
+            &cfg,
+            &s,
+            &super::history::ResourceHistory::default(),
+            &locale,
+        );
         let mem = indicators
             .iter()
             .find(|i| i.kind == SystemIndicatorKind::Memory)
@@ -658,7 +706,12 @@ mod tests {
             time_to_full_seconds: Some(3600),
         });
         let locale = test_locale();
-        let indicators = build_indicators(&cfg, &s, &locale);
+        let indicators = build_indicators(
+            &cfg,
+            &s,
+            &super::history::ResourceHistory::default(),
+            &locale,
+        );
         assert_eq!(indicators.len(), 1);
         assert_eq!(indicators[0].kind, SystemIndicatorKind::Battery);
         assert_eq!(indicators[0].icon, "system-battery-charging");

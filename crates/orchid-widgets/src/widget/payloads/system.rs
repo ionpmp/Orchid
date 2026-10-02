@@ -44,6 +44,10 @@ pub struct SystemIndicator {
     pub percent: Option<f32>,
     /// Optional sub-bars (e.g. per-core CPU), each in `0..=100`.
     pub segments: Vec<f32>,
+    /// Recent samples in `0..=100`, oldest first. Empty for uptime.
+    ///
+    /// Network samples are scaled so the peak in the window is 100.
+    pub history: Vec<f32>,
     /// Icon name.
     pub icon: &'static str,
     /// Threshold-based status.

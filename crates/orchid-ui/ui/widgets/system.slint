@@ -99,6 +99,25 @@ export component SystemView inherits Rectangle {
                         fill: status-color(ind.status);
                     }
 
+                    if ind.history.length > 0 : HorizontalLayout {
+                        spacing: 1px;
+                        height: 28px;
+
+                        for sample in ind.history : Rectangle {
+                            horizontal-stretch: 1;
+                            background: Theme.surface-base;
+                            clip: true;
+
+                            Rectangle {
+                                x: 0;
+                                y: parent.height * (1.0 - sample);
+                                width: parent.width;
+                                height: parent.height * sample;
+                                background: status-color(ind.status);
+                            }
+                        }
+                    }
+
                     // Per-core / per-interface sparkline.
                     if ind.segments.length > 0 : HorizontalLayout {
                         spacing: 2px;

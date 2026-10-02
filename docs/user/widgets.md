@@ -6,7 +6,7 @@
 | Moon | `moon` | Local phase |
 | Jyotish | `jyotish` | [jyotish.md](../jyotish.md) |
 | Clock | `clock` | World clocks |
-| System | `system` | CPU, memory, disks, net, battery |
+| System | `system` | CPU, memory, disks, net, battery, 60-sample graphs |
 | Processes | `processes` | Processes / Services / Startup / Users |
 | Calculator | `calculator` | `=expr` in universal search |
 | Notes | `notes` | In-widget scratchpad |
@@ -24,6 +24,14 @@
 | Terminal | `terminal` | [terminal.md](terminal.md) |
 
 **Document Editor** / **Media Player** catalog tiles spawn Viewer instances.
+
+## System
+
+Each CPU, memory, disk, network, and battery row draws the last 60 samples,
+oldest on the left. At the default 2 second refresh that is about two
+minutes. Network bars are scaled to the peak in that window. The samples
+stay with the widget instance and are not written to disk. Uptime has no
+graph.
 
 ## Audio Player
 
