@@ -963,6 +963,38 @@ fn apply_settings_field(
                 .parse::<u32>()
                 .map_err(|_| format!("invalid vault auto-lock `{value}`"))?;
         }
+        ("agent", "enabled") => {
+            cfg.agent.enabled = parse_settings_bool(value)?;
+        }
+        ("agent", "backend") => {
+            let trimmed = value.trim();
+            if trimmed != "ollama" && trimmed != "openai" {
+                return Err(format!("unknown agent backend `{trimmed}`"));
+            }
+            cfg.agent.backend = trimmed.to_string();
+        }
+        ("agent", "endpoint") => {
+            let trimmed = value.trim();
+            let default = orchid_widgets::agent::default_endpoint(&cfg.agent.backend);
+            cfg.agent.endpoint = if trimmed.is_empty() || trimmed == default {
+                String::new()
+            } else {
+                trimmed.to_string()
+            };
+        }
+        ("agent", "model") => {
+            cfg.agent.model = value.trim().to_string();
+        }
+        ("agent", "api-key") => {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                cfg.agent.api_key =
+                    orchid_crypto::protect_for_storage(trimmed).map_err(|e| e.to_string())?;
+            }
+        }
+        ("agent", "clear-key") => {
+            cfg.agent.api_key.clear();
+        }
         _ => return Err(format!("field `{section}.{key}` is not editable")),
     }
     Ok(())

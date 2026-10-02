@@ -17,8 +17,16 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 | Locale | Language, date/time format, first day of week | — |
 | Privacy | History, retention, clipboard clear, vault auto-lock | — |
 | Marketplace | Install Ink, Dawn, Pine, or Ember; add a built-in widget | — |
+| Agent | Enable Ollama or an OpenAI-compatible chat, endpoint, model, API key | — |
 
 Widget options stay on each widget.
+
+## Agent
+
+Settings → Agent. Off until enabled. Universal Search `? your question`
+sends one message to Ollama or an OpenAI-compatible server and posts the
+reply as a notification. Set the model name. Leave the API key blank to
+keep the saved key. **Clear key** removes it.
 
 ## Marketplace
 

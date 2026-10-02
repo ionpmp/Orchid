@@ -17,6 +17,7 @@ pub(crate) const SETTINGS_SECTION_IDS: &[&str] = &[
     "locale",
     "privacy",
     "marketplace",
+    "agent",
 ];
 
 pub(crate) fn build_settings_sections(locale: &LocaleManager) -> Vec<SettingsSectionEntry> {
@@ -600,6 +601,70 @@ pub(crate) fn build_settings_fields(
                 "vault-auto-lock-seconds",
                 "settings-field-vault-auto-lock",
                 format!("{}", cfg.privacy.vault_auto_lock_seconds),
+            );
+        }
+        "agent" => {
+            push_settings_readonly(
+                &mut rows,
+                locale,
+                "hint",
+                "settings-agent-note",
+                locale.tr("settings-agent-hint").into(),
+            );
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "enabled",
+                "settings-field-agent-enabled",
+                cfg.agent.enabled,
+            );
+            push_settings_combo(
+                &mut rows,
+                locale,
+                "backend",
+                "settings-field-agent-backend",
+                &[
+                    (
+                        "ollama".into(),
+                        locale.tr("settings-value-agent-ollama").into(),
+                    ),
+                    (
+                        "openai".into(),
+                        locale.tr("settings-value-agent-openai").into(),
+                    ),
+                ],
+                if cfg.agent.backend.eq_ignore_ascii_case("openai") {
+                    "openai"
+                } else {
+                    "ollama"
+                },
+            );
+            let endpoint = if cfg.agent.endpoint.trim().is_empty() {
+                orchid_widgets::agent::default_endpoint(&cfg.agent.backend).to_string()
+            } else {
+                cfg.agent.endpoint.clone()
+            };
+            push_settings_text(
+                &mut rows,
+                locale,
+                "endpoint",
+                "settings-field-agent-endpoint",
+                endpoint,
+            );
+            push_settings_text(
+                &mut rows,
+                locale,
+                "model",
+                "settings-field-agent-model",
+                cfg.agent.model.clone(),
+            );
+            push_settings_text(&mut rows, locale, "api-key", "settings-field-agent-key", "");
+            push_settings_button(
+                &mut rows,
+                "clear-key",
+                locale.tr("settings-field-agent-key"),
+                locale.tr("settings-action-clear-agent-key"),
+                !cfg.agent.api_key.is_empty(),
             );
         }
         "marketplace" => {

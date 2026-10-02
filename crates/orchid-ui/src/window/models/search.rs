@@ -84,6 +84,7 @@ fn candidate_entries(
                 "commands" => locale.tr("search-source-commands"),
                 "settings" => locale.tr("search-source-settings"),
                 "calculator" => locale.tr("search-source-calculator"),
+                "agent" => locale.tr("search-source-agent"),
                 "calendar" => locale.tr("search-source-calendar"),
                 "jyotish" => locale.tr("search-source-jyotish"),
                 _ => c.source_name.clone(),

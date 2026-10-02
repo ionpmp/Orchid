@@ -1,7 +1,7 @@
 //! Always-on background job queue.
 //!
 //! Widgets pause UI work when not visible; work that must keep running
-//! (feed fetches, weather, future agents) is scheduled here instead of on
+//! (feed fetches, weather, agent questions) is scheduled here instead of on
 //! per-widget timers tied to lifecycle.
 //!
 //! In addition to interval schedules, the queue exposes a keyed

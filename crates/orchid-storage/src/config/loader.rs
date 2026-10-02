@@ -125,6 +125,15 @@ hint-mode-enabled = false
 # extract-text = true
 # extract-pdf = true
 # sentence-model = "C:/models/sentence.onnx"
+
+# [agent]
+# Off until enabled. Universal Search sends `? your question` and posts the
+# reply to the notification center. Empty endpoint uses the backend default.
+# enabled = false
+# backend = "ollama"          # or "openai"
+# endpoint = "http://127.0.0.1:11434"
+# model = "llama3.2"
+# api-key = ""                # OpenAI-compatible bearer; DPAPI-wrapped on save
 "#;
 
 /// Load / save / reload API for the TOML configuration.

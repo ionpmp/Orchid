@@ -27,6 +27,11 @@ release yet.
   double-tap. A finger is ignored while a pen is down. Double-tap toggles
   whether the pen drives edge gestures, or holds it in erase. Haptic feedback
   keeps Windows touch and pen tap feedback on the window.
+- **Agent:** Settings → Agent talks to Ollama or an OpenAI-compatible
+  chat API. Universal Search sends one question that starts with `?`
+  on the background job queue and posts the reply as a notification.
+  The agent is off until enabled. The API key is DPAPI-wrapped on save.
+  Redirects are not followed. There is no tool use and no remembered chat.
 - **Search embeddings:** hybrid file search in the desktop app runs a
   compiled-in quantized ONNX model (`orchid.onnx.hash.q.v1`, 64-d).
   Builds without the `ort` feature stay on the synonym stub. A

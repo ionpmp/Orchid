@@ -4,6 +4,7 @@
 #![warn(clippy::all)]
 #![allow(clippy::result_large_err)]
 
+pub mod agent;
 pub mod builtin;
 pub mod commands;
 pub mod error;

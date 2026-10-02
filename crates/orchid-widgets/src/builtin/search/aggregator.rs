@@ -63,6 +63,9 @@ impl SearchAggregator {
                 "calculator" if query.trim_start().starts_with('=') => {
                     c.score = c.score.saturating_add(50);
                 }
+                "agent" if query.trim_start().starts_with('?') => {
+                    c.score = c.score.saturating_add(50);
+                }
                 "commands" if short_q => c.score = c.score.saturating_add(30),
                 "files" if file_hinted => c.score = c.score.saturating_add(20),
                 _ => {}

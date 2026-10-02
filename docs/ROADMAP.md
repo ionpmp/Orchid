@@ -30,7 +30,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 
 ## v1.x
 
-- [ ] AI agents (Ollama + OpenAI API) on `BackgroundJobQueue`
 - [ ] Photo library intelligence (hierarchical tags, opt-in auto-tag,
       **People** view / faces, events, smart albums)
 

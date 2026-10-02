@@ -78,3 +78,12 @@ Not in the Settings panel. `included-roots` (empty → Documents),
 to a replacement ONNX graph (`features` in, `embedding` out). Empty uses
 the compiled-in quantized model in the desktop app. The index reads the
 path at startup.
+
+## `[agent]`
+
+Settings → Agent, and `[agent]` in `config.toml`. `enabled` (false),
+`backend` (`ollama` or `openai`), `endpoint` (empty →
+`http://127.0.0.1:11434` or `https://api.openai.com/v1`), `model`,
+`api-key`. Universal Search sends `? your question` and posts the reply
+as a notification. The key is a DPAPI blob after Orchid saves it.
+Redirects are not followed.

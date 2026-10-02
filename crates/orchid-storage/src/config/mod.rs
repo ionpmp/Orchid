@@ -18,9 +18,9 @@ pub use network_bookmarks::{load_network_bookmarks, merge_network_places, save_n
 
 pub use loader::{ConfigLoader, DEFAULT_CONFIG_TOML};
 pub use schema::{
-    AppearanceConfig, Density, FileManagerSectionConfig, GeneralConfig, Hand, InputConfig,
-    LocaleConfig, NetworkMountConfig, OnboardingConfig, OrchidConfig, PenDoubleTapAction,
-    PrivacyConfig, SearchConfig, ShortcutsConfig, TerminalConfig,
+    AgentConfig, AppearanceConfig, Density, FileManagerSectionConfig, GeneralConfig, Hand,
+    InputConfig, LocaleConfig, NetworkMountConfig, OnboardingConfig, OrchidConfig,
+    PenDoubleTapAction, PrivacyConfig, SearchConfig, ShortcutsConfig, TerminalConfig,
 };
 pub use watcher::ConfigWatcher;
 

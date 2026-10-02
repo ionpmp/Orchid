@@ -7,7 +7,7 @@
 
 Top edge swipe, or the Search widget. Sources: **files** (Tantivy BM25 fused
 with in-memory ANN via reciprocal rank fusion, plus snippets), **commands**,
-**settings**, **calculator** (`=`), **calendar**, **Jyotish**.
+**settings**, **calculator** (`=`), **agent** (`?`), **calendar**, **Jyotish**.
 
 The desktop app embeds those file hits with a compiled-in
 quantized ONNX model (`orchid.onnx.hash.q.v1`, 64 dimensions): concept
@@ -21,6 +21,14 @@ again. The ANN snapshot sits next to `data\search_index` and is named
 model change does not mix vectors. Set `[search].sentence-model` to a
 replacement graph that accepts `features` (`float32[1, 32]`) and returns
 `embedding`. The path is read when the index opens.
+
+A question that starts with `?` asks the agent in Settings → Agent. The
+agent is off until you enable it. The desktop app sends one user message
+to Ollama (`http://127.0.0.1:11434` when the endpoint is empty) or to an
+OpenAI-compatible `/chat/completions` URL, on the background job queue.
+The reply is a notification. There is no tool use and no remembered chat.
+Set a model name first. An API key is optional and is stored with Windows
+DPAPI after you save it; leaving the key field blank keeps the saved key.
 
 ## Index
 

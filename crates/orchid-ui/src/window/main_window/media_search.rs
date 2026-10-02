@@ -14,6 +14,7 @@ use orchid_widgets::WidgetPayload;
 use crate::window::errors::media_localized_error;
 use crate::window::spawn;
 
+use super::AgentNotice;
 use super::MainWindowController;
 
 impl MainWindowController {
@@ -483,6 +484,9 @@ impl MainWindowController {
                     Err(e) => warn!(?e, "open clipboard for search calc copy"),
                 }
             }
+            ActionTarget::AskAgent(prompt) => {
+                self.ask_agent(prompt);
+            }
             ActionTarget::OpenCalendarEvent {
                 instance_id,
                 event_id,
@@ -545,4 +549,98 @@ impl MainWindowController {
         self.search_selection.write().insert(instance_id, clamped);
         let _ = self.patch_workspace_frames(&[instance_id]);
     }
+
+    pub(super) fn ask_agent(self: &Arc<Self>, prompt: String) {
+        let cfg = self.config.read().agent.clone();
+        if !cfg.enabled {
+            self.agent_notices
+                .lock()
+                .push(AgentNotice::Error("agent-disabled"));
+            return;
+        }
+        if cfg.model.trim().is_empty() {
+            self.agent_notices
+                .lock()
+                .push(AgentNotice::Error("agent-needs-model"));
+            return;
+        }
+        *self.agent_prompt.lock() = prompt;
+        let prompt_slot = Arc::clone(&self.agent_prompt);
+        let notices = Arc::clone(&self.agent_notices);
+        let config = Arc::clone(&self.config);
+        self.widget_manager
+            .jobs()
+            .spawn_coalesced("agent:ask", move || {
+                let prompt_slot = Arc::clone(&prompt_slot);
+                let notices = Arc::clone(&notices);
+                let config = Arc::clone(&config);
+                async move {
+                    let prompt = prompt_slot.lock().clone();
+                    let cfg = config.read().agent.clone();
+                    let key = match orchid_crypto::resolve_stored_secret(&cfg.api_key) {
+                        Ok(key) => key,
+                        Err(e) => {
+                            notices.lock().push(AgentNotice::Failed(e.to_string()));
+                            return;
+                        }
+                    };
+                    let notice = match orchid_widgets::agent::complete(&cfg, &key, &prompt).await {
+                        Ok(text) => AgentNotice::Reply(text),
+                        Err(orchid_widgets::agent::AgentError::Disabled) => {
+                            AgentNotice::Error("agent-disabled")
+                        }
+                        Err(orchid_widgets::agent::AgentError::NeedsModel) => {
+                            AgentNotice::Error("agent-needs-model")
+                        }
+                        Err(orchid_widgets::agent::AgentError::BadEndpoint) => {
+                            AgentNotice::Error("agent-bad-endpoint")
+                        }
+                        Err(orchid_widgets::agent::AgentError::EmptyPrompt) => {
+                            AgentNotice::Error("agent-empty-prompt")
+                        }
+                        Err(orchid_widgets::agent::AgentError::PromptTooLong) => {
+                            AgentNotice::Error("agent-prompt-too-long")
+                        }
+                        Err(orchid_widgets::agent::AgentError::Failed(reason)) => {
+                            AgentNotice::Failed(reason)
+                        }
+                    };
+                    notices.lock().push(notice);
+                }
+            });
+    }
+
+    pub(super) fn drain_agent_notices(self: &Arc<Self>) {
+        let pending = std::mem::take(&mut *self.agent_notices.lock());
+        if pending.is_empty() {
+            return;
+        }
+        for notice in pending {
+            match notice {
+                AgentNotice::Reply(text) => {
+                    let body = clip_notice(&text, 4_000);
+                    self.push_notification(&self.locale.tr("agent-reply"), &body, 0);
+                }
+                AgentNotice::Error(key) => {
+                    self.push_notification(&self.locale.tr("agent-reply"), &self.locale.tr(key), 2);
+                }
+                AgentNotice::Failed(reason) => {
+                    let body = self.locale.tr_args(
+                        "agent-failed",
+                        &orchid_i18n::FluentArgs::new().with("reason", reason),
+                    );
+                    self.push_notification(&self.locale.tr("agent-reply"), &body, 2);
+                }
+            }
+        }
+    }
+}
+
+fn clip_notice(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    let mut body: String = text.chars().take(max_chars).collect();
+    body.push('…');
+    body
 }

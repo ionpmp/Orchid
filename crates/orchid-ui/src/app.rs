@@ -27,7 +27,7 @@ use orchid_storage::{
 use orchid_terminal::{SessionManager, TerminalClipboardWrite};
 use orchid_widgets::{
     builtin::search::{
-        CalculatorSource, CalendarSource, CommandsSource, FilesSource, JyotishSource,
+        AgentSource, CalculatorSource, CalendarSource, CommandsSource, FilesSource, JyotishSource,
         SearchAggregator, SearchSource, SettingsSource,
     },
     commands::build_command_set,
@@ -206,6 +206,18 @@ impl OrchidApp {
                     tracing::warn!(?e, "could not DPAPI-protect network mount passwords");
                 }
             }
+            if !cfg.agent.api_key.is_empty() && !orchid_crypto::is_protected(&cfg.agent.api_key) {
+                match orchid_crypto::protect_for_storage(&cfg.agent.api_key) {
+                    Ok(protected) if protected != cfg.agent.api_key => {
+                        cfg.agent.api_key = protected;
+                        if let Err(e) = ConfigLoader::save(&cfg, &paths.config_file) {
+                            tracing::warn!(?e, "failed to rewrite DPAPI-protected agent key");
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!(?e, "could not DPAPI-protect the agent key"),
+                }
+            }
         }
 
         let bus = Arc::new(EventBus::new(EventBusConfig::default()));
@@ -318,6 +330,7 @@ impl OrchidApp {
             Arc::new(CommandsSource::new(command_palette.clone())),
             Arc::new(SettingsSource::new()),
             Arc::new(CalculatorSource::new()),
+            Arc::new(AgentSource::new()),
             Arc::new(CalendarSource::new()),
             Arc::new(JyotishSource::new()),
         ];

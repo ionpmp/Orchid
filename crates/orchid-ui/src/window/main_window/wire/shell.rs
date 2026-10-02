@@ -23,6 +23,7 @@ impl MainWindowController {
             move || {
                 if let Some(c) = t.upgrade() {
                     c.drain_fm_ingest_failure_notification();
+                    c.drain_agent_notices();
                     c.drain_ipc_open_paths();
                     if c.config_reload_pending.swap(false, Ordering::AcqRel) {
                         if let Err(e) = c.apply_hot_config() {

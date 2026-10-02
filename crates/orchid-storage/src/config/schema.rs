@@ -35,6 +35,8 @@ pub struct OrchidConfig {
     pub onboarding: OnboardingConfig,
     /// Which VT grid new terminal sessions use.
     pub terminal: TerminalConfig,
+    /// One-shot chat agent (Ollama or an OpenAI-compatible API).
+    pub agent: AgentConfig,
 }
 
 /// Terminal grid selection.
@@ -54,6 +56,40 @@ impl Default for TerminalConfig {
     fn default() -> Self {
         Self {
             grid: "orchid".to_string(),
+        }
+    }
+}
+
+/// One-shot chat completion used by Universal Search (`?` prefix).
+///
+/// The agent is off until [`Self::enabled`] is set. An empty [`Self::endpoint`]
+/// means `http://127.0.0.1:11434` for Ollama and `https://api.openai.com/v1`
+/// for an OpenAI-compatible server. [`Self::api_key`] is a Windows DPAPI blob
+/// (`dpapi:<hex>`) after Orchid saves it; an empty key field in Settings keeps
+/// the saved key.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct AgentConfig {
+    /// When false, `?` questions are refused.
+    pub enabled: bool,
+    /// `ollama` or `openai`. Anything else is treated as Ollama at request time.
+    pub backend: String,
+    /// Base URL without the chat path. Empty selects the backend default.
+    pub endpoint: String,
+    /// Model name. Required before a question is sent.
+    pub model: String,
+    /// Bearer token for OpenAI-compatible servers. Empty skips the header.
+    pub api_key: String,
+}
+
+impl Default for AgentConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            backend: "ollama".to_string(),
+            endpoint: String::new(),
+            model: String::new(),
+            api_key: String::new(),
         }
     }
 }
@@ -528,6 +564,9 @@ mod tests {
         assert_eq!(cfg.locale.language, "en-US");
         assert_eq!(cfg.terminal.grid, "orchid");
         assert!(cfg.search.sentence_model.is_empty());
+        assert!(!cfg.agent.enabled);
+        assert_eq!(cfg.agent.backend, "ollama");
+        assert!(cfg.agent.model.is_empty());
     }
 
     #[test]

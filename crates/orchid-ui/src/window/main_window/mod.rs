@@ -97,6 +97,16 @@ type FmLastClick = Option<(Uuid, u8, String, Instant)>;
 /// Committed virtualized window `(first, end, width-bucket)` per (instance, pane).
 type FmViewportWindows = Arc<Mutex<HashMap<(Uuid, u8), (usize, usize, i32)>>>;
 
+/// Outcome of one agent question, shown on the next UI tick.
+pub(crate) enum AgentNotice {
+    /// Assistant text.
+    Reply(String),
+    /// Fluent key for a known refusal.
+    Error(&'static str),
+    /// Transport or parse failure, already a short reason.
+    Failed(String),
+}
+
 /// Drives the main window: workspace model, terminal I/O, drag/resize previews.
 pub struct MainWindowController {
     window: MainWindow,
@@ -173,6 +183,10 @@ pub struct MainWindowController {
     canvas_scroll_gen: AtomicU32,
     /// Per universal-search instance: selected candidate row (clamped on rebuild).
     search_selection: Arc<RwLock<HashMap<Uuid, i32>>>,
+    /// Latest `?` question. The coalesced agent job reads this when it starts.
+    agent_prompt: Arc<parking_lot::Mutex<String>>,
+    /// Agent replies waiting for the next UI tick.
+    agent_notices: Arc<parking_lot::Mutex<Vec<AgentNotice>>>,
     /// Set when a search widget is created from the dock; cleared after the next workspace rebuild.
     search_autofocus_pending: Arc<Mutex<Option<Uuid>>>,
     /// Per password-manager instance: (message, visible) toast state.
@@ -526,6 +540,8 @@ impl MainWindowController {
             snap_zone: Arc::new(Mutex::new(None)),
             canvas_scroll_gen: AtomicU32::new(0),
             search_selection: Arc::new(RwLock::new(HashMap::new())),
+            agent_prompt: Arc::new(parking_lot::Mutex::new(String::new())),
+            agent_notices: Arc::new(parking_lot::Mutex::new(Vec::new())),
             search_autofocus_pending: Arc::new(Mutex::new(None)),
             password_toasts: Arc::new(RwLock::new(HashMap::new())),
             password_autofocus_pending: Arc::new(RwLock::new(HashMap::new())),

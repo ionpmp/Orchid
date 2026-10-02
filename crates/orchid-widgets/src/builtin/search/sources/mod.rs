@@ -1,5 +1,6 @@
 //! Search-source trait + shared candidate types.
 
+pub mod agent;
 pub mod calculator;
 pub mod calendar;
 pub mod commands;
@@ -9,6 +10,7 @@ pub mod settings;
 
 use async_trait::async_trait;
 
+pub use agent::AgentSource;
 pub use calculator::CalculatorSource;
 pub use calendar::CalendarSource;
 pub use commands::CommandsSource;
@@ -25,6 +27,8 @@ pub enum ActionTarget {
     OpenSettings(String),
     /// Copy plain text to the system clipboard.
     CopyText(String),
+    /// Ask the configured agent one question. The reply is delivered later.
+    AskAgent(String),
     /// Focus a calendar widget on an event.
     OpenCalendarEvent {
         instance_id: String,
