@@ -381,6 +381,7 @@ settings-section-input = Entrada
 settings-section-shortcuts = Atalhos
 settings-section-locale = Idioma
 settings-section-privacy = Privacidade
+settings-section-terminal = Terminal
 
 # ---- Settings panel ----
 settings-panel-title = Configurações
@@ -431,6 +432,9 @@ telemetry-rejected = O endereço de telemetria deve ser https
 telemetry-failed = Não foi possível enviar a telemetria. O evento fica neste computador
 settings-field-open-on-startup = Abrir ao iniciar
 settings-field-os-notifications = Notificações do Windows
+settings-field-terminal-grid = Grade do terminal
+settings-value-terminal-grid-orchid = Integrada
+settings-value-terminal-grid-alacritty = Alacritty
 settings-field-theme = Tema
 settings-field-density = Densidade
 settings-field-font-family = Família de fontes

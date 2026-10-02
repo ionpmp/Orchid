@@ -40,7 +40,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
       **People** view / faces, events, smart albums)
 - [ ] Graphical resource monitor with history
 - [ ] Theme and widget marketplace
-- [ ] Optional `alacritty_terminal` grid
 - [ ] ORT embeddings in production search
 
 ## v2.0

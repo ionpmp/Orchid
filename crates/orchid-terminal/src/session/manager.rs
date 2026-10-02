@@ -3,7 +3,10 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
+use parking_lot::Mutex;
 use uuid::Uuid;
+
+use crate::emulator::GridKind;
 
 use crate::backend::BackendSpec;
 use crate::error::{Result, TerminalError};
@@ -16,6 +19,8 @@ pub struct SessionManager {
     sessions: DashMap<Uuid, Arc<TerminalSession>>,
     bus: Arc<orchid_core::EventBus>,
     storage: Arc<orchid_storage::StateStore>,
+    /// Grid used the next time [`Self::open`] runs. Open sessions keep theirs.
+    grid: Mutex<GridKind>,
 }
 
 impl std::fmt::Debug for SessionManager {
@@ -34,7 +39,13 @@ impl SessionManager {
             sessions: DashMap::new(),
             bus,
             storage,
+            grid: Mutex::new(GridKind::Orchid),
         }
+    }
+
+    /// Choose the grid for sessions opened after this call.
+    pub fn set_grid(&self, grid: GridKind) {
+        *self.grid.lock() = grid;
     }
 
     /// Open a new session.
@@ -43,7 +54,9 @@ impl SessionManager {
     ///
     /// Propagates [`TerminalError::SpawnFailed`] and related errors.
     pub async fn open(&self, spec: BackendSpec, size: PtySize) -> Result<Uuid> {
-        let session = TerminalSession::open(spec, size, Arc::clone(&self.bus)).await?;
+        let grid = *self.grid.lock();
+        let session =
+            TerminalSession::open_with_grid(spec, size, Arc::clone(&self.bus), grid).await?;
         let id = session.id;
         self.sessions.insert(id, session);
         Ok(id)

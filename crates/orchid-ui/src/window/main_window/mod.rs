@@ -858,6 +858,8 @@ impl MainWindowController {
         }
         crate::autostart::sync_open_on_startup(&cfg.general);
         crate::os_notify::sync(cfg.general.os_notifications);
+        self.session_manager
+            .set_grid(orchid_terminal::GridKind::parse(&cfg.terminal.grid));
         drop(cfg);
         if retention_changed {
             self.last_history_retention_days

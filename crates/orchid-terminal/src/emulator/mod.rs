@@ -1,15 +1,15 @@
 //! VT / ANSI emulator.
 //!
-//! This crate intentionally does **not** depend on `alacritty_terminal` for
-//! its emulator state: we maintain a minimal grid directly on top of the
-//! [`vte`] parser. That keeps the dependency graph small, the API
-//! focused on what Orchid needs, and the behaviour easy to audit. The
-//! trade-off is that advanced features (vi mode, regex search over the
-//! ANSI-parsed scrollback, and full xterm control-sequence coverage) are
-//! deferred to a follow-up task — see the crate README.
+//! The default grid is a small state machine on top of [`vte`]. The
+//! `alacritty-grid` feature adds a second grid that feeds the same bytes
+//! into `alacritty_terminal` and copies cells back into [`GridSnapshot`].
+//! Sixel, Kitty, OSC 52, and OSC 7 stay on the built-in grid.
 
+#[cfg(feature = "alacritty-grid")]
+mod alacritty_grid;
 pub mod color;
 pub mod cursor;
+mod engine;
 mod graphics;
 pub mod grid;
 pub mod selection;
@@ -30,6 +30,7 @@ use crate::search::SearchMatch;
 
 pub use color::{resolve_color, xterm_256_color, CellColor, ColorRole, Rgba, TerminalPalette};
 pub use cursor::{CursorState, CursorStyle};
+pub use engine::{GridKind, TerminalGrid};
 pub use grid::{empty_row, Cell, CellFlags, GridLine, GridSnapshot, InlineImage, ScrollPosition};
 pub use selection::{GridPoint, Selection};
 

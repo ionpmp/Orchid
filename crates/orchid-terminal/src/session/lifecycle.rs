@@ -11,7 +11,7 @@ use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::backend::BackendSpec;
-use crate::emulator::TerminalEmulator;
+use crate::emulator::{GridKind, TerminalGrid};
 use crate::error::{Result, TerminalError};
 use crate::events::{TerminalClosed, TerminalExited, TerminalOpened, TerminalOutput};
 use crate::input::InputEncoder;
@@ -32,6 +32,20 @@ impl TerminalSession {
         size: PtySize,
         bus: Arc<orchid_core::EventBus>,
     ) -> Result<Arc<Self>> {
+        Self::open_with_grid(spec, size, bus, GridKind::Orchid).await
+    }
+
+    /// Spawn a session on the built-in grid or the optional Alacritty grid.
+    ///
+    /// # Errors
+    ///
+    /// Propagates PTY and spawn errors.
+    pub async fn open_with_grid(
+        spec: BackendSpec,
+        size: PtySize,
+        bus: Arc<orchid_core::EventBus>,
+        grid: GridKind,
+    ) -> Result<Arc<Self>> {
         let id = Uuid::new_v4();
         // `portable_pty` spawn can block for a long time on some Windows setups
         // (AV hooks, first-run profile work). Run it off the async executor so
@@ -43,10 +57,10 @@ impl TerminalSession {
             .map_err(|e| TerminalError::SpawnFailed(format!("pty spawn join: {e}")))?;
         let pty = pty?;
         let io = pty::start_io(Arc::clone(&pty))?;
-        let emulator = Arc::new(TerminalEmulator::new(
+        let emulator = Arc::new(TerminalGrid::new(
+            grid,
             size.cols,
             size.rows,
-            crate::emulator::DEFAULT_SCROLLBACK,
             Arc::clone(&bus),
             id,
         ));

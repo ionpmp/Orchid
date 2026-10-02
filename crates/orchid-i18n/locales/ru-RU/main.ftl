@@ -376,6 +376,7 @@ settings-section-input = Ввод
 settings-section-shortcuts = Горячие клавиши
 settings-section-locale = Язык и регион
 settings-section-privacy = Конфиденциальность
+settings-section-terminal = Терминал
 
 # ---- Settings panel ----
 settings-panel-title = Настройки
@@ -426,6 +427,9 @@ telemetry-rejected = Адрес телеметрии должен быть https
 telemetry-failed = Не удалось отправить телеметрию. Событие остаётся на этом компьютере
 settings-field-open-on-startup = Запускать при входе
 settings-field-os-notifications = Уведомления Windows
+settings-field-terminal-grid = Сетка терминала
+settings-value-terminal-grid-orchid = Встроенная
+settings-value-terminal-grid-alacritty = Alacritty
 settings-field-theme = Тема
 settings-field-density = Плотность интерфейса
 settings-field-font-family = Шрифт

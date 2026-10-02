@@ -6,7 +6,7 @@ Terminal subsystem for Orchid.
 
 - `backend` — shell / WSL / SSH launch specs (`BackendSpec`, `SshTarget`).
 - `pty` — thin async-friendly wrapper around `portable-pty` with a resizable PTY, a background reader task that streams 8 KiB byte chunks, and a writer task that takes user keystrokes.
-- `emulator` — VT / ANSI state machine built directly on `vte::Parser`. We deliberately do **not** pull in `alacritty_terminal` for its full grid model — its API surface has churned across versions and Orchid only needs the subset covered here (SGR, cursor movement, erase, scroll region, OSC 0/2/7). More advanced features (vi mode, regex scrollback search, full xterm coverage) can drop in later without breaking the public API. A TODO tracks the migration path.
+- `emulator` — default VT grid on `vte::Parser` (SGR, cursor, erase, scroll region, OSC 0/2/7, Sixel, Kitty). The `alacritty-grid` feature adds a second grid that feeds bytes into `alacritty_terminal` and copies cells into the same snapshot. The desktop app enables that feature. Inline images, OSC 52, and OSC 7 stay on the built-in grid. `[terminal].grid` selects which one new sessions use.
 - `input` — keyboard, paste, and mouse encoders. Bracketed-paste guard rejects injection attempts, normalises CRLF.
 - `session` — end-to-end lifecycle: spawn a backend, run emulator + reader task, persist / restore through `orchid-storage`.
 - `layout` — pure data model for tabs + split trees (UI-agnostic).

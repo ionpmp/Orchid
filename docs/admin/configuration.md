@@ -13,6 +13,12 @@ hot-reloaded). Keys are kebab-case.
 | `open-on-startup` | `false` | Autostart helper |
 | `os-notifications` | `false` | Mirror in-app alerts as Windows Action Center toasts. Writes a Start Menu `Orchid.lnk` with AppUserModelID `IonPmp.Orchid` when enabled. Failures stay in the in-app center. |
 
+## `[terminal]`
+
+| Key | Default | Behavior |
+|-----|---------|----------|
+| `grid` | `orchid` | `orchid` is the built-in grid (Sixel, Kitty, OSC 7, OSC 52). `alacritty` feeds new sessions through `alacritty_terminal`. That grid has no inline images, no OSC 52, and no OSC 7 directory. Other values stay on `orchid`. Open sessions are left as they are. The desktop app compiles this grid in. A build of the terminal crate without the `alacritty-grid` feature ignores `alacritty`. |
+
 ## `[appearance]`
 
 `theme` (default `orchid-dark`), `density` (`touch`/`mouse`/`hybrid`),

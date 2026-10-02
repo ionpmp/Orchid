@@ -381,6 +381,7 @@ settings-section-input = الإدخال
 settings-section-shortcuts = الاختصارات
 settings-section-locale = اللغة
 settings-section-privacy = الخصوصية
+settings-section-terminal = الطرفية
 
 # ---- Settings panel ----
 settings-panel-title = الإعدادات
@@ -431,6 +432,9 @@ telemetry-rejected = يجب أن يكون عنوان القياس https
 telemetry-failed = تعذر إرسال القياس. يبقى الحدث على هذا الجهاز
 settings-field-open-on-startup = الفتح عند بدء التشغيل
 settings-field-os-notifications = إشعارات Windows
+settings-field-terminal-grid = شبكة الطرفية
+settings-value-terminal-grid-orchid = مدمجة
+settings-value-terminal-grid-alacritty = Alacritty
 settings-field-theme = السمة
 settings-field-density = الكثافة
 settings-field-font-family = عائلة الخط

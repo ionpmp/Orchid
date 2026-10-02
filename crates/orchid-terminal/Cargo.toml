@@ -32,6 +32,13 @@ bitflags.workspace = true
 orchid-core.workspace = true
 orchid-storage.workspace = true
 image.workspace = true
+alacritty_terminal = { version = "0.25.1", optional = true }
+
+[features]
+default = []
+# Second VT grid. The desktop app turns this on. Crate tests stay on the
+# built-in emulator unless this feature is selected.
+alacritty-grid = ["dep:alacritty_terminal"]
 
 [target.'cfg(windows)'.dependencies.windows]
 workspace = true

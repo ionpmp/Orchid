@@ -690,6 +690,7 @@ settings-section-input = Input
 settings-section-shortcuts = Shortcuts
 settings-section-locale = Locale
 settings-section-privacy = Privacy
+settings-section-terminal = Terminal
 
 # ---- Settings panel ----
 settings-panel-title = Settings
@@ -740,6 +741,9 @@ telemetry-rejected = Telemetry endpoint must be an https URL
 telemetry-failed = Could not send telemetry. The event stays on this PC
 settings-field-open-on-startup = Open on startup
 settings-field-os-notifications = Windows notifications
+settings-field-terminal-grid = Terminal grid
+settings-value-terminal-grid-orchid = Built-in
+settings-value-terminal-grid-alacritty = Alacritty
 settings-field-theme = Theme
 settings-field-density = Density
 settings-field-font-family = Font family

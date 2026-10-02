@@ -42,7 +42,8 @@ pub use config::{
     load_network_bookmarks, merge_network_places, save_network_bookmarks, AppearanceConfig, Config,
     ConfigLoader, ConfigWatcher, Density, FileManagerSectionConfig, GeneralConfig, Hand,
     InputConfig, LocaleConfig, NetworkMountConfig, OnboardingConfig, OrchidConfig,
-    PenDoubleTapAction, PrivacyConfig, SearchConfig, ShortcutsConfig, DEFAULT_CONFIG_TOML,
+    PenDoubleTapAction, PrivacyConfig, SearchConfig, ShortcutsConfig, TerminalConfig,
+    DEFAULT_CONFIG_TOML,
 };
 pub use diagnostics::{default_support_filename, write_support_bundle, SupportBundleExtras};
 pub use error::{Result, StorageError};

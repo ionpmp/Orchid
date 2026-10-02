@@ -381,6 +381,7 @@ settings-section-input = 입력
 settings-section-shortcuts = 단축키
 settings-section-locale = 언어
 settings-section-privacy = 개인정보
+settings-section-terminal = 터미널
 
 # ---- Settings panel ----
 settings-panel-title = 설정
@@ -431,6 +432,9 @@ telemetry-rejected = 원격 분석 주소는 https여야 합니다
 telemetry-failed = 원격 분석을 보내지 못했습니다. 이벤트는 이 PC에 남습니다
 settings-field-open-on-startup = 시작 시 열기
 settings-field-os-notifications = Windows 알림
+settings-field-terminal-grid = 터미널 격자
+settings-value-terminal-grid-orchid = 내장
+settings-value-terminal-grid-alacritty = Alacritty
 settings-field-theme = 테마
 settings-field-density = 밀도
 settings-field-font-family = 글꼴

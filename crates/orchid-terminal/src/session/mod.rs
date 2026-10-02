@@ -15,7 +15,7 @@ use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use crate::backend::BackendSpec;
-use crate::emulator::TerminalEmulator;
+use crate::emulator::TerminalGrid;
 use crate::input::InputEncoder;
 use crate::pty::PtyHandle;
 
@@ -42,7 +42,7 @@ pub struct TerminalSession {
     /// Reader / writer halves. `None` once the session is closing.
     pub(crate) io: Mutex<Option<PtyIoShell>>,
     /// Emulator state.
-    pub emulator: Arc<TerminalEmulator>,
+    pub emulator: Arc<TerminalGrid>,
     /// Input-mode flags (DECCKM, bracketed paste, mouse).
     pub encoder: Arc<RwLock<InputEncoder>>,
     /// When the session was created.

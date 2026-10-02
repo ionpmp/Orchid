@@ -10,6 +10,7 @@ use crate::theme::ThemeManager;
 
 pub(crate) const SETTINGS_SECTION_IDS: &[&str] = &[
     "general",
+    "terminal",
     "appearance",
     "input",
     "shortcuts",
@@ -268,6 +269,25 @@ pub(crate) fn build_settings_fields(
                 "os-notifications",
                 "settings-field-os-notifications",
                 cfg.general.os_notifications,
+            );
+        }
+        "terminal" => {
+            push_settings_combo(
+                &mut rows,
+                locale,
+                "terminal-grid",
+                "settings-field-terminal-grid",
+                &[
+                    (
+                        "orchid".into(),
+                        locale.tr("settings-value-terminal-grid-orchid").into(),
+                    ),
+                    (
+                        "alacritty".into(),
+                        locale.tr("settings-value-terminal-grid-alacritty").into(),
+                    ),
+                ],
+                &cfg.terminal.grid,
             );
         }
         "appearance" => {

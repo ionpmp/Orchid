@@ -692,6 +692,12 @@ fn apply_settings_field(
         ("general", "os-notifications") => {
             cfg.general.os_notifications = parse_settings_bool(value)?;
         }
+        ("terminal", "terminal-grid") => {
+            cfg.terminal.grid = match value {
+                "orchid" | "alacritty" => value.to_string(),
+                other => return Err(format!("unknown terminal grid `{other}`")),
+            };
+        }
         ("appearance", "theme") => {
             if value.is_empty() {
                 return Err("theme id must not be empty".into());

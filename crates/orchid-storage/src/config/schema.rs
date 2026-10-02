@@ -33,6 +33,29 @@ pub struct OrchidConfig {
     pub search: SearchConfig,
     /// First-run tour and gesture hint overlay preferences.
     pub onboarding: OnboardingConfig,
+    /// Which VT grid new terminal sessions use.
+    pub terminal: TerminalConfig,
+}
+
+/// Terminal grid selection.
+///
+/// `grid` is `orchid` or `alacritty`. Any other value keeps the built-in grid.
+/// The Alacritty grid is compiled into the desktop app; a crate build without
+/// the `alacritty-grid` feature ignores `alacritty` and stays on the built-in
+/// emulator. Existing sessions keep the grid they opened with.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct TerminalConfig {
+    /// `orchid` or `alacritty`.
+    pub grid: String,
+}
+
+impl Default for TerminalConfig {
+    fn default() -> Self {
+        Self {
+            grid: "orchid".to_string(),
+        }
+    }
 }
 
 /// First-run onboarding tour and optional gesture hint overlays.
@@ -495,6 +518,7 @@ mod tests {
         assert!(!cfg.general.os_notifications);
         assert!((cfg.appearance.font_scale - 1.0).abs() < f32::EPSILON);
         assert_eq!(cfg.locale.language, "en-US");
+        assert_eq!(cfg.terminal.grid, "orchid");
     }
 
     #[test]

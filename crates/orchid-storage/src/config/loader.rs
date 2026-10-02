@@ -31,6 +31,12 @@ open-on-startup = false
 # Mirror in-app alerts as Windows Action Center toasts (opt-in).
 os-notifications = false
 
+[terminal]
+# orchid (built-in; sixel, kitty, OSC 7, OSC 52) or alacritty.
+# alacritty is used only by builds with the alacritty-grid feature.
+# Already-open sessions keep the grid they started with.
+grid = "orchid"
+
 [appearance]
 theme = "orchid-dark"
 # One of: "touch", "mouse", "hybrid".

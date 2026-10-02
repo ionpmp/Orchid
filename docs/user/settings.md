@@ -10,6 +10,7 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 | Section | You can change | Shown but not wired |
 |---------|----------------|---------------------|
 | General | Open on startup, Windows notifications, auto-update, telemetry | — |
+| Terminal | Terminal grid (built-in or Alacritty) | — |
 | Appearance | Theme, density, font, reduce motion, follow system | — |
 | Input | Primary hand, mirror edge swipes, palm rejection, pen double-tap, haptic feedback | — |
 | Shortcuts | Profile, remaps, leader key/timeout | Leader **binding map** (TOML only) |

@@ -273,6 +273,9 @@ impl OrchidApp {
         let session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>> = Arc::new(Mutex::new(HashMap::new()));
         let session_manager: Arc<SessionManager> =
             Arc::new(SessionManager::new(bus.clone(), storage.clone()));
+        session_manager.set_grid(orchid_terminal::GridKind::parse(
+            &config.read().terminal.grid,
+        ));
         let layout_engine: Arc<LayoutEngine> = Arc::new(LayoutEngine::default());
 
         let widget_registry: Arc<WidgetRegistry> = Arc::new(WidgetRegistry::new());

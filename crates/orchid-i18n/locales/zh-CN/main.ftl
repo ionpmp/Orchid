@@ -381,6 +381,7 @@ settings-section-input = 输入
 settings-section-shortcuts = 快捷键
 settings-section-locale = 语言
 settings-section-privacy = 隐私
+settings-section-terminal = 终端
 
 # ---- Settings panel ----
 settings-panel-title = 设置
@@ -431,6 +432,9 @@ telemetry-rejected = 遥测地址必须是 https
 telemetry-failed = 无法发送遥测。事件仍保留在这台电脑上
 settings-field-open-on-startup = 启动时打开
 settings-field-os-notifications = Windows 通知
+settings-field-terminal-grid = 终端网格
+settings-value-terminal-grid-orchid = 内置
+settings-value-terminal-grid-alacritty = Alacritty
 settings-field-theme = 主题
 settings-field-density = 密度
 settings-field-font-family = 字体

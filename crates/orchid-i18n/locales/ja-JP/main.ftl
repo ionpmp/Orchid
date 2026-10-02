@@ -381,6 +381,7 @@ settings-section-input = 入力
 settings-section-shortcuts = ショートカット
 settings-section-locale = 言語
 settings-section-privacy = プライバシー
+settings-section-terminal = ターミナル
 
 # ---- Settings panel ----
 settings-panel-title = 設定
@@ -431,6 +432,9 @@ telemetry-rejected = テレメトリの宛先は https である必要があり�
 telemetry-failed = テレメトリを送信できませんでした。イベントはこの PC に残ります
 settings-field-open-on-startup = 起動時に開く
 settings-field-os-notifications = Windows の通知
+settings-field-terminal-grid = ターミナルグリッド
+settings-value-terminal-grid-orchid = 内蔵
+settings-value-terminal-grid-alacritty = Alacritty
 settings-field-theme = テーマ
 settings-field-density = 密度
 settings-field-font-family = フォントファミリー
