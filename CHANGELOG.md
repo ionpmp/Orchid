@@ -52,8 +52,10 @@ release yet.
 #### File manager & storage
 - **Photos:** Files → Photos groups hierarchical tags (`people/Name`,
   `event/Date/Title`, `album/Name`) into people, events, a tag tree, and
-  smart albums. It does not detect faces. Settings → Photos can tag images
-  from `People` and `Events` folder names; that switch is off by default.
+  smart albums. Settings → Photos can tag images from `People` and `Events`
+  folder names, and can ask Windows for face rectangles in the open folder.
+  A face with no person name is tagged `people/unnamed`. The detector does
+  not say who someone is. Both switches are off by default.
 - **Managed-folder ingest:** chunk files are block-cloned from the source
   when the volume can share extents, and copied otherwise. Two whole files
   with the same content become one hard link.
@@ -210,8 +212,8 @@ release yet.
   changes), fast EXIF/embedded-JPEG thumbs, and a contact-sheet PNG
   (`T`/`G`/`D`/`I`/`P`).
 - Image folder browse: Timeline (EXIF/mtime), Map (GPS pins), and Calendar
-  month grid (`Ctrl+Shift+T` / `M` / `C`, Esc). Faces are not detected;
-  **Files → Photos** groups `people/` tags.
+  month grid (`Ctrl+Shift+T` / `M` / `C`, Esc). **Files → Photos** can
+  mark detected faces as `people/unnamed`. The viewer does not draw boxes.
 - Image chrome auto-hides after idle time (tap or vertical swipe to
   peek); mouse swipe / right-drag next-prev, double-click fit/actual;
   touch pinch, two-finger pan, swipe, tap, and double-tap.

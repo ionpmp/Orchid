@@ -56,7 +56,9 @@ workspace = true
 features = [
     "Devices_Geolocation",
     "Foundation",
+    "Graphics_Imaging",
     "Media_Control",
+    "Media_FaceAnalysis",
     "Media_Playback",
     "Storage_Streams",
     "Win32_Foundation",

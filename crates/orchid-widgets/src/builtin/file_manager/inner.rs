@@ -778,10 +778,12 @@ impl FileManagerInner {
         // finish and the main window can open without waiting on notify.
         let this = Arc::clone(self);
         let tab = tab.clone();
+        let tab_for_faces = tab.clone();
         tokio::spawn(async move {
             this.rewatch_tab(&tab).await;
             this.decorate_view(&tab).await;
         });
+        self.schedule_face_scan(&tab_for_faces);
     }
 
     pub(super) fn record_recent(&self, path: &orchid_fs::FsPath) {
@@ -1653,8 +1655,13 @@ impl FileManagerInner {
             } else {
                 orchid_fs::FsEntryKind::File
             };
+            let name = if row.path == "virtual:photos/people/unnamed" {
+                locale.tr("fm-photos-unnamed")
+            } else {
+                row.name
+            };
             entries.push(orchid_fs::FsEntry {
-                name: row.name,
+                name,
                 path,
                 metadata: orchid_fs::FsMetadata {
                     kind,
@@ -2006,4 +2013,152 @@ impl FileManagerInner {
         }
         Ok(folder_candidates[0].clone())
     }
+
+    fn schedule_face_scan(self: &Arc<Self>, tab: &TabState) {
+        if !super::faces::face_detection_compiled() {
+            return;
+        }
+        if !self.deps.orchid_config.read().photos.detect_faces {
+            return;
+        }
+        let Some(store) = self.deps.photo_faces.clone() else {
+            return;
+        };
+        if store.detector_unavailable() {
+            return;
+        }
+        let Some(entries) = self.entries_by_tab.read().get(&tab.id).cloned() else {
+            return;
+        };
+        if !store.try_begin_scan() {
+            return;
+        }
+        let tab_id = tab.id;
+        let folder = tab.path.as_str().to_string();
+        let tags = self.deps.tag_manager.clone();
+        let this = Arc::clone(self);
+        let store_for_wave = Arc::clone(&store);
+        tokio::spawn(async move {
+            let outcome = tokio::task::spawn_blocking(move || {
+                scan_face_wave(&store_for_wave, &tags, &entries)
+            })
+            .await;
+            store.end_scan();
+            let Ok((changed, more, unsupported)) = outcome else {
+                return;
+            };
+            if unsupported {
+                store.mark_unavailable();
+            }
+            if !changed && !more {
+                return;
+            }
+            let show_hidden = this.config.read().show_hidden;
+            let live = {
+                let state = this.state.lock();
+                find_tab_by_id(&state, tab_id).cloned()
+            };
+            let Some(live) = live else {
+                return;
+            };
+            if live.path.as_str() != folder {
+                return;
+            }
+            if changed {
+                this.refresh_tab(&live, show_hidden).await;
+            } else if more && !unsupported {
+                this.schedule_face_scan(&live);
+            }
+        });
+    }
+}
+
+fn scan_face_wave(
+    store: &super::faces::FaceStore,
+    tags: &orchid_fs::TagManager,
+    entries: &[orchid_fs::FsEntry],
+) -> (bool, bool, bool) {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut targets = Vec::new();
+    for entry in entries {
+        if !matches!(entry.metadata.kind, orchid_fs::FsEntryKind::File) {
+            continue;
+        }
+        if !entry.path.is_local() {
+            continue;
+        }
+        let Some(ext) = entry.path.extension() else {
+            continue;
+        };
+        if !orchid_viewers::is_image_file_extension(ext) {
+            continue;
+        }
+        if !seen.insert(entry.path.as_str().to_string()) {
+            continue;
+        }
+        targets.push(entry.path.clone());
+    }
+    if targets.is_empty() {
+        return (false, false, false);
+    }
+    let existing = tags.get_many(&targets).unwrap_or_default();
+    let mut changed = false;
+    let mut scanned = 0usize;
+    let mut more = false;
+    for path in targets {
+        let Ok(local) = path.to_local() else {
+            continue;
+        };
+        let Some(mtime) = super::faces::file_mtime_secs(&local) else {
+            continue;
+        };
+        let key = path.as_str().to_string();
+        let face_count = if store.is_current(&key, mtime) {
+            store.face_count(&key).unwrap_or(0)
+        } else if scanned >= super::faces::SCAN_WAVE {
+            more = true;
+            continue;
+        } else {
+            scanned += 1;
+            match super::faces::detect_file_faces(&local) {
+                Ok(found) => {
+                    let count = found.len();
+                    store.put(&key, mtime, found);
+                    count
+                }
+                Err(super::faces::FaceDetectError::Unsupported) => {
+                    return (changed, false, true);
+                }
+                Err(super::faces::FaceDetectError::Failed(err)) => {
+                    warn!(error = %err, path = %key, "face detect failed");
+                    store.put(&key, mtime, Vec::new());
+                    0
+                }
+            }
+        };
+        let have = existing
+            .get(&key)
+            .map(|tag| tag.tags.as_slice())
+            .unwrap_or(&[]);
+        match super::faces::unnamed_person_tag(have, face_count) {
+            super::faces::UnnamedTag::Add => {
+                if tags
+                    .add_tag(&path, super::faces::UNNAMED_PERSON_TAG)
+                    .is_ok()
+                {
+                    changed = true;
+                }
+            }
+            super::faces::UnnamedTag::Remove => {
+                if tags
+                    .remove_tag(&path, super::faces::UNNAMED_PERSON_TAG)
+                    .is_ok()
+                {
+                    changed = true;
+                }
+            }
+            super::faces::UnnamedTag::Keep => {}
+        }
+    }
+    (changed, more, false)
 }

@@ -92,5 +92,7 @@ Redirects are not followed.
 
 Settings → Photos, and `[photos]` in `config.toml`. `auto-tag` (false)
 tags an image from a `People/Name` or `Events/…` folder when that folder
-is opened. Files → Photos then groups `people/`, `event/`, and `album/`
-tags. Face detection is not included.
+is opened. `detect-faces` (false) asks Windows for face rectangles in
+images in the open folder and tags matches `people/unnamed`. It does not
+name the person. Rectangles are stored in `data/photo-faces.json`.
+Files → Photos groups `people/`, `event/`, and `album/` tags.

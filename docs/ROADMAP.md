@@ -28,11 +28,6 @@ keep-alive + CLI transfers), audio/video players, and `orchid-format` /
 
 ---
 
-## v1.x
-
-- [ ] Face detection for the People view (Files → Photos already groups
-      `people/` tags and does not detect faces)
-
 ## v2.0
 
 - [ ] Optional replace of `Winlogon\Shell`

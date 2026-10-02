@@ -18,7 +18,7 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 | Privacy | History, retention, clipboard clear, vault auto-lock | — |
 | Marketplace | Install Ink, Dawn, Pine, or Ember; add a built-in widget | — |
 | Agent | Enable Ollama or an OpenAI-compatible chat, endpoint, model, API key | — |
-| Photos | Auto-tag images from People and Events folder names | — |
+| Photos | Auto-tag from folder names; find faces in the open folder | — |
 
 Widget options stay on each widget.
 
@@ -32,8 +32,10 @@ keep the saved key. **Clear key** removes it.
 ## Photos
 
 Settings → Photos. **Files → Photos** groups `people/`, `event/`, and
-`album/` tags. It does not detect faces. **Auto-tag from folder names**
-is off until enabled.
+`album/` tags. **Auto-tag from folder names** is off until enabled.
+**Find faces in open folders** is also off until enabled. Windows then
+stores face rectangles and tags those files `people/unnamed`. It does
+not decide who the person is.
 
 ## Marketplace
 

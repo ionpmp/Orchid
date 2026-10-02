@@ -99,19 +99,25 @@ impl Default for AgentConfig {
 /// Photo library in Files → Photos.
 ///
 /// People, events, and albums are hierarchical tags (`people/ada`,
-/// `event/2026-10-02/picnic`, `album/vacation`). This does not detect faces.
-/// [`Self::auto_tag`] writes those tags when a folder named People or Events
+/// `event/2026-10-02/picnic`, `album/vacation`). Windows can detect face
+/// rectangles when [`Self::detect_faces`] is on. It does not name the person.
+/// [`Self::auto_tag`] writes folder tags when a People or Events directory
 /// sits above an image.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct PhotosConfig {
     /// Tag images from People and Events folder names while browsing.
     pub auto_tag: bool,
+    /// Find faces in images while a folder is open. Off until enabled.
+    pub detect_faces: bool,
 }
 
 impl Default for PhotosConfig {
     fn default() -> Self {
-        Self { auto_tag: false }
+        Self {
+            auto_tag: false,
+            detect_faces: false,
+        }
     }
 }
 
@@ -589,6 +595,7 @@ mod tests {
         assert_eq!(cfg.agent.backend, "ollama");
         assert!(cfg.agent.model.is_empty());
         assert!(!cfg.photos.auto_tag);
+        assert!(!cfg.photos.detect_faces);
     }
 
     #[test]

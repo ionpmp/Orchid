@@ -666,6 +666,11 @@ impl OrchidApp {
             orchid_config: config.clone(),
             locale: locale.clone(),
             file_watcher: Some(fm_file_watcher),
+            photo_faces: Some(Arc::new(
+                orchid_widgets::builtin::file_manager::FaceStore::open(
+                    paths.data_dir.join("photo-faces.json"),
+                ),
+            )),
         };
         widget_registry
             .register(orchid_widgets::builtin::file_manager::descriptor(fm_deps))

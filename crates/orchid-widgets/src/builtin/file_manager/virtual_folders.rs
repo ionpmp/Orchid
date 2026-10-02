@@ -113,6 +113,7 @@ pub fn label_key_for_virtual_path(raw: &str) -> Option<&'static str> {
         "virtual:photos/albums/people" => Some("fm-photos-album-people"),
         "virtual:photos/albums/events" => Some("fm-photos-album-events"),
         "virtual:photos/albums/other" => Some("fm-photos-album-other"),
+        "virtual:photos/people/unnamed" => Some("fm-photos-unnamed"),
         "virtual:categories" => Some("fm-sidebar-categories"),
         "virtual:categories/images" => Some("fm-category-images"),
         "virtual:categories/documents" => Some("fm-category-documents"),

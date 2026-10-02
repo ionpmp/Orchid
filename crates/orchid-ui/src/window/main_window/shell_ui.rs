@@ -998,6 +998,9 @@ fn apply_settings_field(
         ("photos", "auto-tag") => {
             cfg.photos.auto_tag = parse_settings_bool(value)?;
         }
+        ("photos", "detect-faces") => {
+            cfg.photos.detect_faces = parse_settings_bool(value)?;
+        }
         _ => return Err(format!("field `{section}.{key}` is not editable")),
     }
     Ok(())

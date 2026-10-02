@@ -139,6 +139,7 @@ hint-mode-enabled = false
 # Files → Photos groups people/, event/, and album/ tags. No face detection.
 # auto-tag writes people/Name and event/Date/Title from folder names.
 # auto-tag = false
+# detect-faces = false
 "#;
 
 /// Load / save / reload API for the TOML configuration.

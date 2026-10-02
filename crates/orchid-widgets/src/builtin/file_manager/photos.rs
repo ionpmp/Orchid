@@ -2,7 +2,7 @@
 //!
 //! Tags stay free-form strings. A slash is a folder boundary:
 //! `people/ada`, `event/2026-10-02/picnic`, `album/vacation`.
-//! Files → Photos browses that tree. It does not detect faces.
+//! Files → Photos browses that tree. Face rectangles are stored beside it.
 
 use std::collections::BTreeSet;
 

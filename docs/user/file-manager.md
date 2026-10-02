@@ -32,10 +32,20 @@ Recent, Starred, Tags, Photos, Search results, Recycle Bin, Categories, Network.
 person, `event/2026-10-02/Picnic` is an event, `album/Vacation` is an
 album. Smart albums list every person, every event, and every other tag.
 The names `people`, `events`, and `other` are reserved under Albums.
+**People → Unnamed** holds pictures where Windows found a face and you
+have not added a `people/Name` tag.
 
-This does not detect faces. Settings → Photos can tag images from folder
-names: a picture in `People/Ada` becomes `people/ada`, and a picture in
-`Events/2026-10-02/Picnic` becomes `event/2026-10-02/picnic`. The switch
+This finds faces. It does not name the person. Settings → Photos →
+**Find faces in open folders** is off until you enable `[photos].detect-faces`.
+Orchid then scans images in the folder you open, up to 24 per pass, and
+writes rectangles to `data/photo-faces.json`. Files larger than 40 MiB are
+skipped. Builds that are not Windows, or a Windows edition without the
+face detector, find nothing. Add a `people/Name` tag to move a picture
+out of Unnamed.
+
+Settings → Photos can also tag images from folder names: a picture in
+`People/Ada` becomes `people/ada`, and a picture in
+`Events/2026-10-02/Picnic` becomes `event/2026-10-02/picnic`. That switch
 is off until you enable `[photos].auto-tag`. A file sitting directly in
 `People` or `Events`, with no name folder under it, is left alone.
 

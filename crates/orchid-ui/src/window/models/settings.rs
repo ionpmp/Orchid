@@ -683,6 +683,13 @@ pub(crate) fn build_settings_fields(
                 "settings-field-photos-auto-tag",
                 cfg.photos.auto_tag,
             );
+            push_settings_bool(
+                &mut rows,
+                locale,
+                "detect-faces",
+                "settings-field-photos-detect-faces",
+                cfg.photos.detect_faces,
+            );
         }
         "marketplace" => {
             push_settings_readonly(

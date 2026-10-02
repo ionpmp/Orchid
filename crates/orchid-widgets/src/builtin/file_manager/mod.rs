@@ -12,9 +12,11 @@ mod image_print;
 mod image_share;
 mod wrap_orchid;
 pub(crate) use image_share::{copy_loaded, paste_loaded};
+mod faces;
 mod meta_edit;
 pub mod navigation;
 mod photos;
+pub use faces::FaceStore;
 pub mod selection;
 pub mod state;
 pub mod tools;
@@ -272,6 +274,8 @@ pub struct FileManagerDeps {
     pub locale: Arc<orchid_i18n::LocaleManager>,
     /// Optional directory watcher used to auto-refresh open folders.
     pub file_watcher: Option<Arc<orchid_fs::FileWatcher>>,
+    /// Detected face rectangles (`data/photo-faces.json`).
+    pub photo_faces: Option<Arc<FaceStore>>,
 }
 
 impl std::fmt::Debug for FileManagerDeps {

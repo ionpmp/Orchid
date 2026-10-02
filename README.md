@@ -50,7 +50,7 @@ How to use it: [User guide](docs/user/README.md). How to deploy and configure it
 
 ## Status
 
-**Pre-alpha.** Active development toward v0.1. Planned work (face detection, plugins, shell replacement, …): [`docs/ROADMAP.md`](docs/ROADMAP.md). Release notes: [`CHANGELOG.md`](CHANGELOG.md).
+**Pre-alpha.** Active development toward v0.1. Planned work (shell replacement, TUI, mobile companion, …): [`docs/ROADMAP.md`](docs/ROADMAP.md). Release notes: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## System requirements
 
