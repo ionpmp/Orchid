@@ -376,7 +376,8 @@ async fn gather_chunks(store: &ChunkStore, entry: &crate::toc::RegionEntry<'_>) 
     let chunks = entry
         .chunks()
         .ok_or_else(|| FormatError::InvalidToc("linked region missing chunks".into()))?;
-    let mut buf = Vec::new();
+    let mut hashes = Vec::with_capacity(chunks.len());
+    let mut total = 0usize;
     for i in 0..chunks.len() {
         let c = chunks.get(i);
         let blake = c
@@ -387,8 +388,17 @@ async fn gather_chunks(store: &ChunkStore, entry: &crate::toc::RegionEntry<'_>) 
         }
         let mut hash = [0u8; 32];
         hash.copy_from_slice(blake.bytes());
-        let bytes = store.get(&hash).await?;
-        buf.extend_from_slice(bytes.as_slice());
+        total = total.saturating_add(usize::try_from(c.size()).unwrap_or(0));
+        hashes.push(hash);
+    }
+    let mut buf = Vec::with_capacity(total);
+    // A handful of chunk files at a time. Unbounded joins thrash the disk.
+    const BATCH: usize = 8;
+    for batch in hashes.chunks(BATCH) {
+        let parts = futures::future::try_join_all(batch.iter().map(|hash| store.get(hash))).await?;
+        for bytes in parts {
+            buf.extend_from_slice(bytes.as_slice());
+        }
     }
     Ok(buf)
 }

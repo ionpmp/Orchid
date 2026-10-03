@@ -490,6 +490,9 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **Linked documents**: chunk reads run eight at a time and the output buffer
+  is sized from the table of contents, instead of waiting on one chunk file
+  after another.
 - **Archives**: listing and stat reuse a parsed table of contents while the
   archive file is unchanged, instead of re-reading the central directory on
   every folder step.
