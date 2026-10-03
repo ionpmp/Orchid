@@ -28,7 +28,7 @@ pub struct OfficeViewer {
     path: RwLock<Option<orchid_fs::FsPath>>,
     html: RwLock<Arc<str>>,
     info: RwLock<String>,
-    sheets: RwLock<Vec<SheetPage>>,
+    sheets: RwLock<Arc<Vec<SheetPage>>>,
     /// `true` for a slide deck. Workbooks use [`Self::sheets`].
     slides: RwLock<bool>,
 }
@@ -90,7 +90,7 @@ impl OfficeViewer {
         if let OfficePreview::Sheets(book) = preview {
             *self.html.write() = Arc::from("");
             *self.info.write() = book.info;
-            *self.sheets.write() = book.sheets;
+            *self.sheets.write() = Arc::new(book.sheets);
             *self.slides.write() = false;
         }
         Ok(())
@@ -121,13 +121,13 @@ impl Viewer for OfficeViewer {
             OfficePreview::Slides(preview) => {
                 *self.html.write() = Arc::from(preview.html);
                 *self.info.write() = preview.info;
-                *self.sheets.write() = Vec::new();
+                *self.sheets.write() = Arc::new(Vec::new());
                 *self.slides.write() = true;
             }
             OfficePreview::Sheets(book) => {
                 *self.html.write() = Arc::from("");
                 *self.info.write() = book.info;
-                *self.sheets.write() = book.sheets;
+                *self.sheets.write() = Arc::new(book.sheets);
                 *self.slides.write() = false;
             }
         }
@@ -139,7 +139,7 @@ impl Viewer for OfficeViewer {
         *self.path.write() = None;
         *self.html.write() = Arc::from("");
         *self.info.write() = String::new();
-        *self.sheets.write() = Vec::new();
+        *self.sheets.write() = Arc::new(Vec::new());
         *self.slides.write() = false;
         Ok(())
     }
@@ -162,7 +162,7 @@ impl Viewer for OfficeViewer {
             ViewerSnapshot::Sheet(SheetSnapshot {
                 path_display,
                 info_text: self.info.read().clone(),
-                sheets: self.sheets.read().clone(),
+                sheets: Arc::clone(&self.sheets.read()),
             })
         }
     }
@@ -1061,11 +1061,14 @@ mod tests {
             .edit_cell(Arc::clone(&registry), "Budgets", "B1", "7")
             .await
             .expect("save");
-        match viewer.snapshot() {
-            ViewerSnapshot::Sheet(book) => {
-                assert_eq!(book.sheets[0].rows[0][0].text, "Orchid");
-                assert_eq!(book.sheets[0].rows[0][1].text, "7");
-                assert_eq!(book.sheets[0].rows[0][2].text, "2");
+        let first = viewer.snapshot();
+        let second = viewer.snapshot();
+        match (&first, &second) {
+            (ViewerSnapshot::Sheet(a), ViewerSnapshot::Sheet(b)) => {
+                assert!(Arc::ptr_eq(&a.sheets, &b.sheets));
+                assert_eq!(a.sheets[0].rows[0][0].text, "Orchid");
+                assert_eq!(a.sheets[0].rows[0][1].text, "7");
+                assert_eq!(a.sheets[0].rows[0][2].text, "2");
             }
             other => panic!("expected a sheet snapshot, got {other:?}"),
         }

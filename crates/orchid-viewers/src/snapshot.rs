@@ -606,7 +606,9 @@ pub struct MediaSnapshot {
 pub struct SheetSnapshot {
     pub path_display: String,
     pub info_text: String,
-    pub sheets: Vec<SheetPage>,
+    /// Shared with the open workbook. A snapshot tick clones the pointer,
+    /// not every cell string.
+    pub sheets: Arc<Vec<SheetPage>>,
 }
 
 /// One worksheet in [`SheetSnapshot`].

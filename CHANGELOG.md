@@ -499,6 +499,8 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **Spreadsheets**: the open cell table is shared across snapshot ticks, so
+  panning the viewer does not copy every cell string first.
 - **Terminal tabs**: a snapshot fills pane and divider geometry for the
   active tab. Other tabs still carry their title and focus.
 - **File manager**: an ASCII quick filter or Find name matches in place.
