@@ -81,6 +81,15 @@ fn find_frame_row(v: &VecModel<WidgetFrameModel>, id: Uuid) -> Option<(usize, Wi
     None
 }
 
+enum FrameContentPatch {
+    /// Row content was updated. Geometry on the row is already current.
+    Done,
+    /// Floating window could not be patched; rebuild the overlay.
+    FloatingRebuild,
+    /// Docked row needs a layout snapshot to rebuild.
+    NeedsLayout,
+}
+
 impl MainWindowController {
     /// Patch Slint `WidgetFrameModel` rows for instances whose [`WidgetSnapshotCache`] data changed
     /// without a layout canvas / scale / workspace event (e.g. terminal text at ~30Hz).
@@ -93,6 +102,30 @@ impl MainWindowController {
             self.drain_clock_notice(*id);
         }
         let unique: HashSet<Uuid> = ids.iter().copied().collect();
+        // Terminal and file-manager ticks do not move frames. Skip the layout
+        // snapshot unless a drag or resize is previewing new bounds.
+        let dragging = !self.drag_offset.lock().is_empty();
+        let resizing = !self.resize_override.lock().is_empty();
+        let pending: Vec<Uuid> = if !dragging && !resizing {
+            let mut missed = Vec::new();
+            let mut need_floating_sync = false;
+            for id in &unique {
+                match self.patch_frame_content_only(*id) {
+                    FrameContentPatch::Done => {}
+                    FrameContentPatch::FloatingRebuild => need_floating_sync = true,
+                    FrameContentPatch::NeedsLayout => missed.push(*id),
+                }
+            }
+            if need_floating_sync {
+                self.sync_floating_widgets_model();
+            }
+            if missed.is_empty() {
+                return Ok(());
+            }
+            missed
+        } else {
+            unique.into_iter().collect()
+        };
         let w = self
             .workspace_manager
             .active()
@@ -114,7 +147,7 @@ impl MainWindowController {
             .downcast_ref::<VecModel<WidgetFrameModel>>()
             .expect("workspace widgets must be VecModel-backed");
         let mut need_floating_sync = false;
-        for id in &unique {
+        for id in &pending {
             // Floating windows live in a separate model; patch content in place
             // when possible, otherwise rebuild the floating overlay.
             if self.is_floating_window(*id) {
@@ -280,6 +313,107 @@ impl MainWindowController {
             self.sync_floating_widgets_model();
         }
         Ok(())
+    }
+
+    /// Update widget content from the snapshot cache without consulting layout.
+    ///
+    /// Used when nothing is being dragged or resized, so the frame row already
+    /// has the right bounds.
+    fn patch_frame_content_only(&self, id: Uuid) -> FrameContentPatch {
+        if self.is_floating_window(id) {
+            let Ok(iref) = self.widget_manager.get_instance(id) else {
+                return FrameContentPatch::FloatingRebuild;
+            };
+            if iref.type_id == orchid_widgets::builtin::processes::TYPE_ID
+                && self.try_patch_processes_row(&self.workspace_floating_widgets, id, None, None)
+            {
+                return FrameContentPatch::Done;
+            }
+            if iref.type_id == orchid_widgets::builtin::system::TYPE_ID
+                && self.try_patch_system_row(&self.workspace_floating_widgets, id, None, None)
+            {
+                return FrameContentPatch::Done;
+            }
+            if self.try_patch_viewer_row(&self.workspace_floating_widgets, id, None, None, true) {
+                return FrameContentPatch::Done;
+            }
+            if iref.type_id == orchid_widgets::builtin::file_manager::TYPE_ID
+                && self.try_patch_file_manager_row(&self.workspace_floating_widgets, id, None, None)
+            {
+                return FrameContentPatch::Done;
+            }
+            if iref.type_id == "terminal"
+                && self.try_patch_terminal_row(&self.workspace_floating_widgets, id, None, None)
+            {
+                return FrameContentPatch::Done;
+            }
+            if self.try_patch_common_content_row(
+                &self.workspace_floating_widgets,
+                id,
+                iref.type_id.as_str(),
+                None,
+                None,
+            ) {
+                return FrameContentPatch::Done;
+            }
+            return FrameContentPatch::FloatingRebuild;
+        }
+        let Ok(iref) = self.widget_manager.get_instance(id) else {
+            return FrameContentPatch::Done;
+        };
+        if iref.type_id == "terminal" {
+            let patched = self.try_patch_terminal_row(&self.workspace_widgets, id, None, None);
+            self.resize_terminal_from_frame_row(id);
+            if patched {
+                return FrameContentPatch::Done;
+            }
+        }
+        if iref.type_id == orchid_widgets::builtin::viewer::TYPE_ID
+            && self.try_patch_viewer_row(&self.workspace_widgets, id, None, None, false)
+        {
+            return FrameContentPatch::Done;
+        }
+        if iref.type_id == orchid_widgets::builtin::processes::TYPE_ID
+            && self.try_patch_processes_row(&self.workspace_widgets, id, None, None)
+        {
+            return FrameContentPatch::Done;
+        }
+        if iref.type_id == orchid_widgets::builtin::system::TYPE_ID
+            && self.try_patch_system_row(&self.workspace_widgets, id, None, None)
+        {
+            return FrameContentPatch::Done;
+        }
+        if iref.type_id == orchid_widgets::builtin::file_manager::TYPE_ID
+            && self.try_patch_file_manager_row(&self.workspace_widgets, id, None, None)
+        {
+            return FrameContentPatch::Done;
+        }
+        if self.try_patch_common_content_row(
+            &self.workspace_widgets,
+            id,
+            iref.type_id.as_str(),
+            None,
+            None,
+        ) {
+            return FrameContentPatch::Done;
+        }
+        FrameContentPatch::NeedsLayout
+    }
+
+    fn resize_terminal_from_frame_row(&self, id: Uuid) {
+        let Some(v) = self
+            .workspace_widgets
+            .as_any()
+            .downcast_ref::<VecModel<WidgetFrameModel>>()
+        else {
+            return;
+        };
+        let Some((_, row)) = find_frame_row(v, id) else {
+            return;
+        };
+        let cw = row.width.max(1.0);
+        let ch = (row.height - Self::WIDGET_FRAME_HEADER_PX - Self::TERMINAL_TAB_BAR_PX).max(1.0);
+        let _ = self.resize_terminal_pty_to_content(id, cw, ch);
     }
 
     /// Patch terminal pixels and cursor in place. Avoids rebuilding the frame

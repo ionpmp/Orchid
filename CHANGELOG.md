@@ -15,6 +15,10 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Mail widget:** IMAP/SMTP client with an account wizard (built-in
+  profiles, Mozilla ISPDB, DNS SRV), DPAPI-stored secrets, SQLite header
+  cache, three-pane reading, HTML via WebView2, compose/reply/forward,
+  and OAuth hooks for Gmail / Microsoft 365.
 - **Agent conversation:** Universal Search `?` and the Agent widget share
   `data/agent-chat.json`. The model can read a local text file, list one
   folder, and search the open index. A proposed file write is stored until
@@ -494,6 +498,8 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **Workspace frames**: a content tick patches the existing row and skips
+  the layout snapshot while nothing is being dragged or resized.
 - **Alacritty grid**: after the first frame, only damaged lines are copied
   into the snapshot. A scroll still redraws the viewport.
 - **Linked documents**: chunk reads run eight at a time and the output buffer
