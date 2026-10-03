@@ -35,6 +35,8 @@ widget-notes-name = Notes
 widget-notes-desc = Scratchpad with tabs, autosave, find, and word wrap
 widget-agent-name = Agent
 widget-agent-desc = Conversation with tools. A file write waits for confirmation.
+widget-mail-name = Mail
+widget-mail-desc = IMAP/SMTP client with account wizard, folders, and compose
 
 
 # ---- Notes / scratchpad ----
@@ -2268,6 +2270,7 @@ dock-widget-processes = Processes
 dock-widget-calculator = Calculator
 dock-widget-notes = Notes
 dock-widget-agent = Agent
+dock-widget-mail = Mail
 dock-widget-calendar = Calendar
 dock-widget-rss = News
 dock-widget-recent-files = Recent
@@ -2693,6 +2696,40 @@ agent-role-assistant = Agent
 agent-role-tool = Tool
 agent-working = Working…
 agent-store-closed = The agent store is not open.
+
+# ---- Mail ----
+mail-empty = Add an email account to get started.
+mail-add-account = Add account
+mail-discover = Find servers
+mail-save-account = Save & connect
+mail-oauth = Sign in with browser
+mail-cancel = Cancel
+mail-refresh = Refresh
+mail-compose = New
+mail-send = Send
+mail-save-draft = Save draft
+mail-reply = Reply
+mail-reply-all = Reply all
+mail-forward = Forward
+mail-delete = Delete
+mail-flag = Flag
+mail-toggle-seen = Read/Unread
+mail-remote-images = Remote images
+mail-wizard-title = Add mail account
+mail-email = Email address
+mail-password = Password
+mail-display-name = Display name
+mail-imap = IMAP server
+mail-smtp = SMTP server
+mail-to = To
+mail-cc = Cc
+mail-subject = Subject
+mail-body = Message
+mail-syncing = Syncing…
+mail-draft-saved = Draft saved
+mail-oauth-waiting = Complete sign-in in your browser…
+mail-oauth-cancelled = Sign-in was cancelled
+mail-oauth-provider-missing = This provider needs OAuth. Run Find servers first.
 settings-section-photos = Photos
 settings-photos-note = Photos
 settings-photos-hint = Files → Photos groups people/, event/, and album/ tags. Find faces stays off until you enable it. Windows then marks faces in the open folder as people/unnamed. It does not name who they are. Auto-tag reads People and Events folder names when you open a folder.

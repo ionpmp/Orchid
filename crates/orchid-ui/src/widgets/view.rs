@@ -109,6 +109,11 @@ impl SlintPayload {
                     .map(|line| format!("{}: {}", line.role, line.text))
                     .collect(),
             ),
+            WidgetPayload::Mail(p) => Self::Text(vec![
+                p.selected_folder.clone(),
+                p.reading_subject.clone(),
+                p.status.clone(),
+            ]),
             WidgetPayload::Browser(p) => Self::Text(vec![p.title.clone(), p.url.clone()]),
             WidgetPayload::Calendar(p) => Self::Text(
                 p.events

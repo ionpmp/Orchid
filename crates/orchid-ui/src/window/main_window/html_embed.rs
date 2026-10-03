@@ -421,6 +421,7 @@ pub(super) fn sync_html_from_cache(c: &MainWindowController, id: Uuid) {
     };
     match &ws.payload {
         WidgetPayload::Viewer(vp) => c.sync_html_webview_document(id, &vp.snapshot),
+        WidgetPayload::Mail(_) => c.sync_mail_html(id),
         _ => c.html_webview.set_document(id, HtmlDocument::None),
     }
 }
@@ -476,7 +477,7 @@ pub(super) fn sync_browser_from_cache(c: &MainWindowController, id: Uuid) {
     }
 }
 
-fn parent_hwnd_bits(window: &slint::Window) -> isize {
+pub(super) fn parent_hwnd_bits(window: &slint::Window) -> isize {
     use slint::winit_030::WinitWindowAccessor;
     window
         .with_winit_window(|winit_window| {

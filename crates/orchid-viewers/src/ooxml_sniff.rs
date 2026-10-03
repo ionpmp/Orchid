@@ -72,8 +72,8 @@ fn read_zip_local_entry(sample: &[u8], wanted_name: &str) -> Option<Vec<u8>> {
         }
         let method = u16::from_le_bytes([sample[offset + 8], sample[offset + 9]]);
         let flags = u16::from_le_bytes([sample[offset + 6], sample[offset + 7]]);
-        let comp_size = u32::from_le_bytes(sample[offset + 18..offset + 22].try_into().ok()?)
-            as usize;
+        let comp_size =
+            u32::from_le_bytes(sample[offset + 18..offset + 22].try_into().ok()?) as usize;
         let name_len = u16::from_le_bytes([sample[offset + 26], sample[offset + 27]]) as usize;
         let extra_len = u16::from_le_bytes([sample[offset + 28], sample[offset + 29]]) as usize;
         let name_start = offset + 30;

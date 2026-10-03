@@ -16,6 +16,7 @@ members = [
     "crates/orchid-terminal",
     "crates/orchid-viewers",
     "crates/orchid-widgets",
+    "crates/orchid-mail",
     "crates/orchid-i18n",
     "crates/orchid-ui",
     "crates/orchid-app",
@@ -199,11 +200,31 @@ regex = "1"
 chardetng = "1"
 
 # HTTP client / feeds
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "gzip"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "gzip", "form"] }
 feed-rs = "2.4"
 futures = "0.3"
 opener = "0.8"
 rfd = "0.17"
+
+# Mail (IMAP / SMTP / MIME / autodiscover)
+async-imap = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
+lettre = { version = "0.11", default-features = false, features = [
+    "tokio1-rustls-tls",
+    "smtp-transport",
+    "builder",
+    "hostname",
+] }
+mail-parser = "0.11"
+mail-builder = "0.4"
+rusqlite = { version = "0.37", features = ["bundled"] }
+hickory-resolver = { version = "0.25", default-features = false, features = [
+    "tokio",
+    "system-config",
+    "webpki-roots",
+] }
+tokio-rustls = "0.26"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1"
 
 # System info
 sysinfo = { version = "0.39", default-features = false, features = ["disk", "system", "network", "user"] }
@@ -261,6 +282,7 @@ orchid-search = { path = "crates/orchid-search", version = "0.1.0" }
 orchid-terminal = { path = "crates/orchid-terminal", version = "0.1.0" }
 orchid-viewers = { path = "crates/orchid-viewers", version = "0.1.0" }
 orchid-widgets = { path = "crates/orchid-widgets", version = "0.1.0" }
+orchid-mail = { path = "crates/orchid-mail", version = "0.1.0" }
 orchid-i18n = { path = "crates/orchid-i18n", version = "0.1.0" }
 orchid-ui = { path = "crates/orchid-ui", version = "0.1.0" }
 orchid-format = { path = "crates/orchid-format", version = "0.1.0" }

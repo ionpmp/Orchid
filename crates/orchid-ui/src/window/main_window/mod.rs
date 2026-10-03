@@ -72,6 +72,7 @@ mod html_embed;
 mod image_touch;
 mod input;
 mod jyotish;
+mod mail;
 mod media_search;
 mod notes;
 mod password;
@@ -689,6 +690,7 @@ impl MainWindowController {
         g.set_dock_widget_calculator(mgr.tr("dock-widget-calculator").into());
         g.set_dock_widget_notes(mgr.tr("dock-widget-notes").into());
         g.set_dock_widget_agent(mgr.tr("dock-widget-agent").into());
+        g.set_dock_widget_mail(mgr.tr("dock-widget-mail").into());
         g.set_dock_widget_calendar(mgr.tr("dock-widget-calendar").into());
         g.set_dock_widget_rss(mgr.tr("dock-widget-rss").into());
         g.set_dock_widget_recent_files(mgr.tr("dock-widget-recent-files").into());
@@ -712,6 +714,7 @@ impl MainWindowController {
         g.set_widget_calculator_desc(mgr.tr("widget-calculator-desc").into());
         g.set_widget_notes_desc(mgr.tr("widget-notes-desc").into());
         g.set_widget_agent_desc(mgr.tr("widget-agent-desc").into());
+        g.set_widget_mail_desc(mgr.tr("widget-mail-desc").into());
         g.set_widget_calendar_desc(mgr.tr("widget-calendar-desc").into());
         g.set_widget_rss_desc(mgr.tr("widget-rss-desc").into());
         g.set_widget_recent_files_desc(mgr.tr("widget-recent-files-desc").into());

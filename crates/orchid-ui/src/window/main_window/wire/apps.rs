@@ -196,6 +196,158 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_mail_select_account({
+            let t = t.clone();
+            move |id, account| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_select_account(&id, &account);
+                }
+            }
+        });
+        self.window.on_mail_select_folder({
+            let t = t.clone();
+            move |id, folder| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_select_folder(&id, &folder);
+                }
+            }
+        });
+        self.window.on_mail_select_message({
+            let t = t.clone();
+            move |id, uid| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_select_message(&id, uid);
+                }
+            }
+        });
+        self.window.on_mail_refresh({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_refresh(&id);
+                }
+            }
+        });
+        self.window.on_mail_open_wizard({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_open_wizard(&id);
+                }
+            }
+        });
+        self.window.on_mail_show_mailbox({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_show_mailbox(&id);
+                }
+            }
+        });
+        self.window.on_mail_wizard_set({
+            let t = t.clone();
+            move |id, field, value| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_wizard_set(&id, &field, &value);
+                }
+            }
+        });
+        self.window.on_mail_wizard_discover({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_wizard_discover(&id);
+                }
+            }
+        });
+        self.window.on_mail_wizard_save({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_wizard_save(&id);
+                }
+            }
+        });
+        self.window.on_mail_wizard_oauth({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_wizard_oauth(&id);
+                }
+            }
+        });
+        self.window.on_mail_open_compose({
+            let t = t.clone();
+            move |id, kind| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_open_compose(&id, &kind);
+                }
+            }
+        });
+        self.window.on_mail_compose_set({
+            let t = t.clone();
+            move |id, field, value| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_compose_set(&id, &field, &value);
+                }
+            }
+        });
+        self.window.on_mail_compose_send({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_compose_send(&id);
+                }
+            }
+        });
+        self.window.on_mail_compose_draft({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_compose_draft(&id);
+                }
+            }
+        });
+        self.window.on_mail_toggle_seen({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_toggle_seen(&id);
+                }
+            }
+        });
+        self.window.on_mail_toggle_flagged({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_toggle_flagged(&id);
+                }
+            }
+        });
+        self.window.on_mail_delete({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_delete(&id);
+                }
+            }
+        });
+        self.window.on_mail_set_remote_images({
+            let t = t.clone();
+            move |id, allow| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_set_remote_images(&id, allow);
+                }
+            }
+        });
+        self.window.on_mail_embed_bounds({
+            let t = t.clone();
+            move |id, x, y, w, h, vis| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_embed_bounds(&id, x, y, w, h, vis);
+                }
+            }
+        });
         self.window.on_browser_select_tab({
             let t = t.clone();
             move |id, index| {

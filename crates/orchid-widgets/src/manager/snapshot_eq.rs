@@ -4,11 +4,11 @@ use crate::widget::payloads::{
     AgentPayload, AudioPlayerPayload, BrowserPayload, CalculatorPayload, CalendarPayload,
     ClockPayload, EntryPayload, FileManagerPayload, JyotishAntarRow, JyotishDayChip,
     JyotishFactorRow, JyotishMonthCell, JyotishMonthSummary, JyotishPayload, JyotishYearSummary,
-    MediaPlayerPayload, MoonPayload, NotesPayload, PasswordEntryDetailView, PasswordEntryView,
-    PasswordManagerPayload, ProcessRowView, ProcessesPayload, RecentFilesPayload, RssItemView,
-    RssPayload, SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator,
-    SystemPayload, UniversalSearchPayload, UserRowView, VideoPlayerPayload, ViewerPayload,
-    WeatherForecastDay, WeatherPayload,
+    MailPayload, MediaPlayerPayload, MoonPayload, NotesPayload, PasswordEntryDetailView,
+    PasswordEntryView, PasswordManagerPayload, ProcessRowView, ProcessesPayload,
+    RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView, ServiceRowView,
+    StartupRowView, SystemIndicator, SystemPayload, UniversalSearchPayload, UserRowView,
+    VideoPlayerPayload, ViewerPayload, WeatherForecastDay, WeatherPayload,
 };
 use crate::widget::snapshot::{TerminalPanePayload, TerminalPayload, WidgetPayload};
 
@@ -33,6 +33,7 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
         (WidgetPayload::Calculator(a), WidgetPayload::Calculator(b)) => calculator_payload_eq(a, b),
         (WidgetPayload::Notes(a), WidgetPayload::Notes(b)) => notes_payload_eq(a, b),
         (WidgetPayload::Agent(a), WidgetPayload::Agent(b)) => agent_payload_eq(a, b),
+        (WidgetPayload::Mail(a), WidgetPayload::Mail(b)) => mail_payload_eq(a, b),
         (WidgetPayload::Browser(a), WidgetPayload::Browser(b)) => browser_payload_eq(a, b),
         (WidgetPayload::Calendar(a), WidgetPayload::Calendar(b)) => calendar_payload_eq(a, b),
         (WidgetPayload::RssFeed(a), WidgetPayload::RssFeed(b)) => rss_payload_eq(a, b),
@@ -746,6 +747,10 @@ fn browser_payload_eq(a: &BrowserPayload, b: &BrowserPayload) -> bool {
 }
 
 fn agent_payload_eq(a: &AgentPayload, b: &AgentPayload) -> bool {
+    a == b
+}
+
+fn mail_payload_eq(a: &MailPayload, b: &MailPayload) -> bool {
     a == b
 }
 

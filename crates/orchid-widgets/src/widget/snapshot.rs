@@ -68,6 +68,8 @@ pub enum WidgetPayload {
     Notes(crate::widget::payloads::NotesPayload),
     /// Shared agent conversation.
     Agent(crate::widget::payloads::AgentPayload),
+    /// Mail client.
+    Mail(crate::widget::payloads::MailPayload),
     /// Built-in browser (address bar + tabs).
     Browser(crate::widget::payloads::BrowserPayload),
     /// Local calendar / agenda.

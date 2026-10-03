@@ -407,6 +407,11 @@ impl OrchidApp {
         widget_registry
             .register(orchid_widgets::builtin::agent::descriptor())
             .map_err(|e| UiError::Slint(format!("register agent: {e}")))?;
+        let mail_engine = orchid_mail::MailEngine::open(&paths.data_dir, http.clone())
+            .map_err(|e| UiError::Slint(format!("mail engine: {e}")))?;
+        widget_registry
+            .register(orchid_widgets::builtin::mail::descriptor(mail_engine))
+            .map_err(|e| UiError::Slint(format!("register mail: {e}")))?;
         widget_registry
             .register(orchid_widgets::builtin::browser::descriptor())
             .map_err(|e| UiError::Slint(format!("register browser: {e}")))?;

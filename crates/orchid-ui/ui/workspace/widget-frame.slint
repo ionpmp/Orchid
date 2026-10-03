@@ -16,6 +16,7 @@ import { ProcessesView } from "../widgets/processes.slint";
 import { CalculatorView } from "../widgets/calculator.slint";
 import { NotesView } from "../widgets/notes.slint";
 import { AgentView } from "../widgets/agent.slint";
+import { MailView } from "../widgets/mail.slint";
 import { BrowserView } from "../widgets/browser.slint";
 import { CalendarView } from "../widgets/calendar.slint";
 import { RssView } from "../widgets/rss.slint";
@@ -198,6 +199,27 @@ export component WidgetFrame inherits Rectangle {
     callback agent-confirm(string);
     callback agent-dismiss(string);
     callback agent-clear(string);
+
+    // Mail
+    callback mail-select-account(string, string);
+    callback mail-select-folder(string, string);
+    callback mail-select-message(string, int);
+    callback mail-refresh(string);
+    callback mail-open-wizard(string);
+    callback mail-show-mailbox(string);
+    callback mail-wizard-set(string, string, string);
+    callback mail-wizard-discover(string);
+    callback mail-wizard-save(string);
+    callback mail-wizard-oauth(string);
+    callback mail-open-compose(string, string);
+    callback mail-compose-set(string, string, string);
+    callback mail-compose-send(string);
+    callback mail-compose-draft(string);
+    callback mail-toggle-seen(string);
+    callback mail-toggle-flagged(string);
+    callback mail-delete(string);
+    callback mail-set-remote-images(string, bool);
+    callback mail-embed-bounds(string, length, length, length, length, bool);
 
     // Browser
     callback browser-select-tab(string, int);
@@ -402,6 +424,8 @@ export component WidgetFrame inherits Rectangle {
             type_id == "processes" ? "P" :
             type_id == "calculator" ? "=" :
             type_id == "notes" ? "Nt" :
+            type_id == "agent" ? "Ag" :
+            type_id == "mail" ? "@" :
             type_id == "calendar" ? "Ca" :
             "*";
     }
@@ -868,6 +892,31 @@ export component WidgetFrame inherits Rectangle {
                     confirm-write => { root.agent-confirm(root.model.instance-id); }
                     dismiss-write => { root.agent-dismiss(root.model.instance-id); }
                     clear-chat => { root.agent-clear(root.model.instance-id); }
+                }
+
+                if model.type-id == "mail" : MailView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.mail;
+                    select-account(a) => { root.mail-select-account(root.model.instance-id, a); }
+                    select-folder(f) => { root.mail-select-folder(root.model.instance-id, f); }
+                    select-message(u) => { root.mail-select-message(root.model.instance-id, u); }
+                    refresh => { root.mail-refresh(root.model.instance-id); }
+                    open-wizard => { root.mail-open-wizard(root.model.instance-id); }
+                    show-mailbox => { root.mail-show-mailbox(root.model.instance-id); }
+                    wizard-set(f, v) => { root.mail-wizard-set(root.model.instance-id, f, v); }
+                    wizard-discover => { root.mail-wizard-discover(root.model.instance-id); }
+                    wizard-save => { root.mail-wizard-save(root.model.instance-id); }
+                    wizard-oauth => { root.mail-wizard-oauth(root.model.instance-id); }
+                    open-compose(k) => { root.mail-open-compose(root.model.instance-id, k); }
+                    compose-set(f, v) => { root.mail-compose-set(root.model.instance-id, f, v); }
+                    compose-send => { root.mail-compose-send(root.model.instance-id); }
+                    compose-draft => { root.mail-compose-draft(root.model.instance-id); }
+                    toggle-seen => { root.mail-toggle-seen(root.model.instance-id); }
+                    toggle-flagged => { root.mail-toggle-flagged(root.model.instance-id); }
+                    delete-selected => { root.mail-delete(root.model.instance-id); }
+                    set-remote-images(a) => { root.mail-set-remote-images(root.model.instance-id, a); }
+                    embed-bounds(x, y, w, h, vis) => { root.mail-embed-bounds(root.model.instance-id, x, y, w, h, vis); }
                 }
 
                 if model.type-id == "browser" : BrowserView {

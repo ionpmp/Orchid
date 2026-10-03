@@ -27,7 +27,7 @@ use super::MainWindowController;
 
 impl MainWindowController {
     pub(super) fn resize_terminal_pty_to_content(
-        self: &Arc<Self>,
+        &self,
         inst: Uuid,
         viewport_w: f32,
         viewport_h: f32,

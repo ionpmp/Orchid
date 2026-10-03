@@ -17,6 +17,7 @@ pub mod calendar;
 pub mod clock;
 pub mod file_manager;
 pub mod jyotish;
+pub mod mail;
 pub mod media;
 pub mod moon;
 pub mod notes;

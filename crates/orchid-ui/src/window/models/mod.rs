@@ -10,6 +10,7 @@ mod calendar;
 mod clock;
 mod file_manager;
 mod jyotish;
+mod mail;
 mod media;
 mod moon;
 mod notes;
@@ -49,6 +50,7 @@ pub(crate) use file_manager::{
     FmViewport, FM_LIST_REBASE_SLACK,
 };
 pub(crate) use jyotish::{build_jyotish_model, empty_jyotish_model, patch_jyotish_model};
+pub(crate) use mail::{build_mail_model, empty_mail_model, patch_mail_model};
 pub(crate) use media::{build_media_model, empty_media_model, patch_media_model};
 pub(crate) use moon::{build_moon_model, empty_moon_model, patch_moon_model};
 pub(crate) use notes::{build_notes_model, empty_notes_model, patch_notes_model};

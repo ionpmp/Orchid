@@ -140,9 +140,7 @@ impl MainWindowController {
             };
             let msg = locale.tr(toast_key).to_string();
             let title = locale.tr("widget-password-name");
-            c.password_toasts
-                .write()
-                .insert(inst_id, (msg.clone(), ok));
+            c.password_toasts.write().insert(inst_id, (msg.clone(), ok));
             c.push_notification(&title, &msg, if ok { 1 } else { 2 });
             c.schedule_instance_patch(inst_id);
 

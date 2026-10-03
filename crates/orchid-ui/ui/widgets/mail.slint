@@ -1,0 +1,538 @@
+import { Theme } from "../theme_global.slint";
+import { MailModel } from "../workspace/defs.slint";
+
+export component MailView inherits Rectangle {
+    in property <MailModel> model;
+
+    callback select-account(string);
+    callback select-folder(string);
+    callback select-message(int);
+    callback refresh();
+    callback open-wizard();
+    callback show-mailbox();
+    callback wizard-set(string, string);
+    callback wizard-discover();
+    callback wizard-save();
+    callback wizard-oauth();
+    callback open-compose(string);
+    callback compose-set(string, string);
+    callback compose-send();
+    callback compose-draft();
+    callback toggle-seen();
+    callback toggle-flagged();
+    callback delete-selected();
+    callback set-remote-images(bool);
+    callback embed-bounds(length, length, length, length, bool);
+
+    background: transparent;
+
+    VerticalLayout {
+        width: 100%;
+        height: 100%;
+        spacing: Theme.space-2;
+        padding: Theme.space-2;
+
+        if root.model.status != "" : Text {
+            text: root.model.status;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+        }
+
+        // ---- Wizard ----
+        if root.model.mode == 1 : Flickable {
+            viewport-width: parent.width;
+            VerticalLayout {
+                spacing: Theme.space-2;
+                width: parent.width - Theme.space-2;
+                Text {
+                    text: root.model.wizard-title;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-size-md;
+                    font-weight: Theme.weight-semibold;
+                }
+                Text { text: root.model.email-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                email-in := TextInput {
+                    text: root.model.wizard-email;
+                    color: Theme.text-primary;
+                    single-line: true;
+                    edited => { root.wizard-set("email", self.text); }
+                }
+                Text { text: root.model.display-name-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                TextInput {
+                    text: root.model.wizard-display-name;
+                    color: Theme.text-primary;
+                    single-line: true;
+                    edited => { root.wizard-set("display_name", self.text); }
+                }
+                Rectangle {
+                    height: Theme.control-sm;
+                    border-radius: Theme.radius-pill;
+                    background: Theme.accent-brand;
+                    TouchArea { clicked => { root.wizard-discover(); } }
+                    Text {
+                        width: 100%; height: 100%;
+                        text: root.model.discover-label;
+                        color: Theme.text-on-accent;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+                if root.model.wizard-source != "" : Text {
+                    text: root.model.wizard-source;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
+                Text { text: root.model.imap-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                HorizontalLayout {
+                    spacing: Theme.space-2;
+                    TextInput {
+                        text: root.model.wizard-imap-host;
+                        color: Theme.text-primary;
+                        single-line: true;
+                        horizontal-stretch: 1;
+                        edited => { root.wizard-set("imap_host", self.text); }
+                    }
+                    TextInput {
+                        text: root.model.wizard-imap-port;
+                        color: Theme.text-primary;
+                        single-line: true;
+                        width: 60px;
+                        edited => { root.wizard-set("imap_port", self.text); }
+                    }
+                }
+                Text { text: root.model.smtp-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                HorizontalLayout {
+                    spacing: Theme.space-2;
+                    TextInput {
+                        text: root.model.wizard-smtp-host;
+                        color: Theme.text-primary;
+                        single-line: true;
+                        horizontal-stretch: 1;
+                        edited => { root.wizard-set("smtp_host", self.text); }
+                    }
+                    TextInput {
+                        text: root.model.wizard-smtp-port;
+                        color: Theme.text-primary;
+                        single-line: true;
+                        width: 60px;
+                        edited => { root.wizard-set("smtp_port", self.text); }
+                    }
+                }
+                Text { text: root.model.password-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                TextInput {
+                    text: root.model.wizard-password;
+                    color: Theme.text-primary;
+                    single-line: true;
+                    edited => { root.wizard-set("password", self.text); }
+                }
+                if root.model.wizard-error != "" : Text {
+                    text: root.model.wizard-error;
+                    color: Theme.feedback-danger;
+                    font-size: Theme.font-size-sm;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    spacing: Theme.space-2;
+                    Rectangle {
+                        height: Theme.control-sm;
+                        border-radius: Theme.radius-pill;
+                        background: Theme.accent-brand;
+                        horizontal-stretch: 1;
+                        TouchArea { clicked => { root.wizard-save(); } }
+                        Text {
+                            width: 100%; height: 100%;
+                            text: root.model.save-label;
+                            color: Theme.text-on-accent;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+                    if root.model.wizard-oauth-provider != "" : Rectangle {
+                        height: Theme.control-sm;
+                        border-radius: Theme.radius-pill;
+                        background: Theme.accent-soft;
+                        horizontal-stretch: 1;
+                        TouchArea { clicked => { root.wizard-oauth(); } }
+                        Text {
+                            width: 100%; height: 100%;
+                            text: root.model.oauth-label;
+                            color: Theme.accent-brand;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+                    Rectangle {
+                        height: Theme.control-sm;
+                        border-radius: Theme.radius-pill;
+                        background: Theme.state-hover;
+                        TouchArea { clicked => { root.show-mailbox(); } }
+                        Text {
+                            width: 100%; height: 100%;
+                            text: root.model.cancel-label;
+                            color: Theme.text-secondary;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: Theme.font-size-sm;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- Compose ----
+        if root.model.mode == 2 : VerticalLayout {
+            spacing: Theme.space-2;
+            Text { text: root.model.to-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+            TextInput {
+                text: root.model.compose-to;
+                color: Theme.text-primary;
+                single-line: true;
+                edited => { root.compose-set("to", self.text); }
+            }
+            Text { text: root.model.cc-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+            TextInput {
+                text: root.model.compose-cc;
+                color: Theme.text-primary;
+                single-line: true;
+                edited => { root.compose-set("cc", self.text); }
+            }
+            Text { text: root.model.subject-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+            TextInput {
+                text: root.model.compose-subject;
+                color: Theme.text-primary;
+                single-line: true;
+                edited => { root.compose-set("subject", self.text); }
+            }
+            Text { text: root.model.body-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+            TextInput {
+                text: root.model.compose-body;
+                color: Theme.text-primary;
+                single-line: false;
+                wrap: word-wrap;
+                vertical-stretch: 1;
+                edited => { root.compose-set("body", self.text); }
+            }
+            HorizontalLayout {
+                spacing: Theme.space-2;
+                Rectangle {
+                    height: Theme.control-sm;
+                    border-radius: Theme.radius-pill;
+                    background: Theme.accent-brand;
+                    TouchArea { clicked => { root.compose-send(); } }
+                    Text {
+                        width: 100%; height: 100%;
+                        text: root.model.send-label;
+                        color: Theme.text-on-accent;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+                Rectangle {
+                    height: Theme.control-sm;
+                    border-radius: Theme.radius-pill;
+                    background: Theme.accent-soft;
+                    TouchArea { clicked => { root.compose-draft(); } }
+                    Text {
+                        width: 100%; height: 100%;
+                        text: root.model.draft-label;
+                        color: Theme.accent-brand;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+                Rectangle {
+                    height: Theme.control-sm;
+                    border-radius: Theme.radius-pill;
+                    background: Theme.state-hover;
+                    TouchArea { clicked => { root.show-mailbox(); } }
+                    Text {
+                        width: 100%; height: 100%;
+                        text: root.model.cancel-label;
+                        color: Theme.text-secondary;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+            }
+        }
+
+        // ---- Mailbox ----
+        if root.model.mode == 0 : VerticalLayout {
+            spacing: Theme.space-2;
+            vertical-stretch: 1;
+
+            HorizontalLayout {
+                spacing: Theme.space-2;
+                height: Theme.control-sm;
+                for acc[i] in root.model.accounts : Rectangle {
+                    border-radius: Theme.radius-pill;
+                    background: acc.selected ? Theme.accent-soft : Colors.transparent;
+                    border-width: acc.selected ? Theme.hairline : 0px;
+                    border-color: Theme.accent-muted;
+                    TouchArea { clicked => { root.select-account(acc.id); } }
+                    Text {
+                        text: acc.label;
+                        color: acc.selected ? Theme.accent-brand : Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    border-radius: Theme.radius-pill;
+                    background: Theme.state-hover;
+                    TouchArea { clicked => { root.open-wizard(); } }
+                    Text {
+                        text: root.model.add-account-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    border-radius: Theme.radius-pill;
+                    background: Theme.state-hover;
+                    TouchArea { clicked => { root.refresh(); } }
+                    Text {
+                        text: root.model.refresh-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    border-radius: Theme.radius-pill;
+                    background: Theme.accent-brand;
+                    TouchArea { clicked => { root.open-compose("new"); } }
+                    Text {
+                        text: root.model.compose-label;
+                        color: Theme.text-on-accent;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            if root.model.accounts.length == 0 : Text {
+                text: root.model.empty-label;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                vertical-stretch: 1;
+            }
+
+            if root.model.accounts.length > 0 : HorizontalLayout {
+                spacing: Theme.space-2;
+                vertical-stretch: 1;
+
+                // Folders
+                Rectangle {
+                    width: 160px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    Flickable {
+                        width: 100%;
+                        height: 100%;
+                        viewport-width: self.width;
+                        VerticalLayout {
+                            padding: Theme.space-1;
+                            spacing: Theme.space-1;
+                            for folder[i] in root.model.folders : Rectangle {
+                                height: Theme.control-sm;
+                                border-radius: Theme.radius-sm;
+                                background: folder.selected ? Theme.accent-soft : Colors.transparent;
+                                TouchArea { clicked => { root.select-folder(folder.path); } }
+                                HorizontalLayout {
+                                    padding-left: Theme.space-2 + folder.depth * 10px;
+                                    spacing: Theme.space-1;
+                                    Text {
+                                        text: folder.name;
+                                        color: folder.selected ? Theme.accent-brand : Theme.text-primary;
+                                        font-size: Theme.font-size-sm;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                        overflow: elide;
+                                    }
+                                    if folder.unread > 0 : Text {
+                                        text: folder.unread;
+                                        color: Theme.text-secondary;
+                                        font-size: Theme.font-size-sm;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Message list
+                Rectangle {
+                    width: 240px;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    Flickable {
+                        width: 100%;
+                        height: 100%;
+                        viewport-width: self.width;
+                        VerticalLayout {
+                            padding: Theme.space-1;
+                            spacing: Theme.space-1;
+                            for msg[i] in root.model.messages : Rectangle {
+                                height: 56px;
+                                border-radius: Theme.radius-sm;
+                                background: msg.selected ? Theme.accent-soft :
+                                    ta.has-hover ? Theme.state-hover : Colors.transparent;
+                                ta := TouchArea { clicked => { root.select-message(msg.uid); } }
+                                VerticalLayout {
+                                    padding: Theme.space-1;
+                                    spacing: 2px;
+                                    HorizontalLayout {
+                                        Text {
+                                            text: msg.from;
+                                            color: Theme.text-primary;
+                                            font-size: Theme.font-size-sm;
+                                            font-weight: msg.seen ? Theme.weight-medium : Theme.weight-semibold;
+                                            overflow: elide;
+                                            horizontal-stretch: 1;
+                                        }
+                                        Text {
+                                            text: msg.date;
+                                            color: Theme.text-secondary;
+                                            font-size: Theme.font-size-xs;
+                                        }
+                                    }
+                                    Text {
+                                        text: (msg.flagged ? "★ " : "") + (msg.has-attachment ? "📎 " : "") + msg.subject;
+                                        color: Theme.text-primary;
+                                        font-size: Theme.font-size-sm;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Reading pane
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: Theme.surface-raised;
+                    border-radius: Theme.radius-md;
+                    VerticalLayout {
+                        padding: Theme.space-2;
+                        spacing: Theme.space-2;
+                        if root.model.selected-uid != 0 : HorizontalLayout {
+                            spacing: Theme.space-2;
+                            Rectangle {
+                                height: Theme.control-sm;
+                                border-radius: Theme.radius-pill;
+                                background: Theme.state-hover;
+                                TouchArea { clicked => { root.open-compose("reply"); } }
+                                Text { width: 100%; height: 100%; text: root.model.reply-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                            }
+                            Rectangle {
+                                height: Theme.control-sm;
+                                border-radius: Theme.radius-pill;
+                                background: Theme.state-hover;
+                                TouchArea { clicked => { root.open-compose("reply-all"); } }
+                                Text { width: 100%; height: 100%; text: root.model.reply-all-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                            }
+                            Rectangle {
+                                height: Theme.control-sm;
+                                border-radius: Theme.radius-pill;
+                                background: Theme.state-hover;
+                                TouchArea { clicked => { root.open-compose("forward"); } }
+                                Text { width: 100%; height: 100%; text: root.model.forward-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                            }
+                            Rectangle {
+                                height: Theme.control-sm;
+                                border-radius: Theme.radius-pill;
+                                background: Theme.state-hover;
+                                TouchArea { clicked => { root.toggle-flagged(); } }
+                                Text { width: 100%; height: 100%; text: root.model.flag-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                            }
+                            Rectangle {
+                                height: Theme.control-sm;
+                                border-radius: Theme.radius-pill;
+                                background: Theme.state-hover;
+                                TouchArea { clicked => { root.toggle-seen(); } }
+                                Text { width: 100%; height: 100%; text: root.model.seen-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                            }
+                            Rectangle {
+                                height: Theme.control-sm;
+                                border-radius: Theme.radius-pill;
+                                background: Theme.state-hover;
+                                TouchArea { clicked => { root.delete-selected(); } }
+                                Text { width: 100%; height: 100%; text: root.model.delete-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                            }
+                            if root.model.reading-has-html : Rectangle {
+                                height: Theme.control-sm;
+                                border-radius: Theme.radius-pill;
+                                background: root.model.allow-remote-images ? Theme.accent-soft : Theme.state-hover;
+                                TouchArea { clicked => { root.set-remote-images(!root.model.allow-remote-images); } }
+                                Text { width: 100%; height: 100%; text: root.model.remote-images-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; horizontal-alignment: center; vertical-alignment: center; }
+                            }
+                        }
+                        if root.model.selected-uid != 0 : Text {
+                            text: root.model.reading-subject;
+                            color: Theme.text-primary;
+                            font-size: Theme.font-size-md;
+                            font-weight: Theme.weight-semibold;
+                            wrap: word-wrap;
+                        }
+                        if root.model.selected-uid != 0 : Text {
+                            text: root.model.reading-from + " → " + root.model.reading-to + " · " + root.model.reading-date;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            wrap: word-wrap;
+                        }
+                        html-host := Rectangle {
+                            vertical-stretch: 1;
+                            background: Theme.surface-base;
+                            border-radius: Theme.radius-sm;
+                            changed width => {
+                                if root.model.reading-has-html && root.model.mode == 0 {
+                                    root.embed-bounds(self.absolute-position.x, self.absolute-position.y, self.width, self.height, true);
+                                } else {
+                                    root.embed-bounds(0, 0, 0, 0, false);
+                                }
+                            }
+                            changed height => {
+                                if root.model.reading-has-html && root.model.mode == 0 {
+                                    root.embed-bounds(self.absolute-position.x, self.absolute-position.y, self.width, self.height, true);
+                                } else {
+                                    root.embed-bounds(0, 0, 0, 0, false);
+                                }
+                            }
+                            changed absolute-position => {
+                                if root.model.reading-has-html && root.model.mode == 0 {
+                                    root.embed-bounds(self.absolute-position.x, self.absolute-position.y, self.width, self.height, true);
+                                } else {
+                                    root.embed-bounds(0, 0, 0, 0, false);
+                                }
+                            }
+
+                            if !root.model.reading-has-html : Flickable {
+                                width: 100%;
+                                height: 100%;
+                                viewport-width: self.width;
+                                Text {
+                                    width: parent.width;
+                                    text: root.model.reading-text;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-size-sm;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

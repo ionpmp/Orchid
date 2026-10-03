@@ -18,7 +18,8 @@ settings; it is not a management server.
 │  orchid-app — thin binary (tracing, Tokio, mimalloc,        │
 │               single-instance named pipe, `--tui` browser) │
 ├─────────────────────────────────────────────────────────────┤
-│  orchid-widgets — managers + builtins (incl. browser)      │
+│  orchid-widgets — managers + builtins (incl. browser, mail)│
+│  orchid-mail — IMAP/SMTP, autodiscover, local SQLite cache │
 │  orchid-viewers — image / PDF / text / archive / DOCX /      │
 │                   .orchid / media (libmpv) / HTML           │
 │  orchid-terminal — PTY + vte emulator + session/layout      │

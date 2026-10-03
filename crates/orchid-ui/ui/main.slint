@@ -239,6 +239,25 @@ export component MainWindow inherits Window {
     callback agent-confirm(string);
     callback agent-dismiss(string);
     callback agent-clear(string);
+    callback mail-select-account(string, string);
+    callback mail-select-folder(string, string);
+    callback mail-select-message(string, int);
+    callback mail-refresh(string);
+    callback mail-open-wizard(string);
+    callback mail-show-mailbox(string);
+    callback mail-wizard-set(string, string, string);
+    callback mail-wizard-discover(string);
+    callback mail-wizard-save(string);
+    callback mail-wizard-oauth(string);
+    callback mail-open-compose(string, string);
+    callback mail-compose-set(string, string, string);
+    callback mail-compose-send(string);
+    callback mail-compose-draft(string);
+    callback mail-toggle-seen(string);
+    callback mail-toggle-flagged(string);
+    callback mail-delete(string);
+    callback mail-set-remote-images(string, bool);
+    callback mail-embed-bounds(string, length, length, length, length, bool);
     callback browser-select-tab(string, int);
     callback browser-new-tab(string);
     callback browser-close-tab(string, int);
@@ -707,6 +726,25 @@ export component MainWindow inherits Window {
             agent-confirm(id) => { root.agent-confirm(id); }
             agent-dismiss(id) => { root.agent-dismiss(id); }
             agent-clear(id) => { root.agent-clear(id); }
+            mail-select-account(id, a) => { root.mail-select-account(id, a); }
+            mail-select-folder(id, f) => { root.mail-select-folder(id, f); }
+            mail-select-message(id, u) => { root.mail-select-message(id, u); }
+            mail-refresh(id) => { root.mail-refresh(id); }
+            mail-open-wizard(id) => { root.mail-open-wizard(id); }
+            mail-show-mailbox(id) => { root.mail-show-mailbox(id); }
+            mail-wizard-set(id, f, v) => { root.mail-wizard-set(id, f, v); }
+            mail-wizard-discover(id) => { root.mail-wizard-discover(id); }
+            mail-wizard-save(id) => { root.mail-wizard-save(id); }
+            mail-wizard-oauth(id) => { root.mail-wizard-oauth(id); }
+            mail-open-compose(id, k) => { root.mail-open-compose(id, k); }
+            mail-compose-set(id, f, v) => { root.mail-compose-set(id, f, v); }
+            mail-compose-send(id) => { root.mail-compose-send(id); }
+            mail-compose-draft(id) => { root.mail-compose-draft(id); }
+            mail-toggle-seen(id) => { root.mail-toggle-seen(id); }
+            mail-toggle-flagged(id) => { root.mail-toggle-flagged(id); }
+            mail-delete(id) => { root.mail-delete(id); }
+            mail-set-remote-images(id, a) => { root.mail-set-remote-images(id, a); }
+            mail-embed-bounds(id, x, y, w, h, vis) => { root.mail-embed-bounds(id, x, y, w, h, vis); }
             browser-select-tab(id, i) => { root.browser-select-tab(id, i); }
             browser-new-tab(id) => { root.browser-new-tab(id); }
             browser-close-tab(id, i) => { root.browser-close-tab(id, i); }

@@ -19,6 +19,7 @@
 | Audio Player | `audio-player` | Library, queue, lyrics panel |
 | Video Player | `video-player` | Library + queue |
 | Passwords | `password-manager` | [passwords.md](passwords.md) |
+| Mail | `mail` | [mail.md](mail.md) |
 | Viewer | `viewer` | [viewers.md](viewers.md) |
 | Files | `file-manager` | [file-manager.md](file-manager.md) |
 | Recent Files | `recent-files` | MRU |
