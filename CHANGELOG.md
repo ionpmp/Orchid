@@ -490,6 +490,8 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **Alacritty grid**: after the first frame, only damaged lines are copied
+  into the snapshot. A scroll still redraws the viewport.
 - **Linked documents**: chunk reads run eight at a time and the output buffer
   is sized from the table of contents, instead of waiting on one chunk file
   after another.
