@@ -169,18 +169,34 @@ impl LayoutRoot {
     }
 
     /// UI-friendly snapshot of the whole layout.
+    ///
+    /// Every tab keeps its id, title, and focus. Pane and divider geometry is
+    /// filled only for the active tab; the widget and the resize path read
+    /// that tab alone.
     #[must_use]
     pub fn snapshot(&self) -> LayoutSnapshot {
         let tabs = self
             .tabs
             .tabs
             .iter()
-            .map(|t| TabSnapshot {
-                id: t.id,
-                title: t.title.clone(),
-                panes: pane_snapshot(&t.root, (0.0, 0.0), (1.0, 1.0)),
-                dividers: divider_snapshot(&t.root, (0.0, 0.0), (1.0, 1.0)),
-                focused: t.focus,
+            .enumerate()
+            .map(|(index, t)| {
+                let active = index == self.active_tab;
+                TabSnapshot {
+                    id: t.id,
+                    title: t.title.clone(),
+                    panes: if active {
+                        pane_snapshot(&t.root, (0.0, 0.0), (1.0, 1.0))
+                    } else {
+                        Vec::new()
+                    },
+                    dividers: if active {
+                        divider_snapshot(&t.root, (0.0, 0.0), (1.0, 1.0))
+                    } else {
+                        Vec::new()
+                    },
+                    focused: t.focus,
+                }
             })
             .collect();
         LayoutSnapshot {
@@ -489,6 +505,28 @@ mod tests {
         layout.tabs.tabs[0].focus = Some(s2);
         layout.close_focus().unwrap();
         assert_eq!(layout.snapshot().tabs[0].panes.len(), 1);
+    }
+
+    #[test]
+    fn inactive_tab_omits_pane_geometry() {
+        let s1 = Uuid::new_v4();
+        let s2 = Uuid::new_v4();
+        let s3 = Uuid::new_v4();
+        let mut layout = LayoutRoot::new(s1);
+        layout.split(SplitDirection::Horizontal, s2).unwrap();
+        layout.add_tab(s3);
+        let snap = layout.snapshot();
+        assert_eq!(snap.active_tab, 0);
+        assert_eq!(snap.tabs[0].panes.len(), 2);
+        assert_eq!(snap.tabs[0].dividers.len(), 1);
+        assert!(snap.tabs[1].panes.is_empty());
+        assert!(snap.tabs[1].dividers.is_empty());
+        assert_eq!(snap.tabs[1].title, "Terminal");
+        layout.active_tab = 1;
+        let snap = layout.snapshot();
+        assert_eq!(snap.tabs[1].panes.len(), 1);
+        assert!(snap.tabs[0].panes.is_empty());
+        assert!(snap.tabs[0].dividers.is_empty());
     }
 
     #[test]

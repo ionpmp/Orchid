@@ -499,6 +499,8 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **Terminal tabs**: a snapshot fills pane and divider geometry for the
+  active tab. Other tabs still carry their title and focus.
 - **File manager**: an ASCII quick filter or Find name matches in place.
   Sorting by size or date no longer lowercases every file name.
 - **Terminal resize**: a content tick reuses the frame size already read
