@@ -103,7 +103,7 @@ pub(crate) fn build_tab_payload(
             let q = quick.to_lowercase();
             let filtered: Vec<&orchid_fs::FsEntry> = entries
                 .iter()
-                .filter(|e| e.name.to_lowercase().contains(&q))
+                .filter(|e| name_matches_filter(&e.name, &q))
                 .collect();
             let n = filtered.len();
             let (first, end) = if is_active_tab {
@@ -304,6 +304,21 @@ pub(crate) fn fs_event_affects_listing(event_path: &str, dir: &str) -> bool {
 }
 
 #[cfg(test)]
+mod filter_tests {
+    use super::name_matches_filter;
+
+    #[test]
+    fn ascii_names_match_in_place_and_unicode_stays_lowercase() {
+        assert!(name_matches_filter("Report.TXT", "report"));
+        assert!(!name_matches_filter("notes.txt", "report"));
+        assert!(!name_matches_filter("ab", "abc"));
+        let folded = "İstanbul".to_lowercase();
+        assert!(name_matches_filter("İstanbul", &folded));
+        assert!(name_matches_filter("CAFÉ menu", "café"));
+    }
+}
+
+#[cfg(test)]
 mod dir_watch_tests {
     use super::fs_event_affects_listing;
 
@@ -323,6 +338,24 @@ mod dir_watch_tests {
     }
 }
 
+/// Case-insensitive substring test for file names and find text.
+///
+/// ASCII names and needles compare in place. Other text uses Unicode
+/// lowercase, and `needle_lower` must already be the lowered needle.
+pub(crate) fn name_matches_filter(name: &str, needle_lower: &str) -> bool {
+    if needle_lower.is_empty() {
+        return true;
+    }
+    if needle_lower.is_ascii() && name.is_ascii() {
+        let needle = needle_lower.as_bytes();
+        return name
+            .as_bytes()
+            .windows(needle.len())
+            .any(|window| window.eq_ignore_ascii_case(needle));
+    }
+    name.to_lowercase().contains(needle_lower)
+}
+
 pub(crate) fn sort_entries(
     entries: &mut Vec<orchid_fs::FsEntry>,
     sort_by: SortBy,
@@ -331,19 +364,23 @@ pub(crate) fn sort_entries(
     use std::cmp::Ordering;
 
     // Precompute sort keys once — the previous comparator allocated lowercase
-    // strings on every comparison (≈ O(n log n) allocs).
+    // strings on every comparison (≈ O(n log n) allocs). Size and date sorts
+    // do not need those strings.
+    let want_name = matches!(sort_by, SortBy::Name | SortBy::Type);
+    let want_ext = matches!(sort_by, SortBy::Type);
     let mut keyed: Vec<_> = std::mem::take(entries)
         .into_iter()
         .map(|e| {
             let is_dir = matches!(e.metadata.kind, orchid_fs::FsEntryKind::Directory);
-            let name_key = e.name.to_lowercase();
+            let name_key = want_name.then(|| e.name.to_lowercase());
             let size = e.metadata.size;
             let modified = e.metadata.modified.map(|t| t.timestamp()).unwrap_or(0);
-            let ext_key = e
-                .path
-                .extension()
-                .map(|ext| ext.to_lowercase())
-                .unwrap_or_default();
+            let ext_key = want_ext.then(|| {
+                e.path
+                    .extension()
+                    .map(|ext| ext.to_lowercase())
+                    .unwrap_or_default()
+            });
             (e, is_dir, name_key, size, modified, ext_key)
         })
         .collect();

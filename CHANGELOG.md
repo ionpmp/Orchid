@@ -499,6 +499,8 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **File manager**: an ASCII quick filter or Find name matches in place.
+  Sorting by size or date no longer lowercases every file name.
 - **Terminal resize**: a content tick reuses the frame size already read
   while patching the row, instead of cloning that row again to measure the PTY.
 - **Terminal output**: the first chunk records which widget owns the

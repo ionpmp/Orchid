@@ -942,7 +942,7 @@ impl FileManagerInner {
         let indices = entries
             .iter()
             .enumerate()
-            .filter(|(_, e)| e.name.to_lowercase().contains(&q))
+            .filter(|(_, e)| listing::name_matches_filter(&e.name, &q))
             .map(|(i, _)| i)
             .collect();
         VisiblePaths {

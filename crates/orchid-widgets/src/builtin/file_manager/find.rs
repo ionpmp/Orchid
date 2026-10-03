@@ -230,7 +230,7 @@ impl FindSpec {
         if self.case_sensitive {
             name.contains(pat)
         } else {
-            name.to_lowercase().contains(&pat.to_lowercase())
+            super::listing::name_matches_filter(name, &pat.to_lowercase())
         }
     }
 
@@ -380,7 +380,7 @@ fn text_contains(hay: &str, needle: &str, case_sensitive: bool) -> bool {
     if case_sensitive {
         hay.contains(needle)
     } else {
-        hay.to_lowercase().contains(&needle.to_lowercase())
+        super::listing::name_matches_filter(hay, &needle.to_lowercase())
     }
 }
 
