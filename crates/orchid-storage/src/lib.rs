@@ -51,7 +51,8 @@ pub use error::{Result, StorageError};
 pub use paths::OrchidPaths;
 pub use policy::{
     append_audit, audit_path, install_policy_body, load_policy, locks_from_file, policy_path,
-    policy_url_allowed, InstallPolicy, PolicyDocument, PolicyLoad, PolicyLocks, POLICY_MAX_BYTES,
+    policy_url_allowed, read_audit_tail, InstallPolicy, PolicyDocument, PolicyLoad, PolicyLocks,
+    POLICY_MAX_BYTES,
 };
 pub use state::{
     bincode_decode, bincode_encode, CacheEntry, CacheKind, ColorLabel, FileManagerTab, FileTag,

@@ -13,8 +13,8 @@ use tracing::warn;
 
 use orchid_i18n::LocaleManager;
 use orchid_storage::{
-    append_audit, audit_path, locks_from_file, policy_path, policy_url_allowed, ConfigLoader,
-    OrchidConfig,
+    append_audit, audit_path, locks_from_file, policy_path, policy_url_allowed, read_audit_tail,
+    ConfigLoader, OrchidConfig,
 };
 
 use crate::error::{Result, UiError};
@@ -73,6 +73,7 @@ impl MainWindowController {
         let coming_soon = SharedString::default();
         let cfg = self.config.read();
         let locks = locks_from_file(&policy_path(&self.config_file_path));
+        let audit_tail = read_audit_tail(&audit_path(&self.config_file_path), 12);
         let fields = build_settings_fields(
             &section,
             &cfg,
@@ -80,6 +81,7 @@ impl MainWindowController {
             &self.theme,
             &self.command_registry,
             &locks,
+            &audit_tail,
         );
         drop(cfg);
         sync_vec_model(

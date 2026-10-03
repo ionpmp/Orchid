@@ -15,6 +15,8 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Audit log:** Settings → Policy shows the last 12 lines of `audit.log`.
+  The file stays on this computer.
 - **Policy locks:** `policy.toml` can also mark appearance, date and time,
   privacy, the terminal grid, input, photos, and the agent read-only in
   Settings. Shortcuts and Marketplace stay editable.

@@ -258,6 +258,7 @@ pub(crate) fn build_settings_fields(
     themes: &ThemeManager,
     registry: &CommandRegistry,
     locks: &PolicyLocks,
+    audit_tail: &str,
 ) -> Vec<SettingsFieldRow> {
     let mut rows = Vec::new();
 
@@ -786,6 +787,18 @@ pub(crate) fn build_settings_fields(
                 "url",
                 "settings-field-policy-url",
                 cfg.policy.url.clone(),
+            );
+            let shown = if audit_tail.trim().is_empty() {
+                locale.tr("settings-audit-empty")
+            } else {
+                audit_tail.to_string()
+            };
+            push_settings_readonly(
+                &mut rows,
+                locale,
+                "audit",
+                "settings-field-audit-log",
+                shown.into(),
             );
         }
         "marketplace" => {

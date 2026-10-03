@@ -123,6 +123,7 @@ that address into `policy.toml` in the same directory. A network error, a
 redirect, or a document that does not parse leaves the previous file.
 The audit log is `audit.log` beside `config.toml`. It records policy
 apply, update checks, and shell changes, and it is not sent anywhere.
+Settings → Policy shows the last 12 lines.
 
 `policy.toml` marks settings read-only. It does not change their values:
 

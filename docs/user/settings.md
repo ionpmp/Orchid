@@ -52,7 +52,7 @@ and the agent. Shortcuts and Marketplace stay editable. The values in
 local file. An https address is read when Orchid starts and when you save
 the address. If the read fails, the previous `policy.toml` stays.
 `audit.log` in the same folder records policy apply, update checks, and
-shell changes. It is not uploaded.
+shell changes. Settings → Policy shows the last 12 lines. It is not uploaded.
 
 ## Photos
 

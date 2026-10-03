@@ -7,7 +7,7 @@
 //! [`audit_path`] is `audit.log` in that directory. Lines stay on this computer.
 
 use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -336,6 +336,36 @@ pub fn append_audit(path: &Path, event: &str, detail: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Last `max_lines` of `audit.log`. Empty when the file is missing or unreadable.
+///
+/// Only the last 64 KiB are read. The file is not uploaded.
+#[must_use]
+pub fn read_audit_tail(path: &Path, max_lines: usize) -> String {
+    let max_lines = max_lines.clamp(1, 40);
+    let mut file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(_) => return String::new(),
+    };
+    let len = file.metadata().map(|meta| meta.len()).unwrap_or(0);
+    let window = 64 * 1024u64;
+    let start = len.saturating_sub(window);
+    if file.seek(std::io::SeekFrom::Start(start)).is_err() {
+        return String::new();
+    }
+    let mut buf = String::new();
+    if file.read_to_string(&mut buf).is_err() {
+        return String::new();
+    }
+    if start > 0 {
+        if let Some(pos) = buf.find('\n') {
+            buf.replace_range(..pos + 1, "");
+        }
+    }
+    let lines: Vec<&str> = buf.lines().filter(|line| !line.is_empty()).collect();
+    let from = lines.len().saturating_sub(max_lines);
+    lines[from..].join("\n")
+}
+
 fn sibling(config_file: &Path, name: &str) -> PathBuf {
     match config_file.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent.join(name),
@@ -446,6 +476,13 @@ mod tests {
         assert!(lines[0].contains("policy-apply locks=2"));
         assert!(lines[1].contains("update-check failed"));
         assert!(lines[2].contains("shell-replace on https://secret.example"));
+        let tail = read_audit_tail(&path, 2);
+        let tail_lines: Vec<&str> = tail.lines().collect();
+        assert_eq!(tail_lines.len(), 2);
+        assert!(tail_lines[0].contains("update-check"));
+        assert!(tail_lines[1].contains("shell-replace"));
+        let missing = dir.path().join("missing.log");
+        assert!(read_audit_tail(&missing, 4).is_empty());
     }
 
     #[test]
