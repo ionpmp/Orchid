@@ -84,6 +84,11 @@ fn toc_cache_hit(
         .map(|row| Arc::clone(&row.entries))
 }
 
+fn toc_cache_invalidate(path: &Path) {
+    let mut cache = TOC_CACHE.lock().unwrap_or_else(|err| err.into_inner());
+    cache.retain(|row| row.path != path);
+}
+
 fn toc_cache_store(
     path: &Path,
     len: u64,
@@ -274,6 +279,9 @@ impl FsProvider for ArchiveProvider {
         .await
         .map_err(|e| FsError::CorruptArchive(format!("join: {e}")))?;
         let _ = tokio::fs::remove_file(&tmp).await;
+        if let Ok(os) = container.to_local() {
+            toc_cache_invalidate(&os);
+        }
         result
     }
 
@@ -318,6 +326,9 @@ impl FsProvider for ArchiveProvider {
         let add = FsPath::from_local(&root.join(first))?;
         let result = add_to_archive(&container, &[add]).await;
         let _ = tokio::fs::remove_dir_all(&root).await;
+        if let Ok(os) = container.to_local() {
+            toc_cache_invalidate(&os);
+        }
         result
     }
 
@@ -334,7 +345,11 @@ impl FsProvider for ArchiveProvider {
                 reason: "cannot delete archive root from inside".into(),
             });
         }
-        delete_from_archive(&container, &[inner]).await
+        let result = delete_from_archive(&container, &[inner]).await;
+        if let Ok(os) = container.to_local() {
+            toc_cache_invalidate(&os);
+        }
+        result
     }
 
     async fn watch(
@@ -375,6 +390,9 @@ impl ArchiveWriteFinish {
         self.file = None;
         if self.tmp.is_file() {
             let _ = add_named_file_sync(&self.container, &self.tmp, &self.inner);
+        }
+        if let Ok(os) = self.container.to_local() {
+            toc_cache_invalidate(&os);
         }
         let _ = std::fs::remove_file(&self.tmp);
     }
