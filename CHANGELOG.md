@@ -15,6 +15,9 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **PDF forms:** combo boxes and list boxes accept a listed option label
+  from the Form bar. Free text and signatures stay unchanged, and a
+  compressed choice field is left as it was.
 - **Audit log:** Settings → Policy shows the last 12 lines of `audit.log`.
   The file stays on this computer.
 - **Policy locks:** `policy.toml` can also mark appearance, date and time,

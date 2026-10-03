@@ -39,10 +39,12 @@ current selection (`*-note.pdf` if the open file is not writable).
 
 **Form** lists existing AcroForm fields (`Name=value`) and fills a text
 box, checkbox (`true` / `yes` / `on` / `1`), or radio button (the value
-must match that button's export value). Type `Name=value` and press
-Fill. The write stays in the open file and the page reloads; if that
-path is not writable, it falls back to a sibling `*-form.pdf`. Combo
-boxes, list boxes, and signatures are shown but not filled.
+must match that button's export value). A combo box or list box selects a
+listed option by its displayed label. A value that is not in that list is
+rejected, and a compressed choice field is left unchanged. Type `Name=value`
+and press Fill. The write stays in the open file and the page reloads; if
+that path is not writable, it falls back to a sibling `*-form.pdf`.
+Signatures are shown but not filled.
 
 ## Text
 

@@ -437,7 +437,8 @@ fn upsert_field(fields: &mut Vec<FormField>, field: FormField, prefer: bool) {
 ///
 /// Text fields take the string as-is. Checkboxes treat `true`, `yes`, `on`,
 /// and `1` as checked. Radio buttons select the widget whose export value
-/// matches `value`.
+/// matches `value`. Combo boxes and list boxes select the option whose
+/// displayed label matches `value`. Signatures are left unchanged.
 ///
 /// # Errors
 ///
@@ -450,6 +451,13 @@ pub fn save_form_value(bytes: &[u8], name: &str, value: &str, dest: &Path) -> Re
     let dest = dest.to_path_buf();
     let name = name.to_string();
     let value = value.to_string();
+    if let Some(patched) = choice_fill_bytes(bytes, &name, &value)? {
+        std::fs::write(&dest, patched).map_err(|e| ViewerError::PdfRender {
+            page: 1,
+            reason: format!("save form: {e}"),
+        })?;
+        return Ok(dest);
+    }
     with_pdfium(|pdfium| {
         let mut document =
             pdfium
@@ -482,6 +490,294 @@ pub fn save_form_value_sibling(
 ) -> Result<PathBuf> {
     let dest = unique_export_dest(src_path, "form", "pdf");
     save_form_value(bytes, name, value, &dest)
+}
+
+/// `Some` when `name` is a combo or list and the bytes were rewritten.
+/// `None` when the field is a text, checkbox, or radio control.
+fn choice_fill_bytes(bytes: &[u8], name: &str, value: &str) -> Result<Option<Vec<u8>>> {
+    let selection = with_pdfium(|pdfium| choice_option(pdfium, bytes, name, value))?;
+    let Some((index, label)) = selection else {
+        return Ok(None);
+    };
+    patch_choice_field(bytes, name, &label, index).map(Some)
+}
+
+fn choice_option(
+    pdfium: &Pdfium,
+    bytes: &[u8],
+    name: &str,
+    value: &str,
+) -> Result<Option<(usize, String)>> {
+    let document =
+        pdfium
+            .load_pdf_from_byte_slice(bytes, None)
+            .map_err(|e| ViewerError::PdfRender {
+                page: 1,
+                reason: format!("load document: {e}"),
+            })?;
+    let page_count = i32::from(document.pages().len()).max(0);
+    let mut saw_choice = false;
+    for index in 0..page_count {
+        let page = document
+            .pages()
+            .get(index)
+            .map_err(|e| ViewerError::PdfRender {
+                page: (index.max(0) as u32).saturating_add(1),
+                reason: format!("open page: {e}"),
+            })?;
+        for annotation in page.annotations().iter() {
+            let Some(field) = annotation.as_form_field() else {
+                continue;
+            };
+            if field.name().as_deref() != Some(name) {
+                continue;
+            }
+            if field.is_read_only() {
+                return Err(ViewerError::PdfFormReadOnly);
+            }
+            let options = if let Some(combo) = field.as_combo_box_field() {
+                combo.options()
+            } else if let Some(list) = field.as_list_box_field() {
+                list.options()
+            } else {
+                continue;
+            };
+            saw_choice = true;
+            let want = value.trim();
+            for option in options.iter() {
+                let Some(label) = option.label() else {
+                    continue;
+                };
+                if label == want {
+                    return Ok(Some((option.index() as usize, label.clone())));
+                }
+            }
+        }
+    }
+    if saw_choice {
+        Err(ViewerError::PdfFormUnsupported)
+    } else {
+        Ok(None)
+    }
+}
+
+fn patch_choice_field(bytes: &[u8], name: &str, label: &str, index: usize) -> Result<Vec<u8>> {
+    let spaced = format!("/T ({name})");
+    let tight = format!("/T({name})");
+    let Some(at) =
+        find_bytes(bytes, spaced.as_bytes()).or_else(|| find_bytes(bytes, tight.as_bytes()))
+    else {
+        return Err(ViewerError::PdfFormUnsupported);
+    };
+    let Some((obj_num, object)) = object_containing(bytes, at) else {
+        return Err(ViewerError::PdfFormUnsupported);
+    };
+    if !object.contains("/FT /Ch") && !object.contains("/FT/Ch") {
+        return Err(ViewerError::PdfFormUnsupported);
+    }
+    let updated = rewrite_choice_object(&object, label, index);
+    append_pdf_object(bytes, obj_num, &updated).ok_or(ViewerError::PdfFormUnsupported)
+}
+
+fn rewrite_choice_object(object: &str, label: &str, index: usize) -> String {
+    let escaped = pdf_literal(label);
+    let with_value = replace_pdf_literal(object, "/V", &escaped)
+        .unwrap_or_else(|| insert_before_dict_end(object, &format!("/V ({escaped}) ")));
+    replace_pdf_index(&with_value, index)
+        .unwrap_or_else(|| insert_before_dict_end(&with_value, &format!("/I [{index}] ")))
+}
+
+fn pdf_literal(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('(', "\\(")
+        .replace(')', "\\)")
+}
+
+fn replace_pdf_literal(object: &str, key: &str, escaped: &str) -> Option<String> {
+    let start = find_pdf_key(object, key)?;
+    let after = &object[start + key.len()..];
+    let ws = after
+        .chars()
+        .take_while(|c| c.is_ascii_whitespace())
+        .count();
+    if !after[ws..].starts_with('(') {
+        return None;
+    }
+    let value_at = start + key.len() + ws + 1;
+    let byte_end = pdf_literal_end(&object[value_at..])?;
+    let mut out = String::new();
+    out.push_str(&object[..value_at]);
+    out.push_str(escaped);
+    out.push_str(&object[value_at + byte_end..]);
+    Some(out)
+}
+
+/// `/V` or `/I` followed by a delimiter, so `/View` does not match `/V`.
+fn find_pdf_key(object: &str, key: &str) -> Option<usize> {
+    let bytes = object.as_bytes();
+    let needle = key.as_bytes();
+    let mut i = 0;
+    while i + needle.len() <= bytes.len() {
+        if bytes[i..].starts_with(needle) {
+            let next = bytes.get(i + needle.len()).copied();
+            if next.is_none_or(|b| {
+                matches!(
+                    b,
+                    b' ' | b'\n' | b'\r' | b'\t' | b'(' | b'[' | b'/' | b'>' | b'<'
+                )
+            }) {
+                return Some(i);
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+fn pdf_literal_end(tail: &str) -> Option<usize> {
+    let bytes = tail.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\\' {
+            i += 2;
+            continue;
+        }
+        if bytes[i] == b')' {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
+}
+
+fn replace_pdf_index(object: &str, index: usize) -> Option<String> {
+    let start = find_pdf_key(object, "/I")?;
+    let after = &object[start + 2..];
+    let ws = after
+        .chars()
+        .take_while(|c| c.is_ascii_whitespace())
+        .count();
+    if !after[ws..].starts_with('[') {
+        return None;
+    }
+    let bracket = start + 2 + ws;
+    let end = object[bracket..].find(']')?;
+    let mut out = String::new();
+    out.push_str(&object[..start]);
+    out.push_str(&format!("/I [{index}]"));
+    out.push_str(&object[bracket + end + 1..]);
+    Some(out)
+}
+
+fn insert_before_dict_end(object: &str, piece: &str) -> String {
+    if let Some(at) = object.rfind(">>") {
+        let mut out = String::new();
+        out.push_str(&object[..at]);
+        out.push_str(piece);
+        out.push_str(&object[at..]);
+        out
+    } else {
+        object.to_string()
+    }
+}
+
+fn find_bytes(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    hay.windows(needle.len())
+        .position(|window| window == needle)
+}
+
+fn object_containing(bytes: &[u8], at: usize) -> Option<(u32, String)> {
+    let head = &bytes[..at];
+    let marker = b" obj";
+    let rel = head
+        .windows(marker.len())
+        .rposition(|window| window == marker)?;
+    let line_start = head[..rel]
+        .iter()
+        .rposition(|b| *b == b'\n' || *b == b'\r')
+        .map(|pos| pos + 1)
+        .unwrap_or(0);
+    let header = std::str::from_utf8(&head[line_start..rel]).ok()?.trim();
+    let mut parts = header.split_whitespace();
+    let num: u32 = parts.next()?.parse().ok()?;
+    let _gen: u32 = parts.next()?.parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    let end_rel = bytes[at..]
+        .windows(6)
+        .position(|window| window == b"endobj")?;
+    let end = at + end_rel + 6;
+    let object = std::str::from_utf8(&bytes[line_start..end])
+        .ok()?
+        .to_string();
+    Some((num, object))
+}
+
+fn append_pdf_object(bytes: &[u8], obj_num: u32, object: &str) -> Option<Vec<u8>> {
+    let key = b"startxref";
+    let startxref_at = rfind_bytes(bytes, key)?;
+    let mut line = startxref_at + key.len();
+    while line < bytes.len() && matches!(bytes[line], b'\r' | b'\n' | b' ' | b'\t') {
+        line += 1;
+    }
+    let num_start = line;
+    while line < bytes.len() && bytes[line].is_ascii_digit() {
+        line += 1;
+    }
+    let prev: usize = std::str::from_utf8(&bytes[num_start..line])
+        .ok()?
+        .parse()
+        .ok()?;
+    let trailer_at = rfind_bytes(&bytes[..startxref_at], b"trailer")?;
+    let trailer = &bytes[trailer_at..startxref_at];
+    let root_at = find_bytes(trailer, b"/Root ")?;
+    let root_tail = &trailer[root_at + 6..];
+    let root_end = root_tail
+        .windows(2)
+        .position(|window| window == b">>")
+        .unwrap_or(root_tail.len());
+    let root_text = std::str::from_utf8(&root_tail[..root_end]).ok()?.trim();
+    let root_ref = root_text.split('/').next()?.trim();
+    if root_ref.is_empty() {
+        return None;
+    }
+    let parsed_size = find_bytes(trailer, b"/Size ")
+        .and_then(|at| std::str::from_utf8(&trailer[at + 6..]).ok())
+        .and_then(|rest| rest.split_whitespace().next())
+        .and_then(|token| token.parse::<u32>().ok());
+    let size = parsed_size
+        .unwrap_or(obj_num.saturating_add(1))
+        .max(obj_num.saturating_add(1));
+    let mut out = Vec::with_capacity(bytes.len() + object.len() + 128);
+    out.extend_from_slice(bytes);
+    if !out.ends_with(b"\n") {
+        out.push(b'\n');
+    }
+    let offset = out.len();
+    let body = if object.starts_with(&format!("{obj_num} ")) {
+        object.to_string()
+    } else {
+        format!("{obj_num} 0 obj\n{object}\nendobj\n")
+    };
+    let body = if body.ends_with('\n') {
+        body
+    } else {
+        format!("{body}\n")
+    };
+    out.extend_from_slice(body.as_bytes());
+    let xref = out.len();
+    let xref_text = format!(
+        "xref\n{obj_num} 1\n{offset:010} 00000 n \ntrailer\n<< /Size {size} /Root {root_ref} /Prev {prev} >>\nstartxref\n{xref}\n%%EOF\n"
+    );
+    out.extend_from_slice(xref_text.as_bytes());
+    Some(out)
+}
+
+fn rfind_bytes(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    hay.windows(needle.len())
+        .rposition(|window| window == needle)
 }
 
 fn apply_form_value(document: &mut PdfDocument<'_>, name: &str, value: &str) -> Result<()> {
@@ -551,9 +847,8 @@ fn apply_form_value(document: &mut PdfDocument<'_>, name: &str, value: &str) -> 
                         wrote = true;
                     }
                 }
-                PdfFormFieldType::ComboBox
-                | PdfFormFieldType::ListBox
-                | PdfFormFieldType::PushButton
+                PdfFormFieldType::ComboBox | PdfFormFieldType::ListBox => {}
+                PdfFormFieldType::PushButton
                 | PdfFormFieldType::Signature
                 | PdfFormFieldType::Unknown => {}
             }
@@ -682,17 +977,39 @@ mod tests {
         );
         let missing = save_form_value(&saved, "Missing", "x", &dest);
         assert!(matches!(missing, Err(ViewerError::PdfFormMissing)));
+        save_form_value(&saved, "City", "Lima", &dest).expect("fill combo");
+        let saved = std::fs::read(&dest).expect("read combo");
+        let fields = list_form_fields(&saved).expect("list combo");
+        assert!(
+            fields.iter().any(|field| field.name == "City"
+                && field.kind == "combo"
+                && field.value == "Lima"),
+            "combo should select Lima, got {fields:?}"
+        );
+        save_form_value(&saved, "Color", "Blue", &dest).expect("fill list");
+        let saved = std::fs::read(&dest).expect("read list");
+        let fields = list_form_fields(&saved).expect("list box");
+        assert!(
+            fields.iter().any(|field| field.name == "Color"
+                && field.kind == "list"
+                && field.value == "Blue"),
+            "list should select Blue, got {fields:?}"
+        );
+        let unknown = save_form_value(&saved, "City", "Nowhere", &dest);
+        assert!(matches!(unknown, Err(ViewerError::PdfFormUnsupported)));
         let _ = std::fs::remove_file(&dest);
     }
 
     /// One-page PDF with a text field `Name=Ada` and an unchecked checkbox `Agree`.
     fn acro_form_pdf() -> Vec<u8> {
         let objects = [
-            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R] >> >>\nendobj\n",
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R 6 0 R 7 0 R] >> >>\nendobj\n",
             "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
-            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Annots [4 0 R 5 0 R] >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Annots [4 0 R 5 0 R 6 0 R 7 0 R] >>\nendobj\n",
             "4 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /T (Name) /V (Ada) /Rect [20 20 200 40] /F 4 >>\nendobj\n",
             "5 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Btn /T (Agree) /V /Off /AS /Off /Rect [20 50 40 70] /F 4 >>\nendobj\n",
+            "6 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Ch /Ff 131072 /T (City) /V (Paris) /Opt [(Paris) (Lima)] /Rect [20 80 200 100] /F 4 >>\nendobj\n",
+            "7 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Ch /T (Color) /V (Red) /I [0] /Opt [(Red) (Blue)] /Rect [20 110 200 160] /F 4 >>\nendobj\n",
         ];
         let mut body = String::from("%PDF-1.4\n");
         let mut offsets = Vec::new();
