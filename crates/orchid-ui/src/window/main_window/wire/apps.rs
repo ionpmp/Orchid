@@ -164,6 +164,38 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_agent_send({
+            let t = t.clone();
+            move |id, text| {
+                if let Some(c) = t.upgrade() {
+                    c.on_agent_send(&id, &text);
+                }
+            }
+        });
+        self.window.on_agent_confirm({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_agent_confirm(&id);
+                }
+            }
+        });
+        self.window.on_agent_dismiss({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_agent_dismiss(&id);
+                }
+            }
+        });
+        self.window.on_agent_clear({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_agent_clear(&id);
+                }
+            }
+        });
         self.window.on_browser_select_tab({
             let t = t.clone();
             move |id, index| {

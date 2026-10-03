@@ -10,6 +10,7 @@
 | Processes | `processes` | Processes / Services / Startup / Users |
 | Calculator | `calculator` | `=expr` in universal search |
 | Notes | `notes` | In-widget scratchpad |
+| Agent | `agent` | Shared conversation; file writes wait for confirmation |
 | Calendar | `calendar` | Local only (no CalDAV) |
 | Browser | `browser` | WebView2: tabs, bookmarks, find, zoom |
 | News Feed | `rss` | RSS/Atom |
@@ -24,6 +25,15 @@
 | Terminal | `terminal` | [terminal.md](terminal.md) |
 
 **Document Editor** / **Media Player** catalog tiles spawn Viewer instances.
+
+## Agent
+
+The Agent widget and Universal Search `?` share one transcript in
+`data/agent-chat.json` (about 40 messages, on this computer). The model
+can read a local text file, list one folder, and search the open file
+index. **Write file** replaces the proposed path only after you confirm.
+**Dismiss** drops the proposal. There is no shell. The agent stays off
+until Settings → Agent is enabled and a model name is set.
 
 ## System
 

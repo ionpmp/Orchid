@@ -2032,6 +2032,8 @@ widget-calculator-desc = Schnellrechner mit Standard- und Wissenschaftsmodus, Ve
 
 widget-notes-name = Notizen
 widget-notes-desc = Notizblock mit Tabs, Autospeichern, Suche und Zeilenumbruch
+widget-agent-name = Agent
+widget-agent-desc = Gespräch mit Werkzeugen. Eine Datei wird erst nach Bestätigung geschrieben.
 
 
 # ---- Notes / scratchpad ----
@@ -2170,6 +2172,7 @@ processes-startup-common-folder = Gemeinsamer Autostart
 dock-widget-processes = Processes
 dock-widget-calculator = Rechner
 dock-widget-notes = Notizen
+dock-widget-agent = Agent
 dock-widget-calendar = Kalender
 
 # ---- synced from en-US (jyotish + parity) ----
@@ -2651,6 +2654,18 @@ agent-bad-endpoint = Die Agentenadresse muss eine http- oder https-URL sein.
 agent-empty-prompt = Schreibe eine Frage nach ?.
 agent-prompt-too-long = Diese Frage ist zu lang.
 agent-failed = Agent fehlgeschlagen: { $reason }
+agent-send = Senden
+agent-confirm-write = Datei schreiben
+agent-dismiss-write = Verwerfen
+agent-clear = Leeren
+agent-empty = Stellen Sie eine Frage. Der Agent kann eine Datei lesen, einen Ordner auflisten und den Index durchsuchen.
+agent-placeholder = Nachricht
+agent-pending = Wartet auf das Schreiben
+agent-role-user = Sie
+agent-role-assistant = Agent
+agent-role-tool = Werkzeug
+agent-working = Arbeitet…
+agent-store-closed = Der Agentenspeicher ist nicht geöffnet.
 settings-section-photos = Fotos
 settings-photos-note = Fotos
 settings-photos-hint = Dateien → Fotos gruppiert people/-, event/- und album/-Tags. Gesichtssuche bleibt aus, bis du sie einschaltest. Windows markiert Gesichter im geöffneten Ordner als people/unnamed und nennt die Person nicht. Die automatische Verschlagwortung liest die Ordnernamen People und Events, wenn du einen Ordner öffnest.

@@ -23,12 +23,17 @@ replacement graph that accepts `features` (`float32[1, 32]`) and returns
 `embedding`. The path is read when the index opens.
 
 A question that starts with `?` asks the agent in Settings → Agent. The
-agent is off until you enable it. The desktop app sends one user message
-to Ollama (`http://127.0.0.1:11434` when the endpoint is empty) or to an
+agent is off until you enable it. The desktop app sends the message to
+Ollama (`http://127.0.0.1:11434` when the endpoint is empty) or to an
 OpenAI-compatible `/chat/completions` URL, on the background job queue.
-The reply is a notification. There is no tool use and no remembered chat.
-Set a model name first. An API key is optional and is stored with Windows
-DPAPI after you save it; leaving the key field blank keeps the saved key.
+The reply is a notification, and the same turn is appended to the shared
+transcript in `data/agent-chat.json` (about 40 messages). The Agent widget
+shows that transcript. The model may read a local text file, list one
+folder, and search the open file index. A proposed file write is stored
+until you confirm it in the Agent widget; nothing is written before that.
+There is no shell. Set a model name first. An API key is optional and is
+stored with Windows DPAPI after you save it; leaving the key field blank
+keeps the saved key.
 
 ## Index
 

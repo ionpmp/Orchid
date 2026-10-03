@@ -28,9 +28,11 @@ Widget options stay on each widget.
 ## Agent
 
 Settings → Agent. Off until enabled. Universal Search `? your question`
-sends one message to Ollama or an OpenAI-compatible server and posts the
-reply as a notification. Set the model name. Leave the API key blank to
-keep the saved key. **Clear key** removes it.
+and the Agent widget share one transcript in `data/agent-chat.json`.
+The model may read a local text file, list one folder, and search the
+index. A file write waits until you confirm it in the Agent widget.
+Set the model name. Leave the API key blank to keep the saved key.
+**Clear key** removes it.
 
 ## Shell
 

@@ -329,6 +329,11 @@ impl OrchidApp {
                 .map(Arc::new)
             },
         )?;
+        orchid_widgets::agent::install(
+            paths.data_dir.clone(),
+            Some(Arc::clone(&search_engine)),
+            Arc::clone(&config),
+        );
 
         let session_routing: Arc<Mutex<HashMap<Uuid, Uuid>>> = Arc::new(Mutex::new(HashMap::new()));
         let session_manager: Arc<SessionManager> =
@@ -399,6 +404,9 @@ impl OrchidApp {
         widget_registry
             .register(orchid_widgets::builtin::notes::descriptor())
             .map_err(|e| UiError::Slint(format!("register notes: {e}")))?;
+        widget_registry
+            .register(orchid_widgets::builtin::agent::descriptor())
+            .map_err(|e| UiError::Slint(format!("register agent: {e}")))?;
         widget_registry
             .register(orchid_widgets::builtin::browser::descriptor())
             .map_err(|e| UiError::Slint(format!("register browser: {e}")))?;

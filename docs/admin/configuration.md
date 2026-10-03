@@ -89,9 +89,11 @@ extractors were built, are read when the index opens.
 Settings → Agent, and `[agent]` in `config.toml`. `enabled` (false),
 `backend` (`ollama` or `openai`), `endpoint` (empty →
 `http://127.0.0.1:11434` or `https://api.openai.com/v1`), `model`,
-`api-key`. Universal Search sends `? your question` and posts the reply
-as a notification. The key is a DPAPI blob after Orchid saves it.
-Redirects are not followed.
+`api-key`. Universal Search `? your question` and the Agent widget share
+`data/agent-chat.json`. The model may read a file, list one folder, and
+search the index. `propose_write` does not touch the disk until the user
+confirms in the Agent widget. The key is a DPAPI blob after Orchid saves
+it. Redirects are not followed. The transcript is not uploaded.
 
 ## `[photos]`
 

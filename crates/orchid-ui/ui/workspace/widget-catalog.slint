@@ -432,6 +432,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
+                            type-id: "agent"; glyph: "?"; label: Strings.dock-widget-agent;
+                            description: Strings.widget-agent-desc;
+                            card-visible: WidgetCatalog.show-agent;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
                             type-id: "calendar"; glyph: "▦"; label: Strings.dock-widget-calendar;
                             description: Strings.widget-calendar-desc;
                             card-visible: WidgetCatalog.show-calendar;
@@ -595,6 +601,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {
+                            type-id: "agent"; glyph: "?"; label: Strings.dock-widget-agent;
+                            description: Strings.widget-agent-desc;
+                            card-visible: WidgetCatalog.show-agent;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
                             type-id: "calendar"; glyph: "▦"; label: Strings.dock-widget-calendar;
                             description: Strings.widget-calendar-desc;
                             card-visible: WidgetCatalog.show-calendar;
@@ -755,6 +767,12 @@ export component WidgetCatalogPanel inherits Rectangle {
                             type-id: "notes"; glyph: "≡"; label: Strings.dock-widget-notes;
                             description: Strings.widget-notes-desc;
                             card-visible: WidgetCatalog.show-notes;
+                            pick(id) => { root.pick(id); }
+                        }
+                        CatalogCard {
+                            type-id: "agent"; glyph: "?"; label: Strings.dock-widget-agent;
+                            description: Strings.widget-agent-desc;
+                            card-visible: WidgetCatalog.show-agent;
                             pick(id) => { root.pick(id); }
                         }
                         CatalogCard {

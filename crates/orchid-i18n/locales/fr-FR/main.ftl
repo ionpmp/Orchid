@@ -2031,6 +2031,8 @@ widget-calculator-desc = Calculatrice rapide avec modes standard et scientifique
 
 widget-notes-name = Notes
 widget-notes-desc = Bloc-notes avec onglets, enregistrement auto, recherche et retour à la ligne
+widget-agent-name = Agent
+widget-agent-desc = Conversation avec des outils. L'écriture d'un fichier attend une confirmation.
 
 
 # ---- Notes / scratchpad ----
@@ -2169,6 +2171,7 @@ processes-startup-common-folder = Démarrage commun
 dock-widget-processes = Processes
 dock-widget-calculator = Calculatrice
 dock-widget-notes = Notes
+dock-widget-agent = Agent
 dock-widget-calendar = Calendrier
 
 # ---- synced from en-US (jyotish + parity) ----
@@ -2650,6 +2653,18 @@ agent-bad-endpoint = L’adresse de l’agent doit être une URL http ou https.
 agent-empty-prompt = Écrivez une question après ?.
 agent-prompt-too-long = Cette question est trop longue.
 agent-failed = L’agent a échoué : { $reason }
+agent-send = Envoyer
+agent-confirm-write = Écrire le fichier
+agent-dismiss-write = Ignorer
+agent-clear = Effacer
+agent-empty = Posez une question. L'agent peut lire un fichier, lister un dossier et chercher dans l'index.
+agent-placeholder = Message
+agent-pending = En attente d'écriture
+agent-role-user = Vous
+agent-role-assistant = Agent
+agent-role-tool = Outil
+agent-working = En cours…
+agent-store-closed = Le stockage de l'agent n'est pas ouvert.
 settings-section-photos = Photos
 settings-photos-note = Photos
 settings-photos-hint = Fichiers → Photos regroupe les étiquettes people/, event/ et album/. La recherche de visages reste arrêtée tant que vous ne l’activez pas. Windows marque alors les visages du dossier ouvert comme people/unnamed, sans dire qui c’est. L’étiquetage automatique lit les noms de dossiers People et Events à l’ouverture d’un dossier.

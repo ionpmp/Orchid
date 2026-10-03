@@ -2031,6 +2031,8 @@ widget-calculator-desc = 일반/공학 모드, 기록, 메모리가 있는 빠�
 
 widget-notes-name = 메모
 widget-notes-desc = 탭, 자동 저장, 찾기, 줄 바꿈이 있는 메모장
+widget-agent-name = 에이전트
+widget-agent-desc = 도구가 있는 대화. 파일 쓰기는 확인을 기다립니다.
 
 
 # ---- Notes / scratchpad ----
@@ -2169,6 +2171,7 @@ processes-startup-common-folder = 공통 시작
 dock-widget-processes = Processes
 dock-widget-calculator = 계산기
 dock-widget-notes = 메모
+dock-widget-agent = 에이전트
 dock-widget-calendar = Calendar
 
 # ---- synced from en-US (jyotish + parity) ----
@@ -2650,6 +2653,18 @@ agent-bad-endpoint = 에이전트 주소는 http 또는 https URL이어야 합�
 agent-empty-prompt = ? 뒤에 질문을 입력하세요.
 agent-prompt-too-long = 질문이 너무 깁니다.
 agent-failed = 에이전트 실패: { $reason }
+agent-send = 보내기
+agent-confirm-write = 파일 쓰기
+agent-dismiss-write = 취소
+agent-clear = 지우기
+agent-empty = 질문하세요. 에이전트는 파일을 읽고, 폴더를 나열하고, 색인을 검색할 수 있습니다.
+agent-placeholder = 메시지
+agent-pending = 쓰기 대기
+agent-role-user = 나
+agent-role-assistant = 에이전트
+agent-role-tool = 도구
+agent-working = 작업 중…
+agent-store-closed = 에이전트 저장소가 열려 있지 않습니다.
 settings-section-photos = 사진
 settings-photos-note = 사진
 settings-photos-hint = 파일 → 사진은 people/, event/, album/ 태그를 묶습니다. 얼굴 찾기는 켤 때까지 꺼져 있습니다. 켜면 Windows가 연 폴더의 얼굴을 people/unnamed로 표시하고 누구인지는 정하지 않습니다. 자동 태그는 폴더를 열 때 People과 Events 폴더 이름을 읽습니다.

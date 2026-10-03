@@ -33,6 +33,8 @@ widget-calculator-desc = Quick calculator with standard and scientific modes, hi
 
 widget-notes-name = Notes
 widget-notes-desc = Scratchpad with tabs, autosave, find, and word wrap
+widget-agent-name = Agent
+widget-agent-desc = Conversation with tools. A file write waits for confirmation.
 
 
 # ---- Notes / scratchpad ----
@@ -2254,6 +2256,7 @@ dock-widget-system = System
 dock-widget-processes = Processes
 dock-widget-calculator = Calculator
 dock-widget-notes = Notes
+dock-widget-agent = Agent
 dock-widget-calendar = Calendar
 dock-widget-rss = News
 dock-widget-recent-files = Recent
@@ -2667,6 +2670,18 @@ agent-bad-endpoint = The agent endpoint must be an http or https URL.
 agent-empty-prompt = Type a question after ?.
 agent-prompt-too-long = That question is too long.
 agent-failed = Agent failed: { $reason }
+agent-send = Send
+agent-confirm-write = Write file
+agent-dismiss-write = Dismiss
+agent-clear = Clear
+agent-empty = Ask a question. The agent can read a file, list a folder, and search the index.
+agent-placeholder = Message
+agent-pending = Waiting to write
+agent-role-user = You
+agent-role-assistant = Agent
+agent-role-tool = Tool
+agent-working = Working…
+agent-store-closed = The agent store is not open.
 settings-section-photos = Photos
 settings-photos-note = Photos
 settings-photos-hint = Files → Photos groups people/, event/, and album/ tags. Find faces stays off until you enable it. Windows then marks faces in the open folder as people/unnamed. It does not name who they are. Auto-tag reads People and Events folder names when you open a folder.

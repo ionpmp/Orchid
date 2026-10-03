@@ -15,6 +15,10 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Agent conversation:** Universal Search `?` and the Agent widget share
+  `data/agent-chat.json`. The model can read a local text file, list one
+  folder, and search the open index. A proposed file write is stored until
+  you confirm it. There is no shell, and the transcript is not uploaded.
 - **Process graphs:** the Processes tab draws the last 60 CPU and memory
   samples for the selected process. CPU is that process's percent. Memory
   bars are scaled to the peak working set in the window. The samples stay

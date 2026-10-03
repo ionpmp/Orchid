@@ -2,6 +2,7 @@
 
 use slint::{Model, ModelRc, VecModel};
 
+mod agent;
 mod audio_player;
 mod browser;
 mod calculator;
@@ -26,6 +27,7 @@ mod viewer;
 mod weather;
 mod widget_settings;
 
+pub(crate) use agent::{build_agent_model, empty_agent_model, patch_agent_model};
 pub(crate) use audio_player::{
     build_audio_player_model, empty_audio_player_model, patch_audio_player_model,
 };

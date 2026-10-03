@@ -2031,6 +2031,8 @@ widget-calculator-desc = Calcolatrice rapida con modalità standard e scientific
 
 widget-notes-name = Note
 widget-notes-desc = Blocco note con schede, salvataggio automatico, ricerca e a capo automatico
+widget-agent-name = Agente
+widget-agent-desc = Conversazione con strumenti. La scrittura di un file attende conferma.
 
 
 # ---- Notes / scratchpad ----
@@ -2169,6 +2171,7 @@ processes-startup-common-folder = Avvio comune
 dock-widget-processes = Processes
 dock-widget-calculator = Calcolatrice
 dock-widget-notes = Note
+dock-widget-agent = Agente
 dock-widget-calendar = Calendar
 
 # ---- synced from en-US (jyotish + parity) ----
@@ -2650,6 +2653,18 @@ agent-bad-endpoint = L’indirizzo dell’agente deve essere un URL http o https
 agent-empty-prompt = Scrivi una domanda dopo ?.
 agent-prompt-too-long = Questa domanda è troppo lunga.
 agent-failed = Agente non riuscito: { $reason }
+agent-send = Invia
+agent-confirm-write = Scrivi file
+agent-dismiss-write = Ignora
+agent-clear = Cancella
+agent-empty = Fai una domanda. L'agente può leggere un file, elencare una cartella e cercare nell'indice.
+agent-placeholder = Messaggio
+agent-pending = In attesa di scrittura
+agent-role-user = Tu
+agent-role-assistant = Agente
+agent-role-tool = Strumento
+agent-working = In corso…
+agent-store-closed = L'archivio dell'agente non è aperto.
 settings-section-photos = Foto
 settings-photos-note = Foto
 settings-photos-hint = File → Foto raggruppa i tag people/, event/ e album/. La ricerca dei volti resta spenta finché non la attivi. Windows segna allora i volti nella cartella aperta come people/unnamed e non dice chi sono. L’etichettatura automatica legge i nomi delle cartelle People ed Events quando apri una cartella.

@@ -2033,6 +2033,8 @@ widget-calculator-desc = حاسبة سريعة بالأوضاع العادية �
 
 widget-notes-name = ملاحظات
 widget-notes-desc = مفكرة بعلامات تبويب وحفظ تلقائي وبحث ولف الأسطر
+widget-agent-name = الوكيل
+widget-agent-desc = محادثة بأدوات. كتابة الملف تنتظر التأكيد.
 
 
 # ---- Notes / scratchpad ----
@@ -2171,6 +2173,7 @@ processes-startup-common-folder = بدء التشغيل المشترك
 dock-widget-processes = Processes
 dock-widget-calculator = الآلة الحاسبة
 dock-widget-notes = ملاحظات
+dock-widget-agent = الوكيل
 dock-widget-calendar = Calendar
 
 # ---- synced from en-US (jyotish + parity) ----
@@ -2652,6 +2655,18 @@ agent-bad-endpoint = يجب أن يكون عنوان الوكيل رابط http 
 agent-empty-prompt = اكتب سؤالاً بعد ?.
 agent-prompt-too-long = هذا السؤال طويل جداً.
 agent-failed = فشل الوكيل: { $reason }
+agent-send = إرسال
+agent-confirm-write = كتابة الملف
+agent-dismiss-write = تجاهل
+agent-clear = مسح
+agent-empty = اطرح سؤالاً. يمكن للوكيل قراءة ملف وعرض مجلد والبحث في الفهرس.
+agent-placeholder = رسالة
+agent-pending = بانتظار الكتابة
+agent-role-user = أنت
+agent-role-assistant = الوكيل
+agent-role-tool = أداة
+agent-working = يعمل…
+agent-store-closed = مخزن الوكيل غير مفتوح.
 settings-section-photos = الصور
 settings-photos-note = الصور
 settings-photos-hint = الملفات → الصور تجمع وسوم people/ وevent/ وalbum/. البحث عن الوجوه يبقى متوقفًا حتى تفعّله. عندها يعلّم Windows الوجوه في المجلد المفتوح بوسم people/unnamed ولا يسمّي الشخص. الوسم التلقائي يقرأ أسماء مجلدات People وEvents عند فتح مجلد.

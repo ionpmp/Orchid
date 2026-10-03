@@ -2030,6 +2030,8 @@ widget-calculator-desc = 標準・関数モード、履歴、メモリ付きク�
 
 widget-notes-name = メモ
 widget-notes-desc = タブ・自動保存・検索・折り返し対応のメモ
+widget-agent-name = エージェント
+widget-agent-desc = ツール付きの会話。ファイルの書き込みは確認を待ちます。
 
 
 # ---- Notes / scratchpad ----
@@ -2168,6 +2170,7 @@ processes-startup-common-folder = 共通スタートアップ
 dock-widget-processes = Processes
 dock-widget-calculator = 電卓
 dock-widget-notes = メモ
+dock-widget-agent = エージェント
 dock-widget-calendar = Calendar
 
 # ---- synced from en-US (jyotish + parity) ----
@@ -2649,6 +2652,18 @@ agent-bad-endpoint = エージェントのアドレスは http または https �
 agent-empty-prompt = ? のあとに質問を入力してください。
 agent-prompt-too-long = 質問が長すぎます。
 agent-failed = エージェントが失敗しました: { $reason }
+agent-send = 送信
+agent-confirm-write = ファイルを書き込む
+agent-dismiss-write = 却下
+agent-clear = 消去
+agent-empty = 質問してください。エージェントはファイルの読み取り、フォルダーの一覧、索引の検索ができます。
+agent-placeholder = メッセージ
+agent-pending = 書き込み待ち
+agent-role-user = あなた
+agent-role-assistant = エージェント
+agent-role-tool = ツール
+agent-working = 処理中…
+agent-store-closed = エージェントの保存先が開いていません。
 settings-section-photos = 写真
 settings-photos-note = 写真
 settings-photos-hint = ファイル → 写真は people/、event/、album/ のタグをまとめます。顔の検出はオンにするまで動きません。オンにすると、Windows は開いているフォルダーの顔を people/unnamed として付け、誰かは決めません。自動タグはフォルダーを開いたとき People と Events のフォルダー名を読みます。

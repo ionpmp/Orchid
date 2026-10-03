@@ -2031,6 +2031,8 @@ widget-calculator-desc = 支持标准/科学模式、历史记录和内存的快
 
 widget-notes-name = 笔记
 widget-notes-desc = 带标签页、自动保存、查找和自动换行的便笺
+widget-agent-name = 助手
+widget-agent-desc = 带工具的对话。写入文件前会等待确认。
 
 
 # ---- Notes / scratchpad ----
@@ -2169,6 +2171,7 @@ processes-startup-common-folder = 公用启动
 dock-widget-processes = Processes
 dock-widget-calculator = 计算器
 dock-widget-notes = 笔记
+dock-widget-agent = 助手
 dock-widget-calendar = Calendar
 
 # ---- synced from en-US (jyotish + parity) ----
@@ -2650,6 +2653,18 @@ agent-bad-endpoint = 代理地址必须是 http 或 https URL。
 agent-empty-prompt = 请在 ? 后面输入问题。
 agent-prompt-too-long = 这个问题太长了。
 agent-failed = 代理失败：{ $reason }
+agent-send = 发送
+agent-confirm-write = 写入文件
+agent-dismiss-write = 放弃
+agent-clear = 清除
+agent-empty = 提一个问题。助手可以读取文件、列出文件夹并搜索索引。
+agent-placeholder = 消息
+agent-pending = 等待写入
+agent-role-user = 你
+agent-role-assistant = 助手
+agent-role-tool = 工具
+agent-working = 正在处理…
+agent-store-closed = 助手存储尚未打开。
 settings-section-photos = 照片
 settings-photos-note = 照片
 settings-photos-hint = 文件 → 照片按 people/、event/ 和 album/ 标签分组。查找人脸在启用之前保持关闭。启用后，Windows 会把打开文件夹中的人脸标为 people/unnamed，不会判断是谁。打开文件夹时，自动标记会读取名为 People 和 Events 的文件夹名。

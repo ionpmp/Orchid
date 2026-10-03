@@ -2031,6 +2031,8 @@ widget-calculator-desc = Calculadora rápida com modos padrão e científico, hi
 
 widget-notes-name = Notas
 widget-notes-desc = Bloco de notas com abas, salvamento automático, busca e quebra de linha
+widget-agent-name = Agente
+widget-agent-desc = Conversa com ferramentas. Gravar um arquivo espera confirmação.
 
 
 # ---- Notes / scratchpad ----
@@ -2169,6 +2171,7 @@ processes-startup-common-folder = Inicialização comum
 dock-widget-processes = Processes
 dock-widget-calculator = Calculadora
 dock-widget-notes = Notas
+dock-widget-agent = Agente
 dock-widget-calendar = Calendar
 
 # ---- synced from en-US (jyotish + parity) ----
@@ -2650,6 +2653,18 @@ agent-bad-endpoint = O endereço do agente precisa ser uma URL http ou https.
 agent-empty-prompt = Digite uma pergunta depois de ?.
 agent-prompt-too-long = Essa pergunta é longa demais.
 agent-failed = O agente falhou: { $reason }
+agent-send = Enviar
+agent-confirm-write = Gravar arquivo
+agent-dismiss-write = Dispensar
+agent-clear = Limpar
+agent-empty = Faça uma pergunta. O agente pode ler um arquivo, listar uma pasta e pesquisar no índice.
+agent-placeholder = Mensagem
+agent-pending = Aguardando gravação
+agent-role-user = Você
+agent-role-assistant = Agente
+agent-role-tool = Ferramenta
+agent-working = Trabalhando…
+agent-store-closed = O armazenamento do agente não está aberto.
 settings-section-photos = Fotos
 settings-photos-note = Fotos
 settings-photos-hint = Arquivos → Fotos agrupa as tags people/, event/ e album/. A busca de rostos fica desligada até você ativá-la. O Windows marca então os rostos da pasta aberta como people/unnamed e não diz quem é. A marcação automática lê os nomes das pastas People e Events ao abrir uma pasta.

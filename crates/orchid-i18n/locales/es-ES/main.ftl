@@ -2031,6 +2031,8 @@ widget-calculator-desc = Calculadora rápida con modos estándar y científico, 
 
 widget-notes-name = Notas
 widget-notes-desc = Bloc de notas con pestañas, autoguardado, búsqueda y ajuste de línea
+widget-agent-name = Agente
+widget-agent-desc = Conversación con herramientas. Escribir un archivo espera confirmación.
 
 
 # ---- Notes / scratchpad ----
@@ -2169,6 +2171,7 @@ processes-startup-common-folder = Inicio común
 dock-widget-processes = Processes
 dock-widget-calculator = Calculadora
 dock-widget-notes = Notas
+dock-widget-agent = Agente
 dock-widget-calendar = Calendario
 
 # ---- synced from en-US (jyotish + parity) ----
@@ -2650,6 +2653,18 @@ agent-bad-endpoint = La dirección del agente debe ser una URL http o https.
 agent-empty-prompt = Escribe una pregunta después de ?.
 agent-prompt-too-long = Esa pregunta es demasiado larga.
 agent-failed = El agente falló: { $reason }
+agent-send = Enviar
+agent-confirm-write = Escribir archivo
+agent-dismiss-write = Descartar
+agent-clear = Borrar
+agent-empty = Haga una pregunta. El agente puede leer un archivo, listar una carpeta y buscar en el índice.
+agent-placeholder = Mensaje
+agent-pending = Esperando para escribir
+agent-role-user = Usted
+agent-role-assistant = Agente
+agent-role-tool = Herramienta
+agent-working = Trabajando…
+agent-store-closed = El almacén del agente no está abierto.
 settings-section-photos = Fotos
 settings-photos-note = Fotos
 settings-photos-hint = Archivos → Fotos agrupa las etiquetas people/, event/ y album/. La búsqueda de caras permanece apagada hasta que la actives. Windows marca entonces las caras de la carpeta abierta como people/unnamed y no dice quién es. El autoetiquetado lee los nombres de carpeta People y Events al abrir una carpeta.

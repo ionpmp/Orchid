@@ -5,6 +5,7 @@
 //! [`crate::widget::snapshot::WidgetPayload`] and consumed exhaustively by
 //! the UI renderer.
 
+pub mod agent;
 pub mod audio_player;
 pub mod browser;
 pub mod calculator;
@@ -25,6 +26,7 @@ pub mod video_player;
 pub mod viewer;
 pub mod weather;
 
+pub use agent::{AgentLine, AgentPayload};
 pub use audio_player::{
     AudioPlayerGroupRow, AudioPlayerLyricRow, AudioPlayerPayload, AudioPlayerPlaylistRow,
     AudioPlayerRootRow, AudioPlayerTrackRow,

@@ -215,6 +215,7 @@ pub(super) fn is_known_widget_type(type_id: &str) -> bool {
             | "processes"
             | "calculator"
             | "notes"
+            | "agent"
             | "calendar"
             | "rss"
             | "recent-files"
@@ -241,6 +242,7 @@ fn apply_catalog_row_visibility(g: &WidgetCatalog, visible_ids: &std::collection
     g.set_show_processes(visible_ids.contains("processes"));
     g.set_show_calculator(visible_ids.contains("calculator"));
     g.set_show_notes(visible_ids.contains("notes"));
+    g.set_show_agent(visible_ids.contains("agent"));
     g.set_show_calendar(visible_ids.contains("calendar"));
     g.set_show_rss(visible_ids.contains("rss"));
     g.set_show_recent_files(visible_ids.contains("recent-files"));
@@ -281,6 +283,7 @@ pub(super) fn dock_widget_description(locale: &LocaleManager, type_id: &str) -> 
         "processes" => "widget-processes-desc",
         "calculator" => "widget-calculator-desc",
         "notes" => "widget-notes-desc",
+        "agent" => "widget-agent-desc",
         "calendar" => "widget-calendar-desc",
         "rss" => "widget-rss-desc",
         "recent-files" => "widget-recent-files-desc",
@@ -354,6 +357,12 @@ pub(super) fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             label: locale.tr("dock-widget-notes").into(),
             description: dock_widget_description(locale, "notes"),
             icon: "notes".into(),
+        },
+        DockWidgetType {
+            type_id: "agent".into(),
+            label: locale.tr("dock-widget-agent").into(),
+            description: dock_widget_description(locale, "agent"),
+            icon: "search".into(),
         },
         DockWidgetType {
             type_id: "calendar".into(),

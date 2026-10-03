@@ -14,8 +14,8 @@ use orchid_widgets::WidgetPayload;
 use crate::window::errors::media_localized_error;
 use crate::window::spawn;
 
-use super::AgentNotice;
 use super::MainWindowController;
+use orchid_widgets::agent::AgentNotice;
 
 impl MainWindowController {
     pub(super) fn on_rss_item_clicked(self: &Arc<Self>, link: &SharedString) {
@@ -551,67 +551,11 @@ impl MainWindowController {
     }
 
     pub(super) fn ask_agent(self: &Arc<Self>, prompt: String) {
-        let cfg = self.config.read().agent.clone();
-        if !cfg.enabled {
-            self.agent_notices
-                .lock()
-                .push(AgentNotice::Error("agent-disabled"));
-            return;
-        }
-        if cfg.model.trim().is_empty() {
-            self.agent_notices
-                .lock()
-                .push(AgentNotice::Error("agent-needs-model"));
-            return;
-        }
-        *self.agent_prompt.lock() = prompt;
-        let prompt_slot = Arc::clone(&self.agent_prompt);
-        let notices = Arc::clone(&self.agent_notices);
-        let config = Arc::clone(&self.config);
-        self.widget_manager
-            .jobs()
-            .spawn_coalesced("agent:ask", move || {
-                let prompt_slot = Arc::clone(&prompt_slot);
-                let notices = Arc::clone(&notices);
-                let config = Arc::clone(&config);
-                async move {
-                    let prompt = prompt_slot.lock().clone();
-                    let cfg = config.read().agent.clone();
-                    let key = match orchid_crypto::resolve_stored_secret(&cfg.api_key) {
-                        Ok(key) => key,
-                        Err(e) => {
-                            notices.lock().push(AgentNotice::Failed(e.to_string()));
-                            return;
-                        }
-                    };
-                    let notice = match orchid_widgets::agent::complete(&cfg, &key, &prompt).await {
-                        Ok(text) => AgentNotice::Reply(text),
-                        Err(orchid_widgets::agent::AgentError::Disabled) => {
-                            AgentNotice::Error("agent-disabled")
-                        }
-                        Err(orchid_widgets::agent::AgentError::NeedsModel) => {
-                            AgentNotice::Error("agent-needs-model")
-                        }
-                        Err(orchid_widgets::agent::AgentError::BadEndpoint) => {
-                            AgentNotice::Error("agent-bad-endpoint")
-                        }
-                        Err(orchid_widgets::agent::AgentError::EmptyPrompt) => {
-                            AgentNotice::Error("agent-empty-prompt")
-                        }
-                        Err(orchid_widgets::agent::AgentError::PromptTooLong) => {
-                            AgentNotice::Error("agent-prompt-too-long")
-                        }
-                        Err(orchid_widgets::agent::AgentError::Failed(reason)) => {
-                            AgentNotice::Failed(reason)
-                        }
-                    };
-                    notices.lock().push(notice);
-                }
-            });
+        orchid_widgets::agent::submit(self.widget_manager.jobs(), prompt);
     }
 
     pub(super) fn drain_agent_notices(self: &Arc<Self>) {
-        let pending = std::mem::take(&mut *self.agent_notices.lock());
+        let pending = orchid_widgets::agent::take_notices();
         if pending.is_empty() {
             return;
         }

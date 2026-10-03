@@ -235,6 +235,10 @@ export component MainWindow inherits Window {
     callback notes-zoom(string, int);
     callback notes-clear(string);
     callback notes-find(string, string, bool);
+    callback agent-send(string, string);
+    callback agent-confirm(string);
+    callback agent-dismiss(string);
+    callback agent-clear(string);
     callback browser-select-tab(string, int);
     callback browser-new-tab(string);
     callback browser-close-tab(string, int);
@@ -698,6 +702,10 @@ export component MainWindow inherits Window {
             notes-zoom(id, d) => { root.notes-zoom(id, d); }
             notes-clear(id) => { root.notes-clear(id); }
             notes-find(id, q, fwd) => { root.notes-find(id, q, fwd); }
+            agent-send(id, text) => { root.agent-send(id, text); }
+            agent-confirm(id) => { root.agent-confirm(id); }
+            agent-dismiss(id) => { root.agent-dismiss(id); }
+            agent-clear(id) => { root.agent-clear(id); }
             browser-select-tab(id, i) => { root.browser-select-tab(id, i); }
             browser-new-tab(id) => { root.browser-new-tab(id); }
             browser-close-tab(id, i) => { root.browser-close-tab(id, i); }

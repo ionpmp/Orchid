@@ -2034,6 +2034,8 @@ widget-calculator-desc = Быстрый калькулятор: обычный �
 
 widget-notes-name = Заметки
 widget-notes-desc = Блокнот со вкладками, автосохранением, поиском и переносом строк
+widget-agent-name = Агент
+widget-agent-desc = Диалог с инструментами. Запись файла ждёт подтверждения.
 
 
 # ---- Notes / scratchpad ----
@@ -2172,6 +2174,7 @@ processes-startup-common-folder = Общая автозагрузка
 dock-widget-processes = Processes
 dock-widget-calculator = Калькулятор
 dock-widget-notes = Заметки
+dock-widget-agent = Агент
 dock-widget-calendar = Календарь
 
 # ---- synced from en-US (jyotish + parity) ----
@@ -2653,6 +2656,18 @@ agent-bad-endpoint = Адрес агента должен быть ссылко�
 agent-empty-prompt = Напишите вопрос после ?.
 agent-prompt-too-long = Этот вопрос слишком длинный.
 agent-failed = Агент не ответил: { $reason }
+agent-send = Отправить
+agent-confirm-write = Записать файл
+agent-dismiss-write = Отклонить
+agent-clear = Очистить
+agent-empty = Задайте вопрос. Агент может прочитать файл, показать папку и поискать в индексе.
+agent-placeholder = Сообщение
+agent-pending = Ожидает записи
+agent-role-user = Вы
+agent-role-assistant = Агент
+agent-role-tool = Инструмент
+agent-working = Работает…
+agent-store-closed = Хранилище агента не открыто.
 settings-section-photos = Фото
 settings-photos-note = Фото
 settings-photos-hint = «Файлы → Фото» группирует теги people/, event/ и album/. Поиск лиц выключен, пока вы его не включите. Windows помечает лица в открытой папке как people/unnamed и не называет человека. Автотег берёт имена папок People и Events, когда вы открываете папку.

@@ -48,6 +48,7 @@ pub fn widget_label_key(type_id: &str) -> &'static str {
         "processes" => "dock-widget-processes",
         "calculator" => "dock-widget-calculator",
         "notes" => "dock-widget-notes",
+        "agent" => "dock-widget-agent",
         "calendar" => "dock-widget-calendar",
         "rss" => "dock-widget-rss",
         "recent-files" => "dock-widget-recent-files",

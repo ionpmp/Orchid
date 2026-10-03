@@ -2272,6 +2272,25 @@ export struct WidgetSettingsDialog {
     fields: [SettingsFieldRow],
 }
 
+export struct AgentLine {
+    role: string,
+    text: string,
+}
+
+export struct AgentModel {
+    lines: [AgentLine],
+    pending-path: string,
+    pending-preview: string,
+    status: string,
+    empty-label: string,
+    placeholder: string,
+    send-label: string,
+    confirm-label: string,
+    dismiss-label: string,
+    clear-label: string,
+    pending-label: string,
+}
+
 export struct WidgetFrameModel {
     instance-id: string,
     type-id: string,
@@ -2322,6 +2341,7 @@ export struct WidgetFrameModel {
     processes: ProcessesModel,
     calculator: CalculatorModel,
     notes: NotesModel,
+    agent: AgentModel,
     calendar: CalendarModel,
     rss: RssModel,
     recent-files: RecentFilesModel,

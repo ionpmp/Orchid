@@ -15,6 +15,7 @@ import { SystemView } from "../widgets/system.slint";
 import { ProcessesView } from "../widgets/processes.slint";
 import { CalculatorView } from "../widgets/calculator.slint";
 import { NotesView } from "../widgets/notes.slint";
+import { AgentView } from "../widgets/agent.slint";
 import { BrowserView } from "../widgets/browser.slint";
 import { CalendarView } from "../widgets/calendar.slint";
 import { RssView } from "../widgets/rss.slint";
@@ -191,6 +192,12 @@ export component WidgetFrame inherits Rectangle {
     callback notes-zoom(string, int);
     callback notes-clear(string);
     callback notes-find(string, string, bool);
+
+    // Agent
+    callback agent-send(string, string);
+    callback agent-confirm(string);
+    callback agent-dismiss(string);
+    callback agent-clear(string);
 
     // Browser
     callback browser-select-tab(string, int);
@@ -850,6 +857,16 @@ export component WidgetFrame inherits Rectangle {
                     zoom(d) => { root.notes-zoom(root.model.instance-id, d); }
                     clear-note => { root.notes-clear(root.model.instance-id); }
                     find-request(q, fwd) => { root.notes-find(root.model.instance-id, q, fwd); }
+                }
+
+                if model.type-id == "agent" : AgentView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.agent;
+                    send(text) => { root.agent-send(root.model.instance-id, text); }
+                    confirm-write => { root.agent-confirm(root.model.instance-id); }
+                    dismiss-write => { root.agent-dismiss(root.model.instance-id); }
+                    clear-chat => { root.agent-clear(root.model.instance-id); }
                 }
 
                 if model.type-id == "browser" : BrowserView {
