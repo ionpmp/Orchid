@@ -1,7 +1,7 @@
-//! Read-only HTML preview for Excel and PowerPoint packages.
+//! Read-only preview for Excel and PowerPoint packages.
 //!
-//! Spreadsheets become tables. Presentations become one card per slide.
-//! The UI already renders [`crate::snapshot::ViewerSnapshot::Html`].
+//! Spreadsheets become a sheet and cell table. Presentations become one
+//! HTML card per slide. The workbook is not edited.
 
 use std::any::Any;
 use std::io::{Cursor, Read, Seek};
@@ -14,7 +14,7 @@ use quick_xml::reader::Reader;
 use zip::ZipArchive;
 
 use crate::error::{Result, ViewerError};
-use crate::snapshot::{HtmlSnapshot, ViewerSnapshot};
+use crate::snapshot::{HtmlSnapshot, SheetCell, SheetPage, SheetSnapshot, ViewerSnapshot};
 use crate::viewer_trait::Viewer;
 
 const MAX_ROWS: usize = 400;
@@ -26,6 +26,9 @@ pub struct OfficeViewer {
     path: RwLock<Option<orchid_fs::FsPath>>,
     html: RwLock<Arc<str>>,
     info: RwLock<String>,
+    sheets: RwLock<Vec<SheetPage>>,
+    /// `true` for a slide deck. Workbooks use [`Self::sheets`].
+    slides: RwLock<bool>,
 }
 
 impl OfficeViewer {
@@ -56,8 +59,20 @@ impl Viewer for OfficeViewer {
             .await
             .map_err(|err| ViewerError::DocumentParse(err.to_string()))?
             .map_err(ViewerError::DocumentParse)?;
-        *self.html.write() = Arc::from(preview.html);
-        *self.info.write() = preview.info;
+        match preview {
+            OfficePreview::Slides(preview) => {
+                *self.html.write() = Arc::from(preview.html);
+                *self.info.write() = preview.info;
+                *self.sheets.write() = Vec::new();
+                *self.slides.write() = true;
+            }
+            OfficePreview::Sheets(book) => {
+                *self.html.write() = Arc::from("");
+                *self.info.write() = book.info;
+                *self.sheets.write() = book.sheets;
+                *self.slides.write() = false;
+            }
+        }
         *self.path.write() = Some(path);
         Ok(())
     }
@@ -66,6 +81,8 @@ impl Viewer for OfficeViewer {
         *self.path.write() = None;
         *self.html.write() = Arc::from("");
         *self.info.write() = String::new();
+        *self.sheets.write() = Vec::new();
+        *self.slides.write() = false;
         Ok(())
     }
 
@@ -76,12 +93,20 @@ impl Viewer for OfficeViewer {
             .as_ref()
             .map(|path| path.as_str().to_string())
             .unwrap_or_default();
-        ViewerSnapshot::Html(HtmlSnapshot {
-            path_display,
-            source_preview: Arc::clone(&self.html.read()),
-            local_path: None,
-            info_text: self.info.read().clone(),
-        })
+        if *self.slides.read() {
+            ViewerSnapshot::Html(HtmlSnapshot {
+                path_display,
+                source_preview: Arc::clone(&self.html.read()),
+                local_path: None,
+                info_text: self.info.read().clone(),
+            })
+        } else {
+            ViewerSnapshot::Sheet(SheetSnapshot {
+                path_display,
+                info_text: self.info.read().clone(),
+                sheets: self.sheets.read().clone(),
+            })
+        }
     }
 
     fn current_path(&self) -> Option<&orchid_fs::FsPath> {
@@ -102,25 +127,37 @@ pub(crate) struct Preview {
     info: String,
 }
 
-pub(crate) fn render_office(bytes: &[u8], slides: bool) -> std::result::Result<Preview, String> {
+struct SheetBook {
+    sheets: Vec<SheetPage>,
+    info: String,
+}
+
+enum OfficePreview {
+    Slides(Preview),
+    Sheets(SheetBook),
+}
+
+pub(crate) fn render_office(
+    bytes: &[u8],
+    slides: bool,
+) -> std::result::Result<OfficePreview, String> {
     let cursor = Cursor::new(bytes.to_vec());
     let mut archive = ZipArchive::new(cursor).map_err(|err| format!("zip: {err}"))?;
     if slides {
-        render_slides(&mut archive)
+        render_slides(&mut archive).map(OfficePreview::Slides)
     } else {
-        render_sheets(&mut archive)
+        render_sheets(&mut archive).map(OfficePreview::Sheets)
     }
 }
 
 fn render_sheets<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
-) -> std::result::Result<Preview, String> {
+) -> std::result::Result<SheetBook, String> {
     let shared = read_entry(archive, "xl/sharedStrings.xml")
         .map(|xml| shared_strings(&xml))
         .unwrap_or_default();
     let sheets = sheet_entries(archive);
-    let mut body = String::new();
-    let mut shown = 0usize;
+    let mut pages = Vec::new();
     for (name, path) in &sheets {
         let Some(xml) = read_entry(archive, path) else {
             continue;
@@ -129,30 +166,15 @@ fn render_sheets<R: Read + Seek>(
         if rows.is_empty() {
             continue;
         }
-        shown += 1;
-        body.push_str("<h2>");
-        body.push_str(&escape(name));
-        body.push_str("</h2>");
-        body.push_str("<table>");
-        for row in &rows {
-            body.push_str("<tr>");
-            for cell in row {
-                body.push_str("<td>");
-                body.push_str(&escape(cell));
-                body.push_str("</td>");
-            }
-            body.push_str("</tr>");
-        }
-        body.push_str("</table>");
-        if truncated {
-            body.push_str("<p>Showing the first rows and columns.</p>");
-        }
+        pages.push(SheetPage {
+            name: name.clone(),
+            rows,
+            truncated,
+        });
     }
-    if shown == 0 {
-        body.push_str("<p>This workbook has no visible cells.</p>");
-    }
-    Ok(Preview {
-        html: page("Workbook", &body),
+    let shown = pages.len();
+    Ok(SheetBook {
+        sheets: pages,
         info: format!("{shown} sheets"),
     })
 }
@@ -298,7 +320,7 @@ fn normalize_part(target: &str) -> String {
     }
 }
 
-fn parse_sheet(xml: &str, shared: &[String]) -> (Vec<Vec<String>>, bool) {
+fn parse_sheet(xml: &str, shared: &[String]) -> (Vec<Vec<SheetCell>>, bool) {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
@@ -347,13 +369,14 @@ fn parse_sheet(xml: &str, shared: &[String]) -> (Vec<Vec<String>>, bool) {
                         if col >= MAX_COLS {
                             truncated = true;
                         } else {
-                            place(&mut row, col, text);
+                            place(&mut row, col, text, cell_ref.clone());
                         }
                     }
                     kind.clear();
                     value.clear();
                 } else if name == "row" {
-                    if row.iter().any(|cell| !cell.is_empty()) {
+                    fill_gap_addresses(&mut row);
+                    if row.iter().any(|cell| !cell.text.is_empty()) {
                         rows.push(std::mem::take(&mut row));
                     } else {
                         row.clear();
@@ -391,11 +414,43 @@ fn cell_text(kind: &str, value: &str, shared: &[String]) -> Option<String> {
     Some(value.to_string())
 }
 
-fn place(row: &mut Vec<String>, col: usize, text: String) {
+fn place(row: &mut Vec<SheetCell>, col: usize, text: String, address: String) {
     if row.len() <= col {
-        row.resize(col + 1, String::new());
+        row.resize(col + 1, SheetCell::default());
     }
-    row[col] = text;
+    row[col] = SheetCell { text, address };
+}
+
+fn fill_gap_addresses(row: &mut [SheetCell]) {
+    let Some(row_num) = row.iter().find_map(|cell| trailing_number(&cell.address)) else {
+        return;
+    };
+    for (col, cell) in row.iter_mut().enumerate() {
+        if cell.address.is_empty() {
+            cell.address = format!("{}{row_num}", col_letters(col));
+        }
+    }
+}
+
+fn trailing_number(address: &str) -> Option<usize> {
+    let digits: String = address
+        .chars()
+        .skip_while(|ch| ch.is_ascii_alphabetic())
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect();
+    digits.parse().ok()
+}
+
+fn col_letters(index: usize) -> String {
+    let mut n = index + 1;
+    let mut out = Vec::new();
+    while n > 0 {
+        n -= 1;
+        out.push(b'A' + (n % 26) as u8);
+        n /= 26;
+    }
+    out.reverse();
+    String::from_utf8(out).unwrap_or_default()
 }
 
 fn col_index(cell_ref: &str) -> usize {
@@ -596,7 +651,7 @@ mod tests {
     }
 
     #[test]
-    fn workbook_html_contains_sheet_name_and_cells() {
+    fn workbook_table_keeps_sheet_name_and_cells() {
         let bytes = zip_bytes(&[
             (
                 "xl/workbook.xml",
@@ -616,10 +671,17 @@ mod tests {
             ),
         ]);
         let preview = render_office(&bytes, false).unwrap();
-        assert!(preview.html.contains("Budgets"), "{}", preview.html);
-        assert!(preview.html.contains("Orchid"), "{}", preview.html);
-        assert!(preview.html.contains("42"), "{}", preview.html);
-        assert!(preview.info.contains("1 sheets"), "{}", preview.info);
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        assert_eq!(book.sheets.len(), 1, "{}", book.info);
+        assert_eq!(book.sheets[0].name, "Budgets");
+        let row = &book.sheets[0].rows[0];
+        assert_eq!(row[0].text, "Orchid");
+        assert_eq!(row[0].address, "A1");
+        assert_eq!(row[1].text, "42");
+        assert_eq!(row[1].address, "B1");
+        assert!(book.info.contains("1 sheets"), "{}", book.info);
     }
 
     #[test]
@@ -639,6 +701,9 @@ mod tests {
             ),
         ]);
         let preview = render_office(&bytes, true).unwrap();
+        let OfficePreview::Slides(preview) = preview else {
+            panic!("slides should stay an HTML preview");
+        };
         let hello = preview.html.find("Hello orchid").unwrap();
         let second = preview.html.find("Second").unwrap();
         assert!(hello < second, "{}", preview.html);

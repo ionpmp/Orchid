@@ -1917,6 +1917,29 @@ export struct ViewerHtmlModel {
     can-go-forward: bool,
 }
 
+export struct ViewerSheetCell {
+    text: string,
+    address: string,
+}
+
+export struct ViewerSheetRow {
+    cells: [ViewerSheetCell],
+}
+
+export struct ViewerSheetPage {
+    name: string,
+    rows: [ViewerSheetRow],
+    truncated: bool,
+}
+
+export struct ViewerSheetModel {
+    path-display: string,
+    info: string,
+    empty-label: string,
+    truncated-label: string,
+    sheets: [ViewerSheetPage],
+}
+
 export struct ViewerEmptyModel {
     placeholder-text: string,
 }
@@ -1949,6 +1972,7 @@ export struct ViewerModel {
     document: ViewerDocumentModel,
     media: ViewerMediaModel,
     html: ViewerHtmlModel,
+    sheet: ViewerSheetModel,
     passphrase: FmPassphraseState,
 }
 

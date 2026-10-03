@@ -34,6 +34,8 @@ pub enum ViewerSnapshot {
     Media(MediaSnapshot),
     /// HTML source + local path for an embedded WebView2 preview.
     Html(HtmlSnapshot),
+    /// Read-only spreadsheet grid. The workbook is not edited.
+    Sheet(SheetSnapshot),
 }
 
 impl ViewerSnapshot {
@@ -53,6 +55,7 @@ impl ViewerSnapshot {
             Self::Document(s) => s.path_display = path_display,
             Self::Media(s) => s.path_display = path_display,
             Self::Html(s) => s.path_display = path_display,
+            Self::Sheet(s) => s.path_display = path_display,
         }
         self
     }
@@ -595,6 +598,34 @@ pub struct MediaSnapshot {
     /// Transient on-screen status (volume / seek / speed).
     pub osd_text: String,
     pub error: String,
+}
+
+/// Read-only spreadsheet. Cells are the first rows and columns of each sheet.
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
+pub struct SheetSnapshot {
+    pub path_display: String,
+    pub info_text: String,
+    pub sheets: Vec<SheetPage>,
+}
+
+/// One worksheet in [`SheetSnapshot`].
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
+pub struct SheetPage {
+    pub name: String,
+    pub rows: Vec<Vec<SheetCell>>,
+    /// `true` when rows or columns past the preview cap were dropped.
+    pub truncated: bool,
+}
+
+/// One cell in the sheet preview.
+#[derive(Debug, Clone, Default)]
+#[allow(missing_docs)]
+pub struct SheetCell {
+    pub text: String,
+    /// Spreadsheet address such as `B2`, when the file stored one.
+    pub address: String,
 }
 
 /// HTML snapshot (embedded preview + source + Open in browser).

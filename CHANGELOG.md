@@ -15,6 +15,9 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Spreadsheets:** `.xlsx` and `.xlsm` open as a read-only sheet and
+  cell table. Arrow keys and clicks move the current cell. The workbook
+  is not edited. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label
   from the Form bar. Free text and signatures stay unchanged, and a
   compressed choice field is left as it was.

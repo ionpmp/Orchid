@@ -10,8 +10,9 @@ use crate::slint_generated::{
     FmPassphraseState, ViewerArchiveEntry, ViewerArchiveModel, ViewerCalDay, ViewerDocumentModel,
     ViewerEmptyModel, ViewerFaceBox, ViewerHtmlModel, ViewerImageModel, ViewerImageThumb,
     ViewerMapPin, ViewerMediaChapterItem, ViewerMediaModel, ViewerMediaPlaylistItem, ViewerModel,
-    ViewerPdfModel, ViewerPdfOutlineRow, ViewerPdfOverlay, ViewerStatusModel, ViewerSyntaxLine,
-    ViewerSyntaxSegment, ViewerTextModel,
+    ViewerPdfModel, ViewerPdfOutlineRow, ViewerPdfOverlay, ViewerSheetCell, ViewerSheetModel,
+    ViewerSheetPage, ViewerSheetRow, ViewerStatusModel, ViewerSyntaxLine, ViewerSyntaxSegment,
+    ViewerTextModel,
 };
 
 /// Reuse Slint images when the underlying RGBA `Arc` is unchanged (pan/zoom).
@@ -744,6 +745,56 @@ fn build_media_snapshot(
     }
 }
 
+fn empty_viewer_sheet_model(locale: &LocaleManager) -> ViewerSheetModel {
+    ViewerSheetModel {
+        path_display: SharedString::new(),
+        info: SharedString::new(),
+        empty_label: locale.tr("viewer-sheet-empty").into(),
+        truncated_label: locale.tr("viewer-sheet-truncated").into(),
+        sheets: ModelRc::new(VecModel::from(Vec::<ViewerSheetPage>::new())),
+    }
+}
+
+fn build_sheet_model(
+    snap: &orchid_viewers::SheetSnapshot,
+    locale: &LocaleManager,
+) -> ViewerSheetModel {
+    let pages: Vec<ViewerSheetPage> = snap
+        .sheets
+        .iter()
+        .map(|page| {
+            let rows: Vec<ViewerSheetRow> = page
+                .rows
+                .iter()
+                .map(|row| {
+                    let cells: Vec<ViewerSheetCell> = row
+                        .iter()
+                        .map(|cell| ViewerSheetCell {
+                            text: cell.text.clone().into(),
+                            address: cell.address.clone().into(),
+                        })
+                        .collect();
+                    ViewerSheetRow {
+                        cells: ModelRc::new(VecModel::from(cells)),
+                    }
+                })
+                .collect();
+            ViewerSheetPage {
+                name: page.name.clone().into(),
+                rows: ModelRc::new(VecModel::from(rows)),
+                truncated: page.truncated,
+            }
+        })
+        .collect();
+    ViewerSheetModel {
+        path_display: snap.path_display.clone().into(),
+        info: snap.info_text.clone().into(),
+        empty_label: locale.tr("viewer-sheet-empty").into(),
+        truncated_label: locale.tr("viewer-sheet-truncated").into(),
+        sheets: ModelRc::new(VecModel::from(pages)),
+    }
+}
+
 fn empty_viewer_html_model(locale: &LocaleManager) -> ViewerHtmlModel {
     let available = crate::html_webview::HtmlWebViewHost::runtime_available();
     ViewerHtmlModel {
@@ -1053,6 +1104,7 @@ pub(crate) fn empty_viewer_model(locale: &LocaleManager) -> ViewerModel {
         document: empty_viewer_document_model(locale),
         media: empty_viewer_media_model(locale),
         html: empty_viewer_html_model(locale),
+        sheet: empty_viewer_sheet_model(locale),
         passphrase: empty_passphrase_state(),
     }
 }
@@ -1171,6 +1223,10 @@ pub(crate) fn build_viewer_model(p: &ViewerPayload, locale: &LocaleManager) -> V
                 can_go_back: false,
                 can_go_forward: false,
             };
+        }
+        Vs::Sheet(s) => {
+            model.kind = 10;
+            model.sheet = build_sheet_model(s, locale);
         }
     }
 

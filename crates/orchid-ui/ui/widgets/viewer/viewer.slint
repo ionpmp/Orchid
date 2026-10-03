@@ -11,6 +11,7 @@ import { ViewerArchiveView } from "viewer-archive.slint";
 import { ViewerDocumentView } from "viewer-document.slint";
 import { ViewerMediaView } from "viewer-media.slint";
 import { ViewerHtmlView } from "viewer-html.slint";
+import { ViewerSheetView } from "viewer-sheet.slint";
 
 export component ViewerView inherits Rectangle {
     in property <ViewerModel> model;
@@ -228,6 +229,12 @@ export component ViewerView inherits Rectangle {
         open-browser => { root.open-external(); }
         html-command(c) => { root.html-command(c); }
         embed-bounds(x, y, w, h, vis) => { root.html-embed-bounds(x, y, w, h, vis); }
+    }
+
+    if model.kind == 10 : ViewerSheetView {
+        width: parent.width;
+        height: parent.height;
+        model: root.model.sheet;
     }
 
     if model.passphrase.active : FmPassphraseDialog {

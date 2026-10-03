@@ -739,6 +739,7 @@ impl Widget for ViewerWidget {
             ViewerSnapshot::Document(s) => title_from(&s.path_display),
             ViewerSnapshot::Media(s) => title_from(&s.path_display),
             ViewerSnapshot::Html(s) => title_from(&s.path_display),
+            ViewerSnapshot::Sheet(s) => title_from(&s.path_display),
             ViewerSnapshot::Loading { path_display }
             | ViewerSnapshot::Error { path_display, .. } => title_from(path_display),
         };

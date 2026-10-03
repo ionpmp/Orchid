@@ -494,6 +494,21 @@ fn viewer_to_text_lines(p: &ViewerPayload) -> Vec<String> {
             }
             lines
         }
+        ViewerSnapshot::Sheet(s) => {
+            let mut lines = vec![s.path_display.clone(), s.info_text.clone()];
+            for sheet in s.sheets.iter().take(8) {
+                lines.push(sheet.name.clone());
+                for row in sheet.rows.iter().take(8) {
+                    let text = row
+                        .iter()
+                        .map(|cell| cell.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join("\t");
+                    lines.push(text);
+                }
+            }
+            lines
+        }
         ViewerSnapshot::Archive(a) => {
             let mut lines = vec![
                 format!("{} — {}", a.path_display, a.format),

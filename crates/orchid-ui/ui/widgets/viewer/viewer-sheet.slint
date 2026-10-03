@@ -1,0 +1,172 @@
+import { Theme } from "../../theme_global.slint";
+import { ViewerSheetModel } from "../../workspace/defs.slint";
+
+export component ViewerSheetView inherits Rectangle {
+    in property <ViewerSheetModel> model;
+
+    property <int> sheet-index: 0;
+    property <int> sel-row: 0;
+    property <int> sel-col: 0;
+    property <int> sheet: min(root.sheet-index, max(root.model.sheets.length - 1, 0));
+    property <string> cell-address: root.model.sheets[root.sheet].rows[root.sel-row].cells[root.sel-col].address;
+    property <string> cell-text: root.model.sheets[root.sheet].rows[root.sel-row].cells[root.sel-col].text;
+
+    forward-focus: keys;
+    background: Theme.surface-base;
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.RightArrow) {
+                if (root.sel-col + 1 < root.model.sheets[root.sheet].rows[root.sel-row].cells.length) {
+                    root.sel-col += 1;
+                }
+                accept
+            } else if (event.text == Key.LeftArrow) {
+                if (root.sel-col > 0) {
+                    root.sel-col -= 1;
+                }
+                accept
+            } else if (event.text == Key.DownArrow) {
+                if (root.sel-row + 1 < root.model.sheets[root.sheet].rows.length) {
+                    root.sel-row += 1;
+                    if (root.sel-col >= root.model.sheets[root.sheet].rows[root.sel-row].cells.length) {
+                        root.sel-col = 0;
+                    }
+                }
+                accept
+            } else if (event.text == Key.UpArrow) {
+                if (root.sel-row > 0) {
+                    root.sel-row -= 1;
+                    if (root.sel-col >= root.model.sheets[root.sheet].rows[root.sel-row].cells.length) {
+                        root.sel-col = 0;
+                    }
+                }
+                accept
+            } else {
+                reject
+            }
+        }
+    }
+
+    VerticalLayout {
+        padding: Theme.space-2;
+        spacing: Theme.space-2;
+
+        HorizontalLayout {
+            spacing: Theme.space-2;
+            alignment: start;
+
+            Text {
+                text: root.cell-address;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                font-family: Theme.font-family-mono;
+                vertical-alignment: center;
+                min-width: 48px;
+            }
+
+            Text {
+                text: root.cell-text;
+                color: Theme.text-primary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+
+            Text {
+                text: root.model.info;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+            }
+        }
+
+        if root.model.sheets.length > 1 : HorizontalLayout {
+            spacing: Theme.space-1;
+            alignment: start;
+
+            for page[i] in root.model.sheets : Rectangle {
+                height: Theme.row-height;
+                border-radius: Theme.radius-sm;
+                background: i == root.sheet ? Theme.state-selected : tab-ta.has-hover ? Theme.state-hover : Colors.transparent;
+
+                tab-ta := TouchArea {
+                    clicked => {
+                        root.sheet-index = i;
+                        root.sel-row = 0;
+                        root.sel-col = 0;
+                        keys.focus();
+                    }
+                }
+
+                HorizontalLayout {
+                    padding-left: Theme.space-2;
+                    padding-right: Theme.space-2;
+
+                    Text {
+                        text: page.name;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        if root.model.sheets.length == 0 : Text {
+            text: root.model.empty-label;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-md;
+            vertical-stretch: 1;
+        }
+
+        if root.model.sheets.length > 0 : Flickable {
+            vertical-stretch: 1;
+            viewport-height: grid.preferred-height;
+            viewport-width: grid.preferred-width;
+
+            grid := VerticalLayout {
+                alignment: start;
+                spacing: 1px;
+
+                for row[ri] in root.model.sheets[root.sheet].rows : HorizontalLayout {
+                    height: Theme.row-height;
+                    spacing: 1px;
+                    alignment: start;
+
+                for cell[ci] in row.cells : Rectangle {
+                    min-width: 72px;
+                    background: ri == root.sel-row && ci == root.sel-col ? Theme.state-selected : cell-ta.has-hover ? Theme.state-hover : Theme.surface-raised;
+                    border-width: ri == root.sel-row && ci == root.sel-col ? 1px : 0px;
+                    border-color: Theme.accent-brand;
+
+                    cell-ta := TouchArea {
+                        clicked => {
+                            root.sel-row = ri;
+                            root.sel-col = ci;
+                            keys.focus();
+                        }
+                    }
+
+                    Text {
+                        x: Theme.space-1;
+                        width: parent.width - Theme.space-1 * 2;
+                        text: cell.text;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+            }
+        }
+        }
+
+        if root.model.sheets[root.sheet].truncated : Text {
+            text: root.model.truncated-label;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+        }
+    }
+}
