@@ -434,6 +434,10 @@ impl MainWindowController {
         let terminal_output_wm = widget_manager.clone();
         let terminal_output_layouts = terminal_deps.layouts.clone();
         let terminal_output_routing = session_routing.clone();
+        // session id → widget instance. Filled on the first output chunk so
+        // later PTY data does not scan every layout.
+        let terminal_output_owners: Arc<Mutex<HashMap<Uuid, Uuid>>> =
+            Arc::new(Mutex::new(HashMap::new()));
         let terminal_output_sub = bus
             .subscribe_async(
                 EventFilter::of_type(TerminalOutput::event_type()),
@@ -443,25 +447,32 @@ impl MainWindowController {
                     let wm = terminal_output_wm.clone();
                     let layouts = terminal_output_layouts.clone();
                     let routing = terminal_output_routing.clone();
+                    let owners = terminal_output_owners.clone();
                     async move {
                         let Some(session_id) = session_id else {
                             return;
                         };
-                        // Prefer the focused-session routing table (hot path).
+                        if let Some(instance_id) = owners.lock().get(&session_id).copied() {
+                            wm.mark_snapshot_dirty(instance_id);
+                            return;
+                        }
                         for entry in routing.lock().iter() {
                             if *entry.1 == session_id {
+                                owners.lock().insert(session_id, *entry.0);
                                 wm.mark_snapshot_dirty(*entry.0);
                                 return;
                             }
                         }
-                        // Multi-pane: any leaf in the layout may have produced output.
+                        // Multi-pane: a background leaf is not the focused session.
                         for (instance_id, layout) in layouts.lock().iter() {
                             let mut leaves = Vec::new();
                             for tab in &layout.tabs.tabs {
                                 tab.root.leaves(&mut leaves);
                             }
                             if leaves.contains(&session_id) {
+                                owners.lock().insert(session_id, *instance_id);
                                 wm.mark_snapshot_dirty(*instance_id);
+                                return;
                             }
                         }
                     }

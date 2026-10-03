@@ -498,6 +498,8 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **Terminal output**: the first chunk records which widget owns the
+  session, so later PTY data does not walk every layout.
 - **Workspace frames**: a content tick patches the existing row and skips
   the layout snapshot while nothing is being dragged or resized.
 - **Alacritty grid**: after the first frame, only damaged lines are copied
