@@ -2,7 +2,9 @@
 
 use std::collections::BTreeMap;
 use std::io::Cursor;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -57,6 +59,62 @@ fn container_and_inner(path: &FsPath) -> Result<(FsPath, String)> {
         .trim_matches('/')
         .to_string();
     Ok((container, inner))
+}
+
+struct CachedToc {
+    path: PathBuf,
+    len: u64,
+    modified: Option<SystemTime>,
+    entries: Arc<[ArchiveEntry]>,
+}
+
+const TOC_CACHE_CAP: usize = 4;
+
+static TOC_CACHE: Mutex<Vec<CachedToc>> = Mutex::new(Vec::new());
+
+fn toc_cache_hit(
+    path: &Path,
+    len: u64,
+    modified: Option<SystemTime>,
+) -> Option<Arc<[ArchiveEntry]>> {
+    let cache = TOC_CACHE.lock().unwrap_or_else(|err| err.into_inner());
+    cache
+        .iter()
+        .find(|row| row.path == path && row.len == len && row.modified == modified)
+        .map(|row| Arc::clone(&row.entries))
+}
+
+fn toc_cache_store(
+    path: &Path,
+    len: u64,
+    modified: Option<SystemTime>,
+    entries: Arc<[ArchiveEntry]>,
+) {
+    let mut cache = TOC_CACHE.lock().unwrap_or_else(|err| err.into_inner());
+    cache.retain(|row| row.path != path);
+    if cache.len() >= TOC_CACHE_CAP {
+        cache.remove(0);
+    }
+    cache.push(CachedToc {
+        path: path.to_path_buf(),
+        len,
+        modified,
+        entries,
+    });
+}
+
+/// Listing and stat share one parsed table of contents per unchanged archive.
+async fn cached_archive_entries(os: &Path) -> Result<Arc<[ArchiveEntry]>> {
+    let meta = std::fs::metadata(os)?;
+    let len = meta.len();
+    let modified = meta.modified().ok();
+    if let Some(hit) = toc_cache_hit(os, len, modified) {
+        return Ok(hit);
+    }
+    let reader = open_archive(os)?;
+    let entries = Arc::<[ArchiveEntry]>::from(reader.list().await?);
+    toc_cache_store(os, len, modified, Arc::clone(&entries));
+    Ok(entries)
 }
 
 fn empty_meta(kind: FsEntryKind, size: u64, modified: Option<chrono::DateTime<Utc>>) -> FsMetadata {
@@ -121,8 +179,7 @@ impl FsProvider for ArchiveProvider {
     async fn list(&self, path: &FsPath) -> Result<Vec<FsEntry>> {
         let (container, inner) = container_and_inner(path)?;
         let os = container.to_local()?;
-        let reader = open_archive(&os)?;
-        let all = reader.list().await?;
+        let all = cached_archive_entries(&os).await?;
         let kids = child_entries(&all, &inner);
         let mut out = Vec::with_capacity(kids.len());
         for (name, is_dir, size, modified) in kids {
@@ -151,8 +208,7 @@ impl FsProvider for ArchiveProvider {
             return Ok(empty_meta(FsEntryKind::Directory, 0, None));
         }
         let os = container.to_local()?;
-        let reader = open_archive(&os)?;
-        let all = reader.list().await?;
+        let all = cached_archive_entries(&os).await?;
         if let Some(e) = all.iter().find(|e| e.path.trim_matches('/') == inner) {
             let kind = if e.is_dir {
                 FsEntryKind::Directory

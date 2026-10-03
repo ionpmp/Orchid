@@ -490,6 +490,9 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **Archives**: listing and stat reuse a parsed table of contents while the
+  archive file is unchanged, instead of re-reading the central directory on
+  every folder step.
 - **Images**: metadata hashes stream the file and tag parsers keep the first
   4 MiB. Embedded JPEG previews are hunted in the header instead of the
   whole mmap. Loading mpv goes through the unsafe libloading entry point.
