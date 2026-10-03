@@ -51,10 +51,6 @@ thread_local! {
     /// Frame size observed by the latest terminal row patch on this thread.
     static TERMINAL_FRAME_PX: std::cell::Cell<Option<(Uuid, f32, f32)>> =
         std::cell::Cell::new(None);
-    /// Last content size passed to the PTY for an instance. Skips the layout
-    /// clone while a content tick does not move the frame.
-    static TERMINAL_FRAME_SENT: std::cell::RefCell<std::collections::HashMap<Uuid, (u32, u32)>> =
-        std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
 /// Locate a frame row by instance id without heap-allocating the UUID string.
@@ -416,22 +412,9 @@ impl MainWindowController {
         }
         let cw = width.max(1.0);
         let ch = (height - Self::WIDGET_FRAME_HEADER_PX - Self::TERMINAL_TAB_BAR_PX).max(1.0);
-        let key = (cw.to_bits(), ch.to_bits());
-        let already = TERMINAL_FRAME_SENT.with(|sent| sent.borrow().get(&id).copied() == Some(key));
-        if already {
-            return;
-        }
-        if !self.terminal_deps.layouts.lock().contains_key(&id) {
-            return;
-        }
+        // Always remeasure panes. A split keeps the outer frame size and still
+        // changes each pane's fraction of it.
         let _ = self.resize_terminal_pty_to_content(id, cw, ch);
-        TERMINAL_FRAME_SENT.with(|sent| {
-            let mut sent = sent.borrow_mut();
-            if sent.len() >= 64 && !sent.contains_key(&id) {
-                sent.clear();
-            }
-            sent.insert(id, key);
-        });
     }
 
     /// Patch terminal pixels and cursor in place. Avoids rebuilding the frame

@@ -499,7 +499,7 @@ release yet.
 
 ### Changed
 - **Terminal resize**: a content tick reuses the frame size already read
-  while patching the row, and skips the layout clone while that size holds.
+  while patching the row, instead of cloning that row again to measure the PTY.
 - **Terminal output**: the first chunk records which widget owns the
   session, so later PTY data does not walk every layout.
 - **Workspace frames**: a content tick patches the existing row and skips
