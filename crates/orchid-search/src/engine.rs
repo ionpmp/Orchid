@@ -258,13 +258,17 @@ impl SearchEngine {
 
     /// Current number of live documents in the index.
     ///
+    /// Sees documents from the last [`Self::commit`]. It does not reload segment
+    /// metadata itself.
+    ///
     /// # Errors
     ///
-    /// Propagates Tantivy errors.
+    /// The `Result` is kept for existing callers. This path does not fail.
+    #[allow(clippy::unnecessary_wraps)]
     pub fn doc_count(&self) -> Result<u64> {
-        self.inner.reader.reload()?;
-        let searcher = self.inner.reader.searcher();
-        Ok(searcher.num_docs())
+        // `commit` already reloads the reader. Reloading here re-reads segment
+        // metadata on every poll, which is the cost `commit` was moved to avoid.
+        Ok(self.inner.reader.searcher().num_docs())
     }
 
     /// Run a query. Returns up to `query.limit` ranked hits.

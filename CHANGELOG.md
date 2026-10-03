@@ -490,6 +490,9 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **Search**: PDF indexing binds Pdfium once per worker thread. ANN top-k
+  clones only the winning paths. Document count no longer reloads segment
+  metadata, and the search widget maps candidates once.
 - **Terminal**: a grid row that nothing else shares is edited in place, so a
   paste no longer copies the whole line per character. Unchanged frames share
   the cell buffer instead of cloning every cell on the snapshot tick.

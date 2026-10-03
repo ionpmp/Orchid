@@ -75,39 +75,53 @@ fn extract_local_mmap(os_path: &std::path::Path, path: &str) -> Result<String> {
 }
 
 fn extract_sync(bytes: &[u8], path: &str) -> Result<String> {
+    use std::cell::RefCell;
+
     use pdfium_render::prelude::*;
 
-    let pdfium = match Pdfium::bind_to_system_library() {
-        Ok(bindings) => Pdfium::new(bindings),
-        Err(e) => {
-            return Err(SearchError::Extraction {
-                path: path.to_string(),
-                reason: format!("pdfium library not available: {e}"),
-            });
-        }
-    };
-    let document =
-        pdfium
-            .load_pdf_from_byte_slice(bytes, None)
-            .map_err(|e| SearchError::Extraction {
-                path: path.to_string(),
-                reason: format!("load: {e}"),
-            })?;
-    let mut out = String::new();
-    for page in document.pages().iter() {
-        let text = page
-            .text()
-            .map_err(|e| SearchError::Extraction {
-                path: path.to_string(),
-                reason: format!("page text: {e}"),
-            })?
-            .all();
-        out.push_str(&text);
-        out.push_str("\n\n");
-        if out.len() >= MAX_CONTENT_BYTES {
-            out.truncate(MAX_CONTENT_BYTES);
-            break;
-        }
+    // Binding the shared library is the slow part. Indexing many PDFs used to
+    // do it once per file; each blocking worker now keeps one instance.
+    thread_local! {
+        static PDFIUM: RefCell<Option<Pdfium>> = const { RefCell::new(None) };
     }
-    Ok(out)
+
+    PDFIUM.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        if slot.is_none() {
+            match Pdfium::bind_to_system_library() {
+                Ok(bindings) => *slot = Some(Pdfium::new(bindings)),
+                Err(e) => {
+                    return Err(SearchError::Extraction {
+                        path: path.to_string(),
+                        reason: format!("pdfium library not available: {e}"),
+                    });
+                }
+            }
+        }
+        let pdfium = slot.as_ref().expect("pdfium cached above");
+        let document =
+            pdfium
+                .load_pdf_from_byte_slice(bytes, None)
+                .map_err(|e| SearchError::Extraction {
+                    path: path.to_string(),
+                    reason: format!("load: {e}"),
+                })?;
+        let mut out = String::new();
+        for page in document.pages().iter() {
+            let text = page
+                .text()
+                .map_err(|e| SearchError::Extraction {
+                    path: path.to_string(),
+                    reason: format!("page text: {e}"),
+                })?
+                .all();
+            out.push_str(&text);
+            out.push_str("\n\n");
+            if out.len() >= MAX_CONTENT_BYTES {
+                out.truncate(MAX_CONTENT_BYTES);
+                break;
+            }
+        }
+        Ok(out)
+    })
 }

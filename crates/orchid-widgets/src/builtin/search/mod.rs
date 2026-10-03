@@ -307,10 +307,12 @@ impl Widget for UniversalSearchWidget {
     }
     fn snapshot(&self) -> Option<WidgetSnapshot> {
         let query = self.inner.query.read().clone();
-        let candidates = self.inner.candidates.read().clone();
         let is_searching = *self.inner.is_searching.read();
         let error = self.inner.error.read().clone();
-        let views = candidates
+        let views = self
+            .inner
+            .candidates
+            .read()
             .iter()
             .map(|c| SearchCandidateView {
                 id: c.id.clone(),
