@@ -128,6 +128,63 @@ export component ProcessesView inherits Rectangle {
             }
         }
 
+        if model.tab == 0 && model.cpu-history.length > 0 : HorizontalLayout {
+            spacing: Theme.space-3;
+            height: 48px;
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 2px;
+                Text {
+                    text: model.col-cpu-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
+                HorizontalLayout {
+                    spacing: 1px;
+                    vertical-stretch: 1;
+                    for sample in model.cpu-history : Rectangle {
+                        horizontal-stretch: 1;
+                        background: Theme.surface-base;
+                        clip: true;
+                        Rectangle {
+                            x: 0;
+                            y: parent.height * (1.0 - sample);
+                            width: parent.width;
+                            height: parent.height * sample;
+                            background: Theme.accent-brand;
+                        }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 2px;
+                Text {
+                    text: model.col-memory-label;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                }
+                HorizontalLayout {
+                    spacing: 1px;
+                    vertical-stretch: 1;
+                    for sample in model.memory-history : Rectangle {
+                        horizontal-stretch: 1;
+                        background: Theme.surface-base;
+                        clip: true;
+                        Rectangle {
+                            x: 0;
+                            y: parent.height * (1.0 - sample);
+                            width: parent.width;
+                            height: parent.height * sample;
+                            background: Theme.accent-brand;
+                        }
+                    }
+                }
+            }
+        }
+
         // Processes table
         if model.tab == 0 : Rectangle {
             vertical-stretch: 1;

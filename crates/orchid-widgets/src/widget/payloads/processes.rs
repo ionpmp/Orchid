@@ -127,6 +127,10 @@ pub struct ProcessesPayload {
     pub status_message: String,
     /// Whether process grouping headers should be shown.
     pub show_grouping: bool,
+    /// CPU samples (`0..=100`) for [`Self::selected_pid`]. Not written to disk.
+    pub cpu_history: Vec<f32>,
+    /// Working-set samples scaled so the peak in the 60-sample window is 100.
+    pub memory_history: Vec<f32>,
 }
 
 /// One process row.

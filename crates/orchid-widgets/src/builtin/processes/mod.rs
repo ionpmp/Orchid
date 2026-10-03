@@ -2,6 +2,7 @@
 
 pub mod classify;
 pub mod config;
+pub mod history;
 pub mod provider;
 pub mod services;
 pub mod startup;
@@ -17,6 +18,8 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 use parking_lot::{Mutex, RwLock};
 use uuid::Uuid;
+
+use history::ProcessHistory;
 
 use crate::error::{Result as WidgetResult, WidgetError};
 use crate::events::WidgetSnapshotUpdated;
@@ -63,6 +66,7 @@ struct ProcessesHandle {
     ui: Arc<RwLock<UiState>>,
     provider: Arc<ProcessesProvider>,
     refresh: Mutex<PeriodicRefresh>,
+    history: Mutex<ProcessHistory>,
     bus: Arc<orchid_core::EventBus>,
     locale: Arc<orchid_i18n::LocaleManager>,
     /// Built UI snapshot; invalidated on every [`Self::publish`] so the ~30 Hz
@@ -111,7 +115,8 @@ impl ProcessesHandle {
                 };
                 let tab = ui.read().tab;
                 refresh_side_tabs(&ui, &locale, &snap, tab);
-                *snap_slot.write() = Some(snap);
+                *snap_slot.write() = Some(snap.clone());
+                handle.history.lock().record(&snap.processes);
                 handle.publish();
             }
         });
@@ -499,6 +504,7 @@ impl ProcessesWidget {
             ui: Arc::new(RwLock::new(ui)),
             provider: Arc::new(ProcessesProvider::new()),
             refresh: Mutex::new(PeriodicRefresh::new(interval)),
+            history: Mutex::new(ProcessHistory::default()),
             bus,
             locale,
             cached_ui_snapshot: RwLock::new(None),
@@ -532,6 +538,7 @@ impl Widget for ProcessesWidget {
                 })?;
             let tab = self.handle.ui.read().tab;
             refresh_side_tabs(&self.handle.ui, &self.handle.locale, &snap, tab);
+            self.handle.history.lock().record(&snap.processes);
             *self.handle.snapshot.write() = Some(snap);
         }
         self.handle.schedule_refresh();
@@ -575,6 +582,10 @@ impl Widget for ProcessesWidget {
             None => (Vec::new(), 0),
         };
         let shown = processes.iter().filter(|r| !r.is_group_header).count();
+        let history = self.handle.history.lock();
+        let cpu_history = history.cpu(ui.selected_pid);
+        let memory_history = history.memory_percent(ui.selected_pid);
+        drop(history);
         let status_message = if !ui.status_message.is_empty() {
             ui.status_message
         } else if matched > shown {
@@ -612,6 +623,8 @@ impl Widget for ProcessesWidget {
                 is_loading,
                 status_message,
                 show_grouping: cfg.show_grouping,
+                cpu_history,
+                memory_history,
             }),
         };
         *self.handle.cached_ui_snapshot.write() = Some(built.clone());

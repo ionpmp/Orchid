@@ -691,6 +691,8 @@ fn processes_payload_eq(a: &ProcessesPayload, b: &ProcessesPayload) -> bool {
         && a.is_loading == b.is_loading
         && a.status_message == b.status_message
         && a.show_grouping == b.show_grouping
+        && a.cpu_history == b.cpu_history
+        && a.memory_history == b.memory_history
         && a.processes.len() == b.processes.len()
         && a.processes
             .iter()
@@ -1116,6 +1118,8 @@ mod tests {
                 is_loading: false,
                 status_message: String::new(),
                 show_grouping: true,
+                cpu_history: Vec::new(),
+                memory_history: Vec::new(),
             })
         };
         let a = make();

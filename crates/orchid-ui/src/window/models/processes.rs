@@ -29,6 +29,13 @@ fn sync_rows<T: Clone + PartialEq + 'static>(model: &ModelRc<T>, new_rows: Vec<T
     }
 }
 
+fn scaled_history(samples: &[f32]) -> Vec<f32> {
+    samples
+        .iter()
+        .map(|sample| (sample / 100.0).clamp(0.0, 1.0))
+        .collect()
+}
+
 fn sync_process_rows(model: &ModelRc<ProcessRowEntry>, new_rows: Vec<ProcessRowEntry>) {
     let Some(v) = model.as_any().downcast_ref::<VecModel<ProcessRowEntry>>() else {
         return;
@@ -95,6 +102,8 @@ pub(crate) fn empty_processes_model(locale: &LocaleManager) -> ProcessesModel {
             is_loading: true,
             status_message: String::new(),
             show_grouping: true,
+            cpu_history: Vec::new(),
+            memory_history: Vec::new(),
         },
         false,
         0.0,
@@ -159,6 +168,8 @@ pub(crate) fn patch_processes_model(
     sync_rows(&model.services, service_row_entries(p));
     sync_rows(&model.startups, startup_row_entries(p));
     sync_rows(&model.users, user_row_entries(p));
+    sync_rows(&model.cpu_history, scaled_history(&p.cpu_history));
+    sync_rows(&model.memory_history, scaled_history(&p.memory_history));
     ProcessesPatchResult { needs_frame_write }
 }
 
@@ -187,6 +198,8 @@ fn base_model(
         users: ModelRc::new(VecModel::default()),
         status_message: SharedString::new(),
         is_loading: false,
+        cpu_history: ModelRc::new(VecModel::default()),
+        memory_history: ModelRc::new(VecModel::default()),
         tab_processes_label: SharedString::new(),
         tab_services_label: SharedString::new(),
         tab_startup_label: SharedString::new(),
@@ -225,6 +238,8 @@ fn base_model(
     sync_rows(&model.services, service_row_entries(p));
     sync_rows(&model.startups, startup_row_entries(p));
     sync_rows(&model.users, user_row_entries(p));
+    sync_rows(&model.cpu_history, scaled_history(&p.cpu_history));
+    sync_rows(&model.memory_history, scaled_history(&p.memory_history));
     model
 }
 

@@ -15,6 +15,10 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Process graphs:** the Processes tab draws the last 60 CPU and memory
+  samples for the selected process. CPU is that process's percent. Memory
+  bars are scaled to the peak working set in the window. The samples stay
+  in memory and are not written to disk.
 - **Spreadsheets:** `.xlsx` and `.xlsm` open as a read-only sheet and
   cell table. Arrow keys and clicks move the current cell. The workbook
   is not edited. PowerPoint stays an HTML card preview.

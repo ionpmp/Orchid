@@ -49,5 +49,8 @@ Embedded WebView2. Needs the Evergreen runtime. Distinct from the HTML
 
 ## Notes / Calendar / Processes
 
-Notes are not files on disk. Calendar is local. Processes has no
-Performance graphs (roadmap).
+Notes are not files on disk. Calendar is local. The Processes tab draws
+CPU and memory for the selected process: the last 60 samples, oldest on
+the left. CPU is that process's percent. Memory bars are scaled to the
+peak working set in the window. The samples stay with the widget instance
+and are not written to disk. Services, Startup, and Users have no graphs.
