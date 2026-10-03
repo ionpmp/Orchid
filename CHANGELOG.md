@@ -498,6 +498,8 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **Terminal resize**: a content tick reuses the frame size already read
+  while patching the row, and skips the layout clone while that size holds.
 - **Terminal output**: the first chunk records which widget owns the
   session, so later PTY data does not walk every layout.
 - **Workspace frames**: a content tick patches the existing row and skips

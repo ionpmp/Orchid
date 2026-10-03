@@ -48,6 +48,13 @@ thread_local! {
     /// Last row index seen per instance. Only a hint: every hit is re-checked.
     static FRAME_ROW_HINT: std::cell::RefCell<std::collections::HashMap<Uuid, usize>> =
         std::cell::RefCell::new(std::collections::HashMap::new());
+    /// Frame size observed by the latest terminal row patch on this thread.
+    static TERMINAL_FRAME_PX: std::cell::Cell<Option<(Uuid, f32, f32)>> =
+        std::cell::Cell::new(None);
+    /// Last content size passed to the PTY for an instance. Skips the layout
+    /// clone while a content tick does not move the frame.
+    static TERMINAL_FRAME_SENT: std::cell::RefCell<std::collections::HashMap<Uuid, (u32, u32)>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
 /// Locate a frame row by instance id without heap-allocating the UUID string.
@@ -363,7 +370,7 @@ impl MainWindowController {
         };
         if iref.type_id == "terminal" {
             let patched = self.try_patch_terminal_row(&self.workspace_widgets, id, None, None);
-            self.resize_terminal_from_frame_row(id);
+            self.resize_terminal_from_patched_frame(id);
             if patched {
                 return FrameContentPatch::Done;
             }
@@ -400,20 +407,31 @@ impl MainWindowController {
         FrameContentPatch::NeedsLayout
     }
 
-    fn resize_terminal_from_frame_row(&self, id: Uuid) {
-        let Some(v) = self
-            .workspace_widgets
-            .as_any()
-            .downcast_ref::<VecModel<WidgetFrameModel>>()
-        else {
+    fn resize_terminal_from_patched_frame(&self, id: Uuid) {
+        let Some((seen, width, height)) = TERMINAL_FRAME_PX.get() else {
             return;
         };
-        let Some((_, row)) = find_frame_row(v, id) else {
+        if seen != id {
             return;
-        };
-        let cw = row.width.max(1.0);
-        let ch = (row.height - Self::WIDGET_FRAME_HEADER_PX - Self::TERMINAL_TAB_BAR_PX).max(1.0);
+        }
+        let cw = width.max(1.0);
+        let ch = (height - Self::WIDGET_FRAME_HEADER_PX - Self::TERMINAL_TAB_BAR_PX).max(1.0);
+        let key = (cw.to_bits(), ch.to_bits());
+        let already = TERMINAL_FRAME_SENT.with(|sent| sent.borrow().get(&id).copied() == Some(key));
+        if already {
+            return;
+        }
+        if !self.terminal_deps.layouts.lock().contains_key(&id) {
+            return;
+        }
         let _ = self.resize_terminal_pty_to_content(id, cw, ch);
+        TERMINAL_FRAME_SENT.with(|sent| {
+            let mut sent = sent.borrow_mut();
+            if sent.len() >= 64 && !sent.contains_key(&id) {
+                sent.clear();
+            }
+            sent.insert(id, key);
+        });
     }
 
     /// Patch terminal pixels and cursor in place. Avoids rebuilding the frame
@@ -425,6 +443,7 @@ impl MainWindowController {
         bounds: Option<PixelBounds>,
         z_order: Option<i32>,
     ) -> bool {
+        TERMINAL_FRAME_PX.set(None);
         let cache = self.widget_manager.snapshot_cache();
         let Some(ws) = cache.get(id) else {
             return false;
@@ -438,6 +457,7 @@ impl MainWindowController {
         let Some((r, mut row)) = find_frame_row(v, id) else {
             return false;
         };
+        TERMINAL_FRAME_PX.set(Some((id, row.width, row.height)));
         let Some(panes) = row
             .terminal_panes
             .as_any()
