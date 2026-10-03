@@ -15,6 +15,9 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Policy locks:** `policy.toml` can also mark appearance, date and time,
+  privacy, the terminal grid, input, photos, and the agent read-only in
+  Settings. Shortcuts and Marketplace stay editable.
 - **Face boxes:** the image viewer draws the rectangles stored in
   `photo-faces.json` on the open picture. A rotated or flipped view hides
   them. The boxes do not name the person.

@@ -45,7 +45,9 @@ Run, and start `explorer.exe`. Then run `orchid.exe --restore-shell`.
 ## Policy
 
 Settings → Policy. `policy.toml` sits next to `config.toml`. Entries under
-`[lock]` make those settings read-only in this panel. The values in
+`[lock]` make those settings read-only in this panel. The same file can
+lock appearance, date and time, privacy, the terminal grid, input, photos,
+and the agent. Shortcuts and Marketplace stay editable. The values in
 `config.toml` are not rewritten. An empty policy address uses only that
 local file. An https address is read when Orchid starts and when you save
 the address. If the read fails, the previous `policy.toml` stays.

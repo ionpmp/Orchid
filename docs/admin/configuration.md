@@ -141,9 +141,18 @@ policy-url = false
 
 A missing key stays editable. Unknown keys are ignored. Search fields use
 `search-roots`, `search-excludes`, `search-max-mib`, `search-extract-text`,
-`search-extract-pdf`, and `search-model`. Editing
-`config.toml` by hand still changes a locked value; the Settings panel
-refuses the change.
+`search-extract-pdf`, and `search-model`. Appearance adds `density`,
+`font-family`, `font-scale`, `reduce-motion`, `follow-system-theme`,
+`dark-theme`, and `light-theme`. Locale adds `date-format`, `time-format`,
+and `first-day-of-week`. Privacy adds `record-action-history`,
+`history-retention-days`, `clear-clipboard-seconds`, and
+`vault-auto-lock-seconds`. The terminal grid is `terminal-grid`. Input adds
+`primary-hand`, `mirror-edge-swipes`, `haptic-feedback`, `palm-rejection`,
+and `pen-double-tap`. Photos adds `photos-auto-tag` and
+`photos-detect-faces`. Agent adds `agent-enabled`, `agent-backend`,
+`agent-endpoint`, `agent-model`, and `agent-key` (the key field and Clear
+key). Shortcuts and Marketplace stay editable. Editing `config.toml` by
+hand still changes a locked value; the Settings panel refuses the change.
 
 ## Text mode
 

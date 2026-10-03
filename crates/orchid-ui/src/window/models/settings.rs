@@ -840,7 +840,14 @@ pub(crate) fn build_settings_fields(
 
 fn freeze_locked_rows(rows: &mut [SettingsFieldRow], section: &str, locks: &PolicyLocks) {
     for row in rows {
-        if row.kind == SETTINGS_FIELD_READONLY || row.kind == SETTINGS_FIELD_BUTTON {
+        if row.kind == SETTINGS_FIELD_READONLY {
+            continue;
+        }
+        if row.kind == SETTINGS_FIELD_BUTTON {
+            if locks.is_locked(section, row.key.as_str()) {
+                row.kind = SETTINGS_FIELD_READONLY;
+                row.bool_value = false;
+            }
             continue;
         }
         if !locks.is_locked(section, row.key.as_str()) {

@@ -57,6 +57,60 @@ pub struct PolicyLocks {
     pub search_extract_pdf: bool,
     /// Settings → Search, replacement ONNX path.
     pub search_model: bool,
+    /// Settings → Appearance, density.
+    pub density: bool,
+    /// Settings → Appearance, font family.
+    pub font_family: bool,
+    /// Settings → Appearance, font scale.
+    pub font_scale: bool,
+    /// Settings → Appearance, reduce motion.
+    pub reduce_motion: bool,
+    /// Settings → Appearance, follow the system theme.
+    pub follow_system_theme: bool,
+    /// Settings → Appearance, dark theme.
+    pub dark_theme: bool,
+    /// Settings → Appearance, light theme.
+    pub light_theme: bool,
+    /// Settings → Locale, date format.
+    pub date_format: bool,
+    /// Settings → Locale, time format.
+    pub time_format: bool,
+    /// Settings → Locale, first day of the week.
+    pub first_day_of_week: bool,
+    /// Settings → Privacy, record action history.
+    pub record_action_history: bool,
+    /// Settings → Privacy, history retention.
+    pub history_retention_days: bool,
+    /// Settings → Privacy, clipboard clear delay.
+    pub clear_clipboard_seconds: bool,
+    /// Settings → Privacy, vault auto-lock.
+    pub vault_auto_lock_seconds: bool,
+    /// Settings → Terminal, grid.
+    pub terminal_grid: bool,
+    /// Settings → Input, primary hand.
+    pub primary_hand: bool,
+    /// Settings → Input, mirror edge swipes.
+    pub mirror_edge_swipes: bool,
+    /// Settings → Input, haptic feedback.
+    pub haptic_feedback: bool,
+    /// Settings → Input, palm rejection.
+    pub palm_rejection: bool,
+    /// Settings → Input, pen double-tap.
+    pub pen_double_tap: bool,
+    /// Settings → Photos, auto-tag from folder names.
+    pub photos_auto_tag: bool,
+    /// Settings → Photos, face detection.
+    pub photos_detect_faces: bool,
+    /// Settings → Agent, enable the chat.
+    pub agent_enabled: bool,
+    /// Settings → Agent, backend.
+    pub agent_backend: bool,
+    /// Settings → Agent, endpoint.
+    pub agent_endpoint: bool,
+    /// Settings → Agent, model name.
+    pub agent_model: bool,
+    /// Settings → Agent, API key and the clear button.
+    pub agent_key: bool,
 }
 
 impl PolicyLocks {
@@ -79,6 +133,33 @@ impl PolicyLocks {
             ("search", "extract-text") => self.search_extract_text,
             ("search", "extract-pdf") => self.search_extract_pdf,
             ("search", "sentence-model") => self.search_model,
+            ("appearance", "density") => self.density,
+            ("appearance", "font-family") => self.font_family,
+            ("appearance", "font-scale") => self.font_scale,
+            ("appearance", "reduce-motion") => self.reduce_motion,
+            ("appearance", "follow-system-theme") => self.follow_system_theme,
+            ("appearance", "dark-theme") => self.dark_theme,
+            ("appearance", "light-theme") => self.light_theme,
+            ("locale", "date-format") => self.date_format,
+            ("locale", "time-format") => self.time_format,
+            ("locale", "first-day-of-week") => self.first_day_of_week,
+            ("privacy", "record-action-history") => self.record_action_history,
+            ("privacy", "history-retention-days") => self.history_retention_days,
+            ("privacy", "clear-clipboard-seconds") => self.clear_clipboard_seconds,
+            ("privacy", "vault-auto-lock-seconds") => self.vault_auto_lock_seconds,
+            ("terminal", "terminal-grid") => self.terminal_grid,
+            ("input", "primary-hand") => self.primary_hand,
+            ("input", "mirror-edge-swipes") => self.mirror_edge_swipes,
+            ("input", "haptic-feedback") => self.haptic_feedback,
+            ("input", "palm-rejection") => self.palm_rejection,
+            ("input", "pen-double-tap-action") => self.pen_double_tap,
+            ("photos", "auto-tag") => self.photos_auto_tag,
+            ("photos", "detect-faces") => self.photos_detect_faces,
+            ("agent", "enabled") => self.agent_enabled,
+            ("agent", "backend") => self.agent_backend,
+            ("agent", "endpoint") => self.agent_endpoint,
+            ("agent", "model") => self.agent_model,
+            ("agent", "api-key") | ("agent", "clear-key") => self.agent_key,
             _ => false,
         }
     }
@@ -102,6 +183,33 @@ impl PolicyLocks {
             self.search_extract_text,
             self.search_extract_pdf,
             self.search_model,
+            self.density,
+            self.font_family,
+            self.font_scale,
+            self.reduce_motion,
+            self.follow_system_theme,
+            self.dark_theme,
+            self.light_theme,
+            self.date_format,
+            self.time_format,
+            self.first_day_of_week,
+            self.record_action_history,
+            self.history_retention_days,
+            self.clear_clipboard_seconds,
+            self.vault_auto_lock_seconds,
+            self.terminal_grid,
+            self.primary_hand,
+            self.mirror_edge_swipes,
+            self.haptic_feedback,
+            self.palm_rejection,
+            self.pen_double_tap,
+            self.photos_auto_tag,
+            self.photos_detect_faces,
+            self.agent_enabled,
+            self.agent_backend,
+            self.agent_endpoint,
+            self.agent_model,
+            self.agent_key,
         ];
         flags.iter().filter(|flag| **flag).count() as u32
     }
@@ -284,7 +392,14 @@ mod tests {
         assert!(!locks.is_locked("search", "included-roots"));
         locks.search_roots = true;
         assert!(locks.is_locked("search", "included-roots"));
-        assert_eq!(locks.count(), 3);
+        assert!(!locks.is_locked("appearance", "font-scale"));
+        assert!(!locks.is_locked("agent", "clear-key"));
+        locks.font_scale = true;
+        locks.agent_key = true;
+        assert!(locks.is_locked("appearance", "font-scale"));
+        assert!(locks.is_locked("agent", "api-key"));
+        assert!(locks.is_locked("agent", "clear-key"));
+        assert_eq!(locks.count(), 5);
     }
 
     #[test]
