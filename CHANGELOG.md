@@ -490,6 +490,9 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **Terminal**: a grid row that nothing else shares is edited in place, so a
+  paste no longer copies the whole line per character. Unchanged frames share
+  the cell buffer instead of cloning every cell on the snapshot tick.
 - **File manager**: each listing patch builds visit history once. Entry text
   looks up the path cache without allocating a key on a hit. An empty quick
   filter slices the visible window instead of a pointer per directory entry.

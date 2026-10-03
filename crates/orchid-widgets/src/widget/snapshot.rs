@@ -1,5 +1,7 @@
 //! Renderer-agnostic widget snapshot consumed by the UI layer.
 
+use std::sync::Arc;
+
 use uuid::Uuid;
 
 /// Live-render status of a widget.
@@ -64,6 +66,8 @@ pub enum WidgetPayload {
     Calculator(crate::widget::payloads::CalculatorPayload),
     /// Tabbed notes / scratchpad.
     Notes(crate::widget::payloads::NotesPayload),
+    /// Shared agent conversation.
+    Agent(crate::widget::payloads::AgentPayload),
     /// Built-in browser (address bar + tabs).
     Browser(crate::widget::payloads::BrowserPayload),
     /// Local calendar / agenda.
@@ -96,7 +100,9 @@ pub struct TerminalPayload {
     /// Number of rows in the grid.
     pub rows: u16,
     /// Cells in row-major order (`cells[row * cols + col]`).
-    pub cells: Vec<TerminalPayloadCell>,
+    ///
+    /// Shared with the widget cache so an unchanged frame is a refcount bump.
+    pub cells: Arc<Vec<TerminalPayloadCell>>,
     /// Zero-based cursor column.
     pub cursor_col: u16,
     /// Zero-based cursor row.
@@ -168,7 +174,9 @@ pub struct TerminalPanePayload {
     /// Grid rows.
     pub rows: u16,
     /// Cell data in row-major order.
-    pub cells: Vec<TerminalPayloadCell>,
+    ///
+    /// Shared with the widget cache so an unchanged pane is a refcount bump.
+    pub cells: Arc<Vec<TerminalPayloadCell>>,
     /// Cursor column.
     pub cursor_col: u16,
     /// Cursor row.

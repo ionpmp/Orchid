@@ -327,13 +327,21 @@ impl EmulatorState {
     }
 
     /// Copy-on-write mutate a single visible row.
+    ///
+    /// A row that the last snapshot no longer shares is updated in place.
+    /// The first edit after a snapshot still copies the line; the rest of a
+    /// paste or a typed run on that line does not.
     fn with_row_mut(&mut self, row: usize, f: impl FnOnce(&mut [Cell])) {
-        let Some(existing) = self.grid.get(row).cloned() else {
+        let Some(existing) = self.grid.get_mut(row) else {
             return;
         };
-        let mut owned = existing.as_ref().to_vec();
-        f(&mut owned);
-        self.grid[row] = Arc::from(owned);
+        if let Some(owned) = Arc::get_mut(existing) {
+            f(owned);
+        } else {
+            let mut owned = existing.as_ref().to_vec();
+            f(&mut owned);
+            *existing = Arc::from(owned);
+        }
         if let Some(flag) = self.dirty_lines.get_mut(row) {
             *flag = true;
         }

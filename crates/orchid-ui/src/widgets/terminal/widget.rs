@@ -154,7 +154,7 @@ struct CachedGrid {
     cols: u16,
     rows: u16,
     generation: u64,
-    cells: Vec<TerminalPayloadCell>,
+    cells: Arc<Vec<TerminalPayloadCell>>,
 }
 
 /// Concrete `Widget` implementation for the terminal.
@@ -415,7 +415,7 @@ impl Widget for TerminalWidget {
             TerminalPayload {
                 cols: p.cols,
                 rows: p.rows,
-                cells: Vec::new(),
+                cells: Arc::new(Vec::new()),
                 cursor_col: p.cursor_col,
                 cursor_row: p.cursor_row,
                 cursor_visible: p.cursor_visible,
@@ -575,22 +575,24 @@ fn grid_to_payload(
     let cells = if can_patch {
         let cached = cache.get_mut(&session_id).expect("checked above");
         if cached.generation != grid.content_generation {
+            let cells = Arc::make_mut(&mut cached.cells);
             for &row in &grid.dirty_lines {
-                write_payload_row(&mut cached.cells, grid, palette, cols, rows, row);
+                write_payload_row(cells, grid, palette, cols, rows, row);
             }
             cached.generation = grid.content_generation;
         }
-        cached.cells.clone()
+        Arc::clone(&cached.cells)
     } else {
         let mut cells = Vec::with_capacity(needed);
         fill_payload_cells(&mut cells, grid, palette, cols, rows);
+        let cells = Arc::new(cells);
         cache.insert(
             session_id,
             CachedGrid {
                 cols,
                 rows,
                 generation: grid.content_generation,
-                cells: cells.clone(),
+                cells: Arc::clone(&cells),
             },
         );
         cells
