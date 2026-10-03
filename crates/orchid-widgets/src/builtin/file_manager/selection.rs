@@ -11,6 +11,45 @@ pub struct SelectionModel {
     lead: Option<String>,
 }
 
+/// Ordered paths the selection commands walk (the visible listing).
+///
+/// Keyboard navigation calls this once per arrow key. Implementations can
+/// borrow paths from the live directory instead of copying every name.
+pub trait PathList {
+    /// Number of visible paths.
+    fn len(&self) -> usize;
+    /// Whether the list is empty.
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    /// Path at `index`. `index` is in `0..len()`.
+    fn path(&self, index: usize) -> &str;
+}
+
+fn owned_path_len(items: &[String]) -> usize {
+    items.len()
+}
+
+impl PathList for [String] {
+    fn len(&self) -> usize {
+        owned_path_len(self)
+    }
+
+    fn path(&self, index: usize) -> &str {
+        &self[index]
+    }
+}
+
+impl PathList for Vec<String> {
+    fn len(&self) -> usize {
+        owned_path_len(self)
+    }
+
+    fn path(&self, index: usize) -> &str {
+        &self[index]
+    }
+}
+
 /// How a name/attribute mask is applied to the current selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MaskOp {
@@ -92,26 +131,27 @@ impl SelectionModel {
     }
 
     /// Select every path in `ordered` (typically the visible listing).
-    pub fn select_all(&mut self, ordered: &[String]) {
+    pub fn select_all(&mut self, ordered: &impl PathList) {
         self.selected.clear();
-        for p in ordered {
-            self.selected.insert(p.clone());
+        for i in 0..ordered.len() {
+            self.selected.insert(ordered.path(i).to_string());
         }
-        if let Some(first) = ordered.first() {
-            self.anchor = Some(first.clone());
-            self.lead = ordered.last().cloned();
-        } else {
+        if ordered.is_empty() {
             self.anchor = None;
             self.lead = None;
+        } else {
+            self.anchor = Some(ordered.path(0).to_string());
+            self.lead = Some(ordered.path(ordered.len() - 1).to_string());
         }
     }
 
     /// Invert membership for every path in `ordered` (visible listing).
-    pub fn invert(&mut self, ordered: &[String]) {
+    pub fn invert(&mut self, ordered: &impl PathList) {
         let mut next = HashSet::new();
-        for p in ordered {
+        for i in 0..ordered.len() {
+            let p = ordered.path(i);
             if !self.selected.contains(p) {
-                next.insert(p.clone());
+                next.insert(p.to_string());
             }
         }
         self.selected = next;
@@ -119,25 +159,33 @@ impl SelectionModel {
     }
 
     /// Apply `pred` to visible paths according to `op`.
-    pub fn apply_matching(&mut self, ordered: &[String], op: MaskOp, pred: impl Fn(&str) -> bool) {
+    pub fn apply_matching(
+        &mut self,
+        ordered: &impl PathList,
+        op: MaskOp,
+        pred: impl Fn(&str) -> bool,
+    ) {
         match op {
             MaskOp::Replace => {
                 self.selected.clear();
-                for p in ordered {
+                for i in 0..ordered.len() {
+                    let p = ordered.path(i);
                     if pred(p) {
-                        self.selected.insert(p.clone());
+                        self.selected.insert(p.to_string());
                     }
                 }
             }
             MaskOp::Add => {
-                for p in ordered {
+                for i in 0..ordered.len() {
+                    let p = ordered.path(i);
                     if pred(p) {
-                        self.selected.insert(p.clone());
+                        self.selected.insert(p.to_string());
                     }
                 }
             }
             MaskOp::Subtract => {
-                for p in ordered {
+                for i in 0..ordered.len() {
+                    let p = ordered.path(i);
                     if pred(p) {
                         self.selected.remove(p);
                     }
@@ -152,7 +200,7 @@ impl SelectionModel {
     /// When `additive`, existing members are kept (Ctrl+marquee).
     pub fn select_index_range(
         &mut self,
-        ordered: &[String],
+        ordered: &impl PathList,
         from: usize,
         to: usize,
         additive: bool,
@@ -166,11 +214,11 @@ impl SelectionModel {
         if !additive {
             self.selected.clear();
         }
-        for p in &ordered[lo..=hi] {
-            self.selected.insert(p.clone());
+        for i in lo..=hi {
+            self.selected.insert(ordered.path(i).to_string());
         }
-        self.anchor = Some(ordered[lo].clone());
-        self.lead = Some(ordered[hi].clone());
+        self.anchor = Some(ordered.path(lo).to_string());
+        self.lead = Some(ordered.path(hi).to_string());
     }
 
     /// Select tiles in the inclusive bounding rectangle of `from` and `to`.
@@ -179,7 +227,7 @@ impl SelectionModel {
     /// (list / details). When `additive`, existing members are kept (Ctrl+marquee).
     pub fn select_index_rect(
         &mut self,
-        ordered: &[String],
+        ordered: &impl PathList,
         from: usize,
         to: usize,
         columns: usize,
@@ -207,24 +255,28 @@ impl SelectionModel {
             for c in c_lo..=c_hi {
                 let i = r * cols + c;
                 if i <= last {
-                    self.selected.insert(ordered[i].clone());
+                    self.selected.insert(ordered.path(i).to_string());
                 }
             }
         }
-        self.anchor = Some(ordered[a].clone());
-        self.lead = Some(ordered[b].clone());
+        self.anchor = Some(ordered.path(a).to_string());
+        self.lead = Some(ordered.path(b).to_string());
     }
 
-    fn sync_ends(&mut self, ordered: &[String]) {
-        self.anchor = ordered
-            .iter()
-            .find(|p| self.selected.contains(p.as_str()))
-            .cloned();
-        self.lead = ordered
-            .iter()
-            .rev()
-            .find(|p| self.selected.contains(p.as_str()))
-            .cloned()
+    fn sync_ends(&mut self, ordered: &impl PathList) {
+        let mut first_i = None;
+        let mut last_i = None;
+        for i in 0..ordered.len() {
+            if self.selected.contains(ordered.path(i)) {
+                if first_i.is_none() {
+                    first_i = Some(i);
+                }
+                last_i = Some(i);
+            }
+        }
+        self.anchor = first_i.map(|i| ordered.path(i).to_string());
+        self.lead = last_i
+            .map(|i| ordered.path(i).to_string())
             .or_else(|| self.anchor.clone());
     }
 
@@ -256,18 +308,18 @@ impl SelectionModel {
 
     /// Extend the selection to `path`, treating the current anchor as the
     /// other end of the range. No-op when no anchor is set.
-    pub fn extend_to(&mut self, ordered: &[String], to: &str) {
+    pub fn extend_to(&mut self, ordered: &impl PathList, to: &str) {
         let Some(anchor) = self.anchor.clone() else {
             self.select_single(to);
             return;
         };
-        let ia = ordered.iter().position(|p| p == &anchor);
-        let ib = ordered.iter().position(|p| p == to);
+        let ia = (0..ordered.len()).find(|&i| ordered.path(i) == anchor);
+        let ib = (0..ordered.len()).find(|&i| ordered.path(i) == to);
         if let (Some(a), Some(b)) = (ia, ib) {
             let (lo, hi) = (a.min(b), a.max(b));
             self.selected.clear();
-            for p in &ordered[lo..=hi] {
-                self.selected.insert(p.clone());
+            for i in lo..=hi {
+                self.selected.insert(ordered.path(i).to_string());
             }
             self.lead = Some(to.to_string());
         }
@@ -302,16 +354,16 @@ impl SelectionModel {
     /// When nothing is selected, a positive `delta` selects the first entry and a
     /// negative `delta` selects the last. With `extend`, grows a range from the
     /// existing anchor while moving the lead (Shift+Arrow).
-    pub fn select_relative(&mut self, ordered: &[String], delta: i32, extend: bool) {
+    pub fn select_relative(&mut self, ordered: &impl PathList, delta: i32, extend: bool) {
         if ordered.is_empty() {
             return;
         }
         let current = self
             .lead
-            .as_ref()
-            .or(self.anchor.as_ref())
-            .and_then(|a| ordered.iter().position(|p| p == a))
-            .or_else(|| ordered.iter().position(|p| self.selected.contains(p)));
+            .as_deref()
+            .or(self.anchor.as_deref())
+            .and_then(|a| (0..ordered.len()).find(|&i| ordered.path(i) == a))
+            .or_else(|| (0..ordered.len()).find(|&i| self.selected.contains(ordered.path(i))));
         let next = match current {
             None => {
                 if delta >= 0 {
@@ -325,13 +377,13 @@ impl SelectionModel {
                 ni.clamp(0, ordered.len().saturating_sub(1) as i32) as usize
             }
         };
-        let target = &ordered[next];
+        let target = ordered.path(next);
         if extend {
             if self.anchor.is_none() {
                 if let Some(i) = current {
-                    self.anchor = Some(ordered[i].clone());
+                    self.anchor = Some(ordered.path(i).to_string());
                 } else {
-                    self.anchor = Some(target.clone());
+                    self.anchor = Some(target.to_string());
                 }
             }
             self.extend_to(ordered, target);
@@ -549,7 +601,8 @@ mod tests {
     #[test]
     fn select_relative_empty_list_is_noop() {
         let mut s = SelectionModel::new();
-        s.select_relative(&[], 1, false);
+        let ordered: Vec<String> = Vec::new();
+        s.select_relative(&ordered, 1, false);
         assert_eq!(s.count(), 0);
     }
 

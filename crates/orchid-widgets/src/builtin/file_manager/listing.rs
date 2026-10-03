@@ -81,33 +81,44 @@ pub(crate) fn build_tab_payload(
     };
 
     let quick = tab.quick_filter.trim();
-    let entries_filtered: Vec<&orchid_fs::FsEntry> = if quick.is_empty() {
-        entries.iter().collect()
-    } else {
-        let q = quick.to_lowercase();
-        entries
-            .iter()
-            .filter(|e| e.name.to_lowercase().contains(&q))
-            .collect()
-    };
-
-    let item_count = entries_filtered.len() as u32;
     // Format only the visible window of the active tab. Hidden tabs wait until shown.
+    // An empty filter (the common case) slices the listing directly instead of
+    // allocating a pointer for every directory entry.
     const DEFAULT_WINDOW: usize = 96;
-    let (first, end) = if is_active_tab {
-        let stored = inner.viewport_by_pane.read().get(&pane_idx).copied();
-        clamp_entry_window(stored, entries_filtered.len(), DEFAULT_WINDOW)
+    let stored = if is_active_tab {
+        inner.viewport_by_pane.read().get(&pane_idx).copied()
     } else {
-        (0, 0)
+        None
     };
-    let entries_offset = first as u32;
+    let (item_count, entries_offset, visible): (u32, u32, Vec<&orchid_fs::FsEntry>) =
+        if quick.is_empty() {
+            let n = entries.len();
+            let (first, end) = if is_active_tab {
+                clamp_entry_window(stored, n, DEFAULT_WINDOW)
+            } else {
+                (0, 0)
+            };
+            (n as u32, first as u32, entries[first..end].iter().collect())
+        } else {
+            let q = quick.to_lowercase();
+            let filtered: Vec<&orchid_fs::FsEntry> = entries
+                .iter()
+                .filter(|e| e.name.to_lowercase().contains(&q))
+                .collect();
+            let n = filtered.len();
+            let (first, end) = if is_active_tab {
+                clamp_entry_window(stored, n, DEFAULT_WINDOW)
+            } else {
+                (0, 0)
+            };
+            (n as u32, first as u32, filtered[first..end].to_vec())
+        };
     let locale = inner.deps.orchid_config.read().locale.clone();
     let locale_tag = locale.language.clone();
     let thumb_cache = inner.thumbnail_rgba.read();
     let shell_cache = inner.shell_icon_rgba.read();
-    let entry_payloads: Vec<EntryPayload> = entries_filtered[first..end]
-        .iter()
-        .copied()
+    let entry_payloads: Vec<EntryPayload> = visible
+        .into_iter()
         .map(|e| {
             let path_key = e.path.as_str();
             let icon_size = shell_icon_size_for_mode(tab.view_mode);

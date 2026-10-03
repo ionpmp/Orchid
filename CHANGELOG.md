@@ -490,6 +490,12 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **File manager**: each listing patch builds visit history once. Entry text
+  looks up the path cache without allocating a key on a hit. An empty quick
+  filter slices the visible window instead of a pointer per directory entry.
+  Arrow keys, shift-range, and the status-bar size walk the live listing
+  (and stop once every selected file is counted) instead of copying every
+  path or scanning a directory with nothing selected.
 - **Recent files**: list rows use the shared **ListTile** control instead of
   custom row chrome (`c0f35fae`).
 - **RSS**: feed item rows use **ListTile** (`c0f35fae`).

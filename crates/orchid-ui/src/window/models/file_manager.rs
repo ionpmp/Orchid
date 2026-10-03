@@ -1404,8 +1404,7 @@ pub(crate) fn patch_file_manager_model(
         sync_fm_sidebar(&model.sidebar_items, rows);
     }
 
-    sync_fm_rows(&model.visit_history, build_visit_history_items(p, locale));
-
+    // Visit history and drives are synced inside `apply_fm_shell_scalars`.
     apply_fm_shell_scalars(model, p, overlays, instance_id, locale, request_autofocus)
 }
 

@@ -1,5 +1,6 @@
 //! Navigation, selection, and configuration entry points.
 
+use super::selection::PathList;
 use super::*;
 
 /// Show a passphrase failure on the file-manager status bar.
@@ -854,7 +855,7 @@ pub fn select_entry_sync(
     mode: SelectionMode,
 ) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;
-    let (tab_id, ordered): (Uuid, Vec<String>) = {
+    let (tab_id, ordered) = {
         let state = inner.state.lock();
         let tab = if pane == 1 {
             state

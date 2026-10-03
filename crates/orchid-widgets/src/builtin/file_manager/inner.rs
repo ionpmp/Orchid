@@ -2,6 +2,29 @@
 
 use super::*;
 
+/// Visible listing for selection commands.
+///
+/// `indices == None` means every entry, in current sort order. Arrow keys and
+/// shift-range then borrow paths from `entries` instead of copying them.
+pub(super) struct VisiblePaths {
+    entries: Arc<Vec<orchid_fs::FsEntry>>,
+    indices: Option<Vec<usize>>,
+}
+
+impl selection::PathList for VisiblePaths {
+    fn len(&self) -> usize {
+        match &self.indices {
+            Some(ix) => ix.len(),
+            None => self.entries.len(),
+        }
+    }
+
+    fn path(&self, index: usize) -> &str {
+        let i = self.indices.as_ref().map(|ix| ix[index]).unwrap_or(index);
+        self.entries[i].path.as_str()
+    }
+}
+
 impl FileManagerInner {
     pub(super) fn publish_refresh(&self) {
         self.bus.publish(
@@ -62,7 +85,7 @@ impl FileManagerInner {
         locale: &LocaleConfig,
         locale_tag: &str,
     ) -> Arc<EntryText> {
-        let path_key = entry.path.as_str().to_string();
+        let path_key = entry.path.as_str();
         let modified_ms = entry
             .metadata
             .modified
@@ -71,7 +94,7 @@ impl FileManagerInner {
         let is_dir = matches!(entry.metadata.kind, orchid_fs::FsEntryKind::Directory);
         {
             let cache = self.entry_text_cache.lock();
-            if let Some(c) = cache.get(&path_key) {
+            if let Some(c) = cache.get(path_key) {
                 if c.size == entry.metadata.size
                     && c.modified_ms == modified_ms
                     && c.name == entry.name
@@ -115,7 +138,7 @@ impl FileManagerInner {
         });
         self.entry_text_cache
             .lock()
-            .insert(path_key, Arc::clone(&text));
+            .insert(path_key.to_string(), Arc::clone(&text));
         text
     }
 
@@ -901,24 +924,31 @@ impl FileManagerInner {
         paths
     }
 
-    pub(super) fn filtered_paths_for_tab(&self, tab: &TabState) -> Vec<String> {
-        let guard = self.entries_by_tab.read();
-        let Some(entries) = guard.get(&tab.id) else {
-            return Vec::new();
-        };
+    pub(super) fn filtered_paths_for_tab(&self, tab: &TabState) -> VisiblePaths {
+        let entries = self
+            .entries_by_tab
+            .read()
+            .get(&tab.id)
+            .cloned()
+            .unwrap_or_else(|| Arc::new(Vec::new()));
         let quick = tab.quick_filter.trim();
         if quick.is_empty() {
-            return entries
-                .iter()
-                .map(|e| e.path.as_str().to_string())
-                .collect();
+            return VisiblePaths {
+                entries,
+                indices: None,
+            };
         }
         let q = quick.to_lowercase();
-        entries
+        let indices = entries
             .iter()
-            .filter(|e| e.name.to_lowercase().contains(&q))
-            .map(|e| e.path.as_str().to_string())
-            .collect()
+            .enumerate()
+            .filter(|(_, e)| e.name.to_lowercase().contains(&q))
+            .map(|(i, _)| i)
+            .collect();
+        VisiblePaths {
+            entries,
+            indices: Some(indices),
+        }
     }
 
     pub(super) fn select_all_in_pane(&self, pane: u8) {
@@ -976,21 +1006,15 @@ impl FileManagerInner {
     pub(super) fn mutate_selection_in_pane(
         &self,
         pane: u8,
-        f: impl FnOnce(&mut SelectionModel, &[String], &[orchid_fs::FsEntry]),
+        f: impl FnOnce(&mut SelectionModel, &VisiblePaths, &[orchid_fs::FsEntry]),
     ) {
-        let (tab_id, paths, entries) = {
+        let (tab_id, paths) = {
             let state = self.state.lock();
             let tab = match active_tab_ref(&state, pane) {
                 Ok(t) => t,
                 Err(_) => return,
             };
-            let entries = self
-                .entries_by_tab
-                .read()
-                .get(&tab.id)
-                .cloned()
-                .unwrap_or_else(|| Arc::new(Vec::new()));
-            (tab.id, self.filtered_paths_for_tab(tab), entries)
+            (tab.id, self.filtered_paths_for_tab(tab))
         };
         let mut state = self.state.lock();
         let tab = if pane == 1 {
@@ -1003,19 +1027,30 @@ impl FileManagerInner {
             state.left_pane.tabs.iter_mut().find(|t| t.id == tab_id)
         };
         if let Some(t) = tab {
-            f(&mut t.selection, &paths, entries.as_slice());
+            f(&mut t.selection, &paths, paths.entries.as_slice());
         }
     }
 
     pub(super) fn selection_bytes_in_tab(&self, tab: &TabState) -> u64 {
+        let selected = tab.selection.count();
+        if selected == 0 {
+            return 0;
+        }
         let Some(entries) = self.entries_by_tab.read().get(&tab.id).cloned() else {
             return 0;
         };
-        entries
-            .iter()
-            .filter(|e| tab.selection.is_selected(e.path.as_str()))
-            .map(|e| e.metadata.size)
-            .sum()
+        let mut found = 0usize;
+        let mut sum = 0u64;
+        for e in entries.iter() {
+            if tab.selection.is_selected(e.path.as_str()) {
+                sum += e.metadata.size;
+                found += 1;
+                if found == selected {
+                    break;
+                }
+            }
+        }
+        sum
     }
 
     pub(super) fn move_selection_in_pane(&self, pane: u8, delta: i32, extend: bool) {
