@@ -5,11 +5,14 @@ extension. `.orchid` wraps unwrap Raw (except DOCX envelopes, which stay
 in the document editor). Chrome keeps the `.orchid` path; temps are deleted
 on close. OOXML packages (ZIP) are classified via `[Content_Types].xml`
 when present in the file head: Word → document editor; Excel (`.xlsx`,
-`.xlsm`) → a read-only sheet table (switch sheets, click a cell or use
-the arrow keys; the bar shows that cell's address and value; the first
-400 rows and 32 columns). The table does not edit the workbook.
-PowerPoint (`.pptx`, `.pptm`, `.ppsx`) → a read-only HTML preview (one
-card per slide, including speaker notes).
+`.xlsm`) → a sheet table (switch sheets, click a cell or use the arrow
+keys; the bar shows that cell's address and a field for its value; the
+first 400 rows and 32 columns). Enter or Save writes that cell back into
+the workbook. A formula cell is left unchanged, and other formulas are
+not recalculated. Drawings are copied through. A blank cell that the
+table only filled in so the columns line up is not inserted. PowerPoint
+(`.pptx`, `.pptm`, `.ppsx`) → a read-only HTML preview (one card per
+slide, including speaker notes).
 `.xlsb` stays in the archive browser. Misnamed `.docx` sheets or slides
 follow the sniff, not the extension.
 

@@ -150,6 +150,13 @@ pub enum ViewerError {
     #[error("failed to save document: {0}")]
     DocumentSave(String),
 
+    /// A spreadsheet cell edit was refused or could not be applied.
+    ///
+    /// The display string is a Fluent key when the refusal is one the UI
+    /// knows, or a short package error otherwise.
+    #[error("{0}")]
+    SheetEdit(String),
+
     /// Failed to read or write content metadata (EXIF, ID3, Office).
     #[error("metadata: {0}")]
     Metadata(String),

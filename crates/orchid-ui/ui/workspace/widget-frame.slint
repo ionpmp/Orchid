@@ -281,6 +281,7 @@ export component WidgetFrame inherits Rectangle {
     callback viewer-pdf-highlight(string);
     callback viewer-pdf-comment(string);
     callback viewer-pdf-fill(string, string);
+    callback viewer-sheet-edit(string, string, string, string);
 
     callback viewer-archive-navigate-into(string, string);
     callback viewer-archive-navigate-up(string);
@@ -1021,6 +1022,7 @@ export component WidgetFrame inherits Rectangle {
                         pdf-highlight => { root.viewer-pdf-highlight(root.model.instance-id); }
                         pdf-comment => { root.viewer-pdf-comment(root.model.instance-id); }
                         pdf-fill-form(assignment) => { root.viewer-pdf-fill(root.model.instance-id, assignment); }
+                        sheet-edit(sheet, address, text) => { root.viewer-sheet-edit(root.model.instance-id, sheet, address, text); }
 
                         archive-navigate-into(path) => { root.viewer-archive-navigate-into(root.model.instance-id, path); }
                         archive-navigate-up => { root.viewer-archive-navigate-up(root.model.instance-id); }

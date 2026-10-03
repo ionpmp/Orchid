@@ -1,10 +1,12 @@
-//! Read-only preview for Excel and PowerPoint packages.
+//! Spreadsheet and presentation preview.
 //!
-//! Spreadsheets become a sheet and cell table. Presentations become one
-//! HTML card per slide. The workbook is not edited.
+//! Spreadsheets become a sheet and cell table. One stored cell can be
+//! written back into the package. A formula cell is left unchanged, and
+//! formulas are not recalculated. Presentations become one HTML card per
+//! slide.
 
 use std::any::Any;
-use std::io::{Cursor, Read, Seek};
+use std::io::{Cursor, Read, Seek, Write};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -36,6 +38,62 @@ impl OfficeViewer {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Replace one stored cell and write the package back to `path`.
+    ///
+    /// A formula cell is refused. Drawings and the other zip parts are
+    /// copied through. Nothing is recalculated. The in-memory table is
+    /// refreshed only when this viewer still has the same path open.
+    ///
+    /// # Errors
+    ///
+    /// A slide deck, a missing sheet or cell, a formula cell, or a
+    /// provider write failure.
+    pub async fn edit_cell(
+        &self,
+        registry: Arc<orchid_fs::FsProviderRegistry>,
+        sheet: &str,
+        address: &str,
+        text: &str,
+    ) -> Result<()> {
+        if *self.slides.read() {
+            return Err(ViewerError::SheetEdit("viewer-sheet-not-workbook".into()));
+        }
+        let path = self
+            .path
+            .read()
+            .clone()
+            .ok_or_else(|| ViewerError::SheetEdit("viewer-sheet-not-workbook".into()))?;
+        let provider = registry
+            .for_path(&path)
+            .ok_or_else(|| orchid_fs::FsError::ProviderNotFound(path.scheme().to_string()))?;
+        let bytes = provider.read(&path).await?;
+        let sheet = sheet.to_string();
+        let address = address.to_string();
+        let text = text.to_string();
+        let saved =
+            tokio::task::spawn_blocking(move || set_sheet_cell(&bytes, &sheet, &address, &text))
+                .await
+                .map_err(|err| ViewerError::SheetEdit(err.to_string()))?
+                .map_err(ViewerError::SheetEdit)?;
+        let tmp = orchid_fs::FsPath::new(format!("{}.orchid-save", path.as_str()))?;
+        provider.write(&tmp, &saved).await?;
+        provider.rename(&tmp, &path).await?;
+        let preview = tokio::task::spawn_blocking(move || render_office(&saved, false))
+            .await
+            .map_err(|err| ViewerError::SheetEdit(err.to_string()))?
+            .map_err(ViewerError::DocumentParse)?;
+        if self.path.read().as_ref().map(orchid_fs::FsPath::as_str) != Some(path.as_str()) {
+            return Ok(());
+        }
+        if let OfficePreview::Sheets(book) = preview {
+            *self.html.write() = Arc::from("");
+            *self.info.write() = book.info;
+            *self.sheets.write() = book.sheets;
+            *self.slides.write() = false;
+        }
+        Ok(())
     }
 }
 
@@ -148,6 +206,179 @@ pub(crate) fn render_office(
     } else {
         render_sheets(&mut archive).map(OfficePreview::Sheets)
     }
+}
+
+/// Replace one cell's stored value and return the new package.
+///
+/// A formula cell is left unchanged. Other zip parts, including drawings,
+/// are copied through. The function does not recalculate formulas.
+pub(crate) fn set_sheet_cell(
+    bytes: &[u8],
+    sheet_name: &str,
+    address: &str,
+    text: &str,
+) -> std::result::Result<Vec<u8>, String> {
+    let address = address.trim().to_ascii_uppercase();
+    if !is_cell_address(&address) {
+        return Err("viewer-sheet-bad-address".into());
+    }
+    if text.len() > 32_768 {
+        return Err("viewer-sheet-too-long".into());
+    }
+    let mut archive =
+        ZipArchive::new(Cursor::new(bytes.to_vec())).map_err(|err| err.to_string())?;
+    let sheets = sheet_entries(&mut archive);
+    let path = sheets
+        .iter()
+        .find(|(name, _)| name == sheet_name)
+        .map(|(_, path)| path.clone())
+        .ok_or_else(|| "viewer-sheet-missing-sheet".to_string())?;
+    let xml =
+        read_entry(&mut archive, &path).ok_or_else(|| "viewer-sheet-unreadable".to_string())?;
+    let xml = replace_cell_xml(&xml, &address, text)?;
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut out = zip::ZipWriter::new(&mut cursor);
+        let mut archive =
+            ZipArchive::new(Cursor::new(bytes.to_vec())).map_err(|err| err.to_string())?;
+        for index in 0..archive.len() {
+            let file = archive.by_index(index).map_err(|err| err.to_string())?;
+            let name = file.name().to_string();
+            if name == path {
+                out.start_file(name, zip::write::SimpleFileOptions::default())
+                    .map_err(|err| err.to_string())?;
+                out.write_all(xml.as_bytes())
+                    .map_err(|err| err.to_string())?;
+            } else {
+                out.raw_copy_file(file).map_err(|err| err.to_string())?;
+            }
+        }
+        out.finish().map_err(|err| err.to_string())?;
+    }
+    Ok(cursor.into_inner())
+}
+
+fn is_cell_address(address: &str) -> bool {
+    let mut letters = 0usize;
+    let mut digits = 0usize;
+    for ch in address.chars() {
+        if ch.is_ascii_alphabetic() {
+            if digits > 0 || letters >= 3 {
+                return false;
+            }
+            letters += 1;
+        } else if ch.is_ascii_digit() {
+            if letters == 0 || digits >= 7 {
+                return false;
+            }
+            digits += 1;
+        } else {
+            return false;
+        }
+    }
+    letters > 0 && digits > 0
+}
+
+fn replace_cell_xml(xml: &str, address: &str, text: &str) -> std::result::Result<String, String> {
+    let (start, end) = find_cell(xml, address)?;
+    let element = &xml[start..end];
+    if element_has_formula(element) {
+        return Err("viewer-sheet-formula".into());
+    }
+    let mut out = String::with_capacity(xml.len() + text.len());
+    out.push_str(&xml[..start]);
+    out.push_str(&cell_element(address, text));
+    out.push_str(&xml[end..]);
+    Ok(out)
+}
+
+fn find_cell(xml: &str, address: &str) -> std::result::Result<(usize, usize), String> {
+    let bytes = xml.as_bytes();
+    let mut index = 0usize;
+    while index + 2 < bytes.len() {
+        if bytes[index] == b'<' && bytes[index + 1] == b'c' {
+            let boundary = bytes[index + 2];
+            if matches!(boundary, b' ' | b'>' | b'/') {
+                let Some(tag_end) = xml[index..].find('>') else {
+                    break;
+                };
+                let open_end = index + tag_end + 1;
+                let open = &xml[index..open_end];
+                if cell_ref_matches(open, address) {
+                    if open.ends_with("/>") {
+                        return Ok((index, open_end));
+                    }
+                    let Some(close) = xml[open_end..].find("</c>") else {
+                        return Err("viewer-sheet-broken".into());
+                    };
+                    return Ok((index, open_end + close + 4));
+                }
+                index = open_end;
+                continue;
+            }
+        }
+        index += 1;
+    }
+    Err("viewer-sheet-missing-cell".into())
+}
+
+fn cell_ref_matches(open_tag: &str, address: &str) -> bool {
+    open_tag.contains(&format!("r=\"{address}\"")) || open_tag.contains(&format!("r='{address}'"))
+}
+
+fn element_has_formula(element: &str) -> bool {
+    element.contains("<f>") || element.contains("<f ") || element.contains("<f/>")
+}
+
+fn cell_element(address: &str, text: &str) -> String {
+    let trimmed = text.trim();
+    if trimmed.eq_ignore_ascii_case("true") || trimmed.eq_ignore_ascii_case("false") {
+        let bit = if trimmed.eq_ignore_ascii_case("true") {
+            "1"
+        } else {
+            "0"
+        };
+        return format!(r#"<c r="{address}" t="b"><v>{bit}</v></c>"#);
+    }
+    if is_plain_number(trimmed) {
+        return format!(r#"<c r="{address}"><v>{trimmed}</v></c>"#);
+    }
+    format!(
+        r#"<c r="{address}" t="inlineStr"><is><t>{}</t></is></c>"#,
+        escape(text)
+    )
+}
+
+fn is_plain_number(text: &str) -> bool {
+    let mut chars = text.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    let rest = if first == '-' {
+        let Some(next) = chars.next() else {
+            return false;
+        };
+        if !next.is_ascii_digit() {
+            return false;
+        }
+        chars
+    } else if first.is_ascii_digit() {
+        chars
+    } else {
+        return false;
+    };
+    let mut dot = false;
+    for ch in rest {
+        if ch == '.' {
+            if dot {
+                return false;
+            }
+            dot = true;
+        } else if !ch.is_ascii_digit() {
+            return false;
+        }
+    }
+    true
 }
 
 fn render_sheets<R: Read + Seek>(
@@ -355,7 +586,12 @@ fn parse_sheet(xml: &str, shared: &[String]) -> (Vec<Vec<SheetCell>>, bool) {
             }
             Ok(Event::Text(text)) => {
                 if in_v || in_t {
-                    value.push_str(text.as_ref());
+                    value.push_str(&xml_text(text.as_ref()));
+                }
+            }
+            Ok(Event::GeneralRef(entity)) => {
+                if in_v || in_t {
+                    value.push_str(entity_text(entity.as_ref()));
                 }
             }
             Ok(Event::End(event)) => {
@@ -490,7 +726,10 @@ fn shared_strings(xml: &str) -> Vec<String> {
                 }
             }
             Ok(Event::Text(text)) if in_t => {
-                current.push_str(text.as_ref());
+                current.push_str(&xml_text(text.as_ref()));
+            }
+            Ok(Event::GeneralRef(entity)) if in_t => {
+                current.push_str(entity_text(entity.as_ref()));
             }
             Ok(Event::End(event)) => {
                 let name = local_name(event.name().as_ref());
@@ -524,7 +763,10 @@ fn text_paragraphs(xml: &str) -> Vec<String> {
                 }
             }
             Ok(Event::Text(text)) if in_t => {
-                current.push_str(text.as_ref());
+                current.push_str(&xml_text(text.as_ref()));
+            }
+            Ok(Event::GeneralRef(entity)) if in_t => {
+                current.push_str(entity_text(entity.as_ref()));
             }
             Ok(Event::End(event)) => {
                 let name = local_name(event.name().as_ref());
@@ -606,6 +848,48 @@ fn local_name(name: &str) -> String {
     name.rsplit([':', '}']).next().unwrap_or(name).to_string()
 }
 
+fn entity_text(raw: &str) -> &'static str {
+    match raw {
+        "amp" => "&",
+        "lt" => "<",
+        "gt" => ">",
+        "quot" => "\"",
+        "apos" => "'",
+        _ => "",
+    }
+}
+
+fn xml_text(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut rest = raw;
+    while let Some(start) = rest.find('&') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        let Some(end) = after.find(';') else {
+            out.push('&');
+            rest = after;
+            continue;
+        };
+        let decoded = match &after[..end] {
+            "amp" => "&",
+            "lt" => "<",
+            "gt" => ">",
+            "quot" => "\"",
+            "apos" => "'",
+            _ => "",
+        };
+        if decoded.is_empty() {
+            out.push('&');
+            rest = after;
+        } else {
+            out.push_str(decoded);
+            rest = &after[end + 1..];
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 fn escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for ch in text.chars() {
@@ -682,6 +966,119 @@ mod tests {
         assert_eq!(row[1].text, "42");
         assert_eq!(row[1].address, "B1");
         assert!(book.info.contains("1 sheets"), "{}", book.info);
+    }
+
+    #[test]
+    fn set_sheet_cell_rewrites_a_value_and_leaves_a_formula_and_drawing() {
+        let drawing = "<drawing>keep-me</drawing>";
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/sharedStrings.xml",
+                r#"<sst><si><t>Orchid</t></si></sst>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><v>42</v></c><c r="C1"><f>1+1</f><v>2</v></c></row></sheetData></worksheet>"#,
+            ),
+            ("xl/drawings/drawing1.xml", drawing),
+        ]);
+        let err = set_sheet_cell(&bytes, "Budgets", "C1", "9").unwrap_err();
+        assert_eq!(err, "viewer-sheet-formula");
+        let saved = set_sheet_cell(&bytes, "Budgets", "B1", "7").unwrap();
+        let preview = render_office(&saved, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let row = &book.sheets[0].rows[0];
+        assert_eq!(row[0].text, "Orchid");
+        assert_eq!(row[1].text, "7");
+        assert_eq!(row[2].text, "2");
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let kept = read_entry(&mut archive, "xl/drawings/drawing1.xml").unwrap();
+        assert_eq!(kept, drawing);
+        let renamed = set_sheet_cell(&bytes, "Budgets", "A1", "Lily & Rose").unwrap();
+        let preview = render_office(&renamed, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let mut renamed_zip = ZipArchive::new(Cursor::new(renamed)).unwrap();
+        let sheet = read_entry(&mut renamed_zip, "xl/worksheets/sheet1.xml").unwrap();
+        let (rows, _) = parse_sheet(&sheet, &[]);
+        assert_eq!(rows[0][0].text, "Lily & Rose");
+        assert_eq!(book.sheets[0].rows[0][0].text, "Lily & Rose");
+        assert_eq!(book.sheets[0].rows[0][1].text, "42");
+    }
+
+    #[tokio::test]
+    async fn edit_cell_writes_the_workbook_and_refuses_a_formula() {
+        let drawing = "<drawing>keep-me</drawing>";
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/sharedStrings.xml",
+                r#"<sst><si><t>Orchid</t></si></sst>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><v>42</v></c><c r="C1"><f>1+1</f><v>2</v></c></row></sheetData></worksheet>"#,
+            ),
+            ("xl/drawings/drawing1.xml", drawing),
+        ]);
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file = dir.path().join("book.xlsx");
+        std::fs::write(&file, bytes).expect("write");
+        let fs_path = orchid_fs::FsPath::from_local(&file).expect("fs path");
+        let registry = Arc::new(orchid_fs::FsProviderRegistry::new());
+        registry
+            .register(Arc::new(orchid_fs::LocalProvider::new()))
+            .expect("register local");
+        let mut viewer = OfficeViewer::new();
+        viewer
+            .open(fs_path, Arc::clone(&registry))
+            .await
+            .expect("open");
+        let err = viewer
+            .edit_cell(Arc::clone(&registry), "Budgets", "C1", "9")
+            .await
+            .expect_err("formula");
+        assert_eq!(err.to_string(), "viewer-sheet-formula");
+        viewer
+            .edit_cell(Arc::clone(&registry), "Budgets", "B1", "7")
+            .await
+            .expect("save");
+        match viewer.snapshot() {
+            ViewerSnapshot::Sheet(book) => {
+                assert_eq!(book.sheets[0].rows[0][0].text, "Orchid");
+                assert_eq!(book.sheets[0].rows[0][1].text, "7");
+                assert_eq!(book.sheets[0].rows[0][2].text, "2");
+            }
+            other => panic!("expected a sheet snapshot, got {other:?}"),
+        }
+        let on_disk = std::fs::read(&file).expect("reread");
+        let preview = render_office(&on_disk, false).expect("preview");
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        assert_eq!(book.sheets[0].rows[0][1].text, "7");
+        let mut archive = ZipArchive::new(Cursor::new(on_disk)).unwrap();
+        let kept = read_entry(&mut archive, "xl/drawings/drawing1.xml").unwrap();
+        assert_eq!(kept, drawing);
+        assert!(!dir.path().join("book.xlsx.orchid-save").exists());
     }
 
     #[test]

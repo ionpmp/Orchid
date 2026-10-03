@@ -579,6 +579,50 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_viewer_sheet_edit({
+            let t = t.clone();
+            move |id, sheet, address, text| {
+                if let Some(c) = t.upgrade() {
+                    if let Ok(inst) = Uuid::parse_str(id.as_str()) {
+                        let sheet = sheet.to_string();
+                        let address = address.to_string();
+                        let text = text.to_string();
+                        let tw = Arc::downgrade(&c);
+                        spawn::spawn_local_compat(async move {
+                            match orchid_widgets::builtin::viewer::sheet_edit(
+                                inst, sheet, address, text,
+                            )
+                            .await
+                            {
+                                Ok(path) => {
+                                    if let Some(c) = tw.upgrade() {
+                                        let title = c.locale.tr("widget-viewer-name");
+                                        let body = c.locale.tr_args(
+                                            "viewer-sheet-saved",
+                                            &orchid_i18n::FluentArgs::new().with("path", path),
+                                        );
+                                        c.push_notification(&title, &body, 2);
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!(?e, "viewer sheet edit");
+                                    if let Some(c) = tw.upgrade() {
+                                        let title = c.locale.tr("widget-viewer-name");
+                                        let reason =
+                                            viewer_localized_error(&c.locale, &e.to_string());
+                                        let body = c.locale.tr_args(
+                                            "viewer-action-failed",
+                                            &orchid_i18n::FluentArgs::new().with("reason", reason),
+                                        );
+                                        c.push_notification(&title, &body, 3);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        });
         self.window.on_viewer_pdf_comment({
             let t = t.clone();
             move |id| {

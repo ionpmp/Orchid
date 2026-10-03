@@ -107,6 +107,7 @@ pub use media::{
     FrameBuf, MediaTags, MediaViewer, MpvEngine, SharedPlayback, TrackMeta, MEDIA_FILE_EXTENSIONS,
     VIDEO_FILE_EXTENSIONS,
 };
+pub use office::OfficeViewer;
 pub use pdf::PdfViewer;
 pub use snapshot::{
     ArchiveEntryView, ArchivePreview, ArchiveSnapshot, ArchiveStatus, CalDayItem, DocumentSnapshot,

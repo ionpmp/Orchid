@@ -16,6 +16,7 @@ mod inner;
 mod media_cmds;
 mod open_cmds;
 mod pdf_cmds;
+mod sheet_cmds;
 mod text_cmds;
 
 pub use archive_cmds::*;
@@ -24,6 +25,7 @@ pub use image_cmds::*;
 pub use media_cmds::*;
 pub use open_cmds::*;
 pub use pdf_cmds::*;
+pub use sheet_cmds::*;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;

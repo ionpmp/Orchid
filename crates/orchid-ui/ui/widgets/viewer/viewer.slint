@@ -43,6 +43,7 @@ export component ViewerView inherits Rectangle {
     callback pdf-highlight();
     callback pdf-comment();
     callback pdf-fill-form(string);
+    callback sheet-edit(string, string, string);
 
     callback archive-navigate-into(string);
     callback archive-navigate-up();
@@ -235,6 +236,7 @@ export component ViewerView inherits Rectangle {
         width: parent.width;
         height: parent.height;
         model: root.model.sheet;
+        edit-cell(sheet, address, text) => { root.sheet-edit(sheet, address, text); }
     }
 
     if model.passphrase.active : FmPassphraseDialog {

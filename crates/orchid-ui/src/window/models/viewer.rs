@@ -751,6 +751,8 @@ fn empty_viewer_sheet_model(locale: &LocaleManager) -> ViewerSheetModel {
         info: SharedString::new(),
         empty_label: locale.tr("viewer-sheet-empty").into(),
         truncated_label: locale.tr("viewer-sheet-truncated").into(),
+        save_label: locale.tr("viewer-sheet-save").into(),
+        hint_label: locale.tr("viewer-sheet-hint").into(),
         sheets: ModelRc::new(VecModel::from(Vec::<ViewerSheetPage>::new())),
     }
 }
@@ -791,6 +793,8 @@ fn build_sheet_model(
         info: snap.info_text.clone().into(),
         empty_label: locale.tr("viewer-sheet-empty").into(),
         truncated_label: locale.tr("viewer-sheet-truncated").into(),
+        save_label: locale.tr("viewer-sheet-save").into(),
+        hint_label: locale.tr("viewer-sheet-hint").into(),
         sheets: ModelRc::new(VecModel::from(pages)),
     }
 }

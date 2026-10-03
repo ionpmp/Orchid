@@ -26,7 +26,15 @@ pub(crate) fn viewer_localized_error(locale: &LocaleManager, err: &str) -> Strin
         | "viewer-pdf-form-missing"
         | "viewer-pdf-form-unsupported"
         | "viewer-pdf-form-readonly"
-        | "viewer-document-passphrase-required" => locale.tr(msg),
+        | "viewer-document-passphrase-required"
+        | "viewer-sheet-formula"
+        | "viewer-sheet-missing-cell"
+        | "viewer-sheet-bad-address"
+        | "viewer-sheet-too-long"
+        | "viewer-sheet-missing-sheet"
+        | "viewer-sheet-unreadable"
+        | "viewer-sheet-broken"
+        | "viewer-sheet-not-workbook" => locale.tr(msg),
         _ if msg.starts_with("unsupported file type") => locale.tr("viewer-unsupported"),
         _ if msg.contains("identity required") => locale.tr("viewer-document-passphrase-required"),
         _ if msg.contains("invalid passphrase") => locale.tr("fm-passphrase-invalid"),
