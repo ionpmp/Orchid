@@ -490,6 +490,9 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **Images**: metadata hashes stream the file and tag parsers keep the first
+  4 MiB. Embedded JPEG previews are hunted in the header instead of the
+  whole mmap. Loading mpv goes through the unsafe libloading entry point.
 - **Search**: PDF indexing binds Pdfium once per worker thread. ANN top-k
   clones only the winning paths. Document count no longer reloads segment
   metadata, and the search widget maps candidates once.

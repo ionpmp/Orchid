@@ -179,14 +179,38 @@ fn read_prefix_bytes(path: &Path, max: usize) -> Vec<u8> {
     buf
 }
 
+/// IPTC / XMP / ICC packets live in the header. Hashes still cover the file.
+const IMAGE_META_PREFIX: usize = 4 * 1024 * 1024;
+
 /// Read EXIF, IPTC, XMP, GPS, ICC label, and file hashes from `path`.
+///
+/// Tag parsers see the first 4 MiB. MD5 and SHA-256 still cover the whole file,
+/// streamed so a large photo is not held in memory twice.
 ///
 /// # Errors
 ///
 /// I/O on the image file.
 pub fn inspect_image_file(path: &Path) -> Result<ImageInspect> {
-    let bytes = std::fs::read(path)?;
-    let mut inspect = inspect_image_bytes(&bytes, Some(path));
+    let mut file = std::fs::File::open(path)?;
+    let mut md5 = Md5::new();
+    let mut sha = Sha256::new();
+    let mut prefix = Vec::new();
+    let mut buf = [0_u8; 64 * 1024];
+    loop {
+        let n = std::io::Read::read(&mut file, &mut buf)?;
+        if n == 0 {
+            break;
+        }
+        md5.update(&buf[..n]);
+        sha.update(&buf[..n]);
+        if prefix.len() < IMAGE_META_PREFIX {
+            let room = IMAGE_META_PREFIX - prefix.len();
+            prefix.extend_from_slice(&buf[..n.min(room)]);
+        }
+    }
+    let mut inspect = inspect_image_bytes(&prefix, Some(path));
+    inspect.md5 = hex::encode(md5.finalize());
+    inspect.sha256 = hex::encode(sha.finalize());
     if let Some(side) = sidecar_xmp_path(path).and_then(|p| std::fs::read(p).ok()) {
         let extra = parse_xmp(&side);
         merge_fields(&mut inspect.xmp, extra);
@@ -243,9 +267,10 @@ pub fn inspect_image_bytes(bytes: &[u8], path: Option<&Path>) -> ImageInspect {
 /// IPTC / XMP / GPS only (no hashes) for the FM properties report.
 #[must_use]
 pub fn format_sidecar_report(path: &Path) -> String {
-    let Ok(bytes) = std::fs::read(path) else {
+    let bytes = read_prefix_bytes(path, IMAGE_META_PREFIX);
+    if bytes.is_empty() {
         return String::new();
-    };
+    }
     let iptc = parse_iptc(&bytes);
     let xmp = parse_xmp(&bytes);
     let gps = read_exif_fields(path)

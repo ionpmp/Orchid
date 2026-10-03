@@ -150,7 +150,7 @@ unsafe fn load_from_path(path: &Path) -> std::result::Result<MpvApi, String> {
     if !path.is_file() {
         return Err("not a file".into());
     }
-    let lib = Library::new(path).map_err(|e| e.to_string())?;
+    let lib = unsafe { Library::new(path) }.map_err(|e| e.to_string())?;
     unsafe {
         let create: FnCreate = *lib.get(b"mpv_create\0").map_err(|e| e.to_string())?;
         let initialize: FnInitialize = *lib.get(b"mpv_initialize\0").map_err(|e| e.to_string())?;

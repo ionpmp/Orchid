@@ -17,12 +17,20 @@ pub fn exif_jpeg_thumbnail(data: &[u8]) -> Option<&[u8]> {
     first_embedded_jpeg(&data[2..], 512)
 }
 
-/// Largest JPEG SOI…EOI segment of at least `min_bytes` (preview over thumb).
+/// How far from the start of a RAW/TIFF to look for an embedded JPEG SOI.
+/// Previews sit in the header; scanning a 16 MiB mmap byte-by-byte does not.
+const PREVIEW_SOI_SCAN: usize = 2 * 1024 * 1024;
+
+/// Largest JPEG SOI…EOI segment of at least 512 bytes (preview over thumb).
+///
+/// SOI markers are only hunted in the first 2 MiB. Once one is found, the
+/// matching EOI may sit further into the file.
 #[must_use]
 pub fn embedded_jpeg_preview(data: &[u8]) -> Option<&[u8]> {
     let mut best: Option<&[u8]> = None;
     let mut i = 0;
-    while i + 1 < data.len() {
+    let scan_end = data.len().min(PREVIEW_SOI_SCAN);
+    while i + 1 < scan_end {
         if data[i] != 0xFF || data[i + 1] != 0xD8 {
             i += 1;
             continue;
@@ -38,7 +46,8 @@ pub fn embedded_jpeg_preview(data: &[u8]) -> Option<&[u8]> {
             i += 1;
         }
         let Some(end) = end else {
-            break;
+            i = start + 2;
+            continue;
         };
         let slice = &data[start..end];
         if slice.len() >= 512 && best.is_none_or(|b| slice.len() > b.len()) {
