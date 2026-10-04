@@ -103,6 +103,7 @@ fn base_model(locale: &LocaleManager, payload: &ProtectPayload) -> ProtectModel 
         wipe_label: locale.tr("protect-wipe-start").into(),
         cancel_label: locale.tr("protect-cancel").into(),
         refresh_label: locale.tr("protect-refresh").into(),
+        add_label: locale.tr("protect-add").into(),
         passes_label: locale.tr("protect-passes").into(),
     }
 }

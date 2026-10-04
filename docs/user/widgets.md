@@ -55,7 +55,8 @@ Windows may TRIM the blocks afterward. Cancel removes the filler file.
 **Network** blocks outbound traffic for a program with one Windows Firewall
 rule named `Orchid Protect`. That needs an administrator. Open connections
 can stay up until the program reconnects. Windows itself, security
-processes, and Orchid are not offered as targets.
+processes, and Orchid are not offered as targets. **Add program** blocks an
+executable that is not currently running, with the same limits.
 
 ## Optimize
 

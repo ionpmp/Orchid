@@ -2966,3 +2966,5 @@ protect-item-activity = Журнал действий
 protect-detail-activity = Файлы временной шкалы в разделе «Подключённые устройства».
 protect-clean-sized = Очистить · { $bytes }
 protect-status-browser = Браузер открыт, поэтому его история, кэш и файлы cookie не тронуты. Удалено файлов: { $files } ({ $bytes }).
+protect-add = Добавить программу
+protect-status-refused = Эту программу нельзя заблокировать.

@@ -2962,3 +2962,5 @@ protect-item-activity = アクティビティの履歴
 protect-detail-activity = 接続されたデバイスにあるタイムラインのファイルです。
 protect-clean-sized = 消去 · { $bytes }
 protect-status-browser = ブラウザーが開いているため、履歴・キャッシュ・Cookie は残しました。{ $files } 個のファイルを消去しました ({ $bytes })。
+protect-add = プログラムを追加
+protect-status-refused = このプログラムは遮断できません。

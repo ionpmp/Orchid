@@ -473,6 +473,53 @@ pub fn cancel_wipe(id: Uuid) {
     handle.cancel.store(true, Ordering::Relaxed);
 }
 
+/// Block an executable, including one that is not running.
+pub fn block_program(id: Uuid, path: &str) {
+    let Some(handle) = live(id) else {
+        return;
+    };
+    let program = PathBuf::from(path);
+    if block_refusal(&program).is_some() {
+        {
+            let mut ui = handle.ui.lock();
+            ui.status_key = "protect-status-refused".to_string();
+            ui.status_detail.clear();
+        }
+        handle.publish();
+        return;
+    }
+    let path_string = program.to_string_lossy().into_owned();
+    let name = program
+        .file_name()
+        .map(|file| file.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path_string.clone());
+    let already_blocked = {
+        let mut ui = handle.ui.lock();
+        if let Some(app) = ui
+            .apps
+            .iter()
+            .find(|app| app.path.eq_ignore_ascii_case(&path_string))
+        {
+            app.blocked
+        } else {
+            ui.apps.insert(
+                0,
+                AppView {
+                    path: path_string.clone(),
+                    name,
+                    blocked: false,
+                },
+            );
+            false
+        }
+    };
+    if already_blocked {
+        handle.publish();
+        return;
+    }
+    spawn_firewall_toggle(handle, path_string);
+}
+
 /// Re-read running programs and Orchid firewall rules.
 pub fn refresh_network(id: Uuid) {
     let Some(handle) = live(id) else {

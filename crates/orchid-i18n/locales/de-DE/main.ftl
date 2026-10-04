@@ -2964,3 +2964,5 @@ protect-item-activity = Aktivitätsverlauf
 protect-detail-activity = Zeitachsendateien unter Verbundene Geräte.
 protect-clean-sized = Bereinigen · { $bytes }
 protect-status-browser = Der Browser ist geöffnet, daher bleiben Verlauf, Cache und Cookies. Entfernt: { $files } Dateien ({ $bytes }).
+protect-add = Programm hinzufügen
+protect-status-refused = Dieses Programm kann nicht blockiert werden.

@@ -14,6 +14,7 @@ export component ProtectView inherits Rectangle {
     callback wipe();
     callback cancel();
     callback refresh();
+    callback add-program();
 
     background: transparent;
 
@@ -192,6 +193,13 @@ export component ProtectView inherits Rectangle {
                 size: ControlSize.sm;
                 enabled: !model.busy;
                 clicked => { root.refresh(); }
+            }
+            if model.tab == 3 : TouchButton {
+                text: model.add-label;
+                size: ControlSize.sm;
+                tone: ButtonTone.neutral;
+                enabled: !model.busy;
+                clicked => { root.add-program(); }
             }
             Rectangle { horizontal-stretch: 1; }
             if model.status != "" : Text {

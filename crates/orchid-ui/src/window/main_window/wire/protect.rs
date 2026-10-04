@@ -78,5 +78,13 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_protect_add({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_protect_add(&id);
+                }
+            }
+        });
     }
 }

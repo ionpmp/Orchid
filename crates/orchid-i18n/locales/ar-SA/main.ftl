@@ -2965,3 +2965,5 @@ protect-item-activity = سجل النشاط
 protect-detail-activity = ملفات المخطط الزمني ضمن الأجهزة المتصلة.
 protect-clean-sized = تنظيف · { $bytes }
 protect-status-browser = المتصفح مفتوح، لذلك بقي سجله وذاكرته وملفات الارتباط. مُسح { $files } من الملفات ({ $bytes }).
+protect-add = إضافة برنامج
+protect-status-refused = لا يمكن حظر هذا البرنامج.

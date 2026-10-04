@@ -2963,3 +2963,5 @@ protect-item-activity = Historial de actividad
 protect-detail-activity = Archivos de la línea de tiempo en Dispositivos conectados.
 protect-clean-sized = Limpiar · { $bytes }
 protect-status-browser = El navegador está abierto, así que su historial, caché y cookies no se han tocado. Se borraron { $files } archivos ({ $bytes }).
+protect-add = Añadir programa
+protect-status-refused = Este programa no se puede bloquear.

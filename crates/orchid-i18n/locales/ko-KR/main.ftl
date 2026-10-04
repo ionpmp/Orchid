@@ -2963,3 +2963,5 @@ protect-item-activity = 활동 기록
 protect-detail-activity = 연결된 장치의 타임라인 파일입니다.
 protect-clean-sized = 정리 · { $bytes }
 protect-status-browser = 브라우저가 열려 있어 기록, 캐시, 쿠키는 그대로 두었습니다. 파일 { $files }개를 지웠습니다 ({ $bytes }).
+protect-add = 프로그램 추가
+protect-status-refused = 이 프로그램은 차단할 수 없습니다.

@@ -74,4 +74,24 @@ impl MainWindowController {
         };
         orchid_widgets::builtin::protect::refresh_network(inst);
     }
+
+    pub(super) fn on_protect_add(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_protect_id(id) else {
+            return;
+        };
+        crate::window::spawn::spawn_local_compat(async move {
+            let picked = tokio::task::spawn_blocking(|| {
+                rfd::FileDialog::new()
+                    .add_filter("Program", &["exe"])
+                    .pick_file()
+            })
+            .await
+            .ok()
+            .flatten();
+            let Some(path) = picked else {
+                return;
+            };
+            orchid_widgets::builtin::protect::block_program(inst, &path.to_string_lossy());
+        });
+    }
 }

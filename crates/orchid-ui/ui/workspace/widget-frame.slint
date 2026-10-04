@@ -211,6 +211,7 @@ export component WidgetFrame inherits Rectangle {
     callback protect-wipe(string);
     callback protect-cancel(string);
     callback protect-refresh(string);
+    callback protect-add(string);
 
     // Agent
     callback agent-send(string, string);
@@ -905,6 +906,7 @@ export component WidgetFrame inherits Rectangle {
                     wipe => { root.protect-wipe(root.model.instance-id); }
                     cancel => { root.protect-cancel(root.model.instance-id); }
                     refresh => { root.protect-refresh(root.model.instance-id); }
+                    add-program => { root.protect-add(root.model.instance-id); }
                 }
 
                 if model.type-id == "calculator" : CalculatorView {

@@ -23,6 +23,9 @@ release yet.
   `Orchid Protect` and skip system processes. History, cache, and cookies
   stay while that browser is open. Clean shows the size of the checked rows
   after a scan.
+- **Protection network:** an executable that is not running can be blocked
+  from the file dialog. System directories, security processes, and Orchid
+  are still refused.
 - **Optimize widget:** Windows update, privacy, Explorer, taskbar, suggestion,
   and performance switches in one place. The set is the reversible overlap of
   Winaero Tweaker, the recommended O&O ShutUp10 switches, and Microsoft Update

@@ -249,6 +249,7 @@ export component MainWindow inherits Window {
     callback protect-wipe(string);
     callback protect-cancel(string);
     callback protect-refresh(string);
+    callback protect-add(string);
     callback agent-send(string, string);
     callback agent-confirm(string);
     callback agent-dismiss(string);
@@ -754,6 +755,7 @@ export component MainWindow inherits Window {
             protect-wipe(id) => { root.protect-wipe(id); }
             protect-cancel(id) => { root.protect-cancel(id); }
             protect-refresh(id) => { root.protect-refresh(id); }
+            protect-add(id) => { root.protect-add(id); }
             agent-send(id, text) => { root.agent-send(id, text); }
             agent-confirm(id) => { root.agent-confirm(id); }
             agent-dismiss(id) => { root.agent-dismiss(id); }

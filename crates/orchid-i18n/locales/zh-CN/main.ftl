@@ -2963,3 +2963,5 @@ protect-item-activity = 活动历史
 protect-detail-activity = “已连接的设备”下的时间线文件。
 protect-clean-sized = 清理 · { $bytes }
 protect-status-browser = 浏览器正开着，因此没有动它的历史、缓存和 Cookie。已清除 { $files } 个文件（{ $bytes }）。
+protect-add = 添加程序
+protect-status-refused = 无法阻止此程序。

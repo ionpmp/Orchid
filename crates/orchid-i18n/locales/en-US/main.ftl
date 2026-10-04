@@ -2980,3 +2980,5 @@ protect-item-activity = Activity history
 protect-detail-activity = Timeline files under Connected Devices.
 protect-clean-sized = Clean · { $bytes }
 protect-status-browser = The browser is open, so its history, cache, and cookies were left alone. Cleared { $files } files ({ $bytes }).
+protect-add = Add program
+protect-status-refused = This program cannot be blocked.
