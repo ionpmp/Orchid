@@ -1918,7 +1918,7 @@ dock-widget-video-player = Видеоплеер
 dock-widget-password = Пароли
 dock-widget-viewer = Просмотрщик
 dock-widget-browser = Браузер
-dock-widget-document-editor = Document
+dock-widget-document-editor = Документ
 dock-widget-fm = Файлы
 
 viewer-no-file = Файл не открыт
@@ -2196,7 +2196,7 @@ processes-session-init = Инициализация
 processes-session-unknown = Неизвестно ({ $code })
 processes-startup-user-folder = Папка автозагрузки
 processes-startup-common-folder = Общая автозагрузка
-dock-widget-processes = Processes
+dock-widget-processes = Процессы
 dock-widget-calculator = Калькулятор
 dock-widget-notes = Заметки
 dock-widget-agent = Агент

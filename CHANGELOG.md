@@ -873,6 +873,8 @@ release yet.
 ### Fixed
 
 - The mail widget is translated in every bundled locale.
+- Password editing, backup and diagnostics export, and dock labels that
+  were still English are translated in every bundled locale.
 - Full-text search indexes `.proto`, `.graphql`, `.gql`, `.prisma`,
   `.nix`, `.tf`, `.hcl`, and `.zig` as source text.
 - Full-text search indexes `.aws/credentials`: profile names and regions.
