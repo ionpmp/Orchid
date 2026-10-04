@@ -64,14 +64,26 @@ One place for Windows settings that Settings scatters, plus a few Group Policy
 switches Settings does not show. The catalog follows the useful overlap of
 Winaero Tweaker, the recommended O&O ShutUp10 switches, and the Microsoft
 Update policies: install mode, no restart while you are signed in, active
-hours, update sharing, driver updates, advertising and diagnostics, Explorer
-behavior, the taskbar, suggestions, and a few performance switches.
+hours, staying on the current Windows version, Store app updates, update
+sharing, driver updates, advertising and diagnostics, Explorer behavior, the
+taskbar, suggestions, fast startup, accessibility prompts, mouse acceleration,
+and startup programs.
+
+**Changed** marks a row that is not the usual Windows value. **Restart Explorer**
+on a row means that switch shows up after the Explorer restart button.
+**As Windows** puts every switch back. **Don't reboot itself** pins the current
+version, asks before downloading updates, blocks a restart while you are signed
+in, and turns fast startup off. **Quiet desktop** turns off suggestions, widgets,
+and Store auto-updates. Machine policies in a set share one administrator prompt.
+
+**Startup** lists Run entries and the Startup folder. Turning one off keeps the
+entry and tells Windows not to launch it. A machine entry asks for an
+administrator.
 
 A switch writes as soon as you change it. **Administrator** asks Windows to
 confirm. Defender, the firewall, SmartScreen, sign-in, and the Windows Update
-service are not changed, and inbox apps are not removed. **Restart Explorer**
-applies Explorer and taskbar changes. Some menu timing changes wait until the
-next sign-in.
+service are not changed, and inbox apps are not removed. Some menu timing
+changes wait until the next sign-in.
 
 ## System
 

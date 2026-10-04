@@ -133,7 +133,14 @@ impl SlintPayload {
             WidgetPayload::Optimize(p) => Self::Text(
                 p.rows
                     .iter()
-                    .map(|row| format!("{} {}", row.title_key, row.selected))
+                    .map(|row| {
+                        let title = if row.title_text.is_empty() {
+                            row.title_key.clone()
+                        } else {
+                            row.title_text.clone()
+                        };
+                        format!("{title} {}", row.selected)
+                    })
                     .collect(),
             ),
             WidgetPayload::Protect(p) => Self::Text(

@@ -26,6 +26,13 @@ release yet.
 - **Protection network:** an executable that is not running can be blocked
   from the file dialog. System directories, security processes, and Orchid
   are still refused.
+- **Optimize widget:** search, a Changed mark, three presets (As Windows,
+  Don't reboot itself, Quiet desktop), and a Startup tab that disables Run
+  entries and Startup-folder shortcuts without deleting them. New switches
+  pin the current Windows version, stop Store auto-updates, turn off fast
+  startup, skip accessibility prompts, turn off mouse acceleration, open
+  Explorer folders in separate processes, show clock seconds, and add End
+  task to the taskbar.
 - **Optimize widget:** Windows update, privacy, Explorer, taskbar, suggestion,
   and performance switches in one place. The set is the reversible overlap of
   Winaero Tweaker, the recommended O&O ShutUp10 switches, and Microsoft Update

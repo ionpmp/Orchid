@@ -38,6 +38,22 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_optimize_search_edited({
+            let t = t.clone();
+            move |id, query| {
+                if let Some(c) = t.upgrade() {
+                    c.on_optimize_search(&id, &query);
+                }
+            }
+        });
+        self.window.on_optimize_preset_picked({
+            let t = t.clone();
+            move |id, preset| {
+                if let Some(c) = t.upgrade() {
+                    c.on_optimize_preset(&id, &preset);
+                }
+            }
+        });
         self.window.on_optimize_restart_explorer({
             let t = t.clone();
             move |id| {

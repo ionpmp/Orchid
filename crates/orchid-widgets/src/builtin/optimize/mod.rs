@@ -26,7 +26,9 @@ use orchid_storage::{LifecycleState, WidgetSize};
 pub use catalog::ApplyStatus;
 pub use config::OptimizeConfig;
 
-use catalog::{apply_ops, plan_for, probe_matches, select_index, tweak_by_id, tweaks};
+use catalog::{
+    apply_ops, plan_for, preset_ops, probe_matches, select_index, tweak_by_id, tweaks, TAB_STARTUP,
+};
 
 /// Stable type id.
 pub const TYPE_ID: &str = "optimize";
@@ -37,6 +39,7 @@ struct OptimizeHandle {
     instance_id: Uuid,
     config: RwLock<OptimizeConfig>,
     status_key: RwLock<String>,
+    query: RwLock<String>,
     cache: RwLock<Option<OptimizePayload>>,
     busy: AtomicBool,
     bus: Arc<orchid_core::EventBus>,
@@ -46,6 +49,10 @@ struct OptimizeHandle {
 impl OptimizeHandle {
     fn publish(&self) {
         *self.cache.write() = None;
+        self.emit();
+    }
+
+    fn emit(&self) {
         self.bus.publish(
             orchid_core::EventSource::Widget(self.instance_id),
             WidgetSnapshotUpdated {
@@ -55,12 +62,37 @@ impl OptimizeHandle {
     }
 
     fn payload(&self) -> OptimizePayload {
-        if let Some(cached) = self.cache.read().clone() {
-            return cached;
+        let base = if let Some(cached) = self.cache.read().clone() {
+            cached
+        } else {
+            let built = self.build_payload();
+            *self.cache.write() = Some(built.clone());
+            built
+        };
+        self.filter_query(base)
+    }
+
+    fn filter_query(&self, mut payload: OptimizePayload) -> OptimizePayload {
+        let query = self.query.read().clone();
+        payload.query = query.clone();
+        let needle = query.trim().to_lowercase();
+        if needle.is_empty() {
+            return payload;
         }
-        let built = self.build_payload();
-        *self.cache.write() = Some(built.clone());
-        built
+        payload.rows.retain(|row| {
+            let title = if row.title_text.is_empty() {
+                self.locale.tr(&row.title_key)
+            } else {
+                row.title_text.clone()
+            };
+            let detail = if row.detail_text.is_empty() {
+                self.locale.tr(&row.detail_key)
+            } else {
+                row.detail_text.clone()
+            };
+            title.to_lowercase().contains(&needle) || detail.to_lowercase().contains(&needle)
+        });
+        payload
     }
 
     fn build_payload(&self) -> OptimizePayload {
@@ -68,31 +100,72 @@ impl OptimizeHandle {
         let unsupported = !cfg!(windows);
         let rows = if unsupported {
             Vec::new()
+        } else if tab == i32::from(TAB_STARTUP) {
+            startup_rows(&self.locale)
         } else {
             tweaks()
                 .iter()
                 .filter(|tweak| i32::from(tweak.tab) == tab)
-                .map(|tweak| OptimizeRow {
-                    id: tweak.id.to_string(),
-                    title_key: tweak.title_key.to_string(),
-                    detail_key: tweak.detail_key.to_string(),
-                    option_keys: tweak
-                        .option_keys
-                        .iter()
-                        .map(|key| (*key).to_string())
-                        .collect(),
-                    selected: select_index(tweak, probe_matches),
-                    needs_admin: tweak.needs_admin,
+                .map(|tweak| {
+                    let selected = select_index(tweak, probe_matches);
+                    OptimizeRow {
+                        id: tweak.id.to_string(),
+                        title_key: tweak.title_key.to_string(),
+                        detail_key: tweak.detail_key.to_string(),
+                        option_keys: tweak
+                            .option_keys
+                            .iter()
+                            .map(|key| (*key).to_string())
+                            .collect(),
+                        selected,
+                        needs_admin: tweak.needs_admin,
+                        changed: selected != tweak.fallback,
+                        needs_restart: tweak.restarts_explorer,
+                        title_text: String::new(),
+                        detail_text: String::new(),
+                        can_toggle: true,
+                    }
                 })
                 .collect()
         };
         OptimizePayload {
             tab,
             rows,
+            query: String::new(),
             status_key: self.status_key.read().clone(),
             unsupported,
         }
     }
+}
+
+fn startup_rows(locale: &orchid_i18n::LocaleManager) -> Vec<OptimizeRow> {
+    let Ok(list) = crate::builtin::processes::startup::list_startup() else {
+        return Vec::new();
+    };
+    list.into_iter()
+        .map(|row| {
+            let place = if row.location.contains('\\') {
+                row.location.clone()
+            } else {
+                locale.tr(&row.location)
+            };
+            let machine = row.id.starts_with("registry:hklm")
+                || row.location == "processes-startup-common-folder";
+            OptimizeRow {
+                id: row.id,
+                title_key: String::new(),
+                detail_key: String::new(),
+                option_keys: Vec::new(),
+                selected: u8::from(row.enabled),
+                needs_admin: machine,
+                changed: !row.enabled,
+                needs_restart: false,
+                title_text: row.name,
+                detail_text: format!("{place}\n{}", row.command),
+                can_toggle: row.can_toggle,
+            }
+        })
+        .collect()
 }
 
 /// Snapshot the live config for tests and the settings dialog.
@@ -167,8 +240,63 @@ pub fn set_choice(instance_id: Uuid, tweak_id: &str, index: i32) {
     }
 }
 
+/// Remember the search box. Does not read the registry again.
+pub fn set_query(instance_id: Uuid, query: &str) {
+    let Some(handle) = OPTIMIZE_LIVE.get(&instance_id) else {
+        return;
+    };
+    *handle.query.write() = query.to_string();
+    handle.emit();
+}
+
+/// Apply a named set. Unknown ids are ignored.
+///
+/// Machine policies in the set share one administrator prompt.
+pub fn apply_preset(instance_id: Uuid, preset_id: &str) {
+    let Some((ops, restarts)) = preset_ops(preset_id) else {
+        return;
+    };
+    let Some(handle) = OPTIMIZE_LIVE.get(&instance_id) else {
+        return;
+    };
+    if handle
+        .busy
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+    *handle.status_key.write() = "optimize-status-working".to_string();
+    handle.publish();
+    let worker = Arc::clone(&handle);
+    let spawned = thread::Builder::new()
+        .name("orchid-optimize".to_string())
+        .spawn(move || {
+            let status = apply_ops(&ops);
+            let key = match status {
+                ApplyStatus::Applied if restarts => "optimize-status-explorer",
+                ApplyStatus::Applied => "optimize-status-preset",
+                ApplyStatus::Denied => "optimize-status-denied",
+                ApplyStatus::Failed => "optimize-status-failed",
+                ApplyStatus::Unsupported => "optimize-unsupported",
+            };
+            *worker.status_key.write() = key.to_string();
+            worker.busy.store(false, Ordering::Release);
+            worker.publish();
+        });
+    if spawned.is_err() {
+        handle.busy.store(false, Ordering::Release);
+        *handle.status_key.write() = "optimize-status-failed".to_string();
+        handle.publish();
+    }
+}
+
 /// Flip a switch. Choice rows are left unchanged.
 pub fn toggle(instance_id: Uuid, tweak_id: &str) {
+    if tweak_id.starts_with("registry:") || tweak_id.starts_with("folder:") {
+        toggle_startup(instance_id, tweak_id);
+        return;
+    }
     let Some(def) = tweak_by_id(tweak_id) else {
         return;
     };
@@ -178,6 +306,56 @@ pub fn toggle(instance_id: Uuid, tweak_id: &str) {
     let current = select_index(def, probe_matches);
     let next = if current == 0 { 1 } else { 0 };
     set_choice(instance_id, tweak_id, i32::from(next));
+}
+
+fn toggle_startup(instance_id: Uuid, id: &str) {
+    let Ok(list) = crate::builtin::processes::startup::list_startup() else {
+        return;
+    };
+    let Some(row) = list.into_iter().find(|row| row.id == id) else {
+        return;
+    };
+    if !row.can_toggle {
+        return;
+    }
+    let Some(handle) = OPTIMIZE_LIVE.get(&instance_id) else {
+        return;
+    };
+    if handle
+        .busy
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+    *handle.status_key.write() = "optimize-status-working".to_string();
+    handle.publish();
+    let enable = !row.enabled;
+    let id = id.to_string();
+    let worker = Arc::clone(&handle);
+    let spawned = thread::Builder::new()
+        .name("orchid-optimize".to_string())
+        .spawn(move || {
+            let key = match crate::builtin::processes::startup::set_startup_enabled(&id, enable) {
+                Ok(()) => "optimize-status-applied",
+                Err(err) => {
+                    let lower = err.to_ascii_lowercase();
+                    if lower.contains("denied") || lower.contains("access") {
+                        "optimize-status-denied"
+                    } else {
+                        "optimize-status-failed"
+                    }
+                }
+            };
+            *worker.status_key.write() = key.to_string();
+            worker.busy.store(false, Ordering::Release);
+            worker.publish();
+        });
+    if spawned.is_err() {
+        handle.busy.store(false, Ordering::Release);
+        *handle.status_key.write() = "optimize-status-failed".to_string();
+        handle.publish();
+    }
 }
 
 /// Re-read Windows and clear the status line.
@@ -259,6 +437,7 @@ impl OptimizeWidget {
             instance_id,
             config: RwLock::new(cfg),
             status_key: RwLock::new(String::new()),
+            query: RwLock::new(String::new()),
             cache: RwLock::new(None),
             busy: AtomicBool::new(false),
             bus,

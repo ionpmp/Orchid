@@ -1,5 +1,6 @@
 import { Theme } from "../theme_global.slint";
 import { ButtonTone, Chip, ControlSize, ToggleSwitch, TouchButton } from "../kit.slint";
+import { SearchField } from "search-field.slint";
 import { OptimizeModel } from "../workspace/defs.slint";
 
 export component OptimizeView inherits Rectangle {
@@ -10,6 +11,8 @@ export component OptimizeView inherits Rectangle {
     callback choice-picked(string, int);
     callback refresh();
     callback restart-explorer();
+    callback search-edited(string);
+    callback preset-picked(string);
 
     background: transparent;
 
@@ -65,7 +68,42 @@ export component OptimizeView inherits Rectangle {
                         selected: model.tab == 5;
                         clicked => { root.tab-changed(5); }
                     }
+                    Chip {
+                        text: model.tab-startup;
+                        selected: model.tab == 6;
+                        clicked => { root.tab-changed(6); }
+                    }
                 }
+            }
+
+            if model.tab != 6 : HorizontalLayout {
+                spacing: Theme.space-1;
+                Chip {
+                    text: model.preset-windows;
+                    clicked => { root.preset-picked("windows"); }
+                }
+                Chip {
+                    text: model.preset-noreboot;
+                    clicked => { root.preset-picked("noreboot"); }
+                }
+                Chip {
+                    text: model.preset-quiet;
+                    clicked => { root.preset-picked("quiet"); }
+                }
+            }
+
+            SearchField {
+                query: model.query;
+                placeholder: model.search-placeholder;
+                field-height: Theme.control-sm;
+                edited(text) => { root.search-edited(text); }
+            }
+
+            if root.model.rows.length == 0 && model.query != "" : Text {
+                text: model.search-empty;
+                wrap: word-wrap;
+                color: Theme.text-secondary;
+                font-size: Theme.font-size-sm;
             }
 
             Text {
@@ -111,6 +149,18 @@ export component OptimizeView inherits Rectangle {
                                             font-size: Theme.font-size-sm;
                                             vertical-alignment: center;
                                         }
+                                        if row.changed : Text {
+                                            text: root.model.changed-label;
+                                            color: Theme.accent-brand;
+                                            font-size: Theme.font-size-sm;
+                                            vertical-alignment: center;
+                                        }
+                                        if row.needs-restart : Text {
+                                            text: root.model.restart-row-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            vertical-alignment: center;
+                                        }
                                     }
                                     Text {
                                         text: row.detail;
@@ -118,31 +168,37 @@ export component OptimizeView inherits Rectangle {
                                         color: Theme.text-secondary;
                                         font-size: Theme.font-size-sm;
                                     }
-                                    if row.choice-count > 0 : HorizontalLayout {
+                                    if row.choice-count > 0 : VerticalLayout {
                                         spacing: Theme.space-1;
-                                        if row.choice-count > 0 : Chip {
-                                            text: row.choice-0;
-                                            selected: row.choice == 0;
-                                            clicked => { root.choice-picked(row.id, 0); }
+                                        HorizontalLayout {
+                                            spacing: Theme.space-1;
+                                            if row.choice-count > 0 : Chip {
+                                                text: row.choice-0;
+                                                selected: row.choice == 0;
+                                                clicked => { root.choice-picked(row.id, 0); }
+                                            }
+                                            if row.choice-count > 1 : Chip {
+                                                text: row.choice-1;
+                                                selected: row.choice == 1;
+                                                clicked => { root.choice-picked(row.id, 1); }
+                                            }
                                         }
-                                        if row.choice-count > 1 : Chip {
-                                            text: row.choice-1;
-                                            selected: row.choice == 1;
-                                            clicked => { root.choice-picked(row.id, 1); }
-                                        }
-                                        if row.choice-count > 2 : Chip {
-                                            text: row.choice-2;
-                                            selected: row.choice == 2;
-                                            clicked => { root.choice-picked(row.id, 2); }
-                                        }
-                                        if row.choice-count > 3 : Chip {
-                                            text: row.choice-3;
-                                            selected: row.choice == 3;
-                                            clicked => { root.choice-picked(row.id, 3); }
+                                        if row.choice-count > 2 : HorizontalLayout {
+                                            spacing: Theme.space-1;
+                                            if row.choice-count > 2 : Chip {
+                                                text: row.choice-2;
+                                                selected: row.choice == 2;
+                                                clicked => { root.choice-picked(row.id, 2); }
+                                            }
+                                            if row.choice-count > 3 : Chip {
+                                                text: row.choice-3;
+                                                selected: row.choice == 3;
+                                                clicked => { root.choice-picked(row.id, 3); }
+                                            }
                                         }
                                     }
                                 }
-                                if row.choice-count == 0 : ToggleSwitch {
+                                if row.choice-count == 0 && row.can-toggle : ToggleSwitch {
                                     checked: row.checked;
                                     label: row.title;
                                     toggled => { root.toggled(row.id); }

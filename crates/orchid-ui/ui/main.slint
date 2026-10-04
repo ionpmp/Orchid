@@ -240,6 +240,8 @@ export component MainWindow inherits Window {
     callback optimize-choice(string, string, int);
     callback optimize-refresh(string);
     callback optimize-restart-explorer(string);
+    callback optimize-search-edited(string, string);
+    callback optimize-preset-picked(string, string);
     callback protect-tab-changed(string, int);
     callback protect-toggled(string, string);
     callback protect-scan(string);
@@ -746,6 +748,8 @@ export component MainWindow inherits Window {
             optimize-choice(id, tweak, index) => { root.optimize-choice(id, tweak, index); }
             optimize-refresh(id) => { root.optimize-refresh(id); }
             optimize-restart-explorer(id) => { root.optimize-restart-explorer(id); }
+            optimize-search-edited(id, text) => { root.optimize-search-edited(id, text); }
+            optimize-preset-picked(id, preset) => { root.optimize-preset-picked(id, preset); }
             protect-tab-changed(id, t) => { root.protect-tab-changed(id, t); }
             protect-toggled(id, row) => { root.protect-toggled(id, row); }
             protect-scan(id) => { root.protect-scan(id); }

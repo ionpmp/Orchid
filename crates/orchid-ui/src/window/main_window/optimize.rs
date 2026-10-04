@@ -45,6 +45,20 @@ impl MainWindowController {
         orchid_widgets::builtin::optimize::refresh(inst);
     }
 
+    pub(super) fn on_optimize_search(self: &Arc<Self>, id: &SharedString, query: &SharedString) {
+        let Some(inst) = Self::parse_optimize_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::optimize::set_query(inst, query.as_str());
+    }
+
+    pub(super) fn on_optimize_preset(self: &Arc<Self>, id: &SharedString, preset: &SharedString) {
+        let Some(inst) = Self::parse_optimize_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::optimize::apply_preset(inst, preset.as_str());
+    }
+
     pub(super) fn on_optimize_restart(self: &Arc<Self>, id: &SharedString) {
         let Some(inst) = Self::parse_optimize_id(id) else {
             return;

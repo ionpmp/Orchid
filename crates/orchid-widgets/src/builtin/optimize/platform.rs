@@ -63,12 +63,20 @@ mod win {
     }
 
     pub fn apply_ops(ops: &[RegOp]) -> ApplyStatus {
-        let user: Vec<RegOp> = ops
+        let mut stay: Vec<bool> = Vec::new();
+        let mut plain: Vec<RegOp> = Vec::new();
+        for op in ops {
+            match *op {
+                RegOp::StayOnCurrent { enable } => stay.push(enable),
+                other => plain.push(other),
+            }
+        }
+        let user: Vec<RegOp> = plain
             .iter()
             .copied()
             .filter(|op| hive_of(*op) == Hive::Cu)
             .collect();
-        let machine: Vec<RegOp> = ops
+        let machine: Vec<RegOp> = plain
             .iter()
             .copied()
             .filter(|op| hive_of(*op) == Hive::Lm)
@@ -77,10 +85,99 @@ mod win {
             return status;
         }
         match apply_direct(&machine) {
-            Ok(()) => ApplyStatus::Applied,
-            Err(ApplyStatus::Denied) => elevate_import(&machine),
+            Ok(()) => match apply_stays(&stay) {
+                Ok(()) => ApplyStatus::Applied,
+                Err(ApplyStatus::Denied) => elevate_stay(&stay),
+                Err(status) => status,
+            },
+            Err(ApplyStatus::Denied) => elevate_machine(&machine, &stay),
             Err(status) => status,
         }
+    }
+
+    fn apply_stays(enables: &[bool]) -> Result<(), ApplyStatus> {
+        for enable in enables {
+            apply_stay_direct(*enable)?;
+        }
+        Ok(())
+    }
+
+    fn apply_stay_direct(enable: bool) -> Result<(), ApplyStatus> {
+        const WU: &str = r"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate";
+        if !enable {
+            delete_value(Hive::Lm, WU, "TargetReleaseVersion")?;
+            delete_value(Hive::Lm, WU, "TargetReleaseVersionInfo")?;
+            delete_value(Hive::Lm, WU, "ProductVersion")?;
+            return Ok(());
+        }
+        let (product, version) = current_release().ok_or(ApplyStatus::Failed)?;
+        set_dword(Hive::Lm, WU, "TargetReleaseVersion", 1)?;
+        set_sz(Hive::Lm, WU, "ProductVersion", &product)?;
+        set_sz(Hive::Lm, WU, "TargetReleaseVersionInfo", &version)?;
+        Ok(())
+    }
+
+    fn current_release() -> Option<(String, String)> {
+        const NT: &str = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
+        let build: u32 = read_sz(Hive::Lm, NT, "CurrentBuild")?.parse().ok()?;
+        let display = read_sz(Hive::Lm, NT, "DisplayVersion")?;
+        if display.is_empty() {
+            return None;
+        }
+        let product = if build >= 22_000 {
+            "Windows 11"
+        } else {
+            "Windows 10"
+        };
+        Some((product.to_string(), display))
+    }
+
+    fn elevate_machine(ops: &[RegOp], stays: &[bool]) -> ApplyStatus {
+        let mut text = render_reg(ops);
+        match stay_reg(stays) {
+            Ok(extra) => text.push_str(&extra),
+            Err(status) => return status,
+        }
+        import_text(&text)
+    }
+
+    fn elevate_stay(stays: &[bool]) -> ApplyStatus {
+        match stay_reg(stays) {
+            Ok(text) => import_text(&format!("Windows Registry Editor Version 5.00\r\n{text}")),
+            Err(status) => status,
+        }
+    }
+
+    fn stay_reg(enables: &[bool]) -> Result<String, ApplyStatus> {
+        const WU: &str = r"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate";
+        let mut out = String::new();
+        for enable in enables {
+            if *enable {
+                let (product, version) = current_release().ok_or(ApplyStatus::Failed)?;
+                out.push_str(&format!(
+                    "\r\n[HKEY_LOCAL_MACHINE\\{WU}]\r\n\"TargetReleaseVersion\"=dword:00000001\r\n\"ProductVersion\"=\"{product}\"\r\n\"TargetReleaseVersionInfo\"=\"{version}\"\r\n"
+                ));
+            } else {
+                out.push_str(&format!(
+                    "\r\n[HKEY_LOCAL_MACHINE\\{WU}]\r\n\"TargetReleaseVersion\"=-\r\n\"TargetReleaseVersionInfo\"=-\r\n\"ProductVersion\"=-\r\n"
+                ));
+            }
+        }
+        Ok(out)
+    }
+
+    fn import_text(text: &str) -> ApplyStatus {
+        if text.trim().is_empty() || text.trim() == "Windows Registry Editor Version 5.00" {
+            return ApplyStatus::Applied;
+        }
+        let path =
+            std::env::temp_dir().join(format!("orchid-optimize-{}.reg", uuid::Uuid::new_v4()));
+        if std::fs::write(&path, utf16_reg(text)).is_err() {
+            return ApplyStatus::Failed;
+        }
+        let status = import_elevated(&path);
+        let _ = std::fs::remove_file(&path);
+        status
     }
 
     fn apply_direct(ops: &[RegOp]) -> Result<(), ApplyStatus> {
@@ -107,22 +204,8 @@ mod win {
             RegOp::DeleteValue { hive, key, name } => delete_value(hive, key, name),
             RegOp::EmptyDefault { hive, key } => set_sz(hive, key, "", ""),
             RegOp::DeleteKey { hive, key } => delete_tree(hive, key),
+            RegOp::StayOnCurrent { .. } => Err(ApplyStatus::Failed),
         }
-    }
-
-    fn elevate_import(ops: &[RegOp]) -> ApplyStatus {
-        if ops.is_empty() {
-            return ApplyStatus::Applied;
-        }
-        let path =
-            std::env::temp_dir().join(format!("orchid-optimize-{}.reg", uuid::Uuid::new_v4()));
-        let bytes = utf16_reg(&render_reg(ops));
-        if std::fs::write(&path, bytes).is_err() {
-            return ApplyStatus::Failed;
-        }
-        let status = import_elevated(&path);
-        let _ = std::fs::remove_file(&path);
-        status
     }
 
     fn import_elevated(path: &Path) -> ApplyStatus {
@@ -170,6 +253,7 @@ mod win {
             | RegOp::DeleteValue { hive, .. }
             | RegOp::EmptyDefault { hive, .. }
             | RegOp::DeleteKey { hive, .. } => hive,
+            RegOp::StayOnCurrent { .. } => Hive::Lm,
         }
     }
 

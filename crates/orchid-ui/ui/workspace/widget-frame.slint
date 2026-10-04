@@ -201,6 +201,8 @@ export component WidgetFrame inherits Rectangle {
     callback optimize-choice(string, string, int);
     callback optimize-refresh(string);
     callback optimize-restart-explorer(string);
+    callback optimize-search-edited(string, string);
+    callback optimize-preset-picked(string, string);
 
     callback protect-tab-changed(string, int);
     callback protect-toggled(string, string);
@@ -891,6 +893,8 @@ export component WidgetFrame inherits Rectangle {
                     choice-picked(id, index) => { root.optimize-choice(root.model.instance-id, id, index); }
                     refresh => { root.optimize-refresh(root.model.instance-id); }
                     restart-explorer => { root.optimize-restart-explorer(root.model.instance-id); }
+                    search-edited(text) => { root.optimize-search-edited(root.model.instance-id, text); }
+                    preset-picked(preset) => { root.optimize-preset-picked(root.model.instance-id, preset); }
                 }
 
                 if model.type-id == "protect" : ProtectView {

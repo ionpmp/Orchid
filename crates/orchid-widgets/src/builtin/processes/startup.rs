@@ -8,13 +8,14 @@ mod win {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use std::path::{Path, PathBuf};
+    use std::process::Command;
 
     use windows::core::{w, GUID, PCWSTR, PWSTR};
-    use windows::Win32::Foundation::{ERROR_NO_MORE_ITEMS, ERROR_SUCCESS};
+    use windows::Win32::Foundation::{ERROR_ACCESS_DENIED, ERROR_NO_MORE_ITEMS, ERROR_SUCCESS};
     use windows::Win32::System::Com::CoTaskMemFree;
     use windows::Win32::System::Registry::{
-        RegCloseKey, RegEnumValueW, RegOpenKeyExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER,
-        HKEY_LOCAL_MACHINE, KEY_READ, KEY_SET_VALUE, REG_BINARY, REG_SZ,
+        RegCloseKey, RegEnumValueW, RegOpenKeyExW, RegSetKeyValueW, RegSetValueExW, HKEY,
+        HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_SET_VALUE, REG_BINARY, REG_SZ,
     };
     use windows::Win32::UI::Shell::{
         FOLDERID_CommonStartup, FOLDERID_Startup, SHGetKnownFolderPath, KF_FLAG_DEFAULT,
@@ -51,12 +52,12 @@ mod win {
         out.extend(enum_startup_folder(
             &FOLDERID_Startup,
             "processes-startup-user-folder",
-            "user-folder",
+            HKEY_CURRENT_USER,
         ));
         out.extend(enum_startup_folder(
             &FOLDERID_CommonStartup,
             "processes-startup-common-folder",
-            "common-folder",
+            HKEY_LOCAL_MACHINE,
         ));
         out.sort_by(|a, b| {
             a.name
@@ -67,8 +68,11 @@ mod win {
     }
 
     pub fn set_startup_enabled(id: &str, enabled: bool) -> Result<(), String> {
+        if let Some(path) = id.strip_prefix("folder:") {
+            return set_folder_enabled(Path::new(path), enabled);
+        }
         let Some(rest) = id.strip_prefix("registry:") else {
-            return Err("folder startup entries cannot be toggled yet".into());
+            return Err("unknown startup id".into());
         };
         let mut parts = rest.splitn(3, ':');
         let hive = parts.next().unwrap_or("");
@@ -94,22 +98,35 @@ mod win {
             .encode_wide()
             .chain(std::iter::once(0))
             .collect();
-        unsafe {
+        let direct = unsafe {
             let mut key = HKEY::default();
-            RegOpenKeyExW(root, approved_path, Some(0), KEY_SET_VALUE, &mut key)
-                .ok()
-                .map_err(|e| format!("open StartupApproved: {e}"))?;
-            let status = RegSetValueExW(
-                key,
-                PCWSTR(name_wide.as_ptr()),
-                Some(0),
-                REG_BINARY,
-                Some(&data),
-            );
-            let _ = RegCloseKey(key);
-            status
-                .ok()
-                .map_err(|e| format!("set StartupApproved: {e}"))?;
+            if let Err(error) =
+                RegOpenKeyExW(root, approved_path, Some(0), KEY_SET_VALUE, &mut key).ok()
+            {
+                Err(error)
+            } else {
+                let status = RegSetValueExW(
+                    key,
+                    PCWSTR(name_wide.as_ptr()),
+                    Some(0),
+                    REG_BINARY,
+                    Some(&data),
+                );
+                let _ = RegCloseKey(key);
+                status.ok()
+            }
+        };
+        if let Err(error) = direct {
+            if matches!(hive, "hklm" | "hklm-once")
+                && error.code() == ERROR_ACCESS_DENIED.to_hresult()
+            {
+                return elevate_binary(
+                    r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run",
+                    name,
+                    &data,
+                );
+            }
+            return Err(format!("set StartupApproved: {error}"));
         }
         Ok(())
     }
@@ -199,8 +216,14 @@ mod win {
     }
 
     fn read_approved_map(root: HKEY) -> std::collections::HashMap<String, bool> {
+        read_approved_at(
+            root,
+            w!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"),
+        )
+    }
+
+    fn read_approved_at(root: HKEY, path: PCWSTR) -> std::collections::HashMap<String, bool> {
         let mut map = std::collections::HashMap::new();
-        let path = w!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run");
         unsafe {
             let mut key = HKEY::default();
             if RegOpenKeyExW(root, path, Some(0), KEY_READ, &mut key).is_err() {
@@ -242,10 +265,14 @@ mod win {
         map
     }
 
-    fn enum_startup_folder(folder_id: &GUID, location: &str, _tag: &str) -> Vec<StartupRowView> {
+    fn enum_startup_folder(folder_id: &GUID, location: &str, root: HKEY) -> Vec<StartupRowView> {
         let Some(dir) = known_folder(folder_id) else {
             return Vec::new();
         };
+        let approved = read_approved_at(
+            root,
+            w!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder"),
+        );
         let mut out = Vec::new();
         let Ok(entries) = std::fs::read_dir(&dir) else {
             return out;
@@ -260,16 +287,107 @@ mod win {
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             let command = path.to_string_lossy().into_owned();
+            let enabled = approved.get(&name).copied().unwrap_or(true);
             out.push(StartupRowView {
                 id: format!("folder:{command}"),
                 name,
                 command,
                 location: location.into(),
-                enabled: true,
-                can_toggle: false,
+                enabled,
+                can_toggle: true,
             });
         }
         out
+    }
+
+    fn set_folder_enabled(path: &Path, enabled: bool) -> Result<(), String> {
+        let name = path
+            .file_name()
+            .ok_or_else(|| "startup shortcut has no name".to_string())?;
+        let user = known_folder(&FOLDERID_Startup);
+        let common = known_folder(&FOLDERID_CommonStartup);
+        let root = if user.as_ref().is_some_and(|dir| path.starts_with(dir)) {
+            HKEY_CURRENT_USER
+        } else if common.as_ref().is_some_and(|dir| path.starts_with(dir)) {
+            HKEY_LOCAL_MACHINE
+        } else {
+            return Err("startup shortcut is outside the Startup folders".into());
+        };
+        let name = name.to_string_lossy();
+        let machine = root == HKEY_LOCAL_MACHINE;
+        write_approved(
+            root,
+            w!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder"),
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder",
+            &name,
+            enabled,
+            machine,
+        )
+    }
+
+    fn write_approved(
+        root: HKEY,
+        subkey: PCWSTR,
+        subkey_text: &str,
+        name: &str,
+        enabled: bool,
+        machine: bool,
+    ) -> Result<(), String> {
+        let mut data = [0u8; 12];
+        data[0] = if enabled { 0x02 } else { 0x03 };
+        let name_wide: Vec<u16> = OsStr::new(name)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let status = unsafe {
+            RegSetKeyValueW(
+                root,
+                subkey,
+                PCWSTR(name_wide.as_ptr()),
+                REG_BINARY.0,
+                Some(data.as_ptr().cast()),
+                data.len() as u32,
+            )
+        };
+        match status.ok() {
+            Ok(()) => Ok(()),
+            Err(error) if machine && error.code() == ERROR_ACCESS_DENIED.to_hresult() => {
+                elevate_binary(subkey_text, name, &data)
+            }
+            Err(error) => Err(format!("set StartupApproved: {error}")),
+        }
+    }
+
+    fn elevate_binary(subkey: &str, name: &str, data: &[u8]) -> Result<(), String> {
+        let hex = data
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let escaped = name.replace('\\', "\\\\").replace('"', "\\\"");
+        let text = format!(
+            "Windows Registry Editor Version 5.00\r\n\r\n[HKEY_LOCAL_MACHINE\\{subkey}]\r\n\"{escaped}\"=hex:{hex}\r\n"
+        );
+        let mut bytes = vec![0xFF, 0xFE];
+        for unit in text.encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        let path =
+            std::env::temp_dir().join(format!("orchid-startup-{}.reg", uuid::Uuid::new_v4()));
+        std::fs::write(&path, bytes).map_err(|error| error.to_string())?;
+        let shown = path.to_string_lossy().replace('\'', "''");
+        let script = format!(
+            "$p = Start-Process -FilePath reg.exe -ArgumentList @('import','{shown}') -Verb RunAs -Wait -PassThru -WindowStyle Hidden; if ($null -eq $p) {{ exit 1 }}; exit $p.ExitCode"
+        );
+        let output = Command::new("powershell.exe")
+            .args(["-NoProfile", "-Command", &script])
+            .output();
+        let _ = std::fs::remove_file(&path);
+        match output {
+            Ok(output) if output.status.success() => Ok(()),
+            Ok(_) => Err("access denied".into()),
+            Err(error) => Err(error.to_string()),
+        }
     }
 
     fn known_folder(id: &GUID) -> Option<PathBuf> {

@@ -96,6 +96,13 @@ pub enum RegOp {
         /// Key path under the hive.
         key: &'static str,
     },
+    /// Pin feature updates to the version this PC is already running.
+    ///
+    /// The version string is filled in when the plan is applied.
+    StayOnCurrent {
+        /// `true` writes the pin. `false` deletes it.
+        enable: bool,
+    },
 }
 
 impl RegOp {
@@ -106,6 +113,7 @@ impl RegOp {
             | Self::DeleteValue { hive, .. }
             | Self::EmptyDefault { hive, .. }
             | Self::DeleteKey { hive, .. } => hive,
+            Self::StayOnCurrent { .. } => Hive::Lm,
         }
     }
 
@@ -116,6 +124,7 @@ impl RegOp {
             | Self::DeleteValue { key, .. }
             | Self::EmptyDefault { key, .. }
             | Self::DeleteKey { key, .. } => key,
+            Self::StayOnCurrent { .. } => WU,
         }
     }
 }
@@ -191,8 +200,10 @@ pub const TAB_SHELL: u8 = 3;
 pub const TAB_QUIET: u8 = 4;
 /// Performance tab.
 pub const TAB_PERFORMANCE: u8 = 5;
+/// Startup programs tab.
+pub const TAB_STARTUP: u8 = 6;
 /// Number of tabs.
-pub const TAB_COUNT: u8 = 6;
+pub const TAB_COUNT: u8 = 7;
 
 const AU: &str = r"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU";
 const WU: &str = r"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate";
@@ -200,6 +211,8 @@ const DELIVERY: &str = r"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimizatio
 const DATA: &str = r"SOFTWARE\Policies\Microsoft\Windows\DataCollection";
 const POLICY_SYSTEM: &str = r"SOFTWARE\Policies\Microsoft\Windows\System";
 const CLOUD: &str = r"SOFTWARE\Policies\Microsoft\Windows\CloudContent";
+const STORE: &str = r"SOFTWARE\Policies\Microsoft\WindowsStore";
+const POWER: &str = r"SYSTEM\CurrentControlSet\Control\Session Manager\Power";
 
 const ADV: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
 const CABINET: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\CabinetState";
@@ -222,6 +235,11 @@ const DESKTOP: &str = r"Control Panel\Desktop";
 const BACKGROUND: &str = r"Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications";
 const SEARCH: &str = r"Software\Microsoft\Windows\CurrentVersion\Search";
 const SERIALIZE: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize";
+const MOUSE: &str = r"Control Panel\Mouse";
+const STICKY: &str = r"Control Panel\Accessibility\StickyKeys";
+const TOGGLE_KEYS: &str = r"Control Panel\Accessibility\ToggleKeys";
+const FILTER_KEYS: &str = r"Control Panel\Accessibility\Keyboard Response";
+const MOUSE_KEYS: &str = r"Control Panel\Accessibility\MouseKeys";
 
 const fn dword(hive: Hive, key: &'static str, name: &'static str, value: u32) -> RegOp {
     RegOp::Dword {
@@ -754,6 +772,66 @@ const STARTUP_PLANS: &[&[RegOp]] = &[STARTUP_OFF, STARTUP_ON];
 const STARTUP_DETECT: &[(u8, &[Probe])] =
     &[(1, &[eq_dword(Hive::Cu, SERIALIZE, "StartupDelayInMSec", 0)])];
 
+const TARGET_OFF: &[RegOp] = &[RegOp::StayOnCurrent { enable: false }];
+const TARGET_ON: &[RegOp] = &[RegOp::StayOnCurrent { enable: true }];
+const TARGET_PLANS: &[&[RegOp]] = &[TARGET_OFF, TARGET_ON];
+const TARGET_DETECT: &[(u8, &[Probe])] =
+    &[(1, &[eq_dword(Hive::Lm, WU, "TargetReleaseVersion", 1)])];
+
+const STORE_OFF: &[RegOp] = &[del(Hive::Lm, STORE, "AutoDownload")];
+const STORE_ON: &[RegOp] = &[dword(Hive::Lm, STORE, "AutoDownload", 2)];
+const STORE_PLANS: &[&[RegOp]] = &[STORE_OFF, STORE_ON];
+const STORE_DETECT: &[(u8, &[Probe])] = &[(1, &[eq_dword(Hive::Lm, STORE, "AutoDownload", 2)])];
+
+const FAST_OFF: &[RegOp] = &[dword(Hive::Lm, POWER, "HiberbootEnabled", 1)];
+const FAST_ON: &[RegOp] = &[dword(Hive::Lm, POWER, "HiberbootEnabled", 0)];
+const FAST_PLANS: &[&[RegOp]] = &[FAST_OFF, FAST_ON];
+const FAST_DETECT: &[(u8, &[Probe])] = &[(1, &[eq_dword(Hive::Lm, POWER, "HiberbootEnabled", 0)])];
+
+const STICKY_OFF: &[RegOp] = &[
+    sz(Hive::Cu, STICKY, "Flags", "510"),
+    sz(Hive::Cu, TOGGLE_KEYS, "Flags", "62"),
+    sz(Hive::Cu, FILTER_KEYS, "Flags", "126"),
+    sz(Hive::Cu, MOUSE_KEYS, "Flags", "62"),
+];
+const STICKY_ON: &[RegOp] = &[
+    sz(Hive::Cu, STICKY, "Flags", "506"),
+    sz(Hive::Cu, TOGGLE_KEYS, "Flags", "58"),
+    sz(Hive::Cu, FILTER_KEYS, "Flags", "122"),
+    sz(Hive::Cu, MOUSE_KEYS, "Flags", "58"),
+];
+const STICKY_PLANS: &[&[RegOp]] = &[STICKY_OFF, STICKY_ON];
+const STICKY_DETECT: &[(u8, &[Probe])] = &[(1, &[eq_sz(Hive::Cu, STICKY, "Flags", "506")])];
+
+const MOUSE_OFF: &[RegOp] = &[
+    sz(Hive::Cu, MOUSE, "MouseSpeed", "1"),
+    sz(Hive::Cu, MOUSE, "MouseThreshold1", "6"),
+    sz(Hive::Cu, MOUSE, "MouseThreshold2", "10"),
+];
+const MOUSE_ON: &[RegOp] = &[
+    sz(Hive::Cu, MOUSE, "MouseSpeed", "0"),
+    sz(Hive::Cu, MOUSE, "MouseThreshold1", "0"),
+    sz(Hive::Cu, MOUSE, "MouseThreshold2", "0"),
+];
+const MOUSE_PLANS: &[&[RegOp]] = &[MOUSE_OFF, MOUSE_ON];
+const MOUSE_DETECT: &[(u8, &[Probe])] = &[(1, &[eq_sz(Hive::Cu, MOUSE, "MouseSpeed", "0")])];
+
+const SEPARATE_OFF: &[RegOp] = &[dword(Hive::Cu, ADV, "SeparateProcess", 0)];
+const SEPARATE_ON: &[RegOp] = &[dword(Hive::Cu, ADV, "SeparateProcess", 1)];
+const SEPARATE_PLANS: &[&[RegOp]] = &[SEPARATE_OFF, SEPARATE_ON];
+const SEPARATE_DETECT: &[(u8, &[Probe])] = &[(1, &[eq_dword(Hive::Cu, ADV, "SeparateProcess", 1)])];
+
+const SECONDS_OFF: &[RegOp] = &[dword(Hive::Cu, ADV, "ShowSecondsInSystemClock", 0)];
+const SECONDS_ON: &[RegOp] = &[dword(Hive::Cu, ADV, "ShowSecondsInSystemClock", 1)];
+const SECONDS_PLANS: &[&[RegOp]] = &[SECONDS_OFF, SECONDS_ON];
+const SECONDS_DETECT: &[(u8, &[Probe])] =
+    &[(1, &[eq_dword(Hive::Cu, ADV, "ShowSecondsInSystemClock", 1)])];
+
+const ENDTASK_OFF: &[RegOp] = &[dword(Hive::Cu, ADV, "TaskbarEndTask", 0)];
+const ENDTASK_ON: &[RegOp] = &[dword(Hive::Cu, ADV, "TaskbarEndTask", 1)];
+const ENDTASK_PLANS: &[&[RegOp]] = &[ENDTASK_OFF, ENDTASK_ON];
+const ENDTASK_DETECT: &[(u8, &[Probe])] = &[(1, &[eq_dword(Hive::Cu, ADV, "TaskbarEndTask", 1)])];
+
 const TWEAKS: &[TweakDef] = &[
     TweakDef {
         id: "update-mode",
@@ -811,6 +889,30 @@ const TWEAKS: &[TweakDef] = &[
         option_keys: &[],
         plans: DRIVERS_PLANS,
         detect: DRIVERS_DETECT,
+        fallback: 0,
+        needs_admin: true,
+        restarts_explorer: false,
+    },
+    TweakDef {
+        id: "target-release",
+        tab: TAB_UPDATES,
+        title_key: "optimize-target-release",
+        detail_key: "optimize-target-release-detail",
+        option_keys: &[],
+        plans: TARGET_PLANS,
+        detect: TARGET_DETECT,
+        fallback: 0,
+        needs_admin: true,
+        restarts_explorer: false,
+    },
+    TweakDef {
+        id: "store",
+        tab: TAB_UPDATES,
+        title_key: "optimize-store",
+        detail_key: "optimize-store-detail",
+        option_keys: &[],
+        plans: STORE_PLANS,
+        detect: STORE_DETECT,
         fallback: 0,
         needs_admin: true,
         restarts_explorer: false,
@@ -996,6 +1098,18 @@ const TWEAKS: &[TweakDef] = &[
         restarts_explorer: true,
     },
     TweakDef {
+        id: "separate-process",
+        tab: TAB_EXPLORER,
+        title_key: "optimize-separate-process",
+        detail_key: "optimize-separate-process-detail",
+        option_keys: &[],
+        plans: SEPARATE_PLANS,
+        detect: SEPARATE_DETECT,
+        fallback: 0,
+        needs_admin: false,
+        restarts_explorer: true,
+    },
+    TweakDef {
         id: "taskbar-left",
         tab: TAB_SHELL,
         title_key: "optimize-taskbar-left",
@@ -1078,6 +1192,30 @@ const TWEAKS: &[TweakDef] = &[
         fallback: 0,
         needs_admin: false,
         restarts_explorer: false,
+    },
+    TweakDef {
+        id: "clock-seconds",
+        tab: TAB_SHELL,
+        title_key: "optimize-clock-seconds",
+        detail_key: "optimize-clock-seconds-detail",
+        option_keys: &[],
+        plans: SECONDS_PLANS,
+        detect: SECONDS_DETECT,
+        fallback: 0,
+        needs_admin: false,
+        restarts_explorer: true,
+    },
+    TweakDef {
+        id: "end-task",
+        tab: TAB_SHELL,
+        title_key: "optimize-end-task",
+        detail_key: "optimize-end-task-detail",
+        option_keys: &[],
+        plans: ENDTASK_PLANS,
+        detect: ENDTASK_DETECT,
+        fallback: 0,
+        needs_admin: false,
+        restarts_explorer: true,
     },
     TweakDef {
         id: "lock-screen",
@@ -1199,6 +1337,42 @@ const TWEAKS: &[TweakDef] = &[
         needs_admin: false,
         restarts_explorer: false,
     },
+    TweakDef {
+        id: "fast-startup",
+        tab: TAB_PERFORMANCE,
+        title_key: "optimize-fast-startup",
+        detail_key: "optimize-fast-startup-detail",
+        option_keys: &[],
+        plans: FAST_PLANS,
+        detect: FAST_DETECT,
+        fallback: 0,
+        needs_admin: true,
+        restarts_explorer: false,
+    },
+    TweakDef {
+        id: "sticky-keys",
+        tab: TAB_PERFORMANCE,
+        title_key: "optimize-sticky",
+        detail_key: "optimize-sticky-detail",
+        option_keys: &[],
+        plans: STICKY_PLANS,
+        detect: STICKY_DETECT,
+        fallback: 0,
+        needs_admin: false,
+        restarts_explorer: false,
+    },
+    TweakDef {
+        id: "mouse-accel",
+        tab: TAB_PERFORMANCE,
+        title_key: "optimize-mouse",
+        detail_key: "optimize-mouse-detail",
+        option_keys: &[],
+        plans: MOUSE_PLANS,
+        detect: MOUSE_DETECT,
+        fallback: 0,
+        needs_admin: false,
+        restarts_explorer: false,
+    },
 ];
 
 /// Every tweak, in tab order.
@@ -1211,6 +1385,93 @@ pub fn tweaks() -> &'static [TweakDef] {
 #[must_use]
 pub fn tweak_by_id(id: &str) -> Option<&'static TweakDef> {
     tweaks().iter().find(|tweak| tweak.id == id)
+}
+
+/// One named set of plans. An empty `choices` list means every tweak at its fallback.
+#[derive(Debug, Clone, Copy)]
+pub struct PresetDef {
+    /// Stable id sent by the UI.
+    pub id: &'static str,
+    /// `(tweak id, plan index)` pairs. Empty applies every tweak's fallback.
+    pub choices: &'static [(&'static str, u8)],
+}
+
+const QUIET_CHOICES: &[(&str, u8)] = &[
+    ("ads-id", 1),
+    ("tailored", 1),
+    ("feedback", 1),
+    ("speech", 1),
+    ("typing", 1),
+    ("explorer-ads", 1),
+    ("hide-widgets", 1),
+    ("hide-copilot", 1),
+    ("search-highlights", 1),
+    ("bing-search", 1),
+    ("lock-screen", 1),
+    ("start-suggest", 1),
+    ("settings-suggest", 1),
+    ("welcome", 1),
+    ("consumer", 1),
+    ("store", 1),
+];
+
+const NOREBOOT_CHOICES: &[(&str, u8)] = &[
+    ("no-reboot", 1),
+    ("active-hours", 1),
+    ("update-mode", 2),
+    ("target-release", 1),
+    ("fast-startup", 1),
+];
+
+const PRESETS: &[PresetDef] = &[
+    PresetDef {
+        id: "windows",
+        choices: &[],
+    },
+    PresetDef {
+        id: "noreboot",
+        choices: NOREBOOT_CHOICES,
+    },
+    PresetDef {
+        id: "quiet",
+        choices: QUIET_CHOICES,
+    },
+];
+
+/// Named sets the UI can apply in one step.
+#[must_use]
+pub fn presets() -> &'static [PresetDef] {
+    PRESETS
+}
+
+/// Look up a preset by the id the UI sends.
+#[must_use]
+pub fn preset_by_id(id: &str) -> Option<&'static PresetDef> {
+    presets().iter().find(|preset| preset.id == id)
+}
+
+/// Registry operations for a preset. Unknown ids yield `None`.
+#[must_use]
+pub fn preset_ops(id: &str) -> Option<(Vec<RegOp>, bool)> {
+    let preset = preset_by_id(id)?;
+    let mut ops = Vec::new();
+    let mut restart = false;
+    let pairs: Vec<(&str, u8)> = if preset.choices.is_empty() {
+        tweaks()
+            .iter()
+            .map(|tweak| (tweak.id, tweak.fallback))
+            .collect()
+    } else {
+        preset.choices.to_vec()
+    };
+    for (tweak_id, index) in pairs {
+        let def = tweak_by_id(tweak_id)?;
+        if def.restarts_explorer {
+            restart = true;
+        }
+        ops.extend(plan_for(tweak_id, i32::from(index))?.iter().copied());
+    }
+    Some((ops, restart))
 }
 
 /// Which plan matches the probes. Unknown ids yield `None`.
@@ -1276,6 +1537,18 @@ pub fn render_reg(ops: &[RegOp]) -> String {
                     hive.reg_name()
                 ));
             }
+            RegOp::StayOnCurrent { enable: false } => {
+                out.push_str(&format!(
+                    "\r\n[{}\\{WU}]\r\n\"TargetReleaseVersion\"=-\r\n\"TargetReleaseVersionInfo\"=-\r\n\"ProductVersion\"=-\r\n",
+                    Hive::Lm.reg_name()
+                ));
+            }
+            RegOp::StayOnCurrent { enable: true } => {
+                out.push_str(&format!(
+                    "\r\n[{}\\{WU}]\r\n\"TargetReleaseVersion\"=dword:00000001\r\n",
+                    Hive::Lm.reg_name()
+                ));
+            }
         }
     }
     out
@@ -1302,6 +1575,8 @@ mod tests {
         r"SOFTWARE\Policies\Microsoft\Windows\DataCollection",
         r"SOFTWARE\Policies\Microsoft\Windows\System",
         r"SOFTWARE\Policies\Microsoft\Windows\CloudContent",
+        r"SOFTWARE\Policies\Microsoft\WindowsStore",
+        r"SYSTEM\CurrentControlSet\Control\Session Manager\Power",
     ];
 
     const CU_PREFIXES: &[&str] = &[
@@ -1323,6 +1598,11 @@ mod tests {
         r"Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications",
         r"Software\Microsoft\Windows\CurrentVersion\Search",
         r"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize",
+        r"Control Panel\Mouse",
+        r"Control Panel\Accessibility\StickyKeys",
+        r"Control Panel\Accessibility\ToggleKeys",
+        r"Control Panel\Accessibility\Keyboard Response",
+        r"Control Panel\Accessibility\MouseKeys",
     ];
 
     #[test]
@@ -1402,6 +1682,39 @@ mod tests {
         assert!(plan_for("not-a-tweak", 1).is_none());
         let manual = plan_for("update-mode", 99).unwrap();
         assert_eq!(manual, plan_for("update-mode", 3).unwrap());
+    }
+
+    #[test]
+    fn stay_on_current_pins_or_clears_the_policy() {
+        let on = render_reg(plan_for("target-release", 1).unwrap());
+        assert!(on.contains("TargetReleaseVersion\"=dword:00000001"));
+        let off = render_reg(plan_for("target-release", 0).unwrap());
+        assert!(off.contains("\"TargetReleaseVersion\"=-"));
+        assert!(off.contains("\"TargetReleaseVersionInfo\"=-"));
+        assert!(off.contains("\"ProductVersion\"=-"));
+    }
+
+    #[test]
+    fn fast_startup_off_clears_hiberboot() {
+        let on = render_reg(plan_for("fast-startup", 1).unwrap());
+        assert!(on.contains("HiberbootEnabled\"=dword:00000000"));
+        let off = render_reg(plan_for("fast-startup", 0).unwrap());
+        assert!(off.contains("HiberbootEnabled\"=dword:00000001"));
+    }
+
+    #[test]
+    fn presets_only_use_known_plans() {
+        assert!(preset_ops("missing").is_none());
+        let (windows, _) = preset_ops("windows").unwrap();
+        assert!(!windows.is_empty());
+        let (quiet, restart) = preset_ops("quiet").unwrap();
+        assert!(restart, "quiet changes the taskbar");
+        let text = render_reg(&quiet).to_ascii_lowercase();
+        assert!(!text.contains("defender"));
+        let (noreboot, _) = preset_ops("noreboot").unwrap();
+        let note = render_reg(&noreboot);
+        assert!(note.contains("NoAutoRebootWithLoggedOnUsers\"=dword:00000001"));
+        assert!(note.contains("HiberbootEnabled\"=dword:00000000"));
     }
 
     #[test]

@@ -2406,6 +2406,9 @@ export struct OptimizeRow {
     choice-2: string,
     choice-3: string,
     needs-admin: bool,
+    changed: bool,
+    needs-restart: bool,
+    can-toggle: bool,
 }
 
 export struct ProtectRow {
@@ -2454,8 +2457,17 @@ export struct OptimizeModel {
     tab-shell: string,
     tab-quiet: string,
     tab-performance: string,
+    tab-startup: string,
     rows: [OptimizeRow],
+    query: string,
     hint: string,
+    search-placeholder: string,
+    search-empty: string,
+    changed-label: string,
+    restart-row-label: string,
+    preset-windows: string,
+    preset-noreboot: string,
+    preset-quiet: string,
     status: string,
     refresh-label: string,
     restart-label: string,
