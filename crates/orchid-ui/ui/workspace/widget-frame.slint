@@ -256,6 +256,8 @@ export component WidgetFrame inherits Rectangle {
     callback calendar-nudge-editor-end(string, int);
     callback calendar-editor-notes(string, string);
     callback calendar-editor-color(string, int);
+    callback calendar-caldav-save(string, string, string, string);
+    callback calendar-caldav-sync(string);
 
     // Password
     callback password-search-changed(string);
@@ -961,6 +963,8 @@ export component WidgetFrame inherits Rectangle {
                     nudge-editor-end(d) => { root.calendar-nudge-editor-end(root.model.instance-id, d); }
                     editor-notes-changed(t) => { root.calendar-editor-notes(root.model.instance-id, t); }
                     editor-color-changed(c) => { root.calendar-editor-color(root.model.instance-id, c); }
+                    caldav-save(url, user, password) => { root.calendar-caldav-save(root.model.instance-id, url, user, password); }
+                    caldav-sync => { root.calendar-caldav-sync(root.model.instance-id); }
                 }
 
                 if model.type-id == "rss" : RssView {

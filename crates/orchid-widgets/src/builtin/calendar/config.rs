@@ -7,6 +7,19 @@ use chrono::{Datelike, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Link from a local event to one CalDAV resource.
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default, PartialEq, Eq)]
+pub struct CalDavLink {
+    /// Local [`CalendarEvent::id`].
+    pub event_id: String,
+    /// Absolute URL of the `.ics` resource.
+    pub href: String,
+    /// Server `ETag`, kept as the server sent it.
+    pub etag: String,
+    /// iCalendar UID.
+    pub uid: String,
+}
+
 /// One calendar event.
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct CalendarEvent {
@@ -64,6 +77,18 @@ pub struct CalendarConfig {
     /// Default timed-event length in minutes (30 / 60 / 90).
     #[serde(default = "default_duration")]
     pub default_duration_minutes: u16,
+    /// Calendar collection URL. Empty until an account is saved.
+    #[serde(default)]
+    pub caldav_url: String,
+    /// CalDAV user name.
+    #[serde(default)]
+    pub caldav_user: String,
+    /// DPAPI-protected password, or empty.
+    #[serde(default)]
+    pub caldav_password: String,
+    /// Events that came from the collection, or were written back to it.
+    #[serde(default)]
+    pub caldav_links: Vec<CalDavLink>,
 }
 
 fn default_true() -> bool {
@@ -91,6 +116,10 @@ impl Default for CalendarConfig {
             show_upcoming: true,
             time_step_minutes: 15,
             default_duration_minutes: 60,
+            caldav_url: String::new(),
+            caldav_user: String::new(),
+            caldav_password: String::new(),
+            caldav_links: Vec::new(),
         }
     }
 }
@@ -148,6 +177,8 @@ impl CalendarConfig {
                 ev.date = self.selected_date.clone();
             }
         }
+        self.caldav_links
+            .retain(|link| self.events.iter().any(|event| event.id == link.event_id));
     }
 }
 
@@ -158,6 +189,44 @@ pub fn decode_config(bytes: &[u8]) -> CalendarConfig {
         bytes,
         bincode_reloaded::config::standard(),
     ) {
+        cfg.normalize();
+        return cfg;
+    }
+
+    #[derive(Deserialize)]
+    struct BeforeCalDav {
+        events: Vec<CalendarEvent>,
+        view_year: i32,
+        view_month: u8,
+        selected_date: String,
+        #[serde(default = "default_true")]
+        default_all_day: bool,
+        #[serde(default = "default_true")]
+        show_notes_preview: bool,
+        #[serde(default = "default_true")]
+        show_upcoming: bool,
+        #[serde(default = "default_time_step")]
+        time_step_minutes: u8,
+        #[serde(default = "default_duration")]
+        default_duration_minutes: u16,
+    }
+
+    if let Ok((previous, _)) = bincode_reloaded::serde::decode_from_slice::<BeforeCalDav, _>(
+        bytes,
+        bincode_reloaded::config::standard(),
+    ) {
+        let mut cfg = CalendarConfig {
+            events: previous.events,
+            view_year: previous.view_year,
+            view_month: previous.view_month,
+            selected_date: previous.selected_date,
+            default_all_day: previous.default_all_day,
+            show_notes_preview: previous.show_notes_preview,
+            show_upcoming: previous.show_upcoming,
+            time_step_minutes: previous.time_step_minutes,
+            default_duration_minutes: previous.default_duration_minutes,
+            ..CalendarConfig::default()
+        };
         cfg.normalize();
         return cfg;
     }

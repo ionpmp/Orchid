@@ -72,4 +72,10 @@ pub struct CalendarPayload {
     pub editor_color: i32,
     /// Confirmation sheet visible above the editor.
     pub delete_confirm_open: bool,
+    /// Saved collection URL. The password is not included.
+    pub caldav_url: String,
+    /// Saved CalDAV user.
+    pub caldav_user: String,
+    /// Status token for the account row.
+    pub caldav_status: String,
 }

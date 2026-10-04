@@ -204,6 +204,33 @@ impl MainWindowController {
         orchid_widgets::builtin::calendar::set_editor_notes(inst, text.to_string());
     }
 
+    pub(super) fn on_calendar_caldav_save(
+        self: &Arc<Self>,
+        id: &SharedString,
+        url: &SharedString,
+        user: &SharedString,
+        password: &SharedString,
+    ) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::save_account(
+            inst,
+            url.to_string(),
+            user.to_string(),
+            password.to_string(),
+        );
+        self.refresh_calendar(inst);
+    }
+
+    pub(super) fn on_calendar_caldav_sync(self: &Arc<Self>, id: &SharedString) {
+        let Some(inst) = Self::parse_calendar_id(id) else {
+            return;
+        };
+        orchid_widgets::builtin::calendar::sync_now(inst);
+        self.refresh_calendar(inst);
+    }
+
     pub(super) fn on_calendar_editor_color(self: &Arc<Self>, id: &SharedString, color: i32) {
         let Some(inst) = Self::parse_calendar_id(id) else {
             return;

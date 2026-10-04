@@ -11,7 +11,7 @@
 | Calculator | `calculator` | `=expr` in universal search |
 | Notes | `notes` | In-widget scratchpad |
 | Agent | `agent` | Shared conversation; file writes wait for confirmation |
-| Calendar | `calendar` | Local only (no CalDAV) |
+| Calendar | `calendar` | Local events, plus one CalDAV collection |
 | Browser | `browser` | WebView2: tabs, bookmarks, find, zoom |
 | News Feed | `rss` | RSS/Atom |
 | Universal Search | `universal-search` | [search.md](search.md) |
@@ -60,7 +60,7 @@ Embedded WebView2. Needs the Evergreen runtime. Distinct from the HTML
 
 ## Notes / Calendar / Processes
 
-Notes are not files on disk. Calendar is local. The Processes tab draws
+Notes are not files on disk. Calendar events stay on this computer. A collection URL, user, and password at the bottom of the calendar sync one CalDAV collection: one-time events from 90 days ago through the next year. A time written with `Z` is shown in the local offset. A named timezone is stored as the numbers in the file. Repeating events stay on the server and are not expanded. A multi-day event shows on its first day. Saving or deleting a synced event writes that change back; a local event with no account stays local. The password is stored with the widget config (DPAPI on Windows) and is not shown again. There is no server discovery and no OAuth. The Processes tab draws
 CPU and memory for the selected process: the last 60 samples, oldest on
 the left. CPU is that process's percent. Memory bars are scaled to the
 peak working set in the window. The samples stay with the widget instance

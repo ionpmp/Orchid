@@ -15,6 +15,12 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Calendar sync:** the calendar can save one CalDAV collection URL,
+  user, and password. Sync pulls one-time events from 90 days ago through
+  the next year and writes edits and deletes back. Repeating events stay
+  on the server. A `Z` time is shown in the local offset; a named timezone
+  is stored as written. The password is kept with the widget config
+  (DPAPI on Windows) and is not shown again.
 - **Mail widget:** IMAP/SMTP client with an account wizard (built-in
   profiles, Mozilla ISPDB, DNS SRV), DPAPI-stored secrets, SQLite header
   cache, three-pane reading, HTML via WebView2, compose/reply/forward,

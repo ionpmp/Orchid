@@ -290,6 +290,8 @@ export component CalendarView inherits Rectangle {
     callback nudge-editor-end(int);
     callback editor-notes-changed(string);
     callback editor-color-changed(int);
+    callback caldav-save(string, string, string);
+    callback caldav-sync();
 
     background: transparent;
 
@@ -299,6 +301,11 @@ export component CalendarView inherits Rectangle {
     property <string> synced-selected-date: model.selected-date;
     property <string> synced-editor-id: model.editor-event-id;
     property <bool> synced-editor-open: model.editor-open;
+    property <string> account-url: model.caldav-url;
+    property <string> account-user: model.caldav-user;
+    property <string> account-password;
+    property <string> synced-account-url: model.caldav-url;
+    property <string> synced-account-user: model.caldav-user;
 
     changed model => {
         if model.selected-date != synced-selected-date {
@@ -312,6 +319,12 @@ export component CalendarView inherits Rectangle {
             draft-notes = model.editor-notes;
             synced-editor-id = model.editor-event-id;
             synced-editor-open = model.editor-open;
+        }
+        if model.caldav-url != synced-account-url || model.caldav-user != synced-account-user {
+            account-url = model.caldav-url;
+            account-user = model.caldav-user;
+            synced-account-url = model.caldav-url;
+            synced-account-user = model.caldav-user;
         }
     }
 
@@ -537,6 +550,142 @@ export component CalendarView inherits Rectangle {
                             clicked => { root.open-edit(ev.id); }
                         }
                     }
+                }
+            }
+        }
+
+        VerticalLayout {
+            spacing: Theme.space-1;
+
+            Text {
+                text: model.caldav-hint;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+            }
+
+            HorizontalLayout {
+                spacing: Theme.space-1;
+
+                Rectangle {
+                    horizontal-stretch: 2;
+                    height: Theme.control-sm;
+                    min-width: 80px;
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-raised;
+                    border-width: Theme.hairline;
+                    border-color: Theme.border-default;
+                    url-edit := TextInput {
+                        x: Theme.space-2;
+                        y: 0;
+                        width: parent.width - Theme.space-4;
+                        height: 100%;
+                        text: root.account-url;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        single-line: true;
+                        edited => { root.account-url = self.text; }
+                    }
+                    if root.account-url == "" : Text {
+                        x: Theme.space-2;
+                        y: 0;
+                        width: parent.width - Theme.space-4;
+                        height: 100%;
+                        text: model.caldav-url-label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: Theme.control-sm;
+                    min-width: 64px;
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-raised;
+                    border-width: Theme.hairline;
+                    border-color: Theme.border-default;
+                    user-edit := TextInput {
+                        x: Theme.space-2;
+                        y: 0;
+                        width: parent.width - Theme.space-4;
+                        height: 100%;
+                        text: root.account-user;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        single-line: true;
+                        edited => { root.account-user = self.text; }
+                    }
+                    if root.account-user == "" : Text {
+                        x: Theme.space-2;
+                        y: 0;
+                        width: parent.width - Theme.space-4;
+                        height: 100%;
+                        text: model.caldav-user-label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: Theme.control-sm;
+                    min-width: 64px;
+                    border-radius: Theme.radius-md;
+                    background: Theme.surface-raised;
+                    border-width: Theme.hairline;
+                    border-color: Theme.border-default;
+                    password-edit := TextInput {
+                        x: Theme.space-2;
+                        y: 0;
+                        width: parent.width - Theme.space-4;
+                        height: 100%;
+                        text: root.account-password;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-size-sm;
+                        single-line: true;
+                        input-type: InputType.password;
+                        edited => { root.account-password = self.text; }
+                    }
+                    if root.account-password == "" : Text {
+                        x: Theme.space-2;
+                        y: 0;
+                        width: parent.width - Theme.space-4;
+                        height: 100%;
+                        text: model.caldav-password-label;
+                        color: Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: Theme.space-1;
+                alignment: start;
+
+                TouchButton {
+                    text: model.caldav-save-label;
+                    tone: ButtonTone.neutral;
+                    size: ControlSize.sm;
+                    clicked => {
+                        root.caldav-save(root.account-url, root.account-user, root.account-password);
+                        root.account-password = "";
+                    }
+                }
+                TouchButton {
+                    text: model.caldav-sync-label;
+                    tone: ButtonTone.filled;
+                    size: ControlSize.sm;
+                    clicked => { root.caldav-sync(); }
+                }
+                Text {
+                    horizontal-stretch: 1;
+                    text: model.caldav-status;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
                 }
             }
         }

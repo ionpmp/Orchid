@@ -210,6 +210,8 @@ export component WorkspaceView inherits Rectangle {
     callback calendar-nudge-editor-end(string, int);
     callback calendar-editor-notes(string, string);
     callback calendar-editor-color(string, int);
+    callback calendar-caldav-save(string, string, string, string);
+    callback calendar-caldav-sync(string);
     callback password-search-changed(string);
     callback password-entry-clicked(string);
     callback password-copy-password(string);
@@ -651,6 +653,8 @@ export component WorkspaceView inherits Rectangle {
                     calendar-nudge-editor-end(id, d) => { root.calendar-nudge-editor-end(id, d); }
                     calendar-editor-notes(id, t) => { root.calendar-editor-notes(id, t); }
                     calendar-editor-color(id, c) => { root.calendar-editor-color(id, c); }
+                    calendar-caldav-save(id, url, user, password) => { root.calendar-caldav-save(id, url, user, password); }
+                    calendar-caldav-sync(id) => { root.calendar-caldav-sync(id); }
                     password-search-changed(q) => { root.password-search-changed(q); }
                     password-entry-clicked(id) => { root.password-entry-clicked(id); }
                     password-copy-password(id) => { root.password-copy-password(id); }
@@ -892,6 +896,29 @@ export component WorkspaceView inherits Rectangle {
             browser-open-bookmark(id, i) => { root.browser-open-bookmark(id, i); }
             browser-remove-bookmark(id, i) => { root.browser-remove-bookmark(id, i); }
             browser-embed-bounds(id, x, y, w, h, vis) => { root.browser-embed-bounds(id, x, y, w, h, vis); }
+            calendar-select-date(id, d) => { root.calendar-select-date(id, d); }
+            calendar-activate-day(id, d) => { root.calendar-activate-day(id, d); }
+            calendar-shift-month(id, delta) => { root.calendar-shift-month(id, delta); }
+            calendar-goto-today(id) => { root.calendar-goto-today(id); }
+            calendar-open-new(id) => { root.calendar-open-new(id); }
+            calendar-open-edit(id, eid) => { root.calendar-open-edit(id, eid); }
+            calendar-close-editor(id) => { root.calendar-close-editor(id); }
+            calendar-save-editor(id) => { root.calendar-save-editor(id); }
+            calendar-duplicate-editor(id) => { root.calendar-duplicate-editor(id); }
+            calendar-set-color-filter(id, c) => { root.calendar-set-color-filter(id, c); }
+            calendar-request-delete(id) => { root.calendar-request-delete(id); }
+            calendar-confirm-delete(id) => { root.calendar-confirm-delete(id); }
+            calendar-cancel-delete(id) => { root.calendar-cancel-delete(id); }
+            calendar-editor-title(id, t) => { root.calendar-editor-title(id, t); }
+            calendar-editor-date(id, d) => { root.calendar-editor-date(id, d); }
+            calendar-shift-editor-date(id, delta) => { root.calendar-shift-editor-date(id, delta); }
+            calendar-editor-all-day(id, v) => { root.calendar-editor-all-day(id, v); }
+            calendar-nudge-editor-start(id, d) => { root.calendar-nudge-editor-start(id, d); }
+            calendar-nudge-editor-end(id, d) => { root.calendar-nudge-editor-end(id, d); }
+            calendar-editor-notes(id, t) => { root.calendar-editor-notes(id, t); }
+            calendar-editor-color(id, c) => { root.calendar-editor-color(id, c); }
+            calendar-caldav-save(id, url, user, password) => { root.calendar-caldav-save(id, url, user, password); }
+            calendar-caldav-sync(id) => { root.calendar-caldav-sync(id); }
             viewer-media-command(id, c) => { root.viewer-media-command(id, c); }
             viewer-media-seek-frac(id, f) => { root.viewer-media-seek-frac(id, f); }
             viewer-document-action(id, a) => { root.viewer-document-action(id, a); }

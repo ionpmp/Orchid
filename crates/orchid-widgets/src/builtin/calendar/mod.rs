@@ -1,5 +1,6 @@
-//! Local calendar / agenda — month grid, day list, CRUD events.
+//! Calendar / agenda — month grid, day list, CRUD events, and one CalDAV collection.
 
+pub mod caldav;
 pub mod config;
 
 use std::sync::{Arc, LazyLock};
@@ -25,8 +26,8 @@ use crate::{
 use orchid_storage::{LifecycleState, WidgetSize};
 
 pub use config::{
-    decode_config, format_date, format_minutes, parse_date, parse_date_input, CalendarConfig,
-    CalendarEvent,
+    decode_config, format_date, format_minutes, parse_date, parse_date_input, CalDavLink,
+    CalendarConfig, CalendarEvent,
 };
 
 /// Stable type id.
@@ -72,6 +73,8 @@ struct UiState {
     delete_confirm_open: bool,
     /// When set, agenda / upcoming / month dots show only this color (0..=5).
     color_filter: Option<u8>,
+    /// Sync status token: empty, `working`, `ok:N`, `ok:N:S`, or an error token.
+    caldav_status: String,
 }
 
 struct CalendarHandle {
@@ -100,6 +103,7 @@ impl CalendarHandle {
         refresh.start(move || {
             let handle = Arc::clone(&handle);
             async move {
+                sync_handle(Arc::clone(&handle)).await;
                 handle.publish();
             }
         });
@@ -482,22 +486,21 @@ pub fn save_editor(instance_id: Uuid) {
     if parse_date(&draft.date).is_none() {
         return;
     }
+    let saved_id = editing_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     {
         let mut cfg = h.config.write();
         let title = draft.title.trim().to_string();
-        if let Some(id) = editing_id {
-            if let Some(ev) = cfg.events.iter_mut().find(|e| e.id == id) {
-                ev.title = title;
-                ev.date = draft.date.clone();
-                ev.all_day = draft.all_day;
-                ev.start_minutes = draft.start_minutes;
-                ev.end_minutes = draft.end_minutes;
-                ev.notes = draft.notes;
-                ev.color = draft.color.min(5);
-            }
+        if let Some(ev) = cfg.events.iter_mut().find(|e| e.id == saved_id) {
+            ev.title = title;
+            ev.date = draft.date.clone();
+            ev.all_day = draft.all_day;
+            ev.start_minutes = draft.start_minutes;
+            ev.end_minutes = draft.end_minutes;
+            ev.notes = draft.notes;
+            ev.color = draft.color.min(5);
         } else {
             cfg.events.push(CalendarEvent {
-                id: Uuid::new_v4().to_string(),
+                id: saved_id.clone(),
                 title,
                 date: draft.date.clone(),
                 all_day: draft.all_day,
@@ -522,6 +525,10 @@ pub fn save_editor(instance_id: Uuid) {
         ui.delete_confirm_open = false;
     }
     h.publish();
+    let handle = Arc::clone(&h);
+    spawn_net(async move {
+        push_saved(handle, saved_id).await;
+    });
 }
 
 /// Delete an event by id (also closes editor if it was editing that event).
@@ -529,6 +536,27 @@ pub fn delete_event(instance_id: Uuid, event_id: &str) {
     let Some(h) = CALENDAR_LIVE.get(&instance_id) else {
         return;
     };
+    let remote = {
+        let cfg = h.config.read();
+        cfg.caldav_links
+            .iter()
+            .find(|link| link.event_id == event_id)
+            .cloned()
+    };
+    if remote.is_some() {
+        {
+            let mut ui = h.ui.write();
+            ui.delete_confirm_open = false;
+            ui.caldav_status = "working".into();
+        }
+        h.publish();
+        let handle = Arc::clone(&h);
+        let event_id = event_id.to_string();
+        spawn_net(async move {
+            delete_saved(handle, event_id, remote).await;
+        });
+        return;
+    }
     {
         let mut cfg = h.config.write();
         cfg.events.retain(|e| e.id != event_id);
@@ -543,6 +571,236 @@ pub fn delete_event(instance_id: Uuid, event_id: &str) {
         ui.delete_confirm_open = false;
     }
     h.publish();
+}
+
+/// Store the collection URL, user, and password. An empty password keeps the
+/// previous secret.
+pub fn save_account(instance_id: Uuid, url: String, user: String, password: String) {
+    let Some(h) = CALENDAR_LIVE.get(&instance_id) else {
+        return;
+    };
+    let url = url.trim().to_string();
+    let user = user.trim().to_string();
+    if !url.is_empty() {
+        if let Err(token) = caldav::normalize_collection(&url) {
+            h.ui.write().caldav_status = token.to_string();
+            h.publish();
+            return;
+        }
+    }
+    {
+        let mut cfg = h.config.write();
+        cfg.caldav_url = url;
+        cfg.caldav_user = user;
+        if !password.is_empty() {
+            match orchid_crypto::protect_for_storage(&password) {
+                Ok(stored) => cfg.caldav_password = stored,
+                Err(_) => {
+                    drop(cfg);
+                    h.ui.write().caldav_status = "secret".into();
+                    h.publish();
+                    return;
+                }
+            }
+        }
+        cfg.normalize();
+    }
+    h.ui.write().caldav_status.clear();
+    h.publish();
+}
+
+/// Download the collection and merge it into the local events.
+pub fn sync_now(instance_id: Uuid) {
+    let Some(h) = CALENDAR_LIVE.get(&instance_id) else {
+        return;
+    };
+    {
+        let cfg = h.config.read();
+        if cfg.caldav_url.trim().is_empty() || cfg.caldav_user.trim().is_empty() {
+            drop(cfg);
+            h.ui.write().caldav_status = "need-account".into();
+            h.publish();
+            return;
+        }
+    }
+    let handle = Arc::clone(&h);
+    spawn_net(async move {
+        sync_handle(handle).await;
+    });
+}
+
+fn spawn_net(task: impl std::future::Future<Output = ()> + Send + 'static) {
+    if tokio::runtime::Handle::try_current().is_ok() {
+        tokio::spawn(task);
+    }
+}
+
+async fn sync_handle(handle: Arc<CalendarHandle>) {
+    let (url, user, password) = {
+        let cfg = handle.config.read();
+        if cfg.caldav_url.trim().is_empty() || cfg.caldav_user.trim().is_empty() {
+            return;
+        }
+        let password = match orchid_crypto::resolve_stored_secret(&cfg.caldav_password) {
+            Ok(password) => password,
+            Err(_) => {
+                drop(cfg);
+                handle.ui.write().caldav_status = "secret".into();
+                handle.publish();
+                return;
+            }
+        };
+        (cfg.caldav_url.clone(), cfg.caldav_user.clone(), password)
+    };
+    handle.ui.write().caldav_status = "working".into();
+    handle.publish();
+    match caldav::pull(&url, &user, &password).await {
+        Ok(pull) => {
+            let today = chrono::Local::now().date_naive();
+            let start = today - Duration::days(90);
+            let end = today + Duration::days(365);
+            let skipped = pull.skipped_repeating;
+            let count = pull.events.len();
+            {
+                let mut cfg = handle.config.write();
+                let config = &mut *cfg;
+                caldav::merge(
+                    &mut config.events,
+                    &mut config.caldav_links,
+                    &pull,
+                    start,
+                    end,
+                );
+                cfg.normalize();
+            }
+            handle.ui.write().caldav_status = format!("ok:{count}:{skipped}");
+        }
+        Err(err) => {
+            handle.ui.write().caldav_status = err;
+        }
+    }
+    handle.publish();
+}
+
+async fn push_saved(handle: Arc<CalendarHandle>, event_id: String) {
+    let (url, user, password, event, link) = {
+        let cfg = handle.config.read();
+        if cfg.caldav_url.trim().is_empty() {
+            return;
+        }
+        let Some(event) = cfg
+            .events
+            .iter()
+            .find(|event| event.id == event_id)
+            .cloned()
+        else {
+            return;
+        };
+        let password = match orchid_crypto::resolve_stored_secret(&cfg.caldav_password) {
+            Ok(password) => password,
+            Err(_) => {
+                drop(cfg);
+                handle.ui.write().caldav_status = "secret".into();
+                handle.publish();
+                return;
+            }
+        };
+        let link = cfg
+            .caldav_links
+            .iter()
+            .find(|link| link.event_id == event_id)
+            .cloned();
+        (
+            cfg.caldav_url.clone(),
+            cfg.caldav_user.clone(),
+            password,
+            event,
+            link,
+        )
+    };
+    let uid = link
+        .as_ref()
+        .map(|link| link.uid.clone())
+        .filter(|uid| !uid.is_empty())
+        .unwrap_or_else(|| event.id.clone());
+    match caldav::put_event(
+        &url,
+        &user,
+        &password,
+        link.as_ref().map(|link| link.href.as_str()),
+        link.as_ref().map(|link| link.etag.as_str()),
+        &event,
+        &uid,
+    )
+    .await
+    {
+        Ok((href, etag)) => {
+            let mut cfg = handle.config.write();
+            if let Some(existing) = cfg
+                .caldav_links
+                .iter_mut()
+                .find(|item| item.event_id == event_id)
+            {
+                existing.href = href;
+                existing.etag = etag;
+                existing.uid = uid;
+            } else {
+                cfg.caldav_links.push(CalDavLink {
+                    event_id,
+                    href,
+                    etag,
+                    uid,
+                });
+            }
+            drop(cfg);
+            handle.ui.write().caldav_status.clear();
+        }
+        Err(err) => {
+            handle.ui.write().caldav_status = err;
+        }
+    }
+    handle.publish();
+}
+
+async fn delete_saved(handle: Arc<CalendarHandle>, event_id: String, remote: Option<CalDavLink>) {
+    let Some(remote) = remote else {
+        return;
+    };
+    let (user, password) = {
+        let cfg = handle.config.read();
+        let password = match orchid_crypto::resolve_stored_secret(&cfg.caldav_password) {
+            Ok(password) => password,
+            Err(_) => {
+                drop(cfg);
+                handle.ui.write().caldav_status = "secret".into();
+                handle.publish();
+                return;
+            }
+        };
+        (cfg.caldav_user.clone(), password)
+    };
+    handle.ui.write().caldav_status = "working".into();
+    handle.publish();
+    match caldav::delete_remote(&user, &password, &remote.href, Some(&remote.etag)).await {
+        Ok(()) => {
+            let mut cfg = handle.config.write();
+            cfg.events.retain(|event| event.id != event_id);
+            cfg.caldav_links.retain(|link| link.event_id != event_id);
+            drop(cfg);
+            let mut ui = handle.ui.write();
+            if ui.editing_id.as_deref() == Some(event_id.as_str()) {
+                ui.editor_open = false;
+                ui.editing_id = None;
+                ui.draft = None;
+            }
+            ui.delete_confirm_open = false;
+            ui.caldav_status.clear();
+        }
+        Err(err) => {
+            handle.ui.write().caldav_status = err;
+        }
+    }
+    handle.publish();
 }
 
 fn mutate_draft(instance_id: Uuid, f: impl FnOnce(&mut EventDraft)) {
@@ -877,6 +1135,9 @@ impl CalendarWidget {
             editor_notes: draft.notes,
             editor_color: i32::from(draft.color),
             delete_confirm_open: ui.delete_confirm_open,
+            caldav_url: cfg.caldav_url,
+            caldav_user: cfg.caldav_user,
+            caldav_status: ui.caldav_status,
         }
     }
 }
@@ -946,6 +1207,10 @@ impl Widget for CalendarWidget {
 
     async fn on_activate(&mut self, _ctx: &WidgetContext) -> WidgetResult<()> {
         self.handle.schedule_refresh();
+        let handle = Arc::clone(&self.handle);
+        tokio::spawn(async move {
+            sync_handle(handle).await;
+        });
         Ok(())
     }
 

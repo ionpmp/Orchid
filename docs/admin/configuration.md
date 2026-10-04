@@ -57,6 +57,9 @@ the saved map.
 
 `language` (`en-US`), optional `date-format` / `time-format`.
 `first-day-of-week` (`0` Sunday / `1` Monday) drives the calendar widget.
+A CalDAV collection URL and user are stored with that widget. The password
+is protected for storage (DPAPI on Windows) and is not written into the
+on-screen snapshot.
 
 ## `[privacy]`
 

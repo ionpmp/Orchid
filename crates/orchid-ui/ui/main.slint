@@ -290,6 +290,8 @@ export component MainWindow inherits Window {
     callback calendar-nudge-editor-end(string, int);
     callback calendar-editor-notes(string, string);
     callback calendar-editor-color(string, int);
+    callback calendar-caldav-save(string, string, string, string);
+    callback calendar-caldav-sync(string);
     callback password-search-changed(string);
     callback password-entry-clicked(string);
     callback password-copy-password(string);
@@ -777,6 +779,8 @@ export component MainWindow inherits Window {
             calendar-nudge-editor-end(id, d) => { root.calendar-nudge-editor-end(id, d); }
             calendar-editor-notes(id, t) => { root.calendar-editor-notes(id, t); }
             calendar-editor-color(id, c) => { root.calendar-editor-color(id, c); }
+            calendar-caldav-save(id, url, user, password) => { root.calendar-caldav-save(id, url, user, password); }
+            calendar-caldav-sync(id) => { root.calendar-caldav-sync(id); }
             password-search-changed(q) => { root.password-search-changed(q); }
             password-entry-clicked(id) => { root.password-entry-clicked(id); }
             password-copy-password(id) => { root.password-copy-password(id); }

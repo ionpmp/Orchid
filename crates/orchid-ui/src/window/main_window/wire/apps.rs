@@ -607,5 +607,21 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_calendar_caldav_save({
+            let t = t.clone();
+            move |id, url, user, password| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_caldav_save(&id, &url, &user, &password);
+                }
+            }
+        });
+        self.window.on_calendar_caldav_sync({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_calendar_caldav_sync(&id);
+                }
+            }
+        });
     }
 }

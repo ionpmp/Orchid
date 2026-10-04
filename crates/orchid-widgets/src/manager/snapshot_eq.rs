@@ -801,6 +801,9 @@ fn calendar_payload_eq(a: &CalendarPayload, b: &CalendarPayload) -> bool {
         && a.editor_notes == b.editor_notes
         && a.editor_color == b.editor_color
         && a.delete_confirm_open == b.delete_confirm_open
+        && a.caldav_url == b.caldav_url
+        && a.caldav_user == b.caldav_user
+        && a.caldav_status == b.caldav_status
 }
 
 fn opt_f32_eq(a: Option<f32>, b: Option<f32>) -> bool {

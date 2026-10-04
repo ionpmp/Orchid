@@ -37,6 +37,9 @@ pub(crate) fn empty_calendar_model(locale: &LocaleManager) -> CalendarModel {
             editor_notes: String::new(),
             editor_color: 0,
             delete_confirm_open: false,
+            caldav_url: String::new(),
+            caldav_user: String::new(),
+            caldav_status: String::new(),
         },
     )
 }
@@ -120,6 +123,9 @@ pub(crate) fn patch_calendar_model(
     model.editor_color = p.editor_color;
     model.editor_date_label = selected_day_label(locale, &p.editor_date).into();
     model.delete_confirm_open = p.delete_confirm_open;
+    model.caldav_url = p.caldav_url.clone().into();
+    model.caldav_user = p.caldav_user.clone().into();
+    model.caldav_status = caldav_status_label(locale, &p.caldav_status).into();
     model.tip_time_minus = locale
         .tr_args(
             "calendar-tip-time-minus",
@@ -132,6 +138,45 @@ pub(crate) fn patch_calendar_model(
             &orchid_i18n::FluentArgs::new().with("minutes", p.time_step_minutes.to_string()),
         )
         .into();
+}
+
+fn caldav_status_label(locale: &LocaleManager, token: &str) -> String {
+    if token.is_empty() {
+        return String::new();
+    }
+    if token == "working" {
+        return locale.tr("calendar-caldav-working");
+    }
+    if let Some(rest) = token.strip_prefix("ok:") {
+        let mut parts = rest.split(':');
+        let count = parts.next().unwrap_or("0");
+        let skipped = parts.next().unwrap_or("0");
+        if skipped != "0" {
+            return locale.tr_args(
+                "calendar-caldav-ok-skipped",
+                &orchid_i18n::FluentArgs::new()
+                    .with("count", count)
+                    .with("skipped", skipped),
+            );
+        }
+        return locale.tr_args(
+            "calendar-caldav-ok",
+            &orchid_i18n::FluentArgs::new().with("count", count),
+        );
+    }
+    match token {
+        "need-account" => locale.tr("calendar-caldav-need-account"),
+        "bad-url" => locale.tr("calendar-caldav-bad-url"),
+        "conflict" => locale.tr("calendar-caldav-conflict"),
+        "secret" => locale.tr("calendar-caldav-secret"),
+        other => {
+            let reason = other.strip_prefix("failed:").unwrap_or(other);
+            locale.tr_args(
+                "calendar-caldav-failed",
+                &orchid_i18n::FluentArgs::new().with("reason", reason),
+            )
+        }
+    }
 }
 
 fn sync_calendar_days(model: &ModelRc<CalendarDayEntry>, p: &CalendarPayload) {
@@ -336,6 +381,15 @@ fn base_model(locale: &LocaleManager, p: &CalendarPayload) -> CalendarModel {
             .into(),
         tip_hour_minus: locale.tr("calendar-tip-hour-minus").into(),
         tip_hour_plus: locale.tr("calendar-tip-hour-plus").into(),
+        caldav_url: p.caldav_url.clone().into(),
+        caldav_user: p.caldav_user.clone().into(),
+        caldav_status: caldav_status_label(locale, &p.caldav_status).into(),
+        caldav_url_label: locale.tr("calendar-caldav-url").into(),
+        caldav_user_label: locale.tr("calendar-caldav-user").into(),
+        caldav_password_label: locale.tr("calendar-caldav-password").into(),
+        caldav_save_label: locale.tr("calendar-caldav-save").into(),
+        caldav_sync_label: locale.tr("calendar-caldav-sync").into(),
+        caldav_hint: locale.tr("calendar-caldav-hint").into(),
     }
 }
 
