@@ -42,6 +42,7 @@ pub(crate) fn empty_mail_model(locale: &LocaleManager) -> MailModel {
             compose_cc: String::new(),
             compose_subject: String::new(),
             compose_body: String::new(),
+            search_query: String::new(),
         },
         locale,
     )
@@ -89,6 +90,7 @@ pub(crate) fn build_mail_model(payload: &MailPayload, locale: &LocaleManager) ->
                     flagged: m.flagged,
                     has_attachment: m.has_attachment,
                     selected: m.selected,
+                    thread_indent: m.thread_indent,
                 })
                 .collect::<Vec<_>>(),
         )),
@@ -120,6 +122,7 @@ pub(crate) fn build_mail_model(payload: &MailPayload, locale: &LocaleManager) ->
         compose_cc: payload.compose_cc.clone().into(),
         compose_subject: payload.compose_subject.clone().into(),
         compose_body: payload.compose_body.clone().into(),
+        search_query: payload.search_query.clone().into(),
         empty_label: locale.tr("mail-empty").into(),
         add_account_label: locale.tr("mail-add-account").into(),
         discover_label: locale.tr("mail-discover").into(),
@@ -127,6 +130,7 @@ pub(crate) fn build_mail_model(payload: &MailPayload, locale: &LocaleManager) ->
         oauth_label: locale.tr("mail-oauth").into(),
         cancel_label: locale.tr("mail-cancel").into(),
         refresh_label: locale.tr("mail-refresh").into(),
+        search_placeholder: locale.tr("mail-search-placeholder").into(),
         compose_label: locale.tr("mail-compose").into(),
         send_label: locale.tr("mail-send").into(),
         draft_label: locale.tr("mail-save-draft").into(),

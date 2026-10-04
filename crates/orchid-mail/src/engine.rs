@@ -169,6 +169,45 @@ impl MailEngine {
         Ok(())
     }
 
+    /// Ask the server for `TEXT` matches and store those headers in the cache.
+    pub async fn search_folder(
+        &self,
+        account_id: Uuid,
+        folder: &str,
+        query: &str,
+    ) -> Result<Vec<MessageHeader>> {
+        let mut session = self.session(account_id).await?;
+        let headers = imap::search_headers(&mut session, account_id, folder, query, 100).await?;
+        self.cache.upsert_headers(&headers)?;
+        let _ = session.logout().await;
+        Ok(headers)
+    }
+
+    /// IDLE the folder for up to `limit`. `Ok(true)` means the mailbox changed.
+    pub async fn idle_folder(
+        &self,
+        account_id: Uuid,
+        folder: &str,
+        limit: std::time::Duration,
+    ) -> Result<bool> {
+        let session = self.session(account_id).await?;
+        imap::idle_for(session, folder, limit).await
+    }
+
+    async fn session(&self, account_id: Uuid) -> Result<imap::ImapSession> {
+        let account = self
+            .accounts
+            .get(account_id)
+            .ok_or_else(|| MailError::NotFound(account_id.to_string()))?;
+        let mut secrets = self.secrets.get(account_id);
+        if account.auth == AuthKind::Oauth2 {
+            secrets =
+                oauth::ensure_access_token(&account, &secrets, Some(&self.secrets), &self.http)
+                    .await?;
+        }
+        imap::connect(&account, &secrets).await
+    }
+
     /// Cached folders.
     pub fn folders(&self, account_id: Uuid) -> Result<Vec<MailFolder>> {
         self.cache.folders(account_id)

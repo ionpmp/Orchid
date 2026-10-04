@@ -1,7 +1,9 @@
 //! IMAP session helpers.
 
 use std::collections::HashSet;
+use std::time::Duration;
 
+use async_imap::extensions::idle::IdleResponse;
 use async_imap::types::{Fetch, NameAttribute};
 use async_imap::{Authenticator, Client, Session};
 use futures::TryStreamExt;
@@ -18,7 +20,8 @@ use crate::mime_util::{header_fields, parse_rfc822};
 use crate::secrets::AccountSecrets;
 use crate::tls;
 
-type ImapSession = Session<TlsStream<TcpStream>>;
+/// Authenticated IMAP session over TLS.
+pub type ImapSession = Session<TlsStream<TcpStream>>;
 
 struct Xoauth2 {
     user: String,
@@ -34,15 +37,41 @@ impl Authenticator for Xoauth2 {
 }
 
 /// Open an authenticated IMAP session for `account`.
+///
+/// Implicit TLS uses the configured port as-is. STARTTLS connects in the
+/// clear, reads the greeting, upgrades, and only then sends the password.
+/// Cleartext login is refused.
 pub async fn connect(account: &MailAccount, secrets: &AccountSecrets) -> Result<ImapSession> {
-    if account.imap.tls != TlsMode::Implicit {
-        return Err(MailError::Imap(
-            "only implicit TLS IMAP (port 993) is supported in this build".into(),
-        ));
+    match account.imap.tls {
+        TlsMode::Implicit => {
+            let tls = tls::connect_tls(&account.imap.host, account.imap.port).await?;
+            let client = Client::new(tls);
+            login(client, account, secrets).await
+        }
+        TlsMode::StartTls => {
+            let tcp = tls::connect_tcp(&account.imap.host, account.imap.port).await?;
+            let tcp = begin_starttls(tcp).await?;
+            let tls = tls::upgrade(&account.imap.host, tcp).await?;
+            let client = Client::new(tls);
+            login(client, account, secrets).await
+        }
+        TlsMode::None => Err(MailError::Imap("cleartext IMAP login is not used".into())),
     }
-    let tls = tls::connect_tls(&account.imap.host, account.imap.port).await?;
-    let client = Client::new(tls);
-    login(client, account, secrets).await
+}
+
+/// Read the greeting and complete the STARTTLS command. The returned stream
+/// is still cleartext and must be wrapped in TLS before LOGIN.
+pub async fn begin_starttls(stream: TcpStream) -> Result<TcpStream> {
+    let mut client = Client::new(stream);
+    client
+        .read_response()
+        .await?
+        .ok_or_else(|| MailError::Imap("missing IMAP greeting".into()))?;
+    client
+        .run_command_and_check_ok("STARTTLS", None)
+        .await
+        .map_err(MailError::from)?;
+    Ok(client.into_inner())
 }
 
 async fn login<T>(
@@ -180,6 +209,10 @@ pub async fn fetch_headers(
         .await?;
     let fetches: Vec<Fetch> = fetches.try_collect().await.map_err(MailError::from)?;
 
+    Ok(headers_from_fetches(fetches, account_id, folder))
+}
+
+fn headers_from_fetches(fetches: Vec<Fetch>, account_id: Uuid, folder: &str) -> Vec<MessageHeader> {
     let mut headers = Vec::new();
     for fetch in fetches {
         let uid = match fetch.uid {
@@ -208,7 +241,72 @@ pub async fn fetch_headers(
         });
     }
     headers.sort_by(|a, b| b.date_unix.cmp(&a.date_unix).then(b.uid.cmp(&a.uid)));
-    Ok(headers)
+    headers
+}
+
+/// Search with IMAP `TEXT` and return at most `limit` matching headers.
+///
+/// The query is one quoted string. Control characters are rejected so the
+/// text cannot add another search key.
+pub async fn search_headers(
+    session: &mut ImapSession,
+    account_id: Uuid,
+    folder: &str,
+    query: &str,
+    limit: u32,
+) -> Result<Vec<MessageHeader>> {
+    let quoted = crate::quote_imap(query)
+        .ok_or_else(|| MailError::Imap("search text is empty or has a control character".into()))?;
+    session.select(folder).await?;
+    let found = session
+        .uid_search(format!("TEXT {quoted}"))
+        .await
+        .map_err(MailError::from)?;
+    if found.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut uids: Vec<_> = found.into_iter().collect();
+    uids.sort_unstable();
+    uids.reverse();
+    uids.truncate(limit as usize);
+    let set = uids
+        .iter()
+        .map(|uid| uid.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let fetches = session
+        .uid_fetch(set, "(UID FLAGS BODY.PEEK[HEADER])")
+        .await?;
+    let fetches: Vec<Fetch> = fetches.try_collect().await.map_err(MailError::from)?;
+    Ok(headers_from_fetches(fetches, account_id, folder))
+}
+
+/// SELECT `folder` and IDLE until `limit` or the first mailbox change.
+///
+/// `Ok(false)` means IDLE is unavailable or nothing changed. The password is
+/// never sent on a connection that failed to upgrade.
+pub async fn idle_for(session: ImapSession, folder: &str, limit: Duration) -> Result<bool> {
+    idle_session(session, folder, limit).await
+}
+
+async fn idle_session<T>(mut session: Session<T>, folder: &str, limit: Duration) -> Result<bool>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + std::fmt::Debug,
+{
+    session.select(folder).await?;
+    let mut idle = session.idle();
+    if idle.init().await.is_err() {
+        return Ok(false);
+    }
+    let (wait, _stop) = idle.wait_with_timeout(limit);
+    let response = match wait.await {
+        Ok(response) => response,
+        Err(_) => return Ok(false),
+    };
+    if let Ok(mut session) = idle.done().await {
+        let _ = session.logout().await;
+    }
+    Ok(matches!(response, IdleResponse::NewData(_)))
 }
 
 /// Fetch one full RFC822 body.
@@ -297,5 +395,105 @@ pub fn password_secret(password: &SecretString) -> AccountSecrets {
     AccountSecrets {
         password: Some(password.expose_secret().to_string()),
         ..AccountSecrets::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    async fn read_line(sock: &mut TcpStream) -> String {
+        let mut buf = Vec::new();
+        let mut byte = [0u8; 1];
+        loop {
+            let n = sock.read(&mut byte).await.unwrap();
+            if n == 0 {
+                break;
+            }
+            buf.push(byte[0]);
+            if buf.ends_with(b"\r\n") {
+                break;
+            }
+        }
+        String::from_utf8_lossy(&buf).trim().to_string()
+    }
+
+    fn tag_of(line: &str) -> &str {
+        line.split_whitespace().next().unwrap_or("A")
+    }
+
+    #[tokio::test]
+    async fn starttls_reads_the_greeting_before_the_command() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            sock.write_all(b"* OK ready\r\n").await.unwrap();
+            let line = read_line(&mut sock).await;
+            assert!(line.to_ascii_uppercase().contains("STARTTLS"), "{line}");
+            let reply = format!("{} OK begin TLS\r\n", tag_of(&line));
+            sock.write_all(reply.as_bytes()).await.unwrap();
+            let _ = read_line(&mut sock).await;
+        });
+        let tcp = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        begin_starttls(tcp).await.unwrap();
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn cleartext_login_is_refused() {
+        let mut account = MailAccount::new("ada@example.com", "Ada");
+        account.imap.tls = TlsMode::None;
+        account.imap.host = "127.0.0.1".into();
+        account.imap.port = 1;
+        let err = connect(&account, &AccountSecrets::default())
+            .await
+            .unwrap_err();
+        let text = err.to_string();
+        assert!(text.contains("cleartext"), "{text}");
+    }
+
+    #[tokio::test]
+    async fn idle_reports_a_new_message() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            sock.write_all(b"* OK ready\r\n").await.unwrap();
+            loop {
+                let line = read_line(&mut sock).await;
+                if line.is_empty() {
+                    break;
+                }
+                let tag = tag_of(&line).to_string();
+                let upper = line.to_ascii_uppercase();
+                if upper.contains(" SELECT ") {
+                    let reply = format!("* 1 EXISTS\r\n{tag} OK [READ-WRITE] selected\r\n");
+                    sock.write_all(reply.as_bytes()).await.unwrap();
+                } else if upper.contains(" IDLE") {
+                    sock.write_all(b"+ idling\r\n").await.unwrap();
+                    sock.write_all(b"* 2 EXISTS\r\n").await.unwrap();
+                    let done = read_line(&mut sock).await;
+                    assert!(done.to_ascii_uppercase().contains("DONE"), "{done}");
+                    let reply = format!("{tag} OK idle done\r\n");
+                    sock.write_all(reply.as_bytes()).await.unwrap();
+                } else {
+                    let reply = format!("{tag} OK\r\n");
+                    sock.write_all(reply.as_bytes()).await.unwrap();
+                }
+            }
+        });
+        let tcp = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        let mut account = MailAccount::new("ada@example.com", "Ada");
+        account.imap.username = "ada".into();
+        let secrets = secret_password("secret");
+        let session = login(Client::new(tcp), &account, &secrets).await.unwrap();
+        let changed = idle_session(session, "INBOX", Duration::from_secs(5))
+            .await
+            .unwrap();
+        assert!(changed);
+        server.await.unwrap();
     }
 }

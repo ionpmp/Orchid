@@ -33,6 +33,8 @@ pub struct MailMessageRow {
     pub flagged: bool,
     pub has_attachment: bool,
     pub selected: bool,
+    /// 0 for the newest message in a subject thread, 1 for an older reply.
+    pub thread_indent: i32,
 }
 
 /// Wizard / compose / reading state for the mail UI.
@@ -73,4 +75,6 @@ pub struct MailPayload {
     pub compose_cc: String,
     pub compose_subject: String,
     pub compose_body: String,
+    /// Current mailbox search. Empty shows the cached folder.
+    pub search_query: String,
 }

@@ -72,6 +72,8 @@ struct UiState {
     compose_body: String,
     compose_in_reply_to: Option<String>,
     compose_references: Option<String>,
+    search: String,
+    search_hits: Option<Vec<orchid_mail::MessageHeader>>,
 }
 
 impl Default for UiState {
@@ -109,6 +111,8 @@ impl Default for UiState {
             compose_body: String::new(),
             compose_in_reply_to: None,
             compose_references: None,
+            search: String::new(),
+            search_hits: None,
         }
     }
 }
@@ -164,21 +168,38 @@ impl MailHandle {
                     selected: f.path == st.selected_folder,
                 })
                 .collect();
-            let messages = self
-                .engine
-                .headers(aid, &st.selected_folder, 100)
-                .unwrap_or_default()
+            let headers = if st.search.trim().is_empty() {
+                self.engine
+                    .headers(aid, &st.selected_folder, 100)
+                    .unwrap_or_default()
+            } else if let Some(hits) = &st.search_hits {
+                hits.clone()
+            } else {
+                let query = st.search.trim().to_lowercase();
+                self.engine
+                    .headers(aid, &st.selected_folder, 100)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|header| header_matches(header, &query))
+                    .collect()
+            };
+            let rows = orchid_mail::arrange(&headers);
+            let messages = rows
                 .into_iter()
-                .map(|h| MailMessageRow {
-                    uid: h.uid as i32,
-                    from: h.from,
-                    subject: h.subject,
-                    date: h.date,
-                    snippet: h.snippet,
-                    seen: h.seen,
-                    flagged: h.flagged,
-                    has_attachment: h.has_attachment,
-                    selected: Some(h.uid) == st.selected_uid,
+                .map(|row| {
+                    let header = &headers[row.index];
+                    MailMessageRow {
+                        uid: header.uid as i32,
+                        from: header.from.clone(),
+                        subject: header.subject.clone(),
+                        date: header.date.clone(),
+                        snippet: header.snippet.clone(),
+                        seen: header.seen,
+                        flagged: header.flagged,
+                        has_attachment: header.has_attachment,
+                        selected: Some(header.uid) == st.selected_uid,
+                        thread_indent: i32::from(row.indent),
+                    }
                 })
                 .collect();
             (folders, messages)
@@ -225,6 +246,7 @@ impl MailHandle {
             compose_cc: st.compose_cc,
             compose_subject: st.compose_subject,
             compose_body: st.compose_body,
+            search_query: st.search,
         }
     }
 
@@ -234,17 +256,8 @@ impl MailHandle {
         let interval = std::time::Duration::from_secs(120);
         self.jobs.schedule(key.clone(), interval, move || {
             let handle = Arc::clone(&handle);
-            let key = key.clone();
             async move {
-                handle
-                    .jobs
-                    .run_coalesced(&key, || {
-                        let handle = Arc::clone(&handle);
-                        async move {
-                            handle.sync_now().await;
-                        }
-                    })
-                    .await;
+                handle.periodic().await;
             }
         });
     }
@@ -259,23 +272,56 @@ impl MailHandle {
         let interval = std::time::Duration::from_secs(120);
         self.jobs.resume(key.clone(), interval, move || {
             let handle = Arc::clone(&handle);
-            let key = key.clone();
             async move {
-                handle
-                    .jobs
-                    .run_coalesced(&key, || {
-                        let handle = Arc::clone(&handle);
-                        async move {
-                            handle.sync_now().await;
-                        }
-                    })
-                    .await;
+                handle.periodic().await;
             }
         });
     }
 
     fn cancel_job(&self) {
         self.jobs.cancel(&job_key(self.instance_id));
+    }
+
+    async fn periodic(self: &Arc<Self>) {
+        let key = job_key(self.instance_id);
+        self.jobs
+            .run_coalesced(&key, || {
+                let handle = Arc::clone(self);
+                async move {
+                    handle.sync_now().await;
+                }
+            })
+            .await;
+        if self.watch_mailbox().await {
+            self.jobs
+                .run_coalesced(&key, || {
+                    let handle = Arc::clone(self);
+                    async move {
+                        handle.sync_now().await;
+                    }
+                })
+                .await;
+        }
+    }
+
+    async fn watch_mailbox(&self) -> bool {
+        let account = self
+            .state
+            .read()
+            .selected_account
+            .or_else(|| self.engine.accounts().first().map(|account| account.id));
+        let Some(account_id) = account else {
+            return false;
+        };
+        let folder = self.state.read().selected_folder.clone();
+        match self
+            .engine
+            .idle_folder(account_id, &folder, std::time::Duration::from_secs(90))
+            .await
+        {
+            Ok(changed) => changed,
+            Err(_) => false,
+        }
     }
 
     async fn sync_now(&self) {
@@ -354,6 +400,8 @@ pub fn select_folder(instance_id: Uuid, folder: &str) {
     if let Some(h) = MAIL_LIVE.get(&instance_id) {
         h.state.write().selected_folder = folder.to_string();
         h.state.write().selected_uid = None;
+        h.state.write().search.clear();
+        h.state.write().search_hits = None;
         h.publish();
         let account = h.state.read().selected_account;
         let folder = folder.to_string();
@@ -435,6 +483,54 @@ pub fn refresh(instance_id: Uuid) {
             }
         });
     }
+}
+
+/// Filter the open folder and ask IMAP for `TEXT` matches.
+pub fn set_search(instance_id: Uuid, query: &str) {
+    let Some(h) = MAIL_LIVE.get(&instance_id) else {
+        return;
+    };
+    let query = query.to_string();
+    {
+        let mut state = h.state.write();
+        state.search = query.clone();
+        state.search_hits = None;
+    }
+    h.publish();
+    let query = query.trim().to_string();
+    if query.is_empty() {
+        return;
+    }
+    let account = h.state.read().selected_account;
+    let folder = h.state.read().selected_folder.clone();
+    let handle = Arc::clone(h.value());
+    let jobs = Arc::clone(&handle.jobs);
+    jobs.spawn_coalesced(format!("mail-search:{instance_id}"), move || {
+        let handle = Arc::clone(&handle);
+        let query = query.clone();
+        let folder = folder.clone();
+        async move {
+            let Some(account_id) = account else {
+                return;
+            };
+            match handle
+                .engine
+                .search_folder(account_id, &folder, &query)
+                .await
+            {
+                Ok(hits) => {
+                    let mut state = handle.state.write();
+                    if state.search.trim() == query {
+                        state.search_hits = Some(hits);
+                    }
+                }
+                Err(err) => {
+                    handle.state.write().status = err.to_string();
+                }
+            }
+            handle.publish();
+        }
+    });
 }
 
 /// Open the account wizard.
@@ -1139,4 +1235,10 @@ pub fn descriptor(engine: Arc<MailEngine>) -> WidgetDescriptor {
         allows_multiple_instances: true,
         factory,
     }
+}
+
+fn header_matches(header: &orchid_mail::MessageHeader, query: &str) -> bool {
+    header.from.to_lowercase().contains(query)
+        || header.subject.to_lowercase().contains(query)
+        || header.snippet.to_lowercase().contains(query)
 }

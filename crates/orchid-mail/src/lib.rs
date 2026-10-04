@@ -19,6 +19,7 @@ pub mod oauth;
 pub mod secrets;
 pub mod smtp;
 pub mod store;
+pub mod thread;
 pub mod tls;
 
 pub use account::{
@@ -30,6 +31,7 @@ pub use engine::MailEngine;
 pub use error::{MailError, Result};
 pub use mime_util::{html_to_text, sanitize_html_for_webview};
 pub use secrets::{AccountSecrets, MailSecretsStore};
+pub use thread::{arrange, quote_imap, thread_key, ThreadRow};
 
 /// Crate version.
 #[must_use]

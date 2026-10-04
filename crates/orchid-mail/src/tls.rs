@@ -23,10 +23,20 @@ pub fn client_config() -> Arc<ClientConfig> {
 
 /// Connect TCP + implicit TLS to `host:port`.
 pub async fn connect_tls(host: &str, port: u16) -> Result<TlsStream<TcpStream>> {
+    let stream = connect_tcp(host, port).await?;
+    upgrade(host, stream).await
+}
+
+/// Open a cleartext TCP connection. Used before STARTTLS.
+pub async fn connect_tcp(host: &str, port: u16) -> Result<TcpStream> {
     let addr = format!("{host}:{port}");
-    let stream = TcpStream::connect(&addr)
+    TcpStream::connect(&addr)
         .await
-        .map_err(|e| MailError::Imap(format!("connect {addr}: {e}")))?;
+        .map_err(|e| MailError::Imap(format!("connect {addr}: {e}")))
+}
+
+/// Wrap an already-open TCP stream in TLS. There is no second IMAP greeting.
+pub async fn upgrade(host: &str, stream: TcpStream) -> Result<TlsStream<TcpStream>> {
     let connector = TlsConnector::from(client_config());
     let name = rustls::pki_types::ServerName::try_from(host.to_string())
         .map_err(|e| MailError::Imap(format!("invalid host {host}: {e}")))?;

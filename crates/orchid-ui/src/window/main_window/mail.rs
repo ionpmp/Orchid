@@ -47,6 +47,12 @@ impl MainWindowController {
         }
     }
 
+    pub(super) fn on_mail_search(self: &Arc<Self>, id: &SharedString, query: &SharedString) {
+        if let Some(iid) = Self::parse_mail_id(id) {
+            orchid_widgets::builtin::mail::set_search(iid, query.as_str());
+        }
+    }
+
     pub(super) fn on_mail_open_wizard(self: &Arc<Self>, id: &SharedString) {
         if let Some(iid) = Self::parse_mail_id(id) {
             orchid_widgets::builtin::mail::open_wizard(iid);

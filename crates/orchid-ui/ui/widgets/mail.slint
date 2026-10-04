@@ -7,6 +7,7 @@ export component MailView inherits Rectangle {
     callback select-account(string);
     callback select-folder(string);
     callback select-message(int);
+    callback search-changed(string);
     callback refresh();
     callback open-wizard();
     callback show-mailbox();
@@ -375,22 +376,37 @@ export component MailView inherits Rectangle {
                     width: 240px;
                     background: Theme.surface-raised;
                     border-radius: Theme.radius-md;
-                    Flickable {
-                        width: 100%;
-                        height: 100%;
-                        viewport-width: self.width;
-                        VerticalLayout {
-                            padding: Theme.space-1;
-                            spacing: Theme.space-1;
-                            for msg[i] in root.model.messages : Rectangle {
-                                height: 56px;
-                                border-radius: Theme.radius-sm;
-                                background: msg.selected ? Theme.accent-soft :
-                                    ta.has-hover ? Theme.state-hover : Colors.transparent;
-                                ta := TouchArea { clicked => { root.select-message(msg.uid); } }
-                                VerticalLayout {
-                                    padding: Theme.space-1;
-                                    spacing: 2px;
+                    VerticalLayout {
+                        padding: Theme.space-1;
+                        spacing: Theme.space-1;
+                        Text {
+                            text: root.model.search-placeholder;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-xs;
+                        }
+                        TextInput {
+                            text: root.model.search-query;
+                            color: Theme.text-primary;
+                            single-line: true;
+                            edited => { root.search-changed(self.text); }
+                        }
+                        Flickable {
+                            vertical-stretch: 1;
+                            viewport-width: self.width;
+                            VerticalLayout {
+                                spacing: Theme.space-1;
+                                for msg[i] in root.model.messages : Rectangle {
+                                    height: 56px;
+                                    border-radius: Theme.radius-sm;
+                                    background: msg.selected ? Theme.accent-soft :
+                                        ta.has-hover ? Theme.state-hover : Colors.transparent;
+                                    ta := TouchArea { clicked => { root.select-message(msg.uid); } }
+                                    VerticalLayout {
+                                        padding-left: msg.thread-indent > 0 ? 16px : Theme.space-1;
+                                        padding-right: Theme.space-1;
+                                        padding-top: Theme.space-1;
+                                        padding-bottom: Theme.space-1;
+                                        spacing: 2px;
                                     HorizontalLayout {
                                         Text {
                                             text: msg.from;
@@ -416,6 +432,7 @@ export component MailView inherits Rectangle {
                             }
                         }
                     }
+                }
                 }
 
                 // Reading pane

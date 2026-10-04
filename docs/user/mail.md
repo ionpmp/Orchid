@@ -34,8 +34,17 @@ selected account and folder.
 
 ## Limits
 
-- Implicit TLS IMAP (port 993) is the supported receive path in this
-  release. STARTTLS IMAP is not wired yet.
-- Search, conversation threading, IMAP IDLE, rules, and Microsoft Graph
-  are not included.
+- IMAP can use implicit TLS (usually port 993) or STARTTLS (usually port
+  143). The password is sent only after the TLS handshake. Cleartext IMAP
+  login is refused.
+- The search box filters the cached folder immediately and also runs an
+  IMAP `TEXT` search so matches outside the latest 100 headers can appear.
+  A search string with a control character is rejected. Rules and
+  Microsoft Graph are not included.
+- Messages in one folder are grouped by subject after `Re:` / `Fwd:` (and
+  a few translated prefixes) are removed. The newest message in a group is
+  flush left; older ones are indented. This is not the IMAP THREAD command.
+- The background refresh waits on IMAP IDLE for about 90 seconds. New mail
+  starts another sync. Refresh in the toolbar still syncs immediately and
+  does not wait on IDLE. A server without IDLE keeps the timed sync.
 - Calendar and contacts stay separate from Mail.

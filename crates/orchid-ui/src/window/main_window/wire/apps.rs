@@ -220,6 +220,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_mail_search({
+            let t = t.clone();
+            move |id, query| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_search(&id, &query);
+                }
+            }
+        });
         self.window.on_mail_refresh({
             let t = t.clone();
             move |id| {

@@ -25,6 +25,12 @@ release yet.
   profiles, Mozilla ISPDB, DNS SRV), DPAPI-stored secrets, SQLite header
   cache, three-pane reading, HTML via WebView2, compose/reply/forward,
   and OAuth hooks for Gmail / Microsoft 365.
+- **Mail client:** IMAP can use implicit TLS or STARTTLS. Cleartext login
+  is refused. The search box filters the open folder and runs an IMAP
+  `TEXT` search. Messages group by subject after reply prefixes are
+  removed. The background refresh uses IMAP IDLE for about 90 seconds and
+  syncs again when new mail arrives. Toolbar Refresh does not wait on IDLE.
+  Rules and Microsoft Graph are not included.
 - **Agent conversation:** Universal Search `?` and the Agent widget share
   `data/agent-chat.json`. The model can read a local text file, list one
   folder, and search the open index. A proposed file write is stored until
@@ -505,12 +511,21 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
+- **Jyotish**: the day view keeps the week strip, score, and panchanga in
+  reach. Birth date, time, and place open one at a time, and birth time uses
+  steppers instead of minute wheels. Rectification sits above the life-year
+  list; event years step by one or by ten.
 - **Spreadsheets**: the open cell table is shared across snapshot ticks, so
   panning the viewer does not copy every cell string first.
 - **Terminal tabs**: a snapshot fills pane and divider geometry for the
   active tab. Other tabs still carry their title and focus.
 - **File manager**: an ASCII quick filter or Find name matches in place.
   Sorting by size or date no longer lowercases every file name.
+- **File manager chrome**: tabs show the folder name and scroll instead of
+  the full path overflowing the pane. The path is the address bar on the
+  same row as back, up, and the view and sort menus. The places list stays
+  visible in a single pane. The drive button shows the current root. Details
+  columns shrink to the pane, and the header stays visible while scrolling.
 - **Terminal resize**: a content tick reuses the frame size already read
   while patching the row, instead of cloning that row again to measure the PTY.
 - **Terminal output**: the first chunk records which widget owns the
@@ -872,6 +887,10 @@ release yet.
 
 ### Fixed
 
+- Audio and video players keep transport controls on screen: seek and volume
+  are finger-sized sliders, library actions scroll instead of being clipped,
+  and track buttons use icons with readable labels. Lyrics follow the
+  current line. The video player accepts a volume drag.
 - The mail widget is translated in every bundled locale.
 - Password editing, backup and diagnostics export, and dock labels that
   were still English are translated in every bundled locale.

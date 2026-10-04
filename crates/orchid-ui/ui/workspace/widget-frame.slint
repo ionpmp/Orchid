@@ -204,6 +204,7 @@ export component WidgetFrame inherits Rectangle {
     callback mail-select-account(string, string);
     callback mail-select-folder(string, string);
     callback mail-select-message(string, int);
+    callback mail-search(string, string);
     callback mail-refresh(string);
     callback mail-open-wizard(string);
     callback mail-show-mailbox(string);
@@ -361,6 +362,7 @@ export component WidgetFrame inherits Rectangle {
     callback fm-breadcrumb-clicked(string, int, string);
     callback fm-path-edit-changed(string, int, string);
     callback fm-path-edit-commit(string, int, string);
+    callback fm-view-mode-set(string, int, int);
     callback fm-view-mode-cycle(string, int);
     callback fm-sort-cycle(string, int);
     callback fm-sort-column-clicked(string, int, int);
@@ -903,6 +905,7 @@ export component WidgetFrame inherits Rectangle {
                     select-account(a) => { root.mail-select-account(root.model.instance-id, a); }
                     select-folder(f) => { root.mail-select-folder(root.model.instance-id, f); }
                     select-message(u) => { root.mail-select-message(root.model.instance-id, u); }
+                    search-changed(q) => { root.mail-search(root.model.instance-id, q); }
                     refresh => { root.mail-refresh(root.model.instance-id); }
                     open-wizard => { root.mail-open-wizard(root.model.instance-id); }
                     show-mailbox => { root.mail-show-mailbox(root.model.instance-id); }
@@ -1138,6 +1141,7 @@ export component WidgetFrame inherits Rectangle {
                     breadcrumb-clicked(p, path) => { root.fm-breadcrumb-clicked(root.model.instance-id, p, path); }
                     path-edit-changed(p, t) => { root.fm-path-edit-changed(root.model.instance-id, p, t); }
                     path-edit-commit(p, t) => { root.fm-path-edit-commit(root.model.instance-id, p, t); }
+                    view-mode-set(p, mode) => { root.fm-view-mode-set(root.model.instance-id, p, mode); }
                     view-mode-cycle(p) => { root.fm-view-mode-cycle(root.model.instance-id, p); }
                     sort-cycle(p) => { root.fm-sort-cycle(root.model.instance-id, p); }
                     sort-column-clicked(p, col) => { root.fm-sort-column-clicked(root.model.instance-id, p, col); }
