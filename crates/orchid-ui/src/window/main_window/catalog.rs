@@ -213,6 +213,8 @@ pub(super) fn is_known_widget_type(type_id: &str) -> bool {
             | "clock"
             | "system"
             | "processes"
+            | "optimize"
+            | "protect"
             | "calculator"
             | "notes"
             | "agent"
@@ -241,6 +243,8 @@ fn apply_catalog_row_visibility(g: &WidgetCatalog, visible_ids: &std::collection
     g.set_show_clock(visible_ids.contains("clock"));
     g.set_show_system(visible_ids.contains("system"));
     g.set_show_processes(visible_ids.contains("processes"));
+    g.set_show_optimize(visible_ids.contains("optimize"));
+    g.set_show_protect(visible_ids.contains("protect"));
     g.set_show_calculator(visible_ids.contains("calculator"));
     g.set_show_notes(visible_ids.contains("notes"));
     g.set_show_agent(visible_ids.contains("agent"));
@@ -283,6 +287,8 @@ pub(super) fn dock_widget_description(locale: &LocaleManager, type_id: &str) -> 
         "clock" => "widget-clock-desc",
         "system" => "widget-system-desc",
         "processes" => "widget-processes-desc",
+        "optimize" => "widget-optimize-desc",
+        "protect" => "widget-protect-desc",
         "calculator" => "widget-calculator-desc",
         "notes" => "widget-notes-desc",
         "agent" => "widget-agent-desc",
@@ -348,6 +354,18 @@ pub(super) fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             label: locale.tr("dock-widget-processes").into(),
             description: dock_widget_description(locale, "processes"),
             icon: "processes".into(),
+        },
+        DockWidgetType {
+            type_id: "optimize".into(),
+            label: locale.tr("dock-widget-optimize").into(),
+            description: dock_widget_description(locale, "optimize"),
+            icon: "system".into(),
+        },
+        DockWidgetType {
+            type_id: "protect".into(),
+            label: locale.tr("dock-widget-protect").into(),
+            description: dock_widget_description(locale, "protect"),
+            icon: "system".into(),
         },
         DockWidgetType {
             type_id: "calculator".into(),

@@ -399,6 +399,12 @@ impl OrchidApp {
             .register(orchid_widgets::builtin::processes::descriptor())
             .map_err(|e| UiError::Slint(format!("register processes: {e}")))?;
         widget_registry
+            .register(orchid_widgets::builtin::optimize::descriptor())
+            .map_err(|e| UiError::Slint(format!("register optimize: {e}")))?;
+        widget_registry
+            .register(orchid_widgets::builtin::protect::descriptor())
+            .map_err(|e| UiError::Slint(format!("register protect: {e}")))?;
+        widget_registry
             .register(orchid_widgets::builtin::calculator::descriptor())
             .map_err(|e| UiError::Slint(format!("register calculator: {e}")))?;
         widget_registry

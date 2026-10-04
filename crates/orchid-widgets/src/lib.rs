@@ -47,14 +47,15 @@ pub use widget::payloads::{
     JyotishMonthSummary, JyotishPayload, JyotishPlanetRow, JyotishProfileCalCell,
     JyotishProfileEntry, JyotishRectifyView, JyotishSearchHit, JyotishYearSummary, MailAccountRow,
     MailFolderRow, MailMessageRow, MailPayload, ManagedFolderSidebarPayload, MediaPlayerPayload,
-    MoonPayload, NetworkMountPayload, NotesPayload, NotesTabRow, PanePayload,
-    PasswordEntryDetailView, PasswordEntryView, PasswordGroupView, PasswordManagerPayload,
-    ProcessGroup, ProcessRowView, ProcessSortColumn, ProcessesPayload, ProcessesTab,
-    RecentFileItemView, RecentFilesPayload, RssItemView, RssPayload, SearchCandidateView,
-    ServiceRowView, StartupRowView, SystemIndicator, SystemIndicatorKind, SystemPayload,
-    TabPayload, UniversalSearchPayload, UserRowView, VideoPlayerGroupRow, VideoPlayerItemRow,
-    VideoPlayerPayload, VideoPlayerRootRow, ViewerPayload, VisitHistoryItemPayload,
-    WeatherCityEntry, WeatherForecastDay, WeatherPayload, WeatherSearchHit, WeatherStatusTag,
+    MoonPayload, NetworkMountPayload, NotesPayload, NotesTabRow, OptimizePayload, OptimizeRow,
+    PanePayload, PasswordEntryDetailView, PasswordEntryView, PasswordGroupView,
+    PasswordManagerPayload, ProcessGroup, ProcessRowView, ProcessSortColumn, ProcessesPayload,
+    ProcessesTab, ProtectDrive, ProtectPayload, ProtectRow, RecentFileItemView, RecentFilesPayload,
+    RssItemView, RssPayload, SearchCandidateView, ServiceRowView, StartupRowView, SystemIndicator,
+    SystemIndicatorKind, SystemPayload, TabPayload, UniversalSearchPayload, UserRowView,
+    VideoPlayerGroupRow, VideoPlayerItemRow, VideoPlayerPayload, VideoPlayerRootRow, ViewerPayload,
+    VisitHistoryItemPayload, WeatherCityEntry, WeatherForecastDay, WeatherPayload,
+    WeatherSearchHit, WeatherStatusTag,
 };
 pub use workspace::{WorkspaceManager, MAX_WORKSPACES};
 

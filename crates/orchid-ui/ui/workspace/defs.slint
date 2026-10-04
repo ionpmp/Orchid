@@ -2394,6 +2394,74 @@ export struct MailModel {
     body-label: string,
 }
 
+export struct OptimizeRow {
+    id: string,
+    title: string,
+    detail: string,
+    choice-count: int,
+    checked: bool,
+    choice: int,
+    choice-0: string,
+    choice-1: string,
+    choice-2: string,
+    choice-3: string,
+    needs-admin: bool,
+}
+
+export struct ProtectRow {
+    id: string,
+    title: string,
+    detail: string,
+    size: string,
+    checked: bool,
+}
+
+export struct ProtectDrive {
+    label: string,
+    selected: bool,
+}
+
+export struct ProtectModel {
+    tab: int,
+    tab-traces: string,
+    tab-histories: string,
+    tab-wipe: string,
+    tab-network: string,
+    hint: string,
+    rows: [ProtectRow],
+    drives: [ProtectDrive],
+    passes: int,
+    wipe-progress: float,
+    status: string,
+    busy: bool,
+    free-label: string,
+    free-caption: string,
+    scan-label: string,
+    clean-label: string,
+    wipe-label: string,
+    cancel-label: string,
+    refresh-label: string,
+    passes-label: string,
+}
+
+export struct OptimizeModel {
+    tab: int,
+    tab-updates: string,
+    tab-privacy: string,
+    tab-explorer: string,
+    tab-shell: string,
+    tab-quiet: string,
+    tab-performance: string,
+    rows: [OptimizeRow],
+    hint: string,
+    status: string,
+    refresh-label: string,
+    restart-label: string,
+    admin-label: string,
+    unsupported: bool,
+    unsupported-label: string,
+}
+
 export struct WidgetFrameModel {
     instance-id: string,
     type-id: string,
@@ -2442,6 +2510,8 @@ export struct WidgetFrameModel {
     clock: ClockModel,
     system: SystemModel,
     processes: ProcessesModel,
+    optimize: OptimizeModel,
+    protect: ProtectModel,
     calculator: CalculatorModel,
     notes: NotesModel,
     agent: AgentModel,

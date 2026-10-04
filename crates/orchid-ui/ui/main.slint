@@ -235,6 +235,20 @@ export component MainWindow inherits Window {
     callback notes-zoom(string, int);
     callback notes-clear(string);
     callback notes-find(string, string, bool);
+    callback optimize-tab-changed(string, int);
+    callback optimize-toggled(string, string);
+    callback optimize-choice(string, string, int);
+    callback optimize-refresh(string);
+    callback optimize-restart-explorer(string);
+    callback protect-tab-changed(string, int);
+    callback protect-toggled(string, string);
+    callback protect-scan(string);
+    callback protect-clean(string);
+    callback protect-select-drive(string, int);
+    callback protect-set-passes(string, int);
+    callback protect-wipe(string);
+    callback protect-cancel(string);
+    callback protect-refresh(string);
     callback agent-send(string, string);
     callback agent-confirm(string);
     callback agent-dismiss(string);
@@ -726,6 +740,20 @@ export component MainWindow inherits Window {
             notes-zoom(id, d) => { root.notes-zoom(id, d); }
             notes-clear(id) => { root.notes-clear(id); }
             notes-find(id, q, fwd) => { root.notes-find(id, q, fwd); }
+            optimize-tab-changed(id, t) => { root.optimize-tab-changed(id, t); }
+            optimize-toggled(id, tweak) => { root.optimize-toggled(id, tweak); }
+            optimize-choice(id, tweak, index) => { root.optimize-choice(id, tweak, index); }
+            optimize-refresh(id) => { root.optimize-refresh(id); }
+            optimize-restart-explorer(id) => { root.optimize-restart-explorer(id); }
+            protect-tab-changed(id, t) => { root.protect-tab-changed(id, t); }
+            protect-toggled(id, row) => { root.protect-toggled(id, row); }
+            protect-scan(id) => { root.protect-scan(id); }
+            protect-clean(id) => { root.protect-clean(id); }
+            protect-select-drive(id, index) => { root.protect-select-drive(id, index); }
+            protect-set-passes(id, passes) => { root.protect-set-passes(id, passes); }
+            protect-wipe(id) => { root.protect-wipe(id); }
+            protect-cancel(id) => { root.protect-cancel(id); }
+            protect-refresh(id) => { root.protect-refresh(id); }
             agent-send(id, text) => { root.agent-send(id, text); }
             agent-confirm(id) => { root.agent-confirm(id); }
             agent-dismiss(id) => { root.agent-dismiss(id); }

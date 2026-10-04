@@ -13,6 +13,8 @@ import { JyotishView } from "../widgets/jyotish.slint";
 import { ClockView } from "../widgets/clock.slint";
 import { SystemView } from "../widgets/system.slint";
 import { ProcessesView } from "../widgets/processes.slint";
+import { OptimizeView } from "../widgets/optimize.slint";
+import { ProtectView } from "../widgets/protect.slint";
 import { CalculatorView } from "../widgets/calculator.slint";
 import { NotesView } from "../widgets/notes.slint";
 import { AgentView } from "../widgets/agent.slint";
@@ -193,6 +195,22 @@ export component WidgetFrame inherits Rectangle {
     callback notes-zoom(string, int);
     callback notes-clear(string);
     callback notes-find(string, string, bool);
+
+    callback optimize-tab-changed(string, int);
+    callback optimize-toggled(string, string);
+    callback optimize-choice(string, string, int);
+    callback optimize-refresh(string);
+    callback optimize-restart-explorer(string);
+
+    callback protect-tab-changed(string, int);
+    callback protect-toggled(string, string);
+    callback protect-scan(string);
+    callback protect-clean(string);
+    callback protect-select-drive(string, int);
+    callback protect-set-passes(string, int);
+    callback protect-wipe(string);
+    callback protect-cancel(string);
+    callback protect-refresh(string);
 
     // Agent
     callback agent-send(string, string);
@@ -861,6 +879,32 @@ export component WidgetFrame inherits Rectangle {
                     user-sign-out => { root.processes-user-sign-out(root.model.instance-id); }
                     confirm-yes => { root.processes-confirm-yes(root.model.instance-id); }
                     confirm-no => { root.processes-confirm-no(root.model.instance-id); }
+                }
+
+                if model.type-id == "optimize" : OptimizeView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.optimize;
+                    tab-changed(t) => { root.optimize-tab-changed(root.model.instance-id, t); }
+                    toggled(id) => { root.optimize-toggled(root.model.instance-id, id); }
+                    choice-picked(id, index) => { root.optimize-choice(root.model.instance-id, id, index); }
+                    refresh => { root.optimize-refresh(root.model.instance-id); }
+                    restart-explorer => { root.optimize-restart-explorer(root.model.instance-id); }
+                }
+
+                if model.type-id == "protect" : ProtectView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.protect;
+                    tab-changed(t) => { root.protect-tab-changed(root.model.instance-id, t); }
+                    toggled(id) => { root.protect-toggled(root.model.instance-id, id); }
+                    scan => { root.protect-scan(root.model.instance-id); }
+                    clean => { root.protect-clean(root.model.instance-id); }
+                    select-drive(index) => { root.protect-select-drive(root.model.instance-id, index); }
+                    set-passes(passes) => { root.protect-set-passes(root.model.instance-id, passes); }
+                    wipe => { root.protect-wipe(root.model.instance-id); }
+                    cancel => { root.protect-cancel(root.model.instance-id); }
+                    refresh => { root.protect-refresh(root.model.instance-id); }
                 }
 
                 if model.type-id == "calculator" : CalculatorView {

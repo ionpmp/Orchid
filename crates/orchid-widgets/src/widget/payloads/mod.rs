@@ -17,8 +17,10 @@ pub mod mail;
 pub mod media;
 pub mod moon;
 pub mod notes;
+pub mod optimize;
 pub mod password;
 pub mod processes;
+pub mod protect;
 pub mod recent_files;
 pub mod rss;
 pub mod search;
@@ -50,6 +52,7 @@ pub use mail::{MailAccountRow, MailFolderRow, MailMessageRow, MailPayload};
 pub use media::MediaPlayerPayload;
 pub use moon::MoonPayload;
 pub use notes::{NotesPayload, NotesTabRow};
+pub use optimize::{OptimizePayload, OptimizeRow};
 pub use password::{
     PasswordEntryDetailView, PasswordEntryView, PasswordGroupView, PasswordManagerPayload,
 };
@@ -57,6 +60,7 @@ pub use processes::{
     ProcessGroup, ProcessRowView, ProcessSortColumn, ProcessesPayload, ProcessesTab,
     ServiceRowView, StartupRowView, UserRowView,
 };
+pub use protect::{ProtectDrive, ProtectPayload, ProtectRow};
 pub use recent_files::{RecentFileItemView, RecentFilesPayload};
 pub use rss::{RssItemView, RssPayload};
 pub use search::{SearchCandidateView, UniversalSearchPayload};

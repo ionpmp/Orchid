@@ -14,9 +14,11 @@ mod mail;
 mod media;
 mod moon;
 mod notes;
+mod optimize;
 mod palette;
 mod password;
 mod processes;
+mod protect;
 mod recent;
 mod rss;
 mod search;
@@ -54,6 +56,7 @@ pub(crate) use mail::{build_mail_model, empty_mail_model, patch_mail_model};
 pub(crate) use media::{build_media_model, empty_media_model, patch_media_model};
 pub(crate) use moon::{build_moon_model, empty_moon_model, patch_moon_model};
 pub(crate) use notes::{build_notes_model, empty_notes_model, patch_notes_model};
+pub(crate) use optimize::{build_optimize_model, empty_optimize_model, patch_optimize_model};
 pub(crate) use palette::build_palette_candidates;
 pub(crate) use password::{
     build_password_model, empty_password_model, patch_password_model, PasswordAddDialogOverlay,
@@ -61,6 +64,7 @@ pub(crate) use password::{
 pub(crate) use processes::{
     build_processes_model, empty_processes_confirm, empty_processes_model, patch_processes_model,
 };
+pub(crate) use protect::{build_protect_model, empty_protect_model, patch_protect_model};
 pub(crate) use recent::{
     build_recent_files_model, empty_recent_files_model, patch_recent_files_model,
 };

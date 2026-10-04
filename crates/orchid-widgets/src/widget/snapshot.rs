@@ -92,6 +92,10 @@ pub enum WidgetPayload {
     FileManager(crate::widget::payloads::FileManagerPayload),
     /// Recent files widget.
     RecentFiles(crate::widget::payloads::RecentFilesPayload),
+    /// Windows update, privacy, Explorer, and shell settings.
+    Optimize(crate::widget::payloads::OptimizePayload),
+    /// Privacy cleanup, free-space overwrite, and outbound blocks.
+    Protect(crate::widget::payloads::ProtectPayload),
 }
 
 /// Terminal-specific payload carried inside [`WidgetPayload::Terminal`].

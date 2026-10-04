@@ -16,30 +16,31 @@ use crate::error::{Result, UiError};
 use crate::slint_generated::{
     AgentModel, AppState, AudioPlayerModel, BrowserModel, CalculatorModel, CalendarModel,
     ClockModel, FileManagerModel, JyotishModel, MailModel, MediaModel, MoonModel, NotesModel,
-    PasswordModel, ProcessesModel, RecentFilesModel, RssModel, SearchModel, SystemModel,
-    TerminalCellModel, TerminalPaneModel, VideoPlayerModel, ViewerModel, WeatherModel,
-    WidgetFrameModel, WorkspaceModel, WorkspaceSummary,
+    OptimizeModel, PasswordModel, ProcessesModel, ProtectModel, RecentFilesModel, RssModel,
+    SearchModel, SystemModel, TerminalCellModel, TerminalPaneModel, VideoPlayerModel, ViewerModel,
+    WeatherModel, WidgetFrameModel, WorkspaceModel, WorkspaceSummary,
 };
 use crate::window::models::{
     blank_terminal, build_agent_model, build_audio_player_model, build_browser_model,
     build_calculator_model, build_calendar_model, build_clock_model, build_file_manager_model,
     build_jyotish_model, build_mail_model, build_media_model, build_moon_model, build_notes_model,
-    build_password_model, build_processes_model, build_recent_files_model, build_rss_model,
-    build_search_model, build_system_model, build_terminal_divider_models,
-    build_terminal_tab_models, build_video_player_model, build_viewer_model, build_weather_model,
-    default_terminal_divider_models, default_terminal_pane_models, default_terminal_tab_models,
-    empty_agent_model, empty_audio_player_model, empty_browser_model, empty_calculator_model,
-    empty_calendar_model, empty_clock_model, empty_file_manager_model, empty_fm_overlays,
-    empty_jyotish_model, empty_mail_model, empty_media_model, empty_moon_model, empty_notes_model,
-    empty_password_model, empty_processes_confirm, empty_processes_model, empty_recent_files_model,
-    empty_rss_model, empty_search_model, empty_system_model, empty_terminal_cells,
-    empty_video_player_model, empty_viewer_model, empty_weather_model, patch_agent_model,
-    patch_audio_player_model, patch_browser_model, patch_calculator_model, patch_calendar_model,
-    patch_clock_model, patch_file_manager_model, patch_jyotish_model, patch_mail_model,
-    patch_media_model, patch_moon_model, patch_notes_model, patch_password_model,
-    patch_processes_model, patch_recent_files_model, patch_rss_model, patch_search_model,
-    patch_system_model, patch_video_player_model, patch_viewer_model, patch_weather_model,
-    widget_has_settings, PasswordAddDialogOverlay,
+    build_optimize_model, build_password_model, build_processes_model, build_protect_model,
+    build_recent_files_model, build_rss_model, build_search_model, build_system_model,
+    build_terminal_divider_models, build_terminal_tab_models, build_video_player_model,
+    build_viewer_model, build_weather_model, default_terminal_divider_models,
+    default_terminal_pane_models, default_terminal_tab_models, empty_agent_model,
+    empty_audio_player_model, empty_browser_model, empty_calculator_model, empty_calendar_model,
+    empty_clock_model, empty_file_manager_model, empty_fm_overlays, empty_jyotish_model,
+    empty_mail_model, empty_media_model, empty_moon_model, empty_notes_model, empty_optimize_model,
+    empty_password_model, empty_processes_confirm, empty_processes_model, empty_protect_model,
+    empty_recent_files_model, empty_rss_model, empty_search_model, empty_system_model,
+    empty_terminal_cells, empty_video_player_model, empty_viewer_model, empty_weather_model,
+    patch_agent_model, patch_audio_player_model, patch_browser_model, patch_calculator_model,
+    patch_calendar_model, patch_clock_model, patch_file_manager_model, patch_jyotish_model,
+    patch_mail_model, patch_media_model, patch_moon_model, patch_notes_model, patch_optimize_model,
+    patch_password_model, patch_processes_model, patch_protect_model, patch_recent_files_model,
+    patch_rss_model, patch_search_model, patch_system_model, patch_video_player_model,
+    patch_viewer_model, patch_weather_model, widget_has_settings, PasswordAddDialogOverlay,
 };
 
 use super::{sync_vec_model, MainWindowController};
@@ -928,6 +929,14 @@ impl MainWindowController {
                 patch_notes_model(&mut row.notes, p, &self.locale);
                 true
             }
+            (orchid_widgets::builtin::optimize::TYPE_ID, WidgetPayload::Optimize(p)) => {
+                patch_optimize_model(&mut row.optimize, p, &self.locale);
+                true
+            }
+            (orchid_widgets::builtin::protect::TYPE_ID, WidgetPayload::Protect(p)) => {
+                patch_protect_model(&mut row.protect, p, &self.locale);
+                true
+            }
             (orchid_widgets::builtin::agent::TYPE_ID, WidgetPayload::Agent(p)) => {
                 patch_agent_model(&mut row.agent, p, &self.locale);
                 true
@@ -1048,6 +1057,8 @@ impl MainWindowController {
             recent_files_model,
             file_manager_model,
             browser_model,
+            optimize_model,
+            protect_model,
         ) = if let Some(ws) = cached.as_deref() {
             let tstr: SharedString = ws.title.clone().into();
             match &ws.payload {
@@ -1084,6 +1095,8 @@ impl MainWindowController {
                         empties.recent_files.clone(),
                         empties.file_manager.clone(),
                         empties.browser.clone(),
+                        empties.optimize.clone(),
+                        empties.protect.clone(),
                     )
                 }
                 WidgetPayload::Weather(w) => (
@@ -1116,6 +1129,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::Moon(m) => (
                     tstr,
@@ -1147,6 +1162,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::Jyotish(j) => (
                     tstr,
@@ -1178,6 +1195,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::Clock(c) => (
                     tstr,
@@ -1209,6 +1228,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::SystemIndicators(s) => (
                     tstr,
@@ -1240,6 +1261,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::Processes(p) => {
                     let (ctx_vis, ctx_x, ctx_y) = self
@@ -1284,6 +1307,8 @@ impl MainWindowController {
                         empties.recent_files.clone(),
                         empties.file_manager.clone(),
                         empties.browser.clone(),
+                        empties.optimize.clone(),
+                        empties.protect.clone(),
                     )
                 }
                 WidgetPayload::Calculator(p) => (
@@ -1316,6 +1341,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::Notes(p) => (
                     tstr,
@@ -1347,6 +1374,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::Agent(p) => (
                     tstr,
@@ -1378,6 +1407,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::Mail(p) => (
                     tstr,
@@ -1409,6 +1440,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::Browser(p) => (
                     tstr,
@@ -1440,6 +1473,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     build_browser_model(p, &self.locale),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::Calendar(p) => (
                     tstr,
@@ -1471,6 +1506,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::RssFeed(r) => (
                     tstr,
@@ -1502,6 +1539,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::UniversalSearch(s) => {
                     let selected = self
@@ -1544,6 +1583,8 @@ impl MainWindowController {
                         empties.recent_files.clone(),
                         empties.file_manager.clone(),
                         empties.browser.clone(),
+                        empties.optimize.clone(),
+                        empties.protect.clone(),
                     )
                 }
                 WidgetPayload::MediaPlayer(m) => (
@@ -1576,6 +1617,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::AudioPlayer(a) => (
                     tstr,
@@ -1607,6 +1650,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::VideoPlayer(v) => (
                     tstr,
@@ -1638,6 +1683,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::PasswordManager(p) => {
                     let toast = self.password_toasts.read().get(&pl.instance_id).cloned();
@@ -1697,6 +1744,8 @@ impl MainWindowController {
                         empties.recent_files.clone(),
                         empties.file_manager.clone(),
                         empties.browser.clone(),
+                        empties.optimize.clone(),
+                        empties.protect.clone(),
                     )
                 }
                 WidgetPayload::Viewer(v) => (
@@ -1729,6 +1778,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::RecentFiles(r) => (
                     tstr,
@@ -1760,6 +1811,8 @@ impl MainWindowController {
                     build_recent_files_model(r, &self.locale),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
                 WidgetPayload::FileManager(fm) => {
                     let overlays = self
@@ -1805,8 +1858,76 @@ impl MainWindowController {
                             &self.fm_viewport.lock(),
                         ),
                         empties.browser.clone(),
+                        empties.optimize.clone(),
+                        empties.protect.clone(),
                     )
                 }
+                WidgetPayload::Optimize(p) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empties.weather.clone(),
+                    empties.moon.clone(),
+                    empties.jyotish.clone(),
+                    empties.clock.clone(),
+                    empties.system.clone(),
+                    empties.processes.clone(),
+                    empties.calculator.clone(),
+                    empties.notes.clone(),
+                    empties.agent.clone(),
+                    empties.mail.clone(),
+                    empties.calendar.clone(),
+                    empties.rss.clone(),
+                    empties.search.clone(),
+                    empties.media.clone(),
+                    empties.audio_player.clone(),
+                    empties.video_player.clone(),
+                    empties.password.clone(),
+                    empties.viewer.clone(),
+                    empties.recent_files.clone(),
+                    empties.file_manager.clone(),
+                    empties.browser.clone(),
+                    build_optimize_model(p, &self.locale),
+                    empties.protect.clone(),
+                ),
+                WidgetPayload::Protect(p) => (
+                    tstr,
+                    80,
+                    24,
+                    blank_terminal(80, 24),
+                    Image::default(),
+                    0,
+                    0,
+                    true,
+                    empties.weather.clone(),
+                    empties.moon.clone(),
+                    empties.jyotish.clone(),
+                    empties.clock.clone(),
+                    empties.system.clone(),
+                    empties.processes.clone(),
+                    empties.calculator.clone(),
+                    empties.notes.clone(),
+                    empties.agent.clone(),
+                    empties.mail.clone(),
+                    empties.calendar.clone(),
+                    empties.rss.clone(),
+                    empties.search.clone(),
+                    empties.media.clone(),
+                    empties.audio_player.clone(),
+                    empties.video_player.clone(),
+                    empties.password.clone(),
+                    empties.viewer.clone(),
+                    empties.recent_files.clone(),
+                    empties.file_manager.clone(),
+                    empties.browser.clone(),
+                    empties.optimize.clone(),
+                    build_protect_model(p, &self.locale),
+                ),
                 _ => (
                     tstr,
                     80,
@@ -1837,6 +1958,8 @@ impl MainWindowController {
                     empties.recent_files.clone(),
                     empties.file_manager.clone(),
                     empties.browser.clone(),
+                    empties.optimize.clone(),
+                    empties.protect.clone(),
                 ),
             }
         } else {
@@ -1953,6 +2076,8 @@ impl MainWindowController {
             recent_files: recent_files_model,
             file_manager: file_manager_model,
             browser: browser_model,
+            optimize: optimize_model,
+            protect: protect_model,
             close_confirm,
             settings_dialog,
         }
@@ -2211,6 +2336,8 @@ pub(crate) fn fallback_widget_title(locale: &LocaleManager, type_id: &str) -> Sh
         "clock" => locale.tr("dock-widget-clock").into(),
         "system" => locale.tr("dock-widget-system").into(),
         "processes" => locale.tr("dock-widget-processes").into(),
+        "optimize" => locale.tr("dock-widget-optimize").into(),
+        "protect" => locale.tr("dock-widget-protect").into(),
         "calculator" => locale.tr("dock-widget-calculator").into(),
         "notes" => locale.tr("dock-widget-notes").into(),
         "agent" => locale.tr("dock-widget-agent").into(),
@@ -2282,6 +2409,8 @@ struct EmptyWidgetPack {
     recent_files: RecentFilesModel,
     file_manager: FileManagerModel,
     browser: BrowserModel,
+    optimize: OptimizeModel,
+    protect: ProtectModel,
 }
 
 impl EmptyWidgetPack {
@@ -2308,6 +2437,8 @@ impl EmptyWidgetPack {
             recent_files: empty_recent_files_model(locale),
             file_manager: empty_file_manager_model(locale),
             browser: empty_browser_model(locale),
+            optimize: empty_optimize_model(locale),
+            protect: empty_protect_model(locale),
         }
     }
 
@@ -2366,6 +2497,8 @@ fn default_frame_data_extended(
     RecentFilesModel,
     FileManagerModel,
     BrowserModel,
+    OptimizeModel,
+    ProtectModel,
 ) {
     let empties = EmptyWidgetPack::cached(locale);
     (
@@ -2398,5 +2531,7 @@ fn default_frame_data_extended(
         empties.recent_files,
         empties.file_manager,
         empties.browser,
+        empties.optimize,
+        empties.protect,
     )
 }

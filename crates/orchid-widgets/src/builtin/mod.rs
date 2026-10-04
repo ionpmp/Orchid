@@ -54,6 +54,7 @@ pub fn register_core(registry: &WidgetRegistry, http: reqwest::Client) -> Result
     registry.register(system::descriptor())?;
     registry.register(processes::descriptor())?;
     registry.register(optimize::descriptor())?;
+    registry.register(protect::descriptor())?;
     registry.register(calculator::descriptor())?;
     registry.register(notes::descriptor())?;
     registry.register(agent::descriptor())?;
@@ -88,6 +89,7 @@ pub fn register_all(
     registry.register(system::descriptor())?;
     registry.register(processes::descriptor())?;
     registry.register(optimize::descriptor())?;
+    registry.register(protect::descriptor())?;
     registry.register(calculator::descriptor())?;
     registry.register(notes::descriptor())?;
     registry.register(agent::descriptor())?;

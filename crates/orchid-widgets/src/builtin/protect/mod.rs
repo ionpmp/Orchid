@@ -8,11 +8,13 @@
 //! created and removed only under the `Orchid Protect` name prefix.
 
 mod catalog;
+mod config;
 mod firefox;
 mod firewall;
 mod fs;
 mod platform;
 mod resolve;
+mod widget;
 mod wipe;
 
 pub use catalog::{CleanerId, ProtectTab};
@@ -23,6 +25,10 @@ pub use firewall::{
 pub use fs::CleanStats;
 pub use platform::{firewall_rules_json, run_netsh, PlatformError};
 pub use resolve::{clean_cleaner, scan_cleaner, CleanReport, HostLayout};
+pub use widget::{
+    cancel_wipe, clean, descriptor, refresh_network, scan, select_drive, set_passes, set_tab,
+    start_wipe, toggle_row, TYPE_ID,
+};
 pub use wipe::{
     clamp_passes, filler_directory, volume_key, wipe_budget, wipe_free_space, WipeReport,
     RESERVE_BYTES,

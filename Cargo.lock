@@ -7644,6 +7644,7 @@ dependencies = [
  "redb",
  "regex",
  "reqwest",
+ "rusqlite",
  "secrecy",
  "serde",
  "serde_json",

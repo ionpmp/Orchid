@@ -58,6 +58,8 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
         (WidgetPayload::FileManager(a), WidgetPayload::FileManager(b)) => {
             file_manager_payload_eq(a, b)
         }
+        (WidgetPayload::Optimize(a), WidgetPayload::Optimize(b)) => a == b,
+        (WidgetPayload::Protect(a), WidgetPayload::Protect(b)) => a == b,
         // Different payload kinds never render the same.
         _ => false,
     }

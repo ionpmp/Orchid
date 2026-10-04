@@ -130,6 +130,24 @@ impl SlintPayload {
             WidgetPayload::Viewer(p) => Self::Text(viewer_to_text_lines(p)),
             WidgetPayload::FileManager(p) => Self::Text(file_manager_to_text_lines(p)),
             WidgetPayload::RecentFiles(p) => Self::Text(recent_files_to_text_lines(p)),
+            WidgetPayload::Optimize(p) => Self::Text(
+                p.rows
+                    .iter()
+                    .map(|row| format!("{} {}", row.title_key, row.selected))
+                    .collect(),
+            ),
+            WidgetPayload::Protect(p) => Self::Text(
+                p.rows
+                    .iter()
+                    .map(|row| {
+                        if row.title.is_empty() {
+                            row.title_key.clone()
+                        } else {
+                            row.title.clone()
+                        }
+                    })
+                    .collect(),
+            ),
         }
     }
 }

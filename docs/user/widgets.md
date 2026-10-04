@@ -8,6 +8,8 @@
 | Clock | `clock` | World clocks |
 | System | `system` | CPU, memory, disks, net, battery, 60-sample graphs |
 | Processes | `processes` | Processes / Services / Startup / Users |
+| Optimize | `optimize` | Windows update, privacy, Explorer, and taskbar settings |
+| Protection | `protect` | Traces, histories, free-space overwrite, outbound blocks |
 | Calculator | `calculator` | `=expr` in universal search |
 | Notes | `notes` | In-widget scratchpad |
 | Agent | `agent` | Shared conversation; file writes wait for confirmation |
@@ -35,6 +37,37 @@ can read a local text file, list one folder, and search the open file
 index. **Write file** replaces the proposed path only after you confirm.
 **Dismiss** drops the proposal. There is no shell. The agent stays off
 until Settings → Agent is enabled and a model name is set.
+
+## Protection
+
+Four tabs. **Traces** and **Histories** measure first, then delete only the
+checked rows on the tab you are looking at. Cookies, Windows Temp, and the
+advertising id stay off until you check them. Browser history keeps
+bookmarks. Close the browser before cleaning it.
+
+**Free space** writes zeros over unused space on the selected disk and
+leaves 64 MB free. One pass is enough. Further passes wear an SSD, and
+Windows may TRIM the blocks afterward. Cancel removes the filler file.
+
+**Network** blocks outbound traffic for a program with one Windows Firewall
+rule named `Orchid Protect`. That needs an administrator. Open connections
+can stay up until the program reconnects. Windows itself, security
+processes, and Orchid are not offered as targets.
+
+## Optimize
+
+One place for Windows settings that Settings scatters, plus a few Group Policy
+switches Settings does not show. The catalog follows the useful overlap of
+Winaero Tweaker, the recommended O&O ShutUp10 switches, and the Microsoft
+Update policies: install mode, no restart while you are signed in, active
+hours, update sharing, driver updates, advertising and diagnostics, Explorer
+behavior, the taskbar, suggestions, and a few performance switches.
+
+A switch writes as soon as you change it. **Administrator** asks Windows to
+confirm. Defender, the firewall, SmartScreen, sign-in, and the Windows Update
+service are not changed, and inbox apps are not removed. **Restart Explorer**
+applies Explorer and taskbar changes. Some menu timing changes wait until the
+next sign-in.
 
 ## System
 

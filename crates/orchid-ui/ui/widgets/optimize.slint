@@ -1,0 +1,180 @@
+import { Theme } from "../theme_global.slint";
+import { ButtonTone, Chip, ControlSize, ToggleSwitch, TouchButton } from "../kit.slint";
+import { OptimizeModel } from "../workspace/defs.slint";
+
+export component OptimizeView inherits Rectangle {
+    in property <OptimizeModel> model;
+
+    callback tab-changed(int);
+    callback toggled(string);
+    callback choice-picked(string, int);
+    callback refresh();
+    callback restart-explorer();
+
+    background: transparent;
+
+    VerticalLayout {
+        padding: Theme.space-3;
+        spacing: Theme.space-2;
+
+        if model.unsupported : Text {
+            text: model.unsupported-label;
+            wrap: word-wrap;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-md;
+        }
+
+        if !model.unsupported : VerticalLayout {
+            spacing: Theme.space-2;
+
+            tab-scroll := Flickable {
+                height: Theme.control-sm;
+                viewport-height: self.height;
+                viewport-width: max(self.width, tab-row.preferred-width);
+                interactive: tab-row.preferred-width > self.width;
+
+                tab-row := HorizontalLayout {
+                    spacing: Theme.space-1;
+                    Chip {
+                        text: model.tab-updates;
+                        selected: model.tab == 0;
+                        clicked => { root.tab-changed(0); }
+                    }
+                    Chip {
+                        text: model.tab-privacy;
+                        selected: model.tab == 1;
+                        clicked => { root.tab-changed(1); }
+                    }
+                    Chip {
+                        text: model.tab-explorer;
+                        selected: model.tab == 2;
+                        clicked => { root.tab-changed(2); }
+                    }
+                    Chip {
+                        text: model.tab-shell;
+                        selected: model.tab == 3;
+                        clicked => { root.tab-changed(3); }
+                    }
+                    Chip {
+                        text: model.tab-quiet;
+                        selected: model.tab == 4;
+                        clicked => { root.tab-changed(4); }
+                    }
+                    Chip {
+                        text: model.tab-performance;
+                        selected: model.tab == 5;
+                        clicked => { root.tab-changed(5); }
+                    }
+                }
+            }
+
+            Text {
+                text: model.hint;
+                wrap: word-wrap;
+                color: Theme.text-tertiary;
+                font-size: Theme.font-size-sm;
+            }
+
+            Flickable {
+                vertical-stretch: 1;
+                viewport-width: parent.width;
+                viewport-height: list.preferred-height;
+                list := VerticalLayout {
+                    width: parent.width;
+                    spacing: Theme.space-2;
+                    alignment: start;
+                    for row in root.model.rows : Rectangle {
+                        background: Theme.surface-base;
+                        border-radius: Theme.radius-md;
+                        border-width: Theme.hairline;
+                        border-color: Theme.border-default;
+                        VerticalLayout {
+                            padding: Theme.space-3;
+                            spacing: Theme.space-1;
+                            HorizontalLayout {
+                                spacing: Theme.space-2;
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: Theme.space-1;
+                                    HorizontalLayout {
+                                        spacing: Theme.space-2;
+                                        alignment: start;
+                                        Text {
+                                            text: row.title;
+                                            color: Theme.text-primary;
+                                            font-size: Theme.font-size-md;
+                                            vertical-alignment: center;
+                                        }
+                                        if row.needs-admin : Text {
+                                            text: root.model.admin-label;
+                                            color: Theme.text-tertiary;
+                                            font-size: Theme.font-size-sm;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    Text {
+                                        text: row.detail;
+                                        wrap: word-wrap;
+                                        color: Theme.text-secondary;
+                                        font-size: Theme.font-size-sm;
+                                    }
+                                    if row.choice-count > 0 : HorizontalLayout {
+                                        spacing: Theme.space-1;
+                                        if row.choice-count > 0 : Chip {
+                                            text: row.choice-0;
+                                            selected: row.choice == 0;
+                                            clicked => { root.choice-picked(row.id, 0); }
+                                        }
+                                        if row.choice-count > 1 : Chip {
+                                            text: row.choice-1;
+                                            selected: row.choice == 1;
+                                            clicked => { root.choice-picked(row.id, 1); }
+                                        }
+                                        if row.choice-count > 2 : Chip {
+                                            text: row.choice-2;
+                                            selected: row.choice == 2;
+                                            clicked => { root.choice-picked(row.id, 2); }
+                                        }
+                                        if row.choice-count > 3 : Chip {
+                                            text: row.choice-3;
+                                            selected: row.choice == 3;
+                                            clicked => { root.choice-picked(row.id, 3); }
+                                        }
+                                    }
+                                }
+                                if row.choice-count == 0 : ToggleSwitch {
+                                    checked: row.checked;
+                                    label: row.title;
+                                    toggled => { root.toggled(row.id); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: Theme.space-2;
+                alignment: center;
+                TouchButton {
+                    text: model.refresh-label;
+                    size: ControlSize.sm;
+                    clicked => { root.refresh(); }
+                }
+                TouchButton {
+                    text: model.restart-label;
+                    size: ControlSize.sm;
+                    tone: ButtonTone.neutral;
+                    clicked => { root.restart-explorer(); }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                if model.status != "" : Text {
+                    text: model.status;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

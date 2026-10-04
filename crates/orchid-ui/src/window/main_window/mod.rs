@@ -75,8 +75,10 @@ mod jyotish;
 mod mail;
 mod media_search;
 mod notes;
+mod optimize;
 mod password;
 mod processes;
+mod protect;
 mod shell_ui;
 mod system_file_clipboard;
 mod terminal;
@@ -687,6 +689,8 @@ impl MainWindowController {
         g.set_dock_widget_clock(mgr.tr("dock-widget-clock").into());
         g.set_dock_widget_system(mgr.tr("dock-widget-system").into());
         g.set_dock_widget_processes(mgr.tr("dock-widget-processes").into());
+        g.set_dock_widget_optimize(mgr.tr("dock-widget-optimize").into());
+        g.set_dock_widget_protect(mgr.tr("dock-widget-protect").into());
         g.set_dock_widget_calculator(mgr.tr("dock-widget-calculator").into());
         g.set_dock_widget_notes(mgr.tr("dock-widget-notes").into());
         g.set_dock_widget_agent(mgr.tr("dock-widget-agent").into());
@@ -711,6 +715,8 @@ impl MainWindowController {
         g.set_widget_clock_desc(mgr.tr("widget-clock-desc").into());
         g.set_widget_system_desc(mgr.tr("widget-system-desc").into());
         g.set_widget_processes_desc(mgr.tr("widget-processes-desc").into());
+        g.set_widget_optimize_desc(mgr.tr("widget-optimize-desc").into());
+        g.set_widget_protect_desc(mgr.tr("widget-protect-desc").into());
         g.set_widget_calculator_desc(mgr.tr("widget-calculator-desc").into());
         g.set_widget_notes_desc(mgr.tr("widget-notes-desc").into());
         g.set_widget_agent_desc(mgr.tr("widget-agent-desc").into());

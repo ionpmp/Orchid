@@ -15,6 +15,18 @@ release yet.
 ### Added
 
 #### Workspace & shell
+- **Protection widget:** traces, histories, free-space overwrite, and
+  per-program outbound firewall blocks. Scan before delete. Cookies, Windows
+  Temp, and the advertising id stay off until checked. Browser history keeps
+  bookmarks. Free space is overwritten with zeros, leaving 64 MB, and can be
+  cancelled. Network blocks are outbound Windows Firewall rules named
+  `Orchid Protect` and skip system processes.
+- **Optimize widget:** Windows update, privacy, Explorer, taskbar, suggestion,
+  and performance switches in one place. The set is the reversible overlap of
+  Winaero Tweaker, the recommended O&O ShutUp10 switches, and Microsoft Update
+  policy, including no restart while you are signed in. Administrator changes
+  ask Windows to confirm. Defender, the firewall, and the Windows Update
+  service stay as they are.
 - **Calendar sync:** the calendar can save CalDAV collection URLs,
   a user, and a password. Extra URLs in the same field, separated by a
   space or a new line, use that account. Sync covers 90 days ago through
@@ -519,10 +531,10 @@ release yet.
 - Password, backup, and support-bundle how-to in the user/admin guides.
 
 ### Changed
-- **Jyotish**: the day view keeps the week strip, score, and panchanga in
-  reach. Birth date, time, and place open one at a time, and birth time uses
-  steppers instead of minute wheels. Rectification sits above the life-year
-  list; event years step by one or by ten.
+- **Jyotish**: the day view puts the week strip under the date. Birth date,
+  time, and place open one at a time, and birth time uses steppers instead of
+  minute wheels. Rectification sits above the life-year list; event years
+  step by one or by ten.
 - **Spreadsheets**: the open cell table is shared across snapshot ticks, so
   panning the viewer does not copy every cell string first.
 - **Terminal tabs**: a snapshot fills pane and divider geometry for the
