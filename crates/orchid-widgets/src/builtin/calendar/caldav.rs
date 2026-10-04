@@ -1,12 +1,17 @@
-//! One CalDAV collection: pull one-time events, and write those events back.
+//! CalDAV collections: pull events in the sync window and write one-time events back.
 //!
-//! Repeating events (`RRULE`) are left on the server. A timezone name on a
-//! start time is stored as the numbers written in the file. A `Z` time is
-//! shown in the local offset. Multi-day events show on the first day only.
+//! A supported `RRULE` (`DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`, plus `INTERVAL`,
+//! `COUNT`, `UNTIL`, and weekly `BYDAY`) is expanded inside the window. Other
+//! rule parts are ignored. A multi-day event is shown on each day, up to 14
+//! days. An expanded day uses a local id and is not written back onto the
+//! series. A timezone name is stored as the numbers in the file. A `Z` time is
+//! shown in the local offset.
 
 use std::time::Duration;
 
-use chrono::{Datelike, Duration as ChronoDuration, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
+use chrono::{
+    Datelike, Duration as ChronoDuration, NaiveDate, NaiveTime, TimeZone, Timelike, Utc, Weekday,
+};
 
 use super::config::{format_date, parse_date, CalDavLink, CalendarEvent};
 
@@ -41,9 +46,9 @@ pub struct RemoteEvent {
 pub struct Pull {
     /// One-time events to store.
     pub events: Vec<RemoteEvent>,
-    /// UIDs that must stay, including repeating events that were not imported.
+    /// UIDs that must stay, including a series this build could not expand.
     pub keep_uids: Vec<String>,
-    /// Repeating events seen and left unchanged.
+    /// Rules whose `FREQ` is missing or not daily, weekly, monthly, or yearly.
     pub skipped_repeating: usize,
 }
 
@@ -65,7 +70,24 @@ pub fn normalize_collection(raw: &str) -> Result<String, &'static str> {
     Ok(url.to_string())
 }
 
-/// Download one-time events in the sync window around today.
+/// Split a field into collection URLs. Blank pieces are ignored. One URL is
+/// unchanged. Extra URLs share the same user and password.
+pub fn collection_urls(raw: &str) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for piece in raw.split(|ch: char| ch.is_whitespace()) {
+        let piece = piece.trim().trim_matches(',');
+        if piece.is_empty() {
+            continue;
+        }
+        out.push(normalize_collection(piece).map_err(|_| "bad-url".to_string())?);
+    }
+    if out.is_empty() {
+        return Err("bad-url".into());
+    }
+    Ok(out)
+}
+
+/// Download events in the sync window around today.
 pub async fn pull(collection: &str, user: &str, password: &str) -> Result<Pull, String> {
     let collection = normalize_collection(collection).map_err(str::to_string)?;
     let today = chrono::Local::now().date_naive();
@@ -86,7 +108,13 @@ pub async fn pull(collection: &str, user: &str, password: &str) -> Result<Pull, 
         return Err(format!("failed:HTTP {}", response.status));
     }
     let offset = chrono::Local::now().offset().local_minus_utc();
-    Ok(pull_from_xml(&response.body, &collection, offset))
+    Ok(pull_from_xml(
+        &response.body,
+        &collection,
+        offset,
+        start,
+        end,
+    ))
 }
 
 /// Create or replace one event. Returns the stored href and etag.
@@ -99,10 +127,15 @@ pub async fn put_event(
     event: &CalendarEvent,
     uid: &str,
 ) -> Result<(String, String), String> {
-    let collection = normalize_collection(collection).map_err(str::to_string)?;
     let target = match href {
         Some(href) if !href.is_empty() => href.to_string(),
-        _ => event_href(&collection, uid)?,
+        _ => {
+            let collection = collection_urls(collection)?
+                .into_iter()
+                .next()
+                .ok_or_else(|| "bad-url".to_string())?;
+            event_href(&collection, uid)?
+        }
     };
     let mut headers = vec![("Content-Type", "text/calendar; charset=utf-8")];
     let etag_owned;
@@ -159,7 +192,14 @@ pub async fn delete_remote(
 }
 
 /// Fold a REPORT body into events. `offset_east_seconds` converts `Z` times.
-pub fn pull_from_xml(xml: &str, collection: &str, offset_east_seconds: i32) -> Pull {
+/// Dates outside `window_start`..=`window_end` are dropped.
+pub fn pull_from_xml(
+    xml: &str,
+    collection: &str,
+    offset_east_seconds: i32,
+    window_start: NaiveDate,
+    window_end: NaiveDate,
+) -> Pull {
     let mut pull = Pull::default();
     for item in multistatus_items(xml) {
         if !item.status_ok {
@@ -167,14 +207,43 @@ pub fn pull_from_xml(xml: &str, collection: &str, offset_east_seconds: i32) -> P
         }
         let href = resolve_href(collection, &item.href);
         for parsed in parse_calendar(&item.calendar_data, &href, &item.etag, offset_east_seconds) {
-            if parsed.repeating {
-                pull.skipped_repeating += 1;
+            if parsed.cancelled || parsed.event.is_none() {
                 if !parsed.uid.is_empty() {
                     pull.keep_uids.push(parsed.uid);
                 }
                 continue;
             }
-            if let Some(event) = parsed.event {
+            let Some(template) = parsed.event else {
+                continue;
+            };
+            let Some(start) = parsed.start_date else {
+                continue;
+            };
+            let dates = match expand_dates(
+                start,
+                parsed.span_days,
+                &parsed.rrule,
+                window_start,
+                window_end,
+            ) {
+                Ok(dates) => dates,
+                Err(()) => {
+                    pull.skipped_repeating += 1;
+                    if !parsed.uid.is_empty() {
+                        pull.keep_uids.push(parsed.uid);
+                    }
+                    continue;
+                }
+            };
+            let expanded = !parsed.rrule.is_empty() || parsed.span_days > 1;
+            for date in dates {
+                let mut event = template.clone();
+                event.date = format_date(date);
+                event.uid = if expanded {
+                    format!("{}#{}", parsed.uid, event.date)
+                } else {
+                    parsed.uid.clone()
+                };
                 pull.keep_uids.push(event.uid.clone());
                 pull.events.push(event);
             }
@@ -194,6 +263,9 @@ pub fn merge(
 ) {
     for remote in &pull.events {
         let link_index = links.iter().position(|link| {
+            if remote.uid.contains('#') {
+                return !remote.uid.is_empty() && link.uid == remote.uid;
+            }
             (!remote.uid.is_empty() && link.uid == remote.uid)
                 || (!remote.href.is_empty() && link.href == remote.href)
         });
@@ -570,9 +642,12 @@ fn resolve_href(collection: &str, href: &str) -> String {
 }
 
 struct ParsedIcs {
-    repeating: bool,
     uid: String,
+    rrule: String,
+    cancelled: bool,
     event: Option<RemoteEvent>,
+    start_date: Option<NaiveDate>,
+    span_days: u32,
 }
 
 fn parse_ics(ics: &str, href: &str, etag: &str, offset_east_seconds: i32) -> Option<ParsedIcs> {
@@ -593,7 +668,7 @@ fn parse_calendar(ics: &str, href: &str, etag: &str, offset_east_seconds: i32) -
     let mut notes = String::new();
     let mut start: Option<When> = None;
     let mut end: Option<When> = None;
-    let mut repeating = false;
+    let mut rrule = String::new();
     let mut cancelled = false;
     for line in text.lines() {
         let line = line.trim();
@@ -604,13 +679,13 @@ fn parse_calendar(ics: &str, href: &str, etag: &str, offset_east_seconds: i32) -
             notes.clear();
             start = None;
             end = None;
-            repeating = false;
+            rrule.clear();
             cancelled = false;
             continue;
         }
         if line.eq_ignore_ascii_case("END:VEVENT") {
             if let Some(parsed) = finish_event(
-                href, etag, &uid, &title, &notes, start, end, repeating, cancelled,
+                href, etag, &uid, &title, &notes, start, end, &rrule, cancelled,
             ) {
                 out.push(parsed);
             }
@@ -627,7 +702,7 @@ fn parse_calendar(ics: &str, href: &str, etag: &str, offset_east_seconds: i32) -
             "UID" => uid = value,
             "SUMMARY" => title = value,
             "DESCRIPTION" => notes = value,
-            "RRULE" => repeating = true,
+            "RRULE" => rrule = value,
             "STATUS" if value.eq_ignore_ascii_case("CANCELLED") => cancelled = true,
             "DTSTART" => start = parse_when(&params, &value, offset_east_seconds),
             "DTEND" => end = parse_when(&params, &value, offset_east_seconds),
@@ -645,58 +720,316 @@ fn finish_event(
     notes: &str,
     start: Option<When>,
     end: Option<When>,
-    repeating: bool,
+    rrule: &str,
     cancelled: bool,
 ) -> Option<ParsedIcs> {
     if uid.is_empty() && title.is_empty() {
         return None;
     }
-    if repeating {
-        return Some(ParsedIcs {
-            repeating: true,
-            uid: uid.to_string(),
-            event: None,
-        });
-    }
     if cancelled {
         return Some(ParsedIcs {
-            repeating: false,
             uid: uid.to_string(),
+            rrule: rrule.to_string(),
+            cancelled: true,
             event: None,
+            start_date: None,
+            span_days: 1,
         });
     }
     let start = start?;
-    let (date, all_day, start_minutes, end_minutes) = match start {
-        When::Date(date) => (format_date(date), true, 0, 0),
+    let (date, span_days, all_day, start_minutes, end_minutes) = match start {
+        When::Date(date) => {
+            let exclusive = match end {
+                Some(When::Date(end)) if end > date => end,
+                _ => date + ChronoDuration::days(1),
+            };
+            let span = exclusive
+                .signed_duration_since(date)
+                .num_days()
+                .clamp(1, 14) as u32;
+            (date, span, true, 0, 0)
+        }
         When::DateTime {
             date,
             minutes: start_minutes,
         } => {
-            let end_minutes = match end {
+            let (end_date, end_minutes) = match end {
                 Some(When::DateTime {
                     date: end_date,
                     minutes,
-                }) if end_date == date => minutes.max(start_minutes),
-                _ => start_minutes.saturating_add(60).min(23 * 60 + 59),
+                }) => (end_date, minutes.max(start_minutes)),
+                _ => (date, start_minutes.saturating_add(60).min(23 * 60 + 59)),
             };
-            (format_date(date), false, start_minutes, end_minutes)
+            let span = if end_date <= date {
+                1
+            } else {
+                end_date
+                    .signed_duration_since(date)
+                    .num_days()
+                    .saturating_add(1)
+                    .clamp(1, 14) as u32
+            };
+            (date, span, false, start_minutes, end_minutes)
         }
     };
     Some(ParsedIcs {
-        repeating: false,
         uid: uid.to_string(),
+        rrule: rrule.to_string(),
+        cancelled: false,
+        start_date: Some(date),
+        span_days,
         event: Some(RemoteEvent {
             uid: uid.to_string(),
             href: href.to_string(),
             etag: etag.to_string(),
             title: title.to_string(),
             notes: notes.to_string(),
-            date,
+            date: format_date(date),
             all_day,
             start_minutes,
             end_minutes,
         }),
     })
+}
+
+const MAX_OCCURRENCES: usize = 400;
+
+fn expand_dates(
+    start: NaiveDate,
+    span_days: u32,
+    rrule: &str,
+    window_start: NaiveDate,
+    window_end: NaiveDate,
+) -> Result<Vec<NaiveDate>, ()> {
+    let seeds = if rrule.trim().is_empty() {
+        vec![start]
+    } else {
+        let rule = parse_rrule(rrule).ok_or(())?;
+        rule_dates(start, &rule, window_start, window_end)
+    };
+    let mut out = Vec::new();
+    for seed in seeds {
+        for offset in 0..span_days.min(14) {
+            let Some(date) = seed.checked_add_signed(ChronoDuration::days(i64::from(offset)))
+            else {
+                break;
+            };
+            if date < window_start || date > window_end {
+                continue;
+            }
+            if !out.contains(&date) {
+                out.push(date);
+            }
+            if out.len() >= MAX_OCCURRENCES {
+                return Ok(out);
+            }
+        }
+    }
+    Ok(out)
+}
+
+#[derive(Clone, Copy)]
+enum Freq {
+    Daily,
+    Weekly,
+    Monthly,
+    Yearly,
+}
+
+struct Rule {
+    freq: Freq,
+    interval: i64,
+    count: Option<u32>,
+    until: Option<NaiveDate>,
+    byday: Vec<Weekday>,
+}
+
+fn parse_rrule(raw: &str) -> Option<Rule> {
+    let mut freq = None;
+    let mut interval = 1i64;
+    let mut count = None;
+    let mut until = None;
+    let mut byday = Vec::new();
+    for part in raw.split(';') {
+        let Some((key, value)) = part.split_once('=') else {
+            continue;
+        };
+        match key.trim().to_ascii_uppercase().as_str() {
+            "FREQ" => {
+                freq = Some(match value.trim().to_ascii_uppercase().as_str() {
+                    "DAILY" => Freq::Daily,
+                    "WEEKLY" => Freq::Weekly,
+                    "MONTHLY" => Freq::Monthly,
+                    "YEARLY" => Freq::Yearly,
+                    _ => return None,
+                });
+            }
+            "INTERVAL" => {
+                interval = value.trim().parse::<i64>().unwrap_or(1).max(1);
+            }
+            "COUNT" => count = value.trim().parse().ok(),
+            "UNTIL" => {
+                let digits: String = value
+                    .chars()
+                    .filter(|ch| ch.is_ascii_digit())
+                    .take(8)
+                    .collect();
+                until = ymd(&digits);
+            }
+            "BYDAY" => {
+                for token in value.split(',') {
+                    if let Some(day) = weekday_token(token) {
+                        byday.push(day);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    Some(Rule {
+        freq: freq?,
+        interval,
+        count,
+        until,
+        byday,
+    })
+}
+
+fn weekday_token(token: &str) -> Option<Weekday> {
+    let token = token.trim();
+    if token
+        .chars()
+        .any(|ch| ch.is_ascii_digit() || ch == '+' || ch == '-')
+    {
+        return None;
+    }
+    match token.to_ascii_uppercase().as_str() {
+        "MO" => Some(Weekday::Mon),
+        "TU" => Some(Weekday::Tue),
+        "WE" => Some(Weekday::Wed),
+        "TH" => Some(Weekday::Thu),
+        "FR" => Some(Weekday::Fri),
+        "SA" => Some(Weekday::Sat),
+        "SU" => Some(Weekday::Sun),
+        _ => None,
+    }
+}
+
+fn rule_dates(
+    start: NaiveDate,
+    rule: &Rule,
+    window_start: NaiveDate,
+    window_end: NaiveDate,
+) -> Vec<NaiveDate> {
+    let mut out = Vec::new();
+    let mut produced = 0u32;
+    let push = |date: NaiveDate, out: &mut Vec<NaiveDate>, produced: &mut u32| -> bool {
+        if let Some(until) = rule.until {
+            if date > until {
+                return false;
+            }
+        }
+        if let Some(count) = rule.count {
+            if *produced >= count {
+                return false;
+            }
+        }
+        *produced += 1;
+        if date >= start && date >= window_start && date <= window_end {
+            out.push(date);
+        }
+        out.len() < MAX_OCCURRENCES
+    };
+    match rule.freq {
+        Freq::Daily => {
+            let mut cursor = start;
+            for _ in 0..2000 {
+                if !push(cursor, &mut out, &mut produced) {
+                    break;
+                }
+                let Some(next) = cursor.checked_add_signed(ChronoDuration::days(rule.interval))
+                else {
+                    break;
+                };
+                if next
+                    > window_end
+                        .checked_add_signed(ChronoDuration::days(14))
+                        .unwrap_or(window_end)
+                {
+                    break;
+                }
+                cursor = next;
+            }
+        }
+        Freq::Weekly => {
+            let days = if rule.byday.is_empty() {
+                vec![start.weekday()]
+            } else {
+                rule.byday.clone()
+            };
+            let monday =
+                start - ChronoDuration::days(i64::from(start.weekday().num_days_from_monday()));
+            for week in 0..500 {
+                let Some(week_start) =
+                    monday.checked_add_signed(ChronoDuration::weeks(week * rule.interval))
+                else {
+                    break;
+                };
+                if week_start > window_end + ChronoDuration::days(7) {
+                    break;
+                }
+                let mut stop = false;
+                for day in &days {
+                    let offset = i64::from(day.num_days_from_monday());
+                    let Some(date) = week_start.checked_add_signed(ChronoDuration::days(offset))
+                    else {
+                        continue;
+                    };
+                    if date < start {
+                        continue;
+                    }
+                    if !push(date, &mut out, &mut produced) {
+                        stop = true;
+                        break;
+                    }
+                }
+                if stop {
+                    break;
+                }
+            }
+        }
+        Freq::Monthly | Freq::Yearly => {
+            let step = if matches!(rule.freq, Freq::Yearly) {
+                12 * rule.interval
+            } else {
+                rule.interval
+            };
+            for index in 0..500 {
+                let Some(date) = add_months(start, index * step) else {
+                    continue;
+                };
+                if date
+                    > window_end
+                        .checked_add_signed(ChronoDuration::days(14))
+                        .unwrap_or(window_end)
+                    && index > 0
+                {
+                    break;
+                }
+                if !push(date, &mut out, &mut produced) {
+                    break;
+                }
+            }
+        }
+    }
+    out
+}
+
+fn add_months(start: NaiveDate, months: i64) -> Option<NaiveDate> {
+    let month0 = i64::from(start.month()) - 1 + months;
+    let year = start.year() + i32::try_from(month0.div_euclid(12)).ok()?;
+    let month = u32::try_from(month0.rem_euclid(12)).ok()? + 1;
+    NaiveDate::from_ymd_opt(year, month, start.day())
 }
 
 fn unfold(input: &str) -> String {
@@ -814,6 +1147,14 @@ fn ymd(text: &str) -> Option<NaiveDate> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::NaiveDate;
+
+    fn window() -> (NaiveDate, NaiveDate) {
+        (
+            NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 10, 31).unwrap(),
+        )
+    }
 
     fn sample_event() -> CalendarEvent {
         CalendarEvent {
@@ -843,18 +1184,133 @@ mod tests {
     }
 
     #[test]
-    fn zulu_time_uses_the_given_offset_and_repeating_is_skipped() {
+    fn zulu_time_uses_the_given_offset_and_a_daily_rule_expands() {
         let ics = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:utc\r\nDTSTART:20261003T020000Z\r\nDTEND:20261003T030000Z\r\nSUMMARY:UTC\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nUID:rep\r\nRRULE:FREQ=DAILY\r\nDTSTART;VALUE=DATE:20261004\r\nSUMMARY:Daily\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
         let xml = format!(
             r#"<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:response><D:href>/cal/utc.ics</D:href><D:propstat><D:status>HTTP/1.1 200 OK</D:status><D:prop><D:getetag>"e"</D:getetag><C:calendar-data><![CDATA[{ics}]]></C:calendar-data></D:prop></D:propstat></D:response></D:multistatus>"#
         );
-        let pull = pull_from_xml(&xml, "https://cal.example/cal/", 7 * 3600);
-        assert_eq!(pull.skipped_repeating, 1);
-        assert_eq!(pull.events.len(), 1);
+        let pull = pull_from_xml(
+            &xml,
+            "https://cal.example/cal/",
+            7 * 3600,
+            NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 10, 6).unwrap(),
+        );
+        assert_eq!(pull.skipped_repeating, 0);
         assert_eq!(pull.events[0].date, "2026-10-03");
         assert_eq!(pull.events[0].start_minutes, 9 * 60);
         assert_eq!(pull.events[0].href, "https://cal.example/cal/utc.ics");
-        assert!(pull.keep_uids.iter().any(|uid| uid == "rep"));
+        let daily: Vec<_> = pull
+            .events
+            .iter()
+            .filter(|event| event.title == "Daily")
+            .map(|event| event.date.as_str())
+            .collect();
+        assert_eq!(daily, vec!["2026-10-04", "2026-10-05", "2026-10-06"]);
+        assert!(pull
+            .events
+            .iter()
+            .any(|event| event.uid == "rep#2026-10-04"));
+        assert!(pull.events.iter().all(|event| event.uid != "rep"));
+    }
+
+    #[test]
+    fn weekly_monthly_multiday_and_unknown_freq() {
+        let (start, end) = window();
+        let dates = expand_dates(
+            NaiveDate::from_ymd_opt(2026, 10, 5).unwrap(),
+            1,
+            "FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=1",
+            start,
+            end,
+        )
+        .unwrap();
+        assert_eq!(
+            dates,
+            vec![
+                NaiveDate::from_ymd_opt(2026, 10, 5).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 10, 7).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 10, 12).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 10, 14).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 10, 19).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 10, 21).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 10, 26).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 10, 28).unwrap(),
+            ]
+        );
+        let month = expand_dates(
+            NaiveDate::from_ymd_opt(2026, 10, 31).unwrap(),
+            1,
+            "FREQ=MONTHLY;COUNT=3",
+            NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2027, 1, 31).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            month,
+            vec![
+                NaiveDate::from_ymd_opt(2026, 10, 31).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 12, 31).unwrap(),
+                NaiveDate::from_ymd_opt(2027, 1, 31).unwrap(),
+            ]
+        );
+        let span = expand_dates(
+            NaiveDate::from_ymd_opt(2026, 10, 3).unwrap(),
+            3,
+            "",
+            start,
+            end,
+        )
+        .unwrap();
+        assert_eq!(span.len(), 3);
+        assert!(expand_dates(start, 1, "FREQ=HOURLY", start, end).is_err());
+        let urls = collection_urls("https://cal.example/a https://cal.example/b/").unwrap();
+        assert_eq!(urls.len(), 2);
+        assert!(urls[1].ends_with("/b/"));
+    }
+
+    #[test]
+    fn expanded_days_that_share_an_href_stay_separate() {
+        let mut events = Vec::new();
+        let mut links = Vec::new();
+        let pull = Pull {
+            events: vec![
+                RemoteEvent {
+                    uid: "series#2026-10-04".into(),
+                    href: "https://cal.example/series.ics".into(),
+                    etag: "\"e\"".into(),
+                    title: "Standup".into(),
+                    notes: String::new(),
+                    date: "2026-10-04".into(),
+                    all_day: true,
+                    start_minutes: 0,
+                    end_minutes: 0,
+                },
+                RemoteEvent {
+                    uid: "series#2026-10-05".into(),
+                    href: "https://cal.example/series.ics".into(),
+                    etag: "\"e\"".into(),
+                    title: "Standup".into(),
+                    notes: String::new(),
+                    date: "2026-10-05".into(),
+                    all_day: true,
+                    start_minutes: 0,
+                    end_minutes: 0,
+                },
+            ],
+            keep_uids: vec!["series#2026-10-04".into(), "series#2026-10-05".into()],
+            skipped_repeating: 0,
+        };
+        merge(
+            &mut events,
+            &mut links,
+            &pull,
+            NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 10, 31).unwrap(),
+        );
+        assert_eq!(events.len(), 2);
+        assert_eq!(links.len(), 2);
+        assert_ne!(links[0].uid, links[1].uid);
     }
 
     #[test]
@@ -1037,7 +1493,13 @@ mod tests {
         )
         .await
         .unwrap();
-        let pull = pull_from_xml(&response.body, &url, 0);
+        let pull = pull_from_xml(
+            &response.body,
+            &url,
+            0,
+            NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 12, 31).unwrap(),
+        );
         assert_eq!(
             pull.events.len(),
             1,

@@ -169,6 +169,7 @@ fn caldav_status_label(locale: &LocaleManager, token: &str) -> String {
         "bad-url" => locale.tr("calendar-caldav-bad-url"),
         "conflict" => locale.tr("calendar-caldav-conflict"),
         "secret" => locale.tr("calendar-caldav-secret"),
+        "local-day" => locale.tr("calendar-caldav-local-day"),
         other => {
             let reason = other.strip_prefix("failed:").unwrap_or(other);
             locale.tr_args(

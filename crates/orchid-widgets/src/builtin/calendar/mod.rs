@@ -654,20 +654,35 @@ async fn sync_handle(handle: Arc<CalendarHandle>) {
     };
     handle.ui.write().caldav_status = "working".into();
     handle.publish();
-    match caldav::pull(&url, &user, &password).await {
-        Ok(pull) => {
+    match caldav::collection_urls(&url) {
+        Ok(urls) => {
+            let mut combined = caldav::Pull::default();
+            for one in urls {
+                match caldav::pull(&one, &user, &password).await {
+                    Ok(part) => {
+                        combined.events.extend(part.events);
+                        combined.keep_uids.extend(part.keep_uids);
+                        combined.skipped_repeating += part.skipped_repeating;
+                    }
+                    Err(err) => {
+                        handle.ui.write().caldav_status = err;
+                        handle.publish();
+                        return;
+                    }
+                }
+            }
             let today = chrono::Local::now().date_naive();
             let start = today - Duration::days(90);
             let end = today + Duration::days(365);
-            let skipped = pull.skipped_repeating;
-            let count = pull.events.len();
+            let skipped = combined.skipped_repeating;
+            let count = combined.events.len();
             {
                 let mut cfg = handle.config.write();
                 let config = &mut *cfg;
                 caldav::merge(
                     &mut config.events,
                     &mut config.caldav_links,
-                    &pull,
+                    &combined,
                     start,
                     end,
                 );
@@ -723,6 +738,11 @@ async fn push_saved(handle: Arc<CalendarHandle>, event_id: String) {
         .map(|link| link.uid.clone())
         .filter(|uid| !uid.is_empty())
         .unwrap_or_else(|| event.id.clone());
+    if uid.contains('#') {
+        handle.ui.write().caldav_status = "local-day".into();
+        handle.publish();
+        return;
+    }
     match caldav::put_event(
         &url,
         &user,
@@ -779,6 +799,22 @@ async fn delete_saved(handle: Arc<CalendarHandle>, event_id: String, remote: Opt
         };
         (cfg.caldav_user.clone(), password)
     };
+    if remote.uid.contains('#') {
+        let mut cfg = handle.config.write();
+        cfg.events.retain(|event| event.id != event_id);
+        cfg.caldav_links.retain(|link| link.event_id != event_id);
+        drop(cfg);
+        let mut ui = handle.ui.write();
+        if ui.editing_id.as_deref() == Some(event_id.as_str()) {
+            ui.editor_open = false;
+            ui.editing_id = None;
+            ui.draft = None;
+        }
+        ui.delete_confirm_open = false;
+        ui.caldav_status = "local-day".into();
+        handle.publish();
+        return;
+    }
     handle.ui.write().caldav_status = "working".into();
     handle.publish();
     match caldav::delete_remote(&user, &password, &remote.href, Some(&remote.etag)).await {
