@@ -172,7 +172,13 @@ export component FmEntryList inherits Rectangle {
     }
 
     property <length> row-height: Theme.row-height;
-    property <length> header-height: details ? Theme.control-sm : 0px;
+    // The column header sits above the flickable, so scroll math starts at
+    // the first row. Narrow panes keep name and size.
+    property <length> header-height: 0px;
+    property <bool> show-modified: root.width >= 460px;
+    property <bool> show-type: root.width >= 640px;
+    property <length> size-col: 84px;
+    property <length> modified-col: 136px;
     property <bool> virtualized: virtual-content-height > 0px;
     property <int> first-index: virtualized ? max(0, virtual-first-index) : 0;
     // Scroll extent is derived from what this component actually draws. Taking
@@ -228,9 +234,112 @@ export component FmEntryList inherits Rectangle {
         root.marquee-active = false;
     }
 
-    list-flick := Flickable {
+    VerticalLayout {
         width: parent.width;
         height: parent.height;
+        spacing: 0;
+
+        if details : Rectangle {
+            height: Theme.control-sm;
+            background: Theme.surface-sunken;
+
+            Rectangle {
+                y: parent.height - Theme.hairline;
+                height: Theme.hairline;
+                background: Theme.border-default;
+            }
+
+            HorizontalLayout {
+                padding-left: Theme.space-3;
+                padding-right: Theme.space-3;
+                spacing: Theme.space-2;
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    min-width: 48px;
+                    height: Theme.control-sm;
+                    background: name-hdr-ta.has-hover ? Theme.state-hover : transparent;
+                    border-radius: Theme.radius-sm;
+
+                    name-hdr-ta := TouchArea {
+                        clicked => { root.sort-column-clicked(0); }
+                    }
+                    Text {
+                        text: sort-name-label + (sort-by == 0 ? (sort-descending ? " ↓" : " ↑") : "");
+                        color: sort-by == 0 ? Theme.accent-brand : Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        font-weight: sort-by == 0 ? Theme.weight-semibold : Theme.weight-regular;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+
+                Rectangle {
+                    width: root.size-col;
+                    height: Theme.control-sm;
+                    background: size-hdr-ta.has-hover ? Theme.state-hover : transparent;
+                    border-radius: Theme.radius-sm;
+
+                    size-hdr-ta := TouchArea {
+                        clicked => { root.sort-column-clicked(1); }
+                    }
+                    Text {
+                        width: 100%;
+                        text: sort-size-label + (sort-by == 1 ? (sort-descending ? " ↓" : " ↑") : "");
+                        color: sort-by == 1 ? Theme.accent-brand : Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        font-weight: sort-by == 1 ? Theme.weight-semibold : Theme.weight-regular;
+                        vertical-alignment: center;
+                        horizontal-alignment: right;
+                        overflow: elide;
+                    }
+                }
+
+                if root.show-modified : Rectangle {
+                    width: root.modified-col;
+                    height: Theme.control-sm;
+                    background: mod-hdr-ta.has-hover ? Theme.state-hover : transparent;
+                    border-radius: Theme.radius-sm;
+
+                    mod-hdr-ta := TouchArea {
+                        clicked => { root.sort-column-clicked(2); }
+                    }
+                    Text {
+                        width: 100%;
+                        text: sort-modified-label + (sort-by == 2 ? (sort-descending ? " ↓" : " ↑") : "");
+                        color: sort-by == 2 ? Theme.accent-brand : Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        font-weight: sort-by == 2 ? Theme.weight-semibold : Theme.weight-regular;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+
+                if root.show-type : Rectangle {
+                    horizontal-stretch: 1;
+                    min-width: 48px;
+                    height: Theme.control-sm;
+                    background: type-hdr-ta.has-hover ? Theme.state-hover : transparent;
+                    border-radius: Theme.radius-sm;
+
+                    type-hdr-ta := TouchArea {
+                        clicked => { root.sort-column-clicked(3); }
+                    }
+                    Text {
+                        text: sort-type-label + (sort-by == 3 ? (sort-descending ? " ↓" : " ↑") : "");
+                        color: sort-by == 3 ? Theme.accent-brand : Theme.text-tertiary;
+                        font-size: Theme.font-size-sm;
+                        font-weight: sort-by == 3 ? Theme.weight-semibold : Theme.weight-regular;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+            }
+        }
+
+    list-flick := Flickable {
+        vertical-stretch: 1;
+        horizontal-stretch: 1;
         interactive: !root.drag-active && !root.press-empty && !root.marquee-active;
         viewport-width: self.width;
         viewport-height: max(self.height, content-height);
@@ -312,95 +421,6 @@ export component FmEntryList inherits Rectangle {
         list-stack := VerticalLayout {
             spacing: 0;
 
-            if details : Rectangle {
-                height: Theme.control-sm;
-                background: Theme.surface-sunken;
-
-                Rectangle {
-                    y: parent.height - Theme.hairline;
-                    height: Theme.hairline;
-                    background: Theme.border-default;
-                }
-
-                HorizontalLayout {
-                    padding-left: Theme.space-3;
-                    padding-right: Theme.space-3;
-                    spacing: Theme.space-2;
-
-                    Rectangle {
-                        min-width: 240px;
-                        height: Theme.control-sm;
-                        background: name-hdr-ta.has-hover ? Theme.state-hover : transparent;
-                        border-radius: Theme.radius-sm;
-
-                        name-hdr-ta := TouchArea {
-                            clicked => { root.sort-column-clicked(0); }
-                        }
-                        Text {
-                            text: sort-name-label + (sort-by == 0 ? (sort-descending ? " ↓" : " ↑") : "");
-                            color: sort-by == 0 ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            font-weight: sort-by == 0 ? Theme.weight-semibold : Theme.weight-regular;
-                            vertical-alignment: center;
-                        }
-                    }
-
-                    Rectangle {
-                        min-width: 100px;
-                        height: Theme.control-sm;
-                        background: size-hdr-ta.has-hover ? Theme.state-hover : transparent;
-                        border-radius: Theme.radius-sm;
-
-                        size-hdr-ta := TouchArea {
-                            clicked => { root.sort-column-clicked(1); }
-                        }
-                        Text {
-                            text: sort-size-label + (sort-by == 1 ? (sort-descending ? " ↓" : " ↑") : "");
-                            color: sort-by == 1 ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            font-weight: sort-by == 1 ? Theme.weight-semibold : Theme.weight-regular;
-                            vertical-alignment: center;
-                        }
-                    }
-
-                    Rectangle {
-                        min-width: 140px;
-                        height: Theme.control-sm;
-                        background: mod-hdr-ta.has-hover ? Theme.state-hover : transparent;
-                        border-radius: Theme.radius-sm;
-
-                        mod-hdr-ta := TouchArea {
-                            clicked => { root.sort-column-clicked(2); }
-                        }
-                        Text {
-                            text: sort-modified-label + (sort-by == 2 ? (sort-descending ? " ↓" : " ↑") : "");
-                            color: sort-by == 2 ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            font-weight: sort-by == 2 ? Theme.weight-semibold : Theme.weight-regular;
-                            vertical-alignment: center;
-                        }
-                    }
-
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        height: Theme.control-sm;
-                        background: type-hdr-ta.has-hover ? Theme.state-hover : transparent;
-                        border-radius: Theme.radius-sm;
-
-                        type-hdr-ta := TouchArea {
-                            clicked => { root.sort-column-clicked(3); }
-                        }
-                        Text {
-                            text: sort-type-label + (sort-by == 3 ? (sort-descending ? " ↓" : " ↑") : "");
-                            color: sort-by == 3 ? Theme.accent-brand : Theme.text-tertiary;
-                            font-size: Theme.font-size-sm;
-                            font-weight: sort-by == 3 ? Theme.weight-semibold : Theme.weight-regular;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
-            }
-
             if virtual-pad-top > 0px : Rectangle {
                 height: virtual-pad-top;
             }
@@ -469,8 +489,8 @@ export component FmEntryList inherits Rectangle {
                     }
 
                     if rename.active && entry.path == rename.path : rename-fs := FocusScope {
-                        min-width: details ? 240px : 120px;
-                        horizontal-stretch: details ? 0 : 1;
+                        min-width: 48px;
+                        horizontal-stretch: 1;
 
                         key-pressed(e) => {
                             if (e.text == Key.Return) {
@@ -504,8 +524,8 @@ export component FmEntryList inherits Rectangle {
                             ? Theme.weight-semibold
                             : Theme.weight-medium;
                         vertical-alignment: center;
-                        horizontal-stretch: details ? 0 : 1;
-                        min-width: details ? 240px : 0px;
+                        horizontal-stretch: 1;
+                        min-width: 0px;
                         wrap: no-wrap;
                         overflow: elide;
                     }
@@ -517,28 +537,40 @@ export component FmEntryList inherits Rectangle {
                         vertical-alignment: center;
                     }
 
-                    if details : Text {
-                        text: entry.size-text;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        min-width: 100px;
+                    if details : Rectangle {
+                        width: root.size-col;
+                        Text {
+                            width: 100%;
+                            height: 100%;
+                            text: entry.size-text;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            horizontal-alignment: right;
+                            overflow: elide;
+                        }
                     }
 
-                    if details : Text {
-                        text: entry.modified-text;
-                        color: Theme.text-tertiary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        min-width: 140px;
+                    if details && root.show-modified : Rectangle {
+                        width: root.modified-col;
+                        Text {
+                            width: 100%;
+                            height: 100%;
+                            text: entry.modified-text;
+                            color: Theme.text-tertiary;
+                            font-size: Theme.font-size-sm;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
                     }
 
-                    if details : Text {
+                    if details && root.show-type : Text {
                         text: entry.type-text;
                         color: Theme.text-tertiary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;
                         horizontal-stretch: 1;
+                        min-width: 0px;
                         wrap: no-wrap;
                         overflow: elide;
                     }
@@ -687,4 +719,5 @@ export component FmEntryList inherits Rectangle {
         }
     }
 
+    }
 }

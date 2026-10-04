@@ -9,7 +9,6 @@ import { ShortcutBindings } from "../../shortcuts_global.slint";
 import { FmPane as FmPaneModel, FmRenameState, FmVisitHistoryItem, FmPathSuggest } from "../../workspace/defs.slint";
 import { FmTabs } from "fm-tabs.slint";
 import { FmToolbar } from "fm-toolbar.slint";
-import { FmBreadcrumbs } from "fm-breadcrumbs.slint";
 import { FmEntryList } from "fm-entry-list.slint";
 import { FmEntryGrid } from "fm-entry-grid.slint";
 
@@ -43,6 +42,7 @@ export component FmPane inherits Rectangle {
     callback breadcrumb-clicked(string);
     callback path-edit-changed(string);
     callback path-edit-commit(string);
+    callback view-mode-set(int);
     callback view-mode-cycle();
     callback sort-cycle();
     callback sort-column-clicked(int);
@@ -81,7 +81,26 @@ export component FmPane inherits Rectangle {
     clip: false;
     property <bool> history-open: false;
     property <bool> drives-open: false;
+    property <bool> view-menu-open: false;
+    property <bool> sort-menu-open: false;
     property <bool> address-editing: false;
+
+    function dismiss-chrome() {
+        root.history-open = false;
+        root.drives-open = false;
+        root.view-menu-open = false;
+        root.sort-menu-open = false;
+        root.address-editing = false;
+    }
+
+    changed address-editing => {
+        if (root.address-editing) {
+            root.history-open = false;
+            root.drives-open = false;
+            root.view-menu-open = false;
+            root.sort-menu-open = false;
+        }
+    }
 
     property <bool> grid-view: pane.tabs.length > pane.active-tab && pane.active-tab >= 0
         && (pane.tabs[pane.active-tab].view-mode == 0 || pane.tabs[pane.active-tab].view-mode == 3);
@@ -261,6 +280,14 @@ export component FmPane inherits Rectangle {
                     root.drives-open = false;
                     return accept;
                 }
+                if (root.view-menu-open) {
+                    root.view-menu-open = false;
+                    return accept;
+                }
+                if (root.sort-menu-open) {
+                    root.sort-menu-open = false;
+                    return accept;
+                }
                 if (root.address-editing) {
                     root.address-editing = false;
                     return accept;
@@ -274,9 +301,7 @@ export component FmPane inherits Rectangle {
 
     pane-ta := TouchArea {
         clicked => {
-            root.history-open = false;
-            root.drives-open = false;
-            root.address-editing = false;
+            root.dismiss-chrome();
             root.pane-focused();
             pane-keys.focus();
         }
@@ -306,40 +331,30 @@ export component FmPane inherits Rectangle {
                 tab: pane.tabs[pane.active-tab];
                 visit-history: root.visit-history;
                 drives: root.drives;
+                breadcrumbs: pane.tabs[pane.active-tab].breadcrumbs;
+                suggestions: root.path-suggestions;
+                drag-active: root.drag-active;
+                drag-drop-target: root.drag-drop-target;
                 history-open <=> root.history-open;
                 drives-open <=> root.drives-open;
+                view-menu-open <=> root.view-menu-open;
+                sort-menu-open <=> root.sort-menu-open;
+                editing <=> root.address-editing;
                 new-folder => { root.new-folder(); }
                 back => { root.nav-back(); }
                 forward => { root.nav-forward(); }
                 up => { root.nav-up(); }
                 home => { root.nav-home(); }
                 history-pick(path) => { root.history-pick(path); }
-                view-mode-cycle => { root.view-mode-cycle(); }
-                sort-cycle => { root.sort-cycle(); }
-                branch-toggle => { root.nav-command("branch"); }
-                quick-filter-changed(q) => { root.quick-filter-changed(q); }
-                selection-count: pane.tabs[pane.active-tab].selection-count;
-                deselect-all => {
-                    root.deselect-all();
-                }
-            }
-
-            Divider { }
-
-            FmBreadcrumbs {
-                height: Theme.control-xs;
-                z: 40;
-                clip: false;
-                breadcrumbs: pane.tabs[pane.active-tab].breadcrumbs;
-                suggestions: root.path-suggestions;
-                drag-active: root.drag-active;
-                drag-drop-target: root.drag-drop-target;
-                editing <=> root.address-editing;
-                clicked(p) => { root.breadcrumb-clicked(p); }
+                breadcrumb-clicked(p) => { root.breadcrumb-clicked(p); }
                 crumb-drag-hover(p) => { root.crumb-drag-hover(p); }
                 crumb-drag-drop(p) => { root.crumb-drag-drop(p); }
-                edit-changed(t) => { root.path-edit-changed(t); }
-                edit-commit(t) => { root.path-edit-commit(t); }
+                path-edit-changed(t) => { root.path-edit-changed(t); }
+                path-edit-commit(t) => { root.path-edit-commit(t); }
+                view-mode-set(mode) => { root.view-mode-set(mode); }
+                sort-column-clicked(col) => { root.sort-column-clicked(col); }
+                branch-toggle => { root.nav-command("branch"); }
+                quick-filter-changed(q) => { root.quick-filter-changed(q); }
             }
 
             Divider { }
@@ -350,7 +365,7 @@ export component FmPane inherits Rectangle {
                 listing-bg-ta := TouchArea {
                     width: 100%;
                     height: 100%;
-                    clicked => { root.history-open = false; root.drives-open = false; root.address-editing = false; }
+                    clicked => { root.dismiss-chrome(); }
                     pointer-event(e) => {
                         if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
                             root.entry-context("", self.mouse-x, self.mouse-y);
@@ -417,8 +432,7 @@ export component FmPane inherits Rectangle {
                         sort-type-label: pane.tabs[pane.active-tab].sort-type-label;
                         selection-count: pane.tabs[pane.active-tab].selection-count;
                         entry-clicked(p, ctrl) => {
-                            root.history-open = false;
-                            root.address-editing = false;
+                            root.dismiss-chrome();
                             root.pane-focused();
                             root.entry-clicked(p, ctrl);
                         }
@@ -466,8 +480,7 @@ export component FmPane inherits Rectangle {
                         large: pane.tabs[pane.active-tab].view-mode == 3;
                         selection-count: pane.tabs[pane.active-tab].selection-count;
                         entry-clicked(p, ctrl) => {
-                            root.history-open = false;
-                            root.address-editing = false;
+                            root.dismiss-chrome();
                             root.pane-focused();
                             root.entry-clicked(p, ctrl);
                         }
@@ -552,11 +565,19 @@ export component FmPane inherits Rectangle {
                         value: root.transfer-progress;
                     }
 
-                    HorizontalLayout {
-                        padding-left: Theme.space-3;
+                        HorizontalLayout {
+                        padding-left: Theme.space-2;
                         padding-right: Theme.space-2;
                         spacing: Theme.space-2;
                         alignment: center;
+
+                        if pane.tabs[pane.active-tab].selection-count > 0 : IconButton {
+                            icon: "close";
+                            size: ControlSize.xs;
+                            tooltip: Strings.fm-action-deselect-all;
+                            tooltip-flip: true;
+                            clicked => { root.deselect-all(); }
+                        }
 
                         Rectangle {
                             horizontal-stretch: 1;

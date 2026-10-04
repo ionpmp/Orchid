@@ -2,6 +2,18 @@
 
 use super::config::ViewMode;
 
+/// Map the UI view-mode code (0 icons, 1 list, 2 details, 3 gallery).
+#[must_use]
+pub fn view_mode_from_code(code: u8) -> Option<ViewMode> {
+    match code {
+        0 => Some(ViewMode::Icons),
+        1 => Some(ViewMode::List),
+        2 => Some(ViewMode::Details),
+        3 => Some(ViewMode::Gallery),
+        _ => None,
+    }
+}
+
 /// Render-hint bundle for a view mode.
 #[derive(Debug, Clone, Copy)]
 #[allow(missing_docs)]
@@ -52,7 +64,16 @@ pub fn config_for_mode(mode: ViewMode, density_scale: f32) -> ViewModeConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{config_for_mode, ViewMode};
+    use super::{config_for_mode, view_mode_from_code, ViewMode};
+
+    #[test]
+    fn view_mode_codes_match_the_ui() {
+        assert_eq!(view_mode_from_code(0), Some(ViewMode::Icons));
+        assert_eq!(view_mode_from_code(1), Some(ViewMode::List));
+        assert_eq!(view_mode_from_code(2), Some(ViewMode::Details));
+        assert_eq!(view_mode_from_code(3), Some(ViewMode::Gallery));
+        assert_eq!(view_mode_from_code(4), None);
+    }
 
     #[test]
     fn list_and_details_skip_image_thumbs() {

@@ -731,6 +731,40 @@ pub async fn toggle_click_behavior(instance_id: Uuid) -> WidgetResult<()> {
     Ok(())
 }
 
+/// Set the view mode for the active tab in `pane`.
+///
+/// `mode` is the UI code: 0 icons, 1 list, 2 details, 3 gallery.
+/// The current mode is left unchanged.
+pub async fn set_view_mode(instance_id: Uuid, pane: u8, mode: u8) -> WidgetResult<()> {
+    let Some(view_mode) = super::view_mode::view_mode_from_code(mode) else {
+        return Err(WidgetError::InvalidStateForOperation(
+            "invalid view mode".into(),
+        ));
+    };
+    let inner = live_inner(instance_id)?;
+    let tab = {
+        let mut state = inner.state.lock();
+        let tab = if pane == 1 {
+            if let Some(r) = state.right_pane.as_mut() {
+                r.active_tab_mut()
+            } else {
+                state.left_pane.active_tab_mut()
+            }
+        } else {
+            state.left_pane.active_tab_mut()
+        };
+        if tab.view_mode == view_mode {
+            return Ok(());
+        }
+        tab.view_mode = view_mode;
+        tab.clone()
+    };
+    inner.reset_pane_viewport(pane);
+    inner.publish_refresh();
+    inner.spawn_view_decorations(tab);
+    Ok(())
+}
+
 /// Cycle view mode for the active tab in `pane`.
 pub async fn cycle_view_mode(instance_id: Uuid, pane: u8) -> WidgetResult<()> {
     let inner = live_inner(instance_id)?;

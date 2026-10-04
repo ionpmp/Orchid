@@ -5,9 +5,16 @@ folders.
 
 ## Views and navigation
 
-Icons / List / Details / Gallery; dual pane; tabs; breadcrumbs; editable
-address bar with autocomplete; **branch view** (`Ctrl+B`); **Alt+F1**
+Icons / List / Details / Gallery, chosen from the view menu. Dual pane;
+tabs show the folder name (the full path is on the tooltip) and scroll
+when they do not fit. The path is the address bar: click a segment to
+jump, click the empty part to type, with autocomplete. The places list
+(drives, starred, photos, and the other virtual folders) stays beside
+the listing in both layouts. **Branch view** (`Ctrl+B`); **Alt+F1**
 drives; **Ctrl+Shift+T** new tab; **Ctrl+Shift+Enter** other pane.
+Sort is the menu next to the view button; in Details, click a column
+header. Narrow panes keep name and size; modified and type appear when
+the pane is wide enough. The column header stays put while the list scrolls.
 
 ## Selection, clipboard, undo
 

@@ -1,5 +1,5 @@
 import { Theme } from "../../theme_global.slint";
-import { ControlSize, IconButton } from "../../kit.slint";
+import { ControlSize, IconButton, Tooltip } from "../../kit.slint";
 import { FmTab } from "../../workspace/defs.slint";
 
 export component FmTabs inherits Rectangle {
@@ -13,7 +13,9 @@ export component FmTabs inherits Rectangle {
     height: Theme.toolbar-height;
     background: Theme.surface-sunken;
 
-    // Hairline that separates the strip from the pane below.
+    // Fixed width so the strip can scroll. Deriving the width from the
+    // flickable made a layout cycle (host width depends on content width).
+
     Rectangle {
         y: parent.height - Theme.hairline;
         width: 100%;
@@ -27,52 +29,75 @@ export component FmTabs inherits Rectangle {
         spacing: Theme.space-1;
         alignment: center;
 
-        for tab[i] in tabs : Rectangle {
-            width: 190px;
-            height: Theme.control-sm;
-            background: i == active-tab ? Theme.surface-raised
-                : tab-ta.has-hover ? Theme.state-hover
-                : Colors.transparent;
-            border-radius: Theme.radius-md;
+        tab-host := Flickable {
+            horizontal-stretch: 1;
+            height: parent.height;
+            viewport-height: self.height;
+            viewport-width: max(self.width, tab-row.preferred-width);
 
-            animate background { duration: Theme.motion-fast; easing: ease-out; }
-
-            tab-ta := TouchArea {
-                mouse-cursor: MouseCursor.pointer;
-                clicked => { root.tab-clicked(i, tab.id); }
-            }
-
-            // Active indicator rides the bottom edge.
-            if i == active-tab : Rectangle {
-                y: parent.height - self.height - Theme.space-1;
-                x: Theme.space-3;
-                width: parent.width - Theme.space-6;
-                height: Theme.indicator-thickness;
-                border-radius: Theme.radius-pill;
-                background: Theme.accent-brand;
-            }
-
-            HorizontalLayout {
-                padding-left: Theme.space-3;
-                padding-right: Theme.space-1;
+            tab-row := HorizontalLayout {
                 spacing: Theme.space-1;
+                alignment: start;
 
-                Text {
-                    text: tab.path-display;
-                    color: i == active-tab ? Theme.text-primary : Theme.text-secondary;
-                    font-size: Theme.font-size-sm;
-                    font-weight: i == active-tab ? Theme.weight-semibold : Theme.weight-regular;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                    wrap: no-wrap;
-                    overflow: elide;
-                }
-
-                IconButton {
-                    icon: "close";
-                    size: ControlSize.xs;
+                for tab[i] in tabs : tab-chip := Rectangle {
+                    width: 168px;
+                    height: Theme.control-sm;
                     y: (parent.height - self.height) / 2;
-                    clicked => { root.tab-closed(i, tab.id); }
+                    background: i == active-tab ? Theme.surface-raised
+                        : tab-ta.has-hover ? Theme.state-hover
+                        : Colors.transparent;
+                    border-radius: Theme.radius-md;
+
+                    property <string> tab-label: tab.breadcrumbs.length > 0
+                        ? tab.breadcrumbs[tab.breadcrumbs.length - 1].label
+                        : tab.path-display;
+
+                    animate background { duration: Theme.motion-fast; easing: ease-out; }
+
+                    tab-ta := TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
+                        clicked => { root.tab-clicked(i, tab.id); }
+                    }
+
+                    if i == active-tab : Rectangle {
+                        y: parent.height - self.height - Theme.space-1;
+                        x: Theme.space-3;
+                        width: parent.width - Theme.space-6;
+                        height: Theme.indicator-thickness;
+                        border-radius: Theme.radius-pill;
+                        background: Theme.accent-brand;
+                    }
+
+                    HorizontalLayout {
+                        padding-left: Theme.space-3;
+                        padding-right: Theme.space-1;
+                        spacing: Theme.space-1;
+
+                        Text {
+                            text: tab-chip.tab-label;
+                            color: i == active-tab ? Theme.text-primary : Theme.text-secondary;
+                            font-size: Theme.font-size-sm;
+                            font-weight: i == active-tab ? Theme.weight-semibold : Theme.weight-regular;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            wrap: no-wrap;
+                            overflow: elide;
+                        }
+
+                        IconButton {
+                            icon: "close";
+                            size: ControlSize.xs;
+                            y: (parent.height - self.height) / 2;
+                            clicked => { root.tab-closed(i, tab.id); }
+                        }
+                    }
+
+                    Tooltip {
+                        text: tab.path-display;
+                        shown: tab-ta.has-hover && tab.path-display != tab-chip.tab-label;
+                        x: Theme.space-2;
+                        y: parent.height + Theme.space-1;
+                    }
                 }
             }
         }

@@ -29,6 +29,7 @@ export component FileManagerView inherits Rectangle {
     callback breadcrumb-clicked(int, string);
     callback path-edit-changed(int, string);
     callback path-edit-commit(int, string);
+    callback view-mode-set(int, int);
     callback view-mode-cycle(int);
     callback sort-cycle(int);
     callback sort-column-clicked(int, int);
@@ -88,9 +89,10 @@ export component FileManagerView inherits Rectangle {
         spacing: 0;
         vertical-stretch: 1;
 
-        // Navigation sidebar only in dual-pane. Single-pane is the listing alone.
-        if model.dual-pane : Rectangle {
-            width: 180px;
+        // Places stay visible in both layouts: drives, starred, photos, and
+        // the other virtual folders are one click away from a single pane.
+        Rectangle {
+            width: 200px;
             background: Theme.surface-base;
             border-color: Theme.border-default;
             // Slint doesn't support per-side borders; draw a divider.
@@ -150,6 +152,7 @@ export component FileManagerView inherits Rectangle {
                 breadcrumb-clicked(p) => { root.breadcrumb-clicked(0, p); }
                 path-edit-changed(t) => { root.path-edit-changed(0, t); }
                 path-edit-commit(t) => { root.path-edit-commit(0, t); }
+                view-mode-set(mode) => { root.view-mode-set(0, mode); }
                 view-mode-cycle => { root.view-mode-cycle(0); }
                 sort-cycle => { root.sort-cycle(0); }
                 sort-column-clicked(col) => { root.sort-column-clicked(0, col); }
@@ -226,6 +229,7 @@ export component FileManagerView inherits Rectangle {
                         breadcrumb-clicked(p) => { root.breadcrumb-clicked(0, p); }
                         path-edit-changed(t) => { root.path-edit-changed(0, t); }
                         path-edit-commit(t) => { root.path-edit-commit(0, t); }
+                        view-mode-set(mode) => { root.view-mode-set(0, mode); }
                         view-mode-cycle => { root.view-mode-cycle(0); }
                         sort-cycle => { root.sort-cycle(0); }
                         sort-column-clicked(col) => { root.sort-column-clicked(0, col); }
@@ -300,6 +304,7 @@ export component FileManagerView inherits Rectangle {
                         breadcrumb-clicked(p) => { root.breadcrumb-clicked(1, p); }
                         path-edit-changed(t) => { root.path-edit-changed(1, t); }
                         path-edit-commit(t) => { root.path-edit-commit(1, t); }
+                        view-mode-set(mode) => { root.view-mode-set(1, mode); }
                         view-mode-cycle => { root.view-mode-cycle(1); }
                         sort-cycle => { root.sort-cycle(1); }
                         sort-column-clicked(col) => { root.sort-column-clicked(1, col); }

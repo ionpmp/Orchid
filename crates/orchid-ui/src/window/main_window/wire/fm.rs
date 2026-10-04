@@ -154,6 +154,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_fm_view_mode_set({
+            let t = t.clone();
+            move |fm_id, pane, mode| {
+                if let Some(c) = t.upgrade() {
+                    c.on_fm_view_mode_set(&fm_id, pane, mode);
+                }
+            }
+        });
         self.window.on_fm_view_mode_cycle({
             let t = t.clone();
             move |fm_id, pane| {

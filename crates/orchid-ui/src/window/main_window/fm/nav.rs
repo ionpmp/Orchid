@@ -561,6 +561,28 @@ impl MainWindowController {
         false
     }
 
+    pub(in crate::window::main_window) fn on_fm_view_mode_set(
+        self: &Arc<Self>,
+        fm_id: &SharedString,
+        pane: i32,
+        mode: i32,
+    ) {
+        let p = pane.max(0) as u8;
+        let Some(inst) = self.fm_prepare_instance(fm_id, Some(p)) else {
+            return;
+        };
+        let p = pane.max(0) as u8;
+        let mode = mode.clamp(0, 3) as u8;
+        self.reset_fm_pane_viewport(inst, p);
+        let tw = Arc::downgrade(self);
+        spawn::spawn_local_compat(async move {
+            let _ = orchid_widgets::builtin::file_manager::set_view_mode(inst, p, mode).await;
+            if let Some(c) = tw.upgrade() {
+                c.fm_refresh_ui(inst).await;
+            }
+        });
+    }
+
     pub(in crate::window::main_window) fn on_fm_view_mode_cycle(
         self: &Arc<Self>,
         fm_id: &SharedString,
