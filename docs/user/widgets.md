@@ -43,7 +43,10 @@ until Settings → Agent is enabled and a model name is set.
 Four tabs. **Traces** and **Histories** measure first, then delete only the
 checked rows on the tab you are looking at. Cookies, Windows Temp, and the
 advertising id stay off until you check them. Browser history keeps
-bookmarks. Close the browser before cleaning it.
+bookmarks. If that browser is still open, its history, cache, and cookies
+stay and the status says so; the other checked rows are still removed.
+**Clean** stays off until a scan finishes, and then shows how much the
+checked rows will remove.
 
 **Free space** writes zeros over unused space on the selected disk and
 leaves 64 MB free. One pass is enough. Further passes wear an SSD, and
@@ -93,7 +96,7 @@ Embedded WebView2. Needs the Evergreen runtime. Distinct from the HTML
 
 ## Notes / Calendar / Processes
 
-Notes are not files on disk. Calendar events stay on this computer. A collection URL, user, and password at the bottom of the calendar sync CalDAV. Extra collection URLs, separated by a space or a new line, use the same account. Sync covers 90 days ago through the next year. A time written with `Z` is shown in the local offset. A named timezone is stored as the numbers in the file. Daily, weekly, monthly, and yearly repeats, with interval, count, until, and weekly weekdays, are shown on each day in that window. Other rule parts are ignored, and a rule this build cannot expand stays on the server. A multi-day event is shown on each day, up to 14 days and 400 occurrences. Editing or deleting one of those days stays on this computer and does not change the series; the next sync restores the series days. Saving or deleting a one-time synced event writes that change back. A local event with no account stays local. The password is stored with the widget config (DPAPI on Windows) and is not shown again. There is no server discovery and no OAuth. The Processes tab draws
+Notes are not files on disk. Calendar events stay on this computer. A collection URL, user, and password at the bottom of the calendar sync CalDAV. Extra collection URLs, separated by a space or a new line, use the same account. Sync covers 90 days ago through the next year. A time written with `Z` is shown in the local offset. A named timezone is stored as the numbers in the file. Daily, weekly, monthly, and yearly repeats, with interval, count, until, and weekly weekdays, are shown on each day in that window. A date listed in EXDATE is left out. Other rule parts and exception forms are ignored, and a rule this build cannot expand stays on the server. A multi-day event is shown on each day, up to 14 days and 400 occurrences. Editing or deleting one of those days stays on this computer and does not change the series; the next sync restores the series days. Saving or deleting a one-time synced event writes that change back. A local event with no account stays local. The password is stored with the widget config (DPAPI on Windows) and is not shown again. There is no server discovery and no OAuth. The Processes tab draws
 CPU and memory for the selected process: the last 60 samples, oldest on
 the left. CPU is that process's percent. Memory bars are scaled to the
 peak working set in the window. The samples stay with the widget instance

@@ -1,9 +1,9 @@
 //! CalDAV collections: pull events in the sync window and write one-time events back.
 //!
 //! A supported `RRULE` (`DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`, plus `INTERVAL`,
-//! `COUNT`, `UNTIL`, and weekly `BYDAY`) is expanded inside the window. Other
-//! rule parts are ignored. A multi-day event is shown on each day, up to 14
-//! days. An expanded day uses a local id and is not written back onto the
+//! `COUNT`, `UNTIL`, and weekly `BYDAY`) is expanded inside the window. A date
+//! listed in `EXDATE` is left out. Other rule parts and exception forms are
+//! ignored. A multi-day event is shown on each day, up to 14 days. An expanded day uses a local id and is not written back onto the
 //! series. A timezone name is stored as the numbers in the file. A `Z` time is
 //! shown in the local offset.
 
@@ -223,6 +223,7 @@ pub fn pull_from_xml(
                 start,
                 parsed.span_days,
                 &parsed.rrule,
+                &parsed.exdates,
                 window_start,
                 window_end,
             ) {
@@ -648,6 +649,7 @@ struct ParsedIcs {
     event: Option<RemoteEvent>,
     start_date: Option<NaiveDate>,
     span_days: u32,
+    exdates: Vec<NaiveDate>,
 }
 
 fn parse_ics(ics: &str, href: &str, etag: &str, offset_east_seconds: i32) -> Option<ParsedIcs> {
@@ -669,6 +671,7 @@ fn parse_calendar(ics: &str, href: &str, etag: &str, offset_east_seconds: i32) -
     let mut start: Option<When> = None;
     let mut end: Option<When> = None;
     let mut rrule = String::new();
+    let mut exdates: Vec<NaiveDate> = Vec::new();
     let mut cancelled = false;
     for line in text.lines() {
         let line = line.trim();
@@ -680,12 +683,13 @@ fn parse_calendar(ics: &str, href: &str, etag: &str, offset_east_seconds: i32) -
             start = None;
             end = None;
             rrule.clear();
+            exdates.clear();
             cancelled = false;
             continue;
         }
         if line.eq_ignore_ascii_case("END:VEVENT") {
             if let Some(parsed) = finish_event(
-                href, etag, &uid, &title, &notes, start, end, &rrule, cancelled,
+                href, etag, &uid, &title, &notes, start, end, &rrule, &exdates, cancelled,
             ) {
                 out.push(parsed);
             }
@@ -703,6 +707,15 @@ fn parse_calendar(ics: &str, href: &str, etag: &str, offset_east_seconds: i32) -
             "SUMMARY" => title = value,
             "DESCRIPTION" => notes = value,
             "RRULE" => rrule = value,
+            "EXDATE" => {
+                for piece in value.split(',') {
+                    if let Some(when) = parse_when(&params, piece.trim(), offset_east_seconds) {
+                        exdates.push(match when {
+                            When::Date(date) | When::DateTime { date, .. } => date,
+                        });
+                    }
+                }
+            }
             "STATUS" if value.eq_ignore_ascii_case("CANCELLED") => cancelled = true,
             "DTSTART" => start = parse_when(&params, &value, offset_east_seconds),
             "DTEND" => end = parse_when(&params, &value, offset_east_seconds),
@@ -721,6 +734,7 @@ fn finish_event(
     start: Option<When>,
     end: Option<When>,
     rrule: &str,
+    exdates: &[NaiveDate],
     cancelled: bool,
 ) -> Option<ParsedIcs> {
     if uid.is_empty() && title.is_empty() {
@@ -734,6 +748,7 @@ fn finish_event(
             event: None,
             start_date: None,
             span_days: 1,
+            exdates: Vec::new(),
         });
     }
     let start = start?;
@@ -778,6 +793,7 @@ fn finish_event(
         cancelled: false,
         start_date: Some(date),
         span_days,
+        exdates: exdates.to_vec(),
         event: Some(RemoteEvent {
             uid: uid.to_string(),
             href: href.to_string(),
@@ -798,6 +814,7 @@ fn expand_dates(
     start: NaiveDate,
     span_days: u32,
     rrule: &str,
+    exdates: &[NaiveDate],
     window_start: NaiveDate,
     window_end: NaiveDate,
 ) -> Result<Vec<NaiveDate>, ()> {
@@ -809,6 +826,9 @@ fn expand_dates(
     };
     let mut out = Vec::new();
     for seed in seeds {
+        if exdates.contains(&seed) {
+            continue;
+        }
         for offset in 0..span_days.min(14) {
             let Some(date) = seed.checked_add_signed(ChronoDuration::days(i64::from(offset)))
             else {
@@ -1221,6 +1241,7 @@ mod tests {
             NaiveDate::from_ymd_opt(2026, 10, 5).unwrap(),
             1,
             "FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=1",
+            &[],
             start,
             end,
         )
@@ -1242,6 +1263,7 @@ mod tests {
             NaiveDate::from_ymd_opt(2026, 10, 31).unwrap(),
             1,
             "FREQ=MONTHLY;COUNT=3",
+            &[],
             NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
             NaiveDate::from_ymd_opt(2027, 1, 31).unwrap(),
         )
@@ -1258,15 +1280,37 @@ mod tests {
             NaiveDate::from_ymd_opt(2026, 10, 3).unwrap(),
             3,
             "",
+            &[],
             start,
             end,
         )
         .unwrap();
         assert_eq!(span.len(), 3);
-        assert!(expand_dates(start, 1, "FREQ=HOURLY", start, end).is_err());
+        assert!(expand_dates(start, 1, "FREQ=HOURLY", &[], start, end).is_err());
         let urls = collection_urls("https://cal.example/a https://cal.example/b/").unwrap();
         assert_eq!(urls.len(), 2);
         assert!(urls[1].ends_with("/b/"));
+    }
+
+    #[test]
+    fn exdate_drops_that_day_of_a_daily_series() {
+        let ics = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:rep\r\nRRULE:FREQ=DAILY\r\nEXDATE:20261005,20261007\r\nDTSTART;VALUE=DATE:20261004\r\nSUMMARY:Daily\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        let xml = format!(
+            r#"<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:response><D:href>/cal/rep.ics</D:href><D:propstat><D:status>HTTP/1.1 200 OK</D:status><D:prop><D:getetag>"e"</D:getetag><C:calendar-data><![CDATA[{ics}]]></C:calendar-data></D:prop></D:propstat></D:response></D:multistatus>"#
+        );
+        let pull = pull_from_xml(
+            &xml,
+            "https://cal.example/cal/",
+            0,
+            NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 10, 8).unwrap(),
+        );
+        let dates: Vec<&str> = pull
+            .events
+            .iter()
+            .map(|event| event.date.as_str())
+            .collect();
+        assert_eq!(dates, vec!["2026-10-04", "2026-10-06", "2026-10-08"]);
     }
 
     #[test]

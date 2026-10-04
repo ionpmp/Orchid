@@ -20,7 +20,9 @@ release yet.
   Temp, and the advertising id stay off until checked. Browser history keeps
   bookmarks. Free space is overwritten with zeros, leaving 64 MB, and can be
   cancelled. Network blocks are outbound Windows Firewall rules named
-  `Orchid Protect` and skip system processes.
+  `Orchid Protect` and skip system processes. History, cache, and cookies
+  stay while that browser is open. Clean shows the size of the checked rows
+  after a scan.
 - **Optimize widget:** Windows update, privacy, Explorer, taskbar, suggestion,
   and performance switches in one place. The set is the reversible overlap of
   Winaero Tweaker, the recommended O&O ShutUp10 switches, and Microsoft Update
@@ -31,8 +33,8 @@ release yet.
   a user, and a password. Extra URLs in the same field, separated by a
   space or a new line, use that account. Sync covers 90 days ago through
   the next year. Daily, weekly, monthly, and yearly repeats, with interval,
-  count, until, and weekly weekdays, are shown on each day. Other rule
-  parts are ignored. A multi-day event is shown on each day, up to 14 days
+  count, until, and weekly weekdays, are shown on each day. A date listed
+  in EXDATE is left out. Other rule parts and exception forms are ignored. A multi-day event is shown on each day, up to 14 days
   and 400 occurrences. Editing or deleting one of those days stays on this
   computer and does not change the series; the next sync restores it.
   A one-time event still writes edits and deletes back. A `Z` time is
