@@ -168,77 +168,68 @@ component ProfileDateCal inherits VerticalLayout {
     }
 }
 
-component TimeWheel inherits Rectangle {
+/// One clock field. `coarse` is the larger jump (hours or minutes).
+component ClockStepper inherits VerticalLayout {
     in property <string> label;
-    in property <[string]> items;
-    in property <int> selected;
-    callback pick(int);
+    in property <string> value;
+    in property <int> coarse: 1;
+    callback step(int);
 
-    background: Theme.surface-base;
-    border-radius: Theme.radius-md;
-    border-width: Theme.hairline;
-    border-color: Theme.border-subtle;
-    clip: true;
+    spacing: Theme.space-1;
     horizontal-stretch: 1;
-    property <length> row-h: Theme.control-sm + 1px;
+    alignment: center;
 
-    init => { root.scroll-to-selected(); }
-    changed selected => { root.scroll-to-selected(); }
-    changed height => { root.scroll-to-selected(); }
-
-    public function scroll-to-selected() {
-        if root.selected < 0 { return; }
-        let y = root.selected * root.row-h - wheel-flick.height / 2 + Theme.control-sm / 2;
-        let max-y = max(0px, wheel-flick.viewport-height - wheel-flick.height);
-        wheel-flick.viewport-y = min(max-y, max(0px, y));
+    Text {
+        text: root.label;
+        color: Theme.text-tertiary;
+        font-size: Theme.font-size-sm;
+        horizontal-alignment: center;
     }
 
-    VerticalLayout {
-        padding-top: Theme.space-1;
+    HorizontalLayout {
+        alignment: center;
         spacing: Theme.space-1;
-
-        Text {
-            text: root.label;
-            color: Theme.text-tertiary;
-            font-size: Theme.font-size-sm;
-            horizontal-alignment: center;
+        IconButton {
+            icon: "chevron-left";
+            size: ControlSize.sm;
+            clicked => { root.step(-1); }
         }
+        Text {
+            text: root.value;
+            min-width: 44px;
+            color: Theme.text-primary;
+            font-size: Theme.font-size-lg;
+            font-family: Theme.font-family-mono;
+            font-weight: Theme.weight-semibold;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        IconButton {
+            icon: "chevron-right";
+            size: ControlSize.sm;
+            clicked => { root.step(1); }
+        }
+    }
 
-        wheel-flick := Flickable {
-            vertical-stretch: 1;
-            viewport-width: self.width;
-            viewport-height: wheel.preferred-height;
-
-            wheel := VerticalLayout {
-                spacing: 1px;
-                for item[i] in root.items : Rectangle {
-                    height: Theme.control-sm;
-                    background: root.selected == i ? Theme.accent-soft :
-                        (wheel-ta.has-hover ? Theme.state-hover : Colors.transparent);
-                    border-radius: Theme.radius-md;
-                    animate background { duration: Theme.motion-fast; easing: ease-out; }
-
-                    wheel-ta := TouchArea {
-                        mouse-cursor: MouseCursor.pointer;
-                        clicked => { root.pick(i); }
-                    }
-                    Text {
-                        width: 100%; height: 100%;
-                        text: item;
-                        color: root.selected == i ? Theme.accent-brand : Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        font-family: Theme.font-family-mono;
-                        font-weight: root.selected == i ? Theme.weight-semibold : Theme.weight-regular;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-            }
+    if root.coarse > 1 : HorizontalLayout {
+        alignment: center;
+        spacing: Theme.space-1;
+        TouchButton {
+            text: "−" + root.coarse;
+            tone: ButtonTone.ghost;
+            size: ControlSize.sm;
+            clicked => { root.step(-root.coarse); }
+        }
+        TouchButton {
+            text: "+" + root.coarse;
+            tone: ButtonTone.ghost;
+            size: ControlSize.sm;
+            clicked => { root.step(root.coarse); }
         }
     }
 }
 
-/// Side-by-side hour (0–23) and minute (0–59) wheels.
+/// Side-by-side hour and minute steppers. The first +1 from a blank field lands on 0.
 component ProfileTimeSelect inherits VerticalLayout {
     in property <string> label;
     in property <string> selected-text;
@@ -251,7 +242,23 @@ component ProfileTimeSelect inherits VerticalLayout {
     in property <int> minute;
     callback set-time(int, int);
 
-    spacing: Theme.space-1;
+    spacing: Theme.space-2;
+
+    function tick-label(index: int, items: [string]) -> string {
+        if (index < 0 || index >= items.length) { return "--"; }
+        return items[index];
+    }
+
+    // Blank field: +1 selects 0, −1 selects the last tick. Later steps wrap.
+    function clock-step(current: int, delta: int, modulo: int) -> int {
+        if (current < 0) {
+            if (delta == 1) { return 0; }
+            if (delta == -1) { return modulo - 1; }
+            if (delta > 0) { return mod(delta, modulo); }
+            return mod(modulo + delta, modulo);
+        }
+        return mod(current + delta + modulo * 4, modulo);
+    }
 
     HorizontalLayout {
         spacing: Theme.space-2;
@@ -271,20 +278,23 @@ component ProfileTimeSelect inherits VerticalLayout {
     }
 
     HorizontalLayout {
-        spacing: Theme.space-2;
-        height: 112px;
-
-        TimeWheel {
+        spacing: Theme.space-3;
+        alignment: start;
+        ClockStepper {
             label: root.hour-label;
-            items: root.hour-items;
-            selected: root.hour;
-            pick(h) => { root.set-time(h, root.minute < 0 ? 0 : root.minute); }
+            value: root.tick-label(root.hour, root.hour-items);
+            coarse: 6;
+            step(d) => {
+                root.set-time(root.clock-step(root.hour, d, 24), root.minute < 0 ? 0 : root.minute);
+            }
         }
-        TimeWheel {
+        ClockStepper {
             label: root.minute-label;
-            items: root.minute-items;
-            selected: root.minute;
-            pick(m) => { root.set-time(root.hour < 0 ? 12 : root.hour, m); }
+            value: root.tick-label(root.minute, root.minute-items);
+            coarse: 5;
+            step(d) => {
+                root.set-time(root.hour < 0 ? 12 : root.hour, root.clock-step(root.minute, d, 60));
+            }
         }
     }
 }
@@ -309,6 +319,8 @@ component ColorDot inherits Rectangle {
     in property <int> color-code;
     width: 8px;
     height: 8px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
     border-radius: 4px;
     background: root.color-code == 0 ? Theme.feedback-success
         : root.color-code == 1 ? Theme.feedback-warning
@@ -388,6 +400,8 @@ export component JyotishView inherits Rectangle {
     property <int> draft-event-kind: 0;
     property <int> draft-event-year: 2000;
     property <string> draft-profile-name;
+    /// Profile editor: -1 collapsed, 0 date, 1 time, 2 place.
+    property <int> profile-pane: -1;
 
     background: transparent;
 
@@ -395,18 +409,22 @@ export component JyotishView inherits Rectangle {
         padding: Theme.space-3;
         spacing: Theme.space-3;
 
-        // Tab chips
-        Flickable {
+        tab-scroll := Flickable {
             height: Theme.control-sm;
             viewport-height: self.height;
-            viewport-width: tab-row.preferred-width.max(self.width);
-            interactive: true;
+            viewport-width: max(self.width, tab-row.preferred-width);
+            interactive: tab-row.preferred-width > self.width;
 
             tab-row := HorizontalLayout {
                 spacing: Theme.space-1;
-                for tab-label[i] in model.tab-labels : Chip {
+                min-width: parent.width;
+
+                for tab-label[i] in model.tab-labels : TouchButton {
                     text: tab-label;
-                    selected: model.active-tab == i;
+                    wide: true;
+                    size: ControlSize.sm;
+                    tone: model.active-tab == i ? ButtonTone.tonal : ButtonTone.ghost;
+                    active: model.active-tab == i;
                     clicked => { root.select-tab(i); }
                 }
             }
@@ -543,9 +561,57 @@ export component JyotishView inherits Rectangle {
 
                 if !model.is-today : TouchButton {
                     text: model.today-label;
-                    tone: ButtonTone.ghost;
+                    tone: ButtonTone.tonal;
                     size: ControlSize.sm;
                     clicked => { root.go-today(); }
+                }
+
+                if !model.is-loading && model.week-strip.length > 0 : HorizontalLayout {
+                    spacing: Theme.space-1;
+                    for chip[i] in model.week-strip : Rectangle {
+                        height: Theme.control-lg;
+                        horizontal-stretch: 1;
+                        border-radius: Theme.radius-lg;
+                        background: chip.is-selected ? Theme.accent-soft
+                            : (chip-ta.has-hover ? Theme.state-hover : Theme.surface-sunken);
+                        border-width: Theme.hairline;
+                        border-color: chip.is-selected ? Theme.accent-muted : Theme.border-subtle;
+                        animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
+
+                        accessible-role: AccessibleRole.button;
+                        accessible-label: chip.weekday + " " + chip.day-num;
+                        accessible-action-default => { root.select-offset(chip.offset); }
+
+                        chip-ta := TouchArea {
+                            mouse-cursor: MouseCursor.pointer;
+                            clicked => { root.select-offset(chip.offset); }
+                        }
+
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: Theme.space-1;
+                            padding-top: Theme.space-1;
+                            padding-bottom: Theme.space-1;
+
+                            Text {
+                                text: chip.weekday;
+                                color: chip.is-selected ? Theme.accent-brand : Theme.text-secondary;
+                                font-size: Theme.font-size-sm;
+                                horizontal-alignment: center;
+                            }
+                            Text {
+                                text: chip.day-num;
+                                color: chip.is-selected ? Theme.accent-brand : Theme.text-primary;
+                                font-size: Theme.font-size-sm;
+                                font-weight: Theme.weight-semibold;
+                                horizontal-alignment: center;
+                            }
+                            HorizontalLayout {
+                                alignment: center;
+                                ColorDot { color-code: chip.color; }
+                            }
+                        }
+                    }
                 }
 
                 if model.is-loading : Text {
@@ -699,51 +765,6 @@ export component JyotishView inherits Rectangle {
                         color: Theme.text-primary;
                         font-size: Theme.font-size-sm;
                         wrap: word-wrap;
-                    }
-                }
-
-                // 7-day strip
-                if !model.is-loading && model.week-strip.length > 0 : HorizontalLayout {
-                    spacing: Theme.space-1;
-                    for chip[i] in model.week-strip : Rectangle {
-                        height: 56px;
-                        horizontal-stretch: 1;
-                        border-radius: Theme.radius-lg;
-                        background: chip.is-selected ? Theme.accent-soft
-                            : (chip-ta.has-hover ? Theme.state-hover : Theme.surface-sunken);
-                        border-width: Theme.hairline;
-                        border-color: chip.is-selected ? Theme.accent-muted : Theme.border-subtle;
-                        animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
-
-                        chip-ta := TouchArea {
-                            mouse-cursor: MouseCursor.pointer;
-                            clicked => { root.select-offset(chip.offset); }
-                        }
-
-                        VerticalLayout {
-                            padding-top: Theme.space-2;
-                            padding-bottom: Theme.space-2;
-                            spacing: Theme.space-1;
-                            alignment: center;
-
-                            Text {
-                                text: chip.weekday;
-                                color: chip.is-selected ? Theme.accent-brand : Theme.text-secondary;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: center;
-                            }
-                            Text {
-                                text: chip.day-num;
-                                color: chip.is-selected ? Theme.accent-brand : Theme.text-primary;
-                                font-size: Theme.font-size-sm;
-                                font-weight: Theme.weight-medium;
-                                horizontal-alignment: center;
-                            }
-                            ColorDot {
-                                color-code: chip.color;
-                                x: (parent.width - self.width) / 2;
-                            }
-                        }
                     }
                 }
 
@@ -1163,6 +1184,19 @@ export component JyotishView inherits Rectangle {
                         wrap: word-wrap;
                         horizontal-alignment: center;
                     }
+                    if model.profiles.length > 0 : TouchButton {
+                        text: model.profiles[model.active-profile-index].name;
+                        tone: ButtonTone.ghost;
+                        size: ControlSize.sm;
+                        clicked => { root.open-profiles(); }
+                    }
+                    TouchButton {
+                        text: model.rectify-button-label;
+                        tone: ButtonTone.tonal;
+                        size: ControlSize.md;
+                        wide: true;
+                        clicked => { root.rectify-start(); }
+                    }
                     for row[i] in model.life-years : VerticalLayout {
                         spacing: Theme.space-1;
                         Rectangle {
@@ -1249,12 +1283,6 @@ export component JyotishView inherits Rectangle {
                     }
                 }
 
-                TouchButton {
-                    text: model.rectify-button-label;
-                    tone: ButtonTone.tonal;
-                    size: ControlSize.md;
-                    clicked => { root.rectify-start(); }
-                }
             }
         }
     }
@@ -1507,6 +1535,7 @@ export component JyotishView inherits Rectangle {
                                     tooltip-flip: true;
                                     clicked => {
                                         root.draft-profile-name = profile.name;
+                                        root.profile-pane = profile.has-birth-data ? -1 : 0;
                                         root.begin-edit-profile(i);
                                     }
                                 }
@@ -1528,6 +1557,7 @@ export component JyotishView inherits Rectangle {
                         size: ControlSize.md;
                         clicked => {
                             root.draft-profile-name = "";
+                            root.profile-pane = 0;
                             root.begin-add-profile();
                         }
                     }
@@ -1563,7 +1593,7 @@ export component JyotishView inherits Rectangle {
                                     y: 0px;
                                     width: parent.width - Theme.space-6;
                                     height: parent.height;
-                                    text: root.draft-profile-name == "" && model.profile-edit-name != "" ? model.profile-edit-name : root.draft-profile-name;
+                                    text: root.draft-profile-name;
                                     color: Theme.text-primary;
                                     font-size: Theme.font-size-sm;
                                     vertical-alignment: center;
@@ -1592,7 +1622,15 @@ export component JyotishView inherits Rectangle {
                                 }
                             }
 
-                            ProfileCard {
+                            TouchButton {
+                                text: model.profile-date-label + "  " + (model.profile-edit-date == "" ? model.profile-date-placeholder : model.profile-edit-date);
+                                tone: root.profile-pane == 0 ? ButtonTone.tonal : ButtonTone.ghost;
+                                active: root.profile-pane == 0;
+                                size: ControlSize.sm;
+                                wide: true;
+                                clicked => { root.profile-pane = root.profile-pane == 0 ? -1 : 0; }
+                            }
+                            if root.profile-pane == 0 : ProfileCard {
                                 ProfileDateCal {
                                     label: model.profile-date-label;
                                     selected-text: model.profile-edit-date;
@@ -1608,7 +1646,15 @@ export component JyotishView inherits Rectangle {
                                 }
                             }
 
-                            ProfileCard {
+                            TouchButton {
+                                text: model.profile-time-label + "  " + (model.profile-edit-time == "" ? model.profile-time-placeholder : model.profile-edit-time);
+                                tone: root.profile-pane == 1 ? ButtonTone.tonal : ButtonTone.ghost;
+                                active: root.profile-pane == 1;
+                                size: ControlSize.sm;
+                                wide: true;
+                                clicked => { root.profile-pane = root.profile-pane == 1 ? -1 : 1; }
+                            }
+                            if root.profile-pane == 1 : ProfileCard {
                                 ProfileTimeSelect {
                                     label: model.profile-time-label;
                                     selected-text: model.profile-edit-time;
@@ -1623,7 +1669,15 @@ export component JyotishView inherits Rectangle {
                                 }
                             }
 
-                            ProfileCard {
+                            TouchButton {
+                                text: model.profile-place-placeholder + "  " + (model.profile-edit-place-name == "" ? model.profile-offset-placeholder : model.profile-edit-place-name);
+                                tone: root.profile-pane == 2 ? ButtonTone.tonal : ButtonTone.ghost;
+                                active: root.profile-pane == 2;
+                                size: ControlSize.sm;
+                                wide: true;
+                                clicked => { root.profile-pane = root.profile-pane == 2 ? -1 : 2; }
+                            }
+                            if root.profile-pane == 2 : ProfileCard {
                                 Eyebrow { text: model.profile-place-placeholder; }
 
                                 if model.profile-edit-place-name != "" : HorizontalLayout {
@@ -1898,27 +1952,44 @@ export component JyotishView inherits Rectangle {
 
                     Divider { }
 
-                    HorizontalLayout {
-                        spacing: Theme.space-1;
-                        for kind[ki] in model.rectify.event-kinds : Chip {
-                            text: kind;
-                            selected: root.draft-event-kind == ki;
-                            clicked => { root.draft-event-kind = ki; }
+                    Flickable {
+                        height: Theme.control-sm;
+                        viewport-height: self.height;
+                        viewport-width: kind-row.preferred-width.max(self.width);
+                        interactive: true;
+
+                        kind-row := HorizontalLayout {
+                            spacing: Theme.space-1;
+                            for kind[ki] in model.rectify.event-kinds : Chip {
+                                text: kind;
+                                selected: root.draft-event-kind == ki;
+                                clicked => { root.draft-event-kind = ki; }
+                            }
                         }
                     }
 
                     HorizontalLayout {
-                        spacing: Theme.space-2;
+                        spacing: Theme.space-1;
                         alignment: center;
+                        TouchButton {
+                            text: "−10";
+                            tone: ButtonTone.ghost;
+                            size: ControlSize.sm;
+                            clicked => { root.draft-event-year = max(model.rectify.event-year-min, root.draft-event-year - 10); }
+                        }
                         IconButton {
                             icon: "minus";
                             size: ControlSize.sm;
                             clicked => { root.draft-event-year = max(model.rectify.event-year-min, root.draft-event-year - 1); }
                         }
                         Text {
-                            text: model.rectify.year-placeholder + ": " + root.draft-event-year;
+                            text: model.rectify.year-placeholder + " " + root.draft-event-year;
+                            min-width: 72px;
                             color: Theme.text-primary;
                             font-size: Theme.font-size-sm;
+                            font-family: Theme.font-family-mono;
+                            font-weight: Theme.weight-semibold;
+                            horizontal-alignment: center;
                             vertical-alignment: center;
                         }
                         IconButton {
@@ -1927,11 +1998,18 @@ export component JyotishView inherits Rectangle {
                             clicked => { root.draft-event-year = min(model.rectify.event-year-max, root.draft-event-year + 1); }
                         }
                         TouchButton {
-                            text: model.rectify.add-event-label;
-                            tone: ButtonTone.tonal;
+                            text: "+10";
+                            tone: ButtonTone.ghost;
                             size: ControlSize.sm;
-                            clicked => { root.rectify-add-event(root.draft-event-kind, root.draft-event-year); }
+                            clicked => { root.draft-event-year = min(model.rectify.event-year-max, root.draft-event-year + 10); }
                         }
+                    }
+                    TouchButton {
+                        text: model.rectify.add-event-label;
+                        tone: ButtonTone.tonal;
+                        size: ControlSize.md;
+                        wide: true;
+                        clicked => { root.rectify-add-event(root.draft-event-kind, root.draft-event-year); }
                     }
 
                     Rectangle { vertical-stretch: 1; }
