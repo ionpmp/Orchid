@@ -9,8 +9,9 @@ when present in the file head: Word → document editor; Excel (`.xlsx`,
 keys; the bar shows that cell's address and a field for its value; the
 first 400 rows and 32 columns). Enter or Save writes that cell back into
 the workbook. A formula cell is left unchanged. A value edit recalculates
-arithmetic, cell references, `SUM`, and `AVERAGE` on that same sheet.
-Other formulas keep their stored value. Drawings are copied through. A blank cell that the
+arithmetic, comparisons, cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`,
+`COUNT`, and `IF` on that same sheet. Other formulas keep their stored
+value. Drawings are copied through. A blank cell that the
 table only filled in so the columns line up is not inserted. PowerPoint
 (`.pptx`, `.pptm`, `.ppsx`) → a read-only HTML preview (one card per
 slide, including speaker notes).

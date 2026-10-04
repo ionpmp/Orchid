@@ -2,9 +2,9 @@
 //!
 //! Spreadsheets become a sheet and cell table. One stored cell can be
 //! written back into the package. A formula cell is left unchanged. After a
-//! value edit, arithmetic, cell references, `SUM`, and `AVERAGE` on that
-//! sheet are recalculated. Anything else keeps its stored value.
-//! Presentations become one HTML card per slide.
+//! value edit, arithmetic, comparisons, cell references, `SUM`, `AVERAGE`,
+//! `MIN`, `MAX`, `COUNT`, and `IF` on that sheet are recalculated. Anything
+//! else keeps its stored value. Presentations become one HTML card per slide.
 
 use std::any::Any;
 use std::io::{Cursor, Read, Seek, Write};
@@ -212,9 +212,10 @@ pub(crate) fn render_office(
 /// Replace one cell's stored value and return the new package.
 ///
 /// A formula cell is left unchanged. After a value edit, simple formulas on
-/// that sheet (`+`, `-`, `*`, `/`, parentheses, cell references, `SUM`, and
-/// `AVERAGE`) are written back into `<v>`. An unsupported formula keeps its
-/// previous value. Other zip parts, including drawings, are copied through.
+/// that sheet (`+`, `-`, `*`, `/`, comparisons, parentheses, cell references,
+/// `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, and `IF`) are written back into
+/// `<v>`. An unsupported formula keeps its previous value. Other zip parts,
+/// including drawings, are copied through.
 pub(crate) fn set_sheet_cell(
     bytes: &[u8],
     sheet_name: &str,
@@ -489,7 +490,7 @@ fn eval_formula(
         bytes: formula.as_bytes(),
         index: 0,
     };
-    let value = parser.expr(formulas, literals, visiting)?;
+    let value = parser.compare(formulas, literals, visiting)?;
     parser.skip();
     if parser.index == parser.bytes.len() {
         Some(value)
@@ -503,6 +504,15 @@ struct CalcParser<'a> {
     index: usize,
 }
 
+enum CmpOp {
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+}
+
 impl<'a> CalcParser<'a> {
     fn skip(&mut self) {
         while self
@@ -511,6 +521,61 @@ impl<'a> CalcParser<'a> {
             .is_some_and(|byte| byte.is_ascii_whitespace())
         {
             self.index += 1;
+        }
+    }
+
+    fn compare(
+        &mut self,
+        formulas: &std::collections::HashMap<String, String>,
+        literals: &std::collections::HashMap<String, f64>,
+        visiting: &mut std::collections::HashSet<String>,
+    ) -> Option<f64> {
+        let left = self.expr(formulas, literals, visiting)?;
+        self.skip();
+        let Some(op) = self.cmp_op() else {
+            return Some(left);
+        };
+        let right = self.expr(formulas, literals, visiting)?;
+        let same = (left - right).abs() < 1e-9;
+        let flag = match op {
+            CmpOp::Eq => same,
+            CmpOp::Ne => !same,
+            CmpOp::Lt => left < right && !same,
+            CmpOp::Gt => left > right && !same,
+            CmpOp::Le => left < right || same,
+            CmpOp::Ge => left > right || same,
+        };
+        Some(if flag { 1.0 } else { 0.0 })
+    }
+
+    fn cmp_op(&mut self) -> Option<CmpOp> {
+        match self.bytes.get(self.index).copied() {
+            Some(b'=') => {
+                self.index += 1;
+                Some(CmpOp::Eq)
+            }
+            Some(b'<') => {
+                self.index += 1;
+                if self.bytes.get(self.index) == Some(&b'>') {
+                    self.index += 1;
+                    Some(CmpOp::Ne)
+                } else if self.bytes.get(self.index) == Some(&b'=') {
+                    self.index += 1;
+                    Some(CmpOp::Le)
+                } else {
+                    Some(CmpOp::Lt)
+                }
+            }
+            Some(b'>') => {
+                self.index += 1;
+                if self.bytes.get(self.index) == Some(&b'=') {
+                    self.index += 1;
+                    Some(CmpOp::Ge)
+                } else {
+                    Some(CmpOp::Gt)
+                }
+            }
+            _ => None,
         }
     }
 
@@ -583,7 +648,7 @@ impl<'a> CalcParser<'a> {
         }
         if self.bytes.get(self.index) == Some(&b'(') {
             self.index += 1;
-            let value = self.expr(formulas, literals, visiting)?;
+            let value = self.compare(formulas, literals, visiting)?;
             self.skip();
             if self.bytes.get(self.index) != Some(&b')') {
                 return None;
@@ -602,10 +667,34 @@ impl<'a> CalcParser<'a> {
         self.skip();
         if self.bytes.get(self.index) == Some(&b'(') {
             self.index += 1;
+            if word.eq_ignore_ascii_case("IF") {
+                let cond = self.compare(formulas, literals, visiting)?;
+                self.skip();
+                if self.bytes.get(self.index) != Some(&b',') {
+                    return None;
+                }
+                self.index += 1;
+                let yes = self.compare(formulas, literals, visiting)?;
+                self.skip();
+                if self.bytes.get(self.index) != Some(&b',') {
+                    return None;
+                }
+                self.index += 1;
+                let no = self.compare(formulas, literals, visiting)?;
+                self.skip();
+                if self.bytes.get(self.index) != Some(&b')') {
+                    return None;
+                }
+                self.index += 1;
+                return Some(if cond != 0.0 { yes } else { no });
+            }
             let args = self.arg_list(formulas, literals, visiting)?;
             return match word.to_ascii_uppercase().as_str() {
                 "SUM" => Some(args.iter().sum()),
                 "AVERAGE" if !args.is_empty() => Some(args.iter().sum::<f64>() / args.len() as f64),
+                "MIN" => args.into_iter().reduce(f64::min),
+                "MAX" => args.into_iter().reduce(f64::max),
+                "COUNT" => Some(args.len() as f64),
                 _ => None,
             };
         }
@@ -1499,6 +1588,35 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>SIN(A1)</f><v>9</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_recalculates_min_max_count_and_if() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>2</v></c><c r="B1"><v>8</v></c><c r="C1"><f>MIN(A1:B1)</f><v>0</v></c><c r="D1"><f>MAX(A1,B1)</f><v>0</v></c><c r="E1"><f>COUNT(A1:B1)</f><v>0</v></c><c r="F1"><f>IF(A1>5,B1,A1)</f><v>0</v></c><c r="G1"><f>IF(A1<>2,9,4)</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "B1", "3").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>MIN(A1:B1)</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MAX(A1,B1)</f><v>3</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COUNT(A1:B1)</f><v>2</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>IF(A1>5,B1,A1)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>IF(A1<>2,9,4)</f><v>4</v>"#), "{sheet}");
     }
 
     #[tokio::test]
