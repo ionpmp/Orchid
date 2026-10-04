@@ -21,8 +21,10 @@ pub mod mail;
 pub mod media;
 pub mod moon;
 pub mod notes;
+pub mod optimize;
 pub mod password;
 pub mod processes;
+pub mod protect;
 pub mod recent_files;
 pub mod rss;
 pub mod search;
@@ -51,6 +53,7 @@ pub fn register_core(registry: &WidgetRegistry, http: reqwest::Client) -> Result
     registry.register(clock::descriptor(http.clone()))?;
     registry.register(system::descriptor())?;
     registry.register(processes::descriptor())?;
+    registry.register(optimize::descriptor())?;
     registry.register(calculator::descriptor())?;
     registry.register(notes::descriptor())?;
     registry.register(agent::descriptor())?;
@@ -84,6 +87,7 @@ pub fn register_all(
     registry.register(clock::descriptor(http.clone()))?;
     registry.register(system::descriptor())?;
     registry.register(processes::descriptor())?;
+    registry.register(optimize::descriptor())?;
     registry.register(calculator::descriptor())?;
     registry.register(notes::descriptor())?;
     registry.register(agent::descriptor())?;
