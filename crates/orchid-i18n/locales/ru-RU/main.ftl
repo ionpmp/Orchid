@@ -293,7 +293,8 @@ calendar-caldav-bad-url = URL должен начинаться с http:// ил�
 calendar-caldav-conflict = Копия на сервере изменилась. Синхронизируйте и отредактируйте снова
 calendar-caldav-secret = Не удалось сохранить пароль
 calendar-caldav-failed = Синхронизация не удалась: { $reason }
-calendar-caldav-hint = Одна коллекция CalDAV. Повторяющиеся события остаются на сервере.
+calendar-caldav-local-day = Этот день остаётся на компьютере. Серия на сервере не меняется.
+calendar-caldav-hint = Коллекции CalDAV: один адрес на строку или через пробел. Поддерживаемый повтор показывается в каждый день. Правка одного дня не меняет серию.
 calendar-selected-day = { $weekday }, { $month } { $day }
 calendar-settings-default-all-day = Новые события на весь день по умолчанию
 calendar-settings-show-notes = Показывать заметки в повестке
@@ -1704,7 +1705,7 @@ fm-meta-shift-hint = shift=+1h  -2d  +30m  или секунды
 fm-meta-import-title = Импорт метаданных CSV
 fm-meta-import-hint = Путь к CSV или вставьте строки (path,title,headline,description,creator,copyright,keywords,credit,lat,lon,date)
 fm-meta-template-save-title = Сохранить шаблон метаданных
-fm-meta-template-save-hint = name=press плюс title= creator= copyright= …
+fm-meta-template-save-hint = name=нажмите плюс title= creator= copyright= …
 fm-meta-template-apply-title = Применить шаблон метаданных
 fm-meta-template-apply-hint = Имя шаблона
 fm-meta-template-missing = Неизвестный шаблон метаданных.
@@ -2748,6 +2749,7 @@ mail-save-account = Сохранить и подключиться
 mail-oauth = Войти через браузер
 mail-cancel = Отмена
 mail-refresh = Обновить
+mail-search-placeholder = Поиск почты
 mail-compose = Новое
 mail-send = Отправить
 mail-save-draft = Сохранить черновик

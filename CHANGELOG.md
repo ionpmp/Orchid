@@ -875,6 +875,9 @@ release yet.
 - The mail widget is translated in every bundled locale.
 - Password editing, backup and diagnostics export, and dock labels that
   were still English are translated in every bundled locale.
+- Remaining interface labels (playlists, shell, wind speed, byte sizes,
+  and editor hints) are translated where the English word is not the
+  local term. Sanskrit glossary terms stay as transliteration.
 - Full-text search indexes `.proto`, `.graphql`, `.gql`, `.prisma`,
   `.nix`, `.tf`, `.hcl`, and `.zig` as source text.
 - Full-text search indexes `.aws/credentials`: profile names and regions.
