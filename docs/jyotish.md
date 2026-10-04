@@ -92,6 +92,10 @@ no longer need (at least one location is always kept). Locations are no
 longer edited from the settings panel — latitude/longitude/name fields there
 have been replaced by this in-widget picker.
 
+The Day tab keeps the date, location, and profile chips above a seven-day
+strip and the score, so nearby days can be opened without scrolling past the
+explanation. **Today** is shown when the open day is not today.
+
 ## Engineering notes
 
 - Day colors for Month/Year grids are memoized per civil date (`color_cache`);
@@ -123,12 +127,22 @@ Each profile stores:
 - **Birth place** (name + lat/lon) — searched via Open-Meteo geocoding,
   **separate** from observation locations
 
+Name and gender stay visible in the editor. Date, time, and place are rows
+that open one at a time: a calendar (with month and year sheets), hour and
+minute steppers (one step, or six hours / five minutes), and place search.
+The UTC offset is edited with the place, in steps of 30 and 60 minutes.
+Saving with an empty place name keeps the place already chosen, including
+its coordinates.
+
 Observation location (including Current) still drives sunrise / muhurta /
 Rahu Kalam only. Natal Moon, tara, daśā, and the rectification wizard use
 the **active profile** (birth datetime + birth place for lagna).
 
 Once the active profile has a birth date, `has_birth_data` unlocks the
 personal layer, the Life tab's retrospective, and the current daśā display.
+On the Life tab the rectification button and the active profile name sit
+above the year list.
+
 Birth time matters for the ascendant/houses used by rectification; if you
 don't know it precisely, use the rectification wizard below rather than
 guessing.
@@ -152,7 +166,8 @@ requiring an outside tool:
    pattern; each answer scores candidate ascendants.
 3. **Life events** — optionally add dated life events (marriage, career
    change, relocation, etc.); each event scores candidates against
-   Vimshottari daśā/antardaśā transitions.
+   Vimshottari daśā/antardaśā transitions. The year moves by one or by ten
+   and stays between the birth year and next year.
 4. **Results** — ranked candidate windows with a quiz/event/total score
    breakdown; you can **refine** (narrow further around the top result) or
    **accept** the top candidate as your rectified birth time.
