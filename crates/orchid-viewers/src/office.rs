@@ -1,9 +1,10 @@
 //! Spreadsheet and presentation preview.
 //!
 //! Spreadsheets become a sheet and cell table. One stored cell can be
-//! written back into the package. A formula cell is left unchanged, and
-//! formulas are not recalculated. Presentations become one HTML card per
-//! slide.
+//! written back into the package. A formula cell is left unchanged. After a
+//! value edit, arithmetic, cell references, `SUM`, and `AVERAGE` on that
+//! sheet are recalculated. Anything else keeps its stored value.
+//! Presentations become one HTML card per slide.
 
 use std::any::Any;
 use std::io::{Cursor, Read, Seek, Write};
@@ -210,8 +211,10 @@ pub(crate) fn render_office(
 
 /// Replace one cell's stored value and return the new package.
 ///
-/// A formula cell is left unchanged. Other zip parts, including drawings,
-/// are copied through. The function does not recalculate formulas.
+/// A formula cell is left unchanged. After a value edit, simple formulas on
+/// that sheet (`+`, `-`, `*`, `/`, parentheses, cell references, `SUM`, and
+/// `AVERAGE`) are written back into `<v>`. An unsupported formula keeps its
+/// previous value. Other zip parts, including drawings, are copied through.
 pub(crate) fn set_sheet_cell(
     bytes: &[u8],
     sheet_name: &str,
@@ -236,6 +239,7 @@ pub(crate) fn set_sheet_cell(
     let xml =
         read_entry(&mut archive, &path).ok_or_else(|| "viewer-sheet-unreadable".to_string())?;
     let xml = replace_cell_xml(&xml, &address, text)?;
+    let xml = recalculate_sheet(&xml);
     let mut cursor = Cursor::new(Vec::new());
     {
         let mut out = zip::ZipWriter::new(&mut cursor);
@@ -328,6 +332,453 @@ fn cell_ref_matches(open_tag: &str, address: &str) -> bool {
 
 fn element_has_formula(element: &str) -> bool {
     element.contains("<f>") || element.contains("<f ") || element.contains("<f/>")
+}
+
+struct SheetCellRef {
+    address: String,
+    formula: Option<String>,
+    value: Option<f64>,
+    value_span: Option<(usize, usize)>,
+    insert_at: Option<usize>,
+    text_cell: bool,
+}
+
+fn recalculate_sheet(xml: &str) -> String {
+    let cells = sheet_cells(xml);
+    let mut literals = std::collections::HashMap::<String, f64>::new();
+    let mut formulas = std::collections::HashMap::<String, String>::new();
+    for cell in &cells {
+        if let Some(formula) = &cell.formula {
+            formulas.insert(cell.address.clone(), formula.clone());
+        } else if let Some(value) = cell.value {
+            literals.insert(cell.address.clone(), value);
+        }
+    }
+    let mut edits = Vec::new();
+    for cell in &cells {
+        let Some(formula) = &cell.formula else {
+            continue;
+        };
+        if cell.text_cell {
+            continue;
+        }
+        let mut visiting = std::collections::HashSet::new();
+        let Some(number) = eval_formula(formula, &formulas, &literals, &mut visiting) else {
+            continue;
+        };
+        let rendered = format_calc(number);
+        if rendered.is_empty() {
+            continue;
+        }
+        if let Some((start, end)) = cell.value_span {
+            edits.push((start, end, rendered));
+        } else if let Some(at) = cell.insert_at {
+            edits.push((at, at, format!("<v>{rendered}</v>")));
+        }
+    }
+    edits.sort_by(|a, b| b.0.cmp(&a.0));
+    let mut out = xml.to_string();
+    for (start, end, text) in edits {
+        out.replace_range(start..end, &text);
+    }
+    out
+}
+
+fn sheet_cells(xml: &str) -> Vec<SheetCellRef> {
+    let bytes = xml.as_bytes();
+    let mut cells = Vec::new();
+    let mut index = 0usize;
+    while index + 2 < bytes.len() {
+        if bytes[index] == b'<' && bytes[index + 1] == b'c' {
+            let boundary = bytes[index + 2];
+            if matches!(boundary, b' ' | b'>' | b'/') {
+                let Some(tag_end) = xml[index..].find('>') else {
+                    break;
+                };
+                let open_end = index + tag_end + 1;
+                let open = &xml[index..open_end];
+                let address = cell_address_from_tag(open);
+                if open.ends_with("/>") {
+                    index = open_end;
+                    continue;
+                }
+                let Some(close) = xml[open_end..].find("</c>") else {
+                    break;
+                };
+                let end = open_end + close + 4;
+                if let Some(address) = address {
+                    let body = &xml[open_end..open_end + close];
+                    let formula = formula_text(body);
+                    let value_span = value_span(xml, open_end, open_end + close);
+                    let value =
+                        value_span.and_then(|(start, end)| xml[start..end].parse::<f64>().ok());
+                    cells.push(SheetCellRef {
+                        address,
+                        formula,
+                        value,
+                        value_span,
+                        insert_at: Some(open_end + close),
+                        text_cell: open.contains("t=\"s\"")
+                            || open.contains("t=\"str\"")
+                            || open.contains("t=\"inlineStr\""),
+                    });
+                }
+                index = end;
+                continue;
+            }
+        }
+        index += 1;
+    }
+    cells
+}
+
+fn cell_address_from_tag(open: &str) -> Option<String> {
+    for mark in ["r=\"", "r='"] {
+        let Some(start) = open.find(mark) else {
+            continue;
+        };
+        let rest = &open[start + mark.len()..];
+        let end = rest.find(['"', '\'']).unwrap_or(rest.len());
+        let address = rest[..end].trim().to_ascii_uppercase();
+        if is_cell_address(&address) {
+            return Some(address);
+        }
+    }
+    None
+}
+
+fn formula_text(body: &str) -> Option<String> {
+    let start = body.find("<f>")?;
+    let rest = &body[start + 3..];
+    let end = rest.find("</f>")?;
+    let text = rest[..end].trim();
+    let text = text.strip_prefix('=').unwrap_or(text).trim();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text.to_string())
+    }
+}
+
+fn value_span(xml: &str, from: usize, to: usize) -> Option<(usize, usize)> {
+    let body = &xml[from..to];
+    let start = body.find("<v>")?;
+    let rest = &body[start + 3..];
+    let end = rest.find("</v>")?;
+    Some((from + start + 3, from + start + 3 + end))
+}
+
+fn format_calc(value: f64) -> String {
+    if !value.is_finite() {
+        return String::new();
+    }
+    if (value - value.round()).abs() < 1e-9 && value.abs() < 1e15 {
+        return format!("{}", value.round() as i64);
+    }
+    let text = format!("{value:.8}");
+    text.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+fn eval_formula(
+    formula: &str,
+    formulas: &std::collections::HashMap<String, String>,
+    literals: &std::collections::HashMap<String, f64>,
+    visiting: &mut std::collections::HashSet<String>,
+) -> Option<f64> {
+    let mut parser = CalcParser {
+        bytes: formula.as_bytes(),
+        index: 0,
+    };
+    let value = parser.expr(formulas, literals, visiting)?;
+    parser.skip();
+    if parser.index == parser.bytes.len() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+struct CalcParser<'a> {
+    bytes: &'a [u8],
+    index: usize,
+}
+
+impl<'a> CalcParser<'a> {
+    fn skip(&mut self) {
+        while self
+            .bytes
+            .get(self.index)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            self.index += 1;
+        }
+    }
+
+    fn expr(
+        &mut self,
+        formulas: &std::collections::HashMap<String, String>,
+        literals: &std::collections::HashMap<String, f64>,
+        visiting: &mut std::collections::HashSet<String>,
+    ) -> Option<f64> {
+        let mut value = self.term(formulas, literals, visiting)?;
+        loop {
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b'+') => {
+                    self.index += 1;
+                    value += self.term(formulas, literals, visiting)?;
+                }
+                Some(b'-') => {
+                    self.index += 1;
+                    value -= self.term(formulas, literals, visiting)?;
+                }
+                _ => break,
+            }
+        }
+        Some(value)
+    }
+
+    fn term(
+        &mut self,
+        formulas: &std::collections::HashMap<String, String>,
+        literals: &std::collections::HashMap<String, f64>,
+        visiting: &mut std::collections::HashSet<String>,
+    ) -> Option<f64> {
+        let mut value = self.factor(formulas, literals, visiting)?;
+        loop {
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b'*') => {
+                    self.index += 1;
+                    value *= self.factor(formulas, literals, visiting)?;
+                }
+                Some(b'/') => {
+                    self.index += 1;
+                    let right = self.factor(formulas, literals, visiting)?;
+                    if right == 0.0 {
+                        return None;
+                    }
+                    value /= right;
+                }
+                _ => break,
+            }
+        }
+        Some(value)
+    }
+
+    fn factor(
+        &mut self,
+        formulas: &std::collections::HashMap<String, String>,
+        literals: &std::collections::HashMap<String, f64>,
+        visiting: &mut std::collections::HashSet<String>,
+    ) -> Option<f64> {
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b'+') {
+            self.index += 1;
+            return self.factor(formulas, literals, visiting);
+        }
+        if self.bytes.get(self.index) == Some(&b'-') {
+            self.index += 1;
+            return Some(-self.factor(formulas, literals, visiting)?);
+        }
+        if self.bytes.get(self.index) == Some(&b'(') {
+            self.index += 1;
+            let value = self.expr(formulas, literals, visiting)?;
+            self.skip();
+            if self.bytes.get(self.index) != Some(&b')') {
+                return None;
+            }
+            self.index += 1;
+            return Some(value);
+        }
+        if self
+            .bytes
+            .get(self.index)
+            .is_some_and(|byte| byte.is_ascii_digit() || *byte == b'.')
+        {
+            return self.number();
+        }
+        let word = self.word()?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b'(') {
+            self.index += 1;
+            let args = self.arg_list(formulas, literals, visiting)?;
+            return match word.to_ascii_uppercase().as_str() {
+                "SUM" => Some(args.iter().sum()),
+                "AVERAGE" if !args.is_empty() => Some(args.iter().sum::<f64>() / args.len() as f64),
+                _ => None,
+            };
+        }
+        self.cell_value(&word, formulas, literals, visiting)
+    }
+
+    fn arg_list(
+        &mut self,
+        formulas: &std::collections::HashMap<String, String>,
+        literals: &std::collections::HashMap<String, f64>,
+        visiting: &mut std::collections::HashSet<String>,
+    ) -> Option<Vec<f64>> {
+        let mut values = Vec::new();
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(values);
+        }
+        loop {
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                break;
+            }
+            let saved = self.index;
+            if let Some(start) = self.cell_token() {
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b':') {
+                    self.index += 1;
+                    self.skip();
+                    let Some(end) = self.cell_token() else {
+                        return None;
+                    };
+                    let Some(cells) = cells_in_range(&start, &end) else {
+                        return None;
+                    };
+                    for address in cells {
+                        if let Some(value) = self.cell_value(&address, formulas, literals, visiting)
+                        {
+                            values.push(value);
+                        }
+                    }
+                } else {
+                    self.index = saved;
+                    values.push(self.expr(formulas, literals, visiting)?);
+                }
+            } else {
+                self.index = saved;
+                values.push(self.expr(formulas, literals, visiting)?);
+            }
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => self.index += 1,
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        if values.len() > 4096 {
+            None
+        } else {
+            Some(values)
+        }
+    }
+
+    fn number(&mut self) -> Option<f64> {
+        let start = self.index;
+        while self
+            .bytes
+            .get(self.index)
+            .is_some_and(|byte| byte.is_ascii_digit() || *byte == b'.')
+        {
+            self.index += 1;
+        }
+        std::str::from_utf8(&self.bytes[start..self.index])
+            .ok()?
+            .parse()
+            .ok()
+    }
+
+    fn word(&mut self) -> Option<String> {
+        let start = self.index;
+        while self
+            .bytes
+            .get(self.index)
+            .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'$' || *byte == b'_')
+        {
+            self.index += 1;
+        }
+        if start == self.index {
+            return None;
+        }
+        Some(String::from_utf8_lossy(&self.bytes[start..self.index]).replace('$', ""))
+    }
+
+    fn cell_token(&mut self) -> Option<String> {
+        let word = self.word()?;
+        if is_cell_address(&word) {
+            Some(word)
+        } else {
+            None
+        }
+    }
+
+    fn cell_value(
+        &self,
+        address: &str,
+        formulas: &std::collections::HashMap<String, String>,
+        literals: &std::collections::HashMap<String, f64>,
+        visiting: &mut std::collections::HashSet<String>,
+    ) -> Option<f64> {
+        let address = address.to_ascii_uppercase();
+        if !visiting.insert(address.clone()) {
+            return None;
+        }
+        let value = if let Some(formula) = formulas.get(&address) {
+            eval_formula(formula, formulas, literals, visiting)
+        } else {
+            literals.get(&address).copied()
+        };
+        visiting.remove(&address);
+        value
+    }
+}
+
+fn cells_in_range(start: &str, end: &str) -> Option<Vec<String>> {
+    let (c1, r1) = split_address(start)?;
+    let (c2, r2) = split_address(end)?;
+    let (c1, c2) = (c1.min(c2), c1.max(c2));
+    let (r1, r2) = (r1.min(r2), r1.max(r2));
+    if (c2 - c1 + 1).saturating_mul(r2 - r1 + 1) > 4096 {
+        return None;
+    }
+    let mut cells = Vec::new();
+    for row in r1..=r2 {
+        for col in c1..=c2 {
+            cells.push(format!("{}{row}", column_name(col)));
+        }
+    }
+    Some(cells)
+}
+
+fn split_address(address: &str) -> Option<(u32, u32)> {
+    let split = address.find(|ch: char| ch.is_ascii_digit())?;
+    let col = column_index(&address[..split])?;
+    let row = address[split..].parse::<u32>().ok()?;
+    Some((col, row))
+}
+
+fn column_index(letters: &str) -> Option<u32> {
+    let mut value = 0u32;
+    for ch in letters.chars() {
+        if !ch.is_ascii_alphabetic() {
+            return None;
+        }
+        value = value
+            .checked_mul(26)?
+            .checked_add(u32::from(ch.to_ascii_uppercase()) - u32::from(b'A') + 1)?;
+    }
+    Some(value)
+}
+
+fn column_name(mut index: u32) -> String {
+    let mut out = Vec::new();
+    while index > 0 {
+        index -= 1;
+        out.push(b'A' + (index % 26) as u8);
+        index /= 26;
+    }
+    out.reverse();
+    String::from_utf8(out).unwrap_or_default()
 }
 
 fn cell_element(address: &str, text: &str) -> String {
@@ -1015,6 +1466,39 @@ mod tests {
         assert_eq!(rows[0][0].text, "Lily & Rose");
         assert_eq!(book.sheets[0].rows[0][0].text, "Lily & Rose");
         assert_eq!(book.sheets[0].rows[0][1].text, "42");
+    }
+
+    #[test]
+    fn set_sheet_cell_recalculates_arithmetic_sum_and_average() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>2</v></c><c r="B1"><v>3</v></c><c r="C1"><f>A1+B1</f><v>0</v></c><c r="D1"><f>SUM(A1:A2)</f><v>0</v></c><c r="E1"><f>AVERAGE(A1,B1)</f><v>0</v></c><c r="F1"><f>SIN(A1)</f><v>9</v></c></row><row r="2"><c r="A2"><v>4</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let refused = set_sheet_cell(&bytes, "Budgets", "C1", "9").unwrap_err();
+        assert_eq!(refused, "viewer-sheet-formula");
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "4").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<c r="C1"><f>A1+B1</f><v>7</v></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>SUM(A1:A2)</f><v>8</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>AVERAGE(A1,B1)</f><v>3.5</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>SIN(A1)</f><v>9</v>"#), "{sheet}");
     }
 
     #[tokio::test]
