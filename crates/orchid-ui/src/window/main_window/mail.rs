@@ -53,6 +53,46 @@ impl MainWindowController {
         }
     }
 
+    pub(super) fn on_mail_save_attachment(
+        self: &Arc<Self>,
+        id: &SharedString,
+        part: &SharedString,
+    ) {
+        let Some(iid) = Self::parse_mail_id(id) else {
+            return;
+        };
+        let Some((name, bytes)) =
+            orchid_widgets::builtin::mail::attachment_file(iid, part.as_str())
+        else {
+            orchid_widgets::builtin::mail::set_status(iid, "attachment-missing");
+            return;
+        };
+        if bytes.is_empty() {
+            orchid_widgets::builtin::mail::set_status(iid, "attachment-missing");
+            return;
+        }
+        let file_name = safe_download_name(&name);
+        crate::window::spawn::spawn_local_compat(async move {
+            let outcome = tokio::task::spawn_blocking(move || {
+                let Some(dest) = rfd::FileDialog::new().set_file_name(&file_name).save_file()
+                else {
+                    return None;
+                };
+                Some(std::fs::write(dest, bytes).map_err(|err| err.to_string()))
+            })
+            .await
+            .ok()
+            .flatten();
+            match outcome {
+                Some(Ok(())) => {
+                    orchid_widgets::builtin::mail::set_status(iid, "attachment-saved");
+                }
+                Some(Err(err)) => orchid_widgets::builtin::mail::set_status(iid, &err),
+                None => {}
+            }
+        });
+    }
+
     pub(super) fn on_mail_open_wizard(self: &Arc<Self>, id: &SharedString) {
         if let Some(iid) = Self::parse_mail_id(id) {
             orchid_widgets::builtin::mail::open_wizard(iid);
@@ -185,5 +225,29 @@ impl MainWindowController {
             None => HtmlDocument::None,
         };
         self.html_webview.set_document(id, document);
+    }
+}
+
+fn safe_download_name(name: &str) -> String {
+    let base = std::path::Path::new(name)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("attachment");
+    let cleaned: String = base
+        .chars()
+        .map(|ch| {
+            if ch.is_control() || matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
+            {
+                '_'
+            } else {
+                ch
+            }
+        })
+        .collect();
+    let trimmed = cleaned.trim().trim_matches('.');
+    if trimmed.is_empty() {
+        "attachment".to_string()
+    } else {
+        trimmed.to_string()
     }
 }

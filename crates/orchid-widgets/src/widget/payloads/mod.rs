@@ -48,7 +48,7 @@ pub use jyotish::{
     JyotishProfileEntry, JyotishRectifyCandidate, JyotishRectifyView, JyotishSearchHit,
     JyotishYearSummary,
 };
-pub use mail::{MailAccountRow, MailFolderRow, MailMessageRow, MailPayload};
+pub use mail::{MailAccountRow, MailAttachmentRow, MailFolderRow, MailMessageRow, MailPayload};
 pub use media::MediaPlayerPayload;
 pub use moon::MoonPayload;
 pub use notes::{NotesPayload, NotesTabRow};

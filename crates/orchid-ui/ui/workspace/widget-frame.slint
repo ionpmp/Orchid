@@ -226,6 +226,7 @@ export component WidgetFrame inherits Rectangle {
     callback mail-select-folder(string, string);
     callback mail-select-message(string, int);
     callback mail-search(string, string);
+    callback mail-save-attachment(string, string);
     callback mail-refresh(string);
     callback mail-open-wizard(string);
     callback mail-show-mailbox(string);
@@ -956,6 +957,7 @@ export component WidgetFrame inherits Rectangle {
                     select-folder(f) => { root.mail-select-folder(root.model.instance-id, f); }
                     select-message(u) => { root.mail-select-message(root.model.instance-id, u); }
                     search-changed(q) => { root.mail-search(root.model.instance-id, q); }
+                    save-attachment(part) => { root.mail-save-attachment(root.model.instance-id, part); }
                     refresh => { root.mail-refresh(root.model.instance-id); }
                     open-wizard => { root.mail-open-wizard(root.model.instance-id); }
                     show-mailbox => { root.mail-show-mailbox(root.model.instance-id); }

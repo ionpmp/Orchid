@@ -11,7 +11,9 @@ use uuid::Uuid;
 use crate::error::Result as WidgetResult;
 use crate::events::WidgetSnapshotUpdated;
 use crate::widget::config as state_codec;
-use crate::widget::payloads::{MailAccountRow, MailFolderRow, MailMessageRow, MailPayload};
+use crate::widget::payloads::{
+    MailAccountRow, MailAttachmentRow, MailFolderRow, MailMessageRow, MailPayload,
+};
 use crate::widget::snapshot::{WidgetPayload, WidgetSnapshot, WidgetStatus};
 use crate::{
     Widget, WidgetCapabilities, WidgetCategory, WidgetContext, WidgetDescriptor, WidgetFactory,
@@ -30,12 +32,20 @@ struct MailPersisted {
     allow_remote_images: bool,
 }
 
+struct SavedPart {
+    id: String,
+    name: String,
+    size: u64,
+    bytes: Vec<u8>,
+}
+
 struct MailHandle {
     instance_id: Uuid,
     engine: Arc<MailEngine>,
     bus: Arc<orchid_core::EventBus>,
     jobs: Arc<orchid_core::BackgroundJobQueue>,
     state: RwLock<UiState>,
+    parts: RwLock<Vec<SavedPart>>,
 }
 
 #[derive(Debug, Clone)]
@@ -247,6 +257,22 @@ impl MailHandle {
             compose_subject: st.compose_subject,
             compose_body: st.compose_body,
             search_query: st.search,
+            attachments: if st.selected_uid.is_some() {
+                self.parts
+                    .read()
+                    .iter()
+                    .map(|part| MailAttachmentRow {
+                        id: part.id.clone(),
+                        label: format!(
+                            "{} · {}",
+                            attachment_label(&part.name),
+                            size_text(part.size)
+                        ),
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
         }
     }
 
@@ -381,6 +407,7 @@ pub fn select_account(instance_id: Uuid, account_id: &str) {
             h.state.write().selected_account = Some(id);
             h.state.write().selected_folder = "INBOX".into();
             h.state.write().selected_uid = None;
+            h.parts.write().clear();
             h.publish();
             let handle = Arc::clone(h.value());
             let jobs = Arc::clone(&handle.jobs);
@@ -402,6 +429,7 @@ pub fn select_folder(instance_id: Uuid, folder: &str) {
         h.state.write().selected_uid = None;
         h.state.write().search.clear();
         h.state.write().search_hits = None;
+        h.parts.write().clear();
         h.publish();
         let account = h.state.read().selected_account;
         let folder = folder.to_string();
@@ -432,6 +460,7 @@ pub fn select_message(instance_id: Uuid, uid: i32) {
         return;
     };
     h.state.write().selected_uid = Some(uid as u32);
+    h.parts.write().clear();
     h.publish();
     let handle = Arc::clone(h.value());
     let jobs = Arc::clone(&handle.jobs);
@@ -446,6 +475,18 @@ pub fn select_message(instance_id: Uuid, uid: i32) {
                 .await
             {
                 Ok(body) => {
+                    let saved = body
+                        .attachments
+                        .iter()
+                        .zip(body.parts.iter())
+                        .map(|(meta, bytes)| SavedPart {
+                            id: meta.id.clone(),
+                            name: meta.filename.clone(),
+                            size: meta.size,
+                            bytes: bytes.clone(),
+                        })
+                        .collect();
+                    *handle.parts.write() = saved;
                     let text = handle.engine.reading_text(&body);
                     let mut st = handle.state.write();
                     st.reading_text = text;
@@ -895,6 +936,7 @@ pub fn delete_selected(instance_id: Uuid) {
                 s.reading_text.clear();
                 s.reading_html.clear();
             }
+            handle.parts.write().clear();
             let _ = handle.engine.sync_account(account_id, Some(&folder)).await;
             handle.publish();
         }
@@ -1107,6 +1149,7 @@ impl MailWidget {
             bus: ctx.bus.clone(),
             jobs: ctx.jobs.clone(),
             state: RwLock::new(ui),
+            parts: RwLock::new(Vec::new()),
         });
         MAIL_LIVE.insert(ctx.instance_id, Arc::clone(&handle));
         Self {
@@ -1237,8 +1280,46 @@ pub fn descriptor(engine: Arc<MailEngine>) -> WidgetDescriptor {
     }
 }
 
+/// Bytes and filename for one open attachment, copied for a save dialog.
+pub fn attachment_file(instance_id: Uuid, part_id: &str) -> Option<(String, Vec<u8>)> {
+    let h = MAIL_LIVE.get(&instance_id)?;
+    let parts = h.parts.read();
+    parts
+        .iter()
+        .find(|part| part.id == part_id)
+        .map(|part| (part.name.clone(), part.bytes.clone()))
+}
+
+/// Replace the status line and republish.
+pub fn set_status(instance_id: Uuid, status: &str) {
+    if let Some(h) = MAIL_LIVE.get(&instance_id) {
+        h.state.write().status = status.to_string();
+        h.publish();
+    }
+}
+
 fn header_matches(header: &orchid_mail::MessageHeader, query: &str) -> bool {
     header.from.to_lowercase().contains(query)
         || header.subject.to_lowercase().contains(query)
         || header.snippet.to_lowercase().contains(query)
+}
+
+fn attachment_label(name: &str) -> String {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        "attachment".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn size_text(size: u64) -> String {
+    if size < 1024 {
+        format!("{size} B")
+    } else if size < 1024 * 1024 {
+        format!("{} KB", size / 1024)
+    } else {
+        let mb = size as f64 / (1024.0 * 1024.0);
+        format!("{mb:.1} MB")
+    }
 }

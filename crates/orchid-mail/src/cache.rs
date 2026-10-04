@@ -64,6 +64,14 @@ impl MailCache {
                 attachments_json TEXT NOT NULL,
                 PRIMARY KEY (account_id, folder, uid)
             );
+            CREATE TABLE IF NOT EXISTS attachment_bytes (
+                account_id TEXT NOT NULL,
+                folder TEXT NOT NULL,
+                uid INTEGER NOT NULL,
+                part_id TEXT NOT NULL,
+                bytes BLOB NOT NULL,
+                PRIMARY KEY (account_id, folder, uid, part_id)
+            );
             "#,
         )?;
         Ok(Arc::new(Self {
@@ -209,11 +217,13 @@ impl MailCache {
         Ok(out)
     }
 
-    /// Store a full body.
+    /// Store a full body and the attachment bytes that came with it.
     pub fn put_body(&self, body: &MessageBody) -> Result<()> {
         let attachments_json = serde_json::to_string(&body.attachments)?;
         let conn = self.conn.lock();
-        conn.execute(
+        let tx = conn.unchecked_transaction()?;
+        let account = body.account_id.to_string();
+        tx.execute(
             "INSERT INTO bodies(account_id, folder, uid, text, html, attachments_json)
              VALUES (?1,?2,?3,?4,?5,?6)
              ON CONFLICT(account_id, folder, uid) DO UPDATE SET
@@ -221,7 +231,7 @@ impl MailCache {
                 html=excluded.html,
                 attachments_json=excluded.attachments_json",
             params![
-                body.account_id.to_string(),
+                account,
                 body.folder,
                 body.uid,
                 body.text,
@@ -229,6 +239,20 @@ impl MailCache {
                 attachments_json,
             ],
         )?;
+        tx.execute(
+            "DELETE FROM attachment_bytes WHERE account_id = ?1 AND folder = ?2 AND uid = ?3",
+            params![account, body.folder, body.uid],
+        )?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO attachment_bytes(account_id, folder, uid, part_id, bytes)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+            )?;
+            for (meta, bytes) in body.attachments.iter().zip(body.parts.iter()) {
+                stmt.execute(params![account, body.folder, body.uid, meta.id, bytes])?;
+            }
+        }
+        tx.commit()?;
         Ok(())
     }
 
@@ -251,11 +275,26 @@ impl MailCache {
                         text: row.get(0)?,
                         html: row.get(1)?,
                         attachments,
+                        parts: Vec::new(),
                     })
                 },
             )
             .optional()?;
-        Ok(row)
+        let Some(mut body) = row else {
+            return Ok(None);
+        };
+        for meta in &body.attachments {
+            let bytes = conn
+                .query_row(
+                    "SELECT bytes FROM attachment_bytes
+                     WHERE account_id = ?1 AND folder = ?2 AND uid = ?3 AND part_id = ?4",
+                    params![account_id.to_string(), folder, uid, meta.id],
+                    |row| row.get::<_, Vec<u8>>(0),
+                )
+                .optional()?;
+            body.parts.push(bytes.unwrap_or_default());
+        }
+        Ok(Some(body))
     }
 
     /// Update seen/flagged flags in the header cache.
@@ -290,6 +329,10 @@ impl MailCache {
         conn.execute("DELETE FROM folders WHERE account_id = ?1", params![id])?;
         conn.execute("DELETE FROM headers WHERE account_id = ?1", params![id])?;
         conn.execute("DELETE FROM bodies WHERE account_id = ?1", params![id])?;
+        conn.execute(
+            "DELETE FROM attachment_bytes WHERE account_id = ?1",
+            params![id],
+        )?;
         Ok(())
     }
 
@@ -305,6 +348,44 @@ impl MailCache {
             "DELETE FROM bodies WHERE account_id = ?1 AND folder = ?2 AND uid = ?3",
             params![id, folder, uid],
         )?;
+        conn.execute(
+            "DELETE FROM attachment_bytes WHERE account_id = ?1 AND folder = ?2 AND uid = ?3",
+            params![id, folder, uid],
+        )?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::account::AttachmentMeta;
+
+    #[test]
+    fn body_cache_keeps_attachment_bytes() {
+        let dir = std::env::temp_dir().join(format!("orchid-mail-att-{}", Uuid::new_v4()));
+        let cache = MailCache::open(&dir).unwrap();
+        let account = Uuid::new_v4();
+        let body = MessageBody {
+            account_id: account,
+            folder: "INBOX".into(),
+            uid: 4,
+            text: "hello".into(),
+            html: String::new(),
+            attachments: vec![AttachmentMeta {
+                id: "0".into(),
+                filename: "note.txt".into(),
+                content_type: "text/plain".into(),
+                size: 4,
+            }],
+            parts: vec![b"note".to_vec()],
+        };
+        cache.put_body(&body).unwrap();
+        let loaded = cache.body(account, "INBOX", 4).unwrap().unwrap();
+        assert_eq!(loaded.attachments[0].filename, "note.txt");
+        assert_eq!(loaded.parts, vec![b"note".to_vec()]);
+        cache.delete_message(account, "INBOX", 4).unwrap();
+        assert!(cache.body(account, "INBOX", 4).unwrap().is_none());
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

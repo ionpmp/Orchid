@@ -47,4 +47,8 @@ selected account and folder.
 - The background refresh waits on IMAP IDLE for about 90 seconds. New mail
   starts another sync. Refresh in the toolbar still syncs immediately and
   does not wait on IDLE. A server without IDLE keeps the timed sync.
+- Opening a message stores its attachment names and bytes in the local
+  cache. The reading pane lists those names, and Save writes the cached
+  bytes to a file you choose. There is no preview. A message cached before
+  this version is downloaded again once. Compose has no file picker.
 - Calendar and contacts stay separate from Mail.

@@ -37,6 +37,14 @@ pub struct MailMessageRow {
     pub thread_indent: i32,
 }
 
+/// One file attached to the open message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MailAttachmentRow {
+    pub id: String,
+    /// Filename and size, ready to show.
+    pub label: String,
+}
+
 /// Wizard / compose / reading state for the mail UI.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MailPayload {
@@ -77,4 +85,6 @@ pub struct MailPayload {
     pub compose_body: String,
     /// Current mailbox search. Empty shows the cached folder.
     pub search_query: String,
+    /// Files on the open message. Empty when no message is open.
+    pub attachments: Vec<MailAttachmentRow>,
 }

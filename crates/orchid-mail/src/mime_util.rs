@@ -19,6 +19,7 @@ pub fn parse_rfc822(account_id: Uuid, folder: &str, uid: u32, raw: &[u8]) -> Mes
             text: String::from_utf8_lossy(raw).into_owned(),
             html: String::new(),
             attachments: Vec::new(),
+            parts: Vec::new(),
         };
     };
 
@@ -32,6 +33,7 @@ pub fn parse_rfc822(account_id: Uuid, folder: &str, uid: u32, raw: &[u8]) -> Mes
         .unwrap_or_default();
 
     let mut attachments = Vec::new();
+    let mut parts = Vec::new();
     for (idx, part) in message.attachments().enumerate() {
         let filename = part
             .attachment_name()
@@ -48,13 +50,15 @@ pub fn parse_rfc822(account_id: Uuid, folder: &str, uid: u32, raw: &[u8]) -> Mes
                 s
             })
             .unwrap_or_else(|| "application/octet-stream".into());
-        let size = part.contents().len() as u64;
+        let bytes = part.contents().to_vec();
+        let size = bytes.len() as u64;
         attachments.push(AttachmentMeta {
             id: idx.to_string(),
             filename,
             content_type,
             size,
         });
+        parts.push(bytes);
     }
 
     MessageBody {
@@ -64,6 +68,7 @@ pub fn parse_rfc822(account_id: Uuid, folder: &str, uid: u32, raw: &[u8]) -> Mes
         text,
         html,
         attachments,
+        parts,
     }
 }
 
@@ -232,6 +237,8 @@ mod tests {
         let raw = build_rfc822("Me", "me@example.com", &compose).expect("build");
         let body = parse_rfc822(Uuid::nil(), "INBOX", 1, &raw);
         assert!(body.text.contains("Hi there"));
+        assert!(body.attachments.is_empty());
+        assert!(body.parts.is_empty());
         let (from, _to, subject, ..) = header_fields(&raw);
         assert!(from.contains("Me") || from.contains("me@"));
         assert_eq!(subject, "Hello");
@@ -240,5 +247,26 @@ mod tests {
     #[test]
     fn html_strip() {
         assert_eq!(html_to_text("<b>Hi</b> there"), "Hi there");
+    }
+
+    #[test]
+    fn parse_keeps_attachment_bytes() {
+        let dir = std::env::temp_dir().join(format!("orchid-mail-parse-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("note.txt");
+        std::fs::write(&path, b"note").unwrap();
+        let compose = ComposeMessage {
+            to: "a@b.com".into(),
+            subject: "Files".into(),
+            body: "See attached".into(),
+            attachments: vec![path.to_string_lossy().into_owned()],
+            ..Default::default()
+        };
+        let raw = build_rfc822("Me", "me@example.com", &compose).expect("build");
+        let body = parse_rfc822(Uuid::nil(), "INBOX", 3, &raw);
+        assert_eq!(body.attachments.len(), 1);
+        assert_eq!(body.attachments[0].filename, "note.txt");
+        assert_eq!(body.parts, vec![b"note".to_vec()]);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

@@ -60,6 +60,9 @@ release yet.
   `TEXT` search. Messages group by subject after reply prefixes are
   removed. The background refresh uses IMAP IDLE for about 90 seconds and
   syncs again when new mail arrives. Toolbar Refresh does not wait on IDLE.
+  Opening a message keeps attachment names and bytes in the local cache.
+  The reading pane lists those names, and Save writes the cached bytes.
+  There is no preview, and Compose has no file picker.
   Rules and Microsoft Graph are not included.
 - **Agent conversation:** Universal Search `?` and the Agent widget share
   `data/agent-chat.json`. The model can read a local text file, list one

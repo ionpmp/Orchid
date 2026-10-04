@@ -228,6 +228,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_mail_save_attachment({
+            let t = t.clone();
+            move |id, part| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_save_attachment(&id, &part);
+                }
+            }
+        });
         self.window.on_mail_refresh({
             let t = t.clone();
             move |id| {

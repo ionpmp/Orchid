@@ -231,7 +231,9 @@ impl MailEngine {
         uid: u32,
     ) -> Result<MessageBody> {
         if let Some(body) = self.cache.body(account_id, folder, uid)? {
-            return Ok(body);
+            if attachment_bytes_ready(&body) {
+                return Ok(body);
+            }
         }
         let account = self
             .accounts
@@ -402,4 +404,13 @@ impl MailEngine {
         let _ = session.logout().await;
         Ok(())
     }
+}
+
+fn attachment_bytes_ready(body: &MessageBody) -> bool {
+    body.attachments.len() == body.parts.len()
+        && body
+            .attachments
+            .iter()
+            .zip(body.parts.iter())
+            .all(|(meta, bytes)| meta.size == 0 || !bytes.is_empty())
 }

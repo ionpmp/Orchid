@@ -2330,6 +2330,11 @@ export struct MailMessageEntry {
     thread-indent: int,
 }
 
+export struct MailAttachmentEntry {
+    id: string,
+    label: string,
+}
+
 export struct MailModel {
     mode: int,
     accounts: [MailAccountEntry],
@@ -2364,6 +2369,7 @@ export struct MailModel {
     compose-subject: string,
     compose-body: string,
     search-query: string,
+    attachments: [MailAttachmentEntry],
     empty-label: string,
     add-account-label: string,
     discover-label: string,
@@ -2392,6 +2398,7 @@ export struct MailModel {
     cc-label: string,
     subject-label: string,
     body-label: string,
+    save-attachment-label: string,
 }
 
 export struct OptimizeRow {

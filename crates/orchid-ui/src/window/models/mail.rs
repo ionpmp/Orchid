@@ -5,7 +5,9 @@ use orchid_widgets::MailPayload;
 use slint::{ModelRc, VecModel};
 
 use super::sync_eq_rows;
-use crate::slint_generated::{MailAccountEntry, MailFolderEntry, MailMessageEntry, MailModel};
+use crate::slint_generated::{
+    MailAccountEntry, MailAttachmentEntry, MailFolderEntry, MailMessageEntry, MailModel,
+};
 
 pub(crate) fn empty_mail_model(locale: &LocaleManager) -> MailModel {
     build_mail_model(
@@ -43,6 +45,7 @@ pub(crate) fn empty_mail_model(locale: &LocaleManager) -> MailModel {
             compose_subject: String::new(),
             compose_body: String::new(),
             search_query: String::new(),
+            attachments: Vec::new(),
         },
         locale,
     )
@@ -123,6 +126,16 @@ pub(crate) fn build_mail_model(payload: &MailPayload, locale: &LocaleManager) ->
         compose_subject: payload.compose_subject.clone().into(),
         compose_body: payload.compose_body.clone().into(),
         search_query: payload.search_query.clone().into(),
+        attachments: ModelRc::new(VecModel::from(
+            payload
+                .attachments
+                .iter()
+                .map(|row| MailAttachmentEntry {
+                    id: row.id.clone().into(),
+                    label: row.label.clone().into(),
+                })
+                .collect::<Vec<_>>(),
+        )),
         empty_label: locale.tr("mail-empty").into(),
         add_account_label: locale.tr("mail-add-account").into(),
         discover_label: locale.tr("mail-discover").into(),
@@ -151,6 +164,7 @@ pub(crate) fn build_mail_model(payload: &MailPayload, locale: &LocaleManager) ->
         cc_label: locale.tr("mail-cc").into(),
         subject_label: locale.tr("mail-subject").into(),
         body_label: locale.tr("mail-body").into(),
+        save_attachment_label: locale.tr("mail-save-attachment").into(),
     }
 }
 
@@ -163,6 +177,7 @@ pub(crate) fn patch_mail_model(
     sync_eq_rows(&model.accounts, rows_of(&fresh.accounts));
     sync_eq_rows(&model.folders, rows_of(&fresh.folders));
     sync_eq_rows(&model.messages, rows_of(&fresh.messages));
+    sync_eq_rows(&model.attachments, rows_of(&fresh.attachments));
     model.mode = fresh.mode;
     model.selected_account_id = fresh.selected_account_id;
     model.selected_folder = fresh.selected_folder;
@@ -219,6 +234,7 @@ pub(crate) fn patch_mail_model(
     model.cc_label = fresh.cc_label;
     model.subject_label = fresh.subject_label;
     model.body_label = fresh.body_label;
+    model.save_attachment_label = fresh.save_attachment_label;
 }
 
 fn rows_of<T: Clone + 'static>(model: &ModelRc<T>) -> Vec<T> {
@@ -236,6 +252,8 @@ fn status_label(locale: &LocaleManager, status: &str) -> String {
         "" => String::new(),
         "syncing" => locale.tr("mail-syncing"),
         "draft-saved" => locale.tr("mail-draft-saved"),
+        "attachment-saved" => locale.tr("mail-attachment-saved"),
+        "attachment-missing" => locale.tr("mail-attachment-missing"),
         other => other.to_string(),
     }
 }

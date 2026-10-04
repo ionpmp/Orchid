@@ -180,6 +180,7 @@ export component WorkspaceView inherits Rectangle {
     callback mail-select-folder(string, string);
     callback mail-select-message(string, int);
     callback mail-search(string, string);
+    callback mail-save-attachment(string, string);
     callback mail-refresh(string);
     callback mail-open-wizard(string);
     callback mail-show-mailbox(string);
@@ -642,6 +643,7 @@ export component WorkspaceView inherits Rectangle {
                     mail-select-folder(id, f) => { root.mail-select-folder(id, f); }
                     mail-select-message(id, u) => { root.mail-select-message(id, u); }
                     mail-search(id, q) => { root.mail-search(id, q); }
+                    mail-save-attachment(id, part) => { root.mail-save-attachment(id, part); }
                     mail-refresh(id) => { root.mail-refresh(id); }
                     mail-open-wizard(id) => { root.mail-open-wizard(id); }
                     mail-show-mailbox(id) => { root.mail-show-mailbox(id); }
@@ -1002,6 +1004,7 @@ export component WorkspaceView inherits Rectangle {
             mail-select-folder(id, f) => { root.mail-select-folder(id, f); }
             mail-select-message(id, u) => { root.mail-select-message(id, u); }
             mail-search(id, q) => { root.mail-search(id, q); }
+            mail-save-attachment(id, part) => { root.mail-save-attachment(id, part); }
             mail-refresh(id) => { root.mail-refresh(id); }
             mail-open-wizard(id) => { root.mail-open-wizard(id); }
             mail-show-mailbox(id) => { root.mail-show-mailbox(id); }

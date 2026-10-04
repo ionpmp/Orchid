@@ -169,9 +169,12 @@ pub struct MessageBody {
     pub html: String,
     /// Attachment descriptors.
     pub attachments: Vec<AttachmentMeta>,
+    /// Part bytes, in the same order as `attachments`. Kept out of the metadata JSON.
+    #[serde(skip)]
+    pub parts: Vec<Vec<u8>>,
 }
 
-/// Attachment metadata (bytes fetched on demand).
+/// Attachment name and size. The bytes live beside the cached body.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttachmentMeta {
     /// Part index / stable id within the message.
