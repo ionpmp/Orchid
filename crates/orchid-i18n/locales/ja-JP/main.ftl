@@ -2960,3 +2960,5 @@ protect-item-browser-cookies = ブラウザーの Cookie
 protect-detail-browser-cookies = サイトからサインアウトします。チェックするまでオフです。先にブラウザーを閉じてください。
 protect-item-activity = アクティビティの履歴
 protect-detail-activity = 接続されたデバイスにあるタイムラインのファイルです。
+protect-clean-sized = 消去 · { $bytes }
+protect-status-browser = ブラウザーが開いているため、履歴・キャッシュ・Cookie は残しました。{ $files } 個のファイルを消去しました ({ $bytes })。

@@ -2961,3 +2961,5 @@ protect-item-browser-cookies = Cookies del navegador
 protect-detail-browser-cookies = Cierra la sesión de los sitios. Permanece desactivado hasta que lo marque. Cierre el navegador antes.
 protect-item-activity = Historial de actividad
 protect-detail-activity = Archivos de la línea de tiempo en Dispositivos conectados.
+protect-clean-sized = Limpiar · { $bytes }
+protect-status-browser = El navegador está abierto, así que su historial, caché y cookies no se han tocado. Se borraron { $files } archivos ({ $bytes }).

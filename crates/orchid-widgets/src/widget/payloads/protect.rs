@@ -45,5 +45,9 @@ pub struct ProtectPayload {
     pub status_bytes: u64,
     pub status_detail: String,
     pub busy: bool,
+    /// A scan has finished, so Clean may run.
+    pub scanned: bool,
+    /// Bytes the checked rows on this tab reported. Zero hides the size on Clean.
+    pub clean_bytes: u64,
     pub free_bytes: u64,
 }

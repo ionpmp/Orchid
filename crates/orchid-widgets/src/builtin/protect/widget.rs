@@ -278,6 +278,8 @@ impl ProtectHandle {
             status_bytes: ui.status_bytes,
             status_detail: ui.status_detail.clone(),
             busy: self.busy.load(Ordering::Acquire),
+            scanned: ui.scanned,
+            clean_bytes: checked_bytes(&ui),
             free_bytes: ui.free_bytes,
         }
     }
@@ -311,6 +313,17 @@ fn cleaner_rows(ui: &ProtectUi) -> Vec<ProtectRow> {
             }
         })
         .collect()
+}
+
+fn checked_bytes(ui: &ProtectUi) -> u64 {
+    if ui.tab != 0 && ui.tab != 1 {
+        return 0;
+    }
+    ui.stats
+        .iter()
+        .filter(|(id, _)| tab_index(id.tab()) == ui.tab && ui.config.is_enabled(*id))
+        .map(|(_, stats)| stats.bytes)
+        .sum()
 }
 
 fn tab_index(tab: ProtectTab) -> i32 {
@@ -406,8 +419,11 @@ pub fn clean(id: Uuid) {
     let Some(handle) = live(id) else {
         return;
     };
-    let tab = handle.ui.lock().tab;
-    if tab == 0 || tab == 1 {
+    let (tab, scanned) = {
+        let ui = handle.ui.lock();
+        (ui.tab, ui.scanned)
+    };
+    if scanned && (tab == 0 || tab == 1) {
         spawn_clean(handle, tab);
     }
 }
@@ -527,11 +543,23 @@ fn spawn_clean(handle: Arc<ProtectHandle>, tab: i32) {
     let worker = Arc::clone(&handle);
     if !spawn_named("orchid-protect-clean", move || {
         let layout = HostLayout::from_env();
+        let browser_open = running_apps()
+            .iter()
+            .any(|app| super::browser::locks_browser_files(&app.name));
+        let mut browser_locked = false;
         let reports = enabled
             .into_iter()
+            .filter(|id| {
+                if browser_open && super::browser::cleaner_needs_closed_browser(*id) {
+                    browser_locked = true;
+                    false
+                } else {
+                    true
+                }
+            })
             .map(|id| (id, clean_cleaner(id, &layout)))
             .collect::<Vec<_>>();
-        apply_clean_reports(&worker, &reports);
+        apply_clean_reports(&worker, &reports, browser_locked);
         worker.busy.store(false, Ordering::Release);
         worker.publish();
     }) {
@@ -539,9 +567,13 @@ fn spawn_clean(handle: Arc<ProtectHandle>, tab: i32) {
     }
 }
 
-fn apply_clean_reports(handle: &ProtectHandle, reports: &[(CleanerId, CleanReport)]) {
+fn apply_clean_reports(
+    handle: &ProtectHandle,
+    reports: &[(CleanerId, CleanReport)],
+    browser_locked: bool,
+) {
     let mut ui = handle.ui.lock();
-    if reports.is_empty() {
+    if reports.is_empty() && !browser_locked {
         ui.status_key = "protect-status-empty".to_string();
         return;
     }
@@ -566,6 +598,8 @@ fn apply_clean_reports(handle: &ProtectHandle, reports: &[(CleanerId, CleanRepor
     if let Some(message) = other {
         ui.status_key = "protect-status-error".to_string();
         ui.status_detail = message;
+    } else if browser_locked {
+        ui.status_key = "protect-status-browser".to_string();
     } else if files == 0 && need_admin {
         ui.status_key = "protect-status-need-admin".to_string();
     } else {

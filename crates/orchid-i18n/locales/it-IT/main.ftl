@@ -2961,3 +2961,5 @@ protect-item-browser-cookies = Cookie del browser
 protect-detail-browser-cookies = Disconnette dai siti. Resta spento finché non lo selezioni. Chiudi prima il browser.
 protect-item-activity = Cronologia attività
 protect-detail-activity = File della sequenza temporale in Dispositivi connessi.
+protect-clean-sized = Pulisci · { $bytes }
+protect-status-browser = Il browser è aperto, quindi cronologia, cache e cookie restano. Cancellati { $files } file ({ $bytes }).

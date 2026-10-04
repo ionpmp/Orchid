@@ -2964,3 +2964,5 @@ protect-item-browser-cookies = Файлы cookie браузера
 protect-detail-browser-cookies = Выходит из учётных записей на сайтах. Выключено, пока вы сами не отметите. Сначала закройте браузер.
 protect-item-activity = Журнал действий
 protect-detail-activity = Файлы временной шкалы в разделе «Подключённые устройства».
+protect-clean-sized = Очистить · { $bytes }
+protect-status-browser = Браузер открыт, поэтому его история, кэш и файлы cookie не тронуты. Удалено файлов: { $files } ({ $bytes }).

@@ -7,6 +7,7 @@
 //! Outbound blocks follow simplewall: one Windows Firewall rule per program,
 //! created and removed only under the `Orchid Protect` name prefix.
 
+mod browser;
 mod catalog;
 mod config;
 mod firefox;

@@ -2961,3 +2961,5 @@ protect-item-browser-cookies = 브라우저 쿠키
 protect-detail-browser-cookies = 사이트에서 로그아웃됩니다. 직접 선택하기 전에는 꺼져 있습니다. 먼저 브라우저를 닫으세요.
 protect-item-activity = 활동 기록
 protect-detail-activity = 연결된 장치의 타임라인 파일입니다.
+protect-clean-sized = 정리 · { $bytes }
+protect-status-browser = 브라우저가 열려 있어 기록, 캐시, 쿠키는 그대로 두었습니다. 파일 { $files }개를 지웠습니다 ({ $bytes }).

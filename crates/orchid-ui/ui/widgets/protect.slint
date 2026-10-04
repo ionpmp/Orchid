@@ -171,7 +171,7 @@ export component ProtectView inherits Rectangle {
                 text: model.clean-label;
                 size: ControlSize.sm;
                 tone: ButtonTone.neutral;
-                enabled: !model.busy;
+                enabled: !model.busy && model.scanned;
                 clicked => { root.clean(); }
             }
             if model.tab == 2 : TouchButton {

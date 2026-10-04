@@ -2963,3 +2963,5 @@ protect-item-browser-cookies = ملفات تعريف ارتباط المتصفح
 protect-detail-browser-cookies = يخرجك من المواقع. يبقى مطفأً حتى تحدده. أغلق المتصفح أولًا.
 protect-item-activity = سجل النشاط
 protect-detail-activity = ملفات المخطط الزمني ضمن الأجهزة المتصلة.
+protect-clean-sized = تنظيف · { $bytes }
+protect-status-browser = المتصفح مفتوح، لذلك بقي سجله وذاكرته وملفات الارتباط. مُسح { $files } من الملفات ({ $bytes }).

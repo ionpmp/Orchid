@@ -2978,3 +2978,5 @@ protect-item-browser-cookies = Browser cookies
 protect-detail-browser-cookies = Signs you out of websites. Left off until you check it. Close the browser first.
 protect-item-activity = Activity history
 protect-detail-activity = Timeline files under Connected Devices.
+protect-clean-sized = Clean · { $bytes }
+protect-status-browser = The browser is open, so its history, cache, and cookies were left alone. Cleared { $files } files ({ $bytes }).

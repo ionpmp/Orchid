@@ -20,6 +20,8 @@ pub(crate) fn empty_protect_model(locale: &LocaleManager) -> ProtectModel {
             status_bytes: 0,
             status_detail: String::new(),
             busy: false,
+            scanned: false,
+            clean_bytes: 0,
             free_bytes: 0,
         },
     )
@@ -83,10 +85,21 @@ fn base_model(locale: &LocaleManager, payload: &ProtectPayload) -> ProtectModel 
         },
         status: status_line(locale, payload),
         busy: payload.busy,
+        scanned: payload.scanned,
         free_label: locale.format_byte_size(payload.free_bytes).into(),
         free_caption: locale.tr("protect-free-label").into(),
         scan_label: locale.tr("protect-scan").into(),
-        clean_label: locale.tr("protect-clean").into(),
+        clean_label: if payload.clean_bytes > 0 {
+            locale
+                .tr_args(
+                    "protect-clean-sized",
+                    &orchid_i18n::FluentArgs::new()
+                        .with("bytes", locale.format_byte_size(payload.clean_bytes)),
+                )
+                .into()
+        } else {
+            locale.tr("protect-clean").into()
+        },
         wipe_label: locale.tr("protect-wipe-start").into(),
         cancel_label: locale.tr("protect-cancel").into(),
         refresh_label: locale.tr("protect-refresh").into(),
@@ -120,9 +133,9 @@ fn size_text(locale: &LocaleManager, key: &str, files: u64, bytes: u64) -> Share
 fn status_line(locale: &LocaleManager, payload: &ProtectPayload) -> SharedString {
     match payload.status_key.as_str() {
         "" => SharedString::default(),
-        "protect-status-done" => locale
+        "protect-status-done" | "protect-status-browser" => locale
             .tr_args(
-                "protect-status-done",
+                &payload.status_key,
                 &orchid_i18n::FluentArgs::new()
                     .with("files", payload.status_files.to_string())
                     .with("bytes", locale.format_byte_size(payload.status_bytes)),

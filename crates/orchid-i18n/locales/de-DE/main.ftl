@@ -2962,3 +2962,5 @@ protect-item-browser-cookies = Browsercookies
 protect-detail-browser-cookies = Meldet Sie von Websites ab. Bleibt aus, bis Sie es auswählen. Schließen Sie den Browser zuerst.
 protect-item-activity = Aktivitätsverlauf
 protect-detail-activity = Zeitachsendateien unter Verbundene Geräte.
+protect-clean-sized = Bereinigen · { $bytes }
+protect-status-browser = Der Browser ist geöffnet, daher bleiben Verlauf, Cache und Cookies. Entfernt: { $files } Dateien ({ $bytes }).
