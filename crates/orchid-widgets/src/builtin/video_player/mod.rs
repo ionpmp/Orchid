@@ -449,6 +449,14 @@ pub fn execute_command(instance_id: Uuid, command: &str) {
             h.sync_queue_to_config();
             h.publish();
         }
+        cmd if let Some(raw) = cmd.strip_prefix("volume:") => {
+            if let Ok(v) = raw.parse::<f64>() {
+                let v = v.clamp(0.0, 150.0);
+                h.player.set_volume(v);
+                h.config.write().volume = v as f32;
+                h.publish();
+            }
+        }
         "shuffle" => {
             let on = {
                 let mut q = h.queue.write();
