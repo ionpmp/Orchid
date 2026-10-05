@@ -74,6 +74,8 @@ pub enum WidgetPayload {
     Browser(crate::widget::payloads::BrowserPayload),
     /// Local calendar / agenda.
     Calendar(crate::widget::payloads::CalendarPayload),
+    /// Local contacts and one CardDAV collection.
+    Contacts(crate::widget::payloads::ContactsPayload),
     /// RSS feed widget.
     RssFeed(crate::widget::payloads::RssPayload),
     /// Universal search widget.

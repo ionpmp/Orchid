@@ -121,6 +121,13 @@ impl SlintPayload {
                     .flat_map(|e| [e.title.clone(), e.notes_preview.clone()])
                     .collect(),
             ),
+            WidgetPayload::Contacts(p) => Self::Text(
+                p.rows
+                    .iter()
+                    .map(|row| format!("{} {}", row.label, row.id))
+                    .chain([p.name.clone(), p.email.clone(), p.notes.clone()])
+                    .collect(),
+            ),
             WidgetPayload::RssFeed(p) => Self::Text(rss_to_text_lines(p)),
             WidgetPayload::UniversalSearch(p) => Self::Text(search_to_text_lines(p)),
             WidgetPayload::MediaPlayer(p) => Self::Text(media_to_text_lines(p)),

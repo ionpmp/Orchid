@@ -51,4 +51,4 @@ selected account and folder.
   cache. The reading pane lists those names, and Save writes the cached
   bytes to a file you choose. There is no preview. A message cached before
   this version is downloaded again once. Compose has no file picker.
-- Calendar and contacts stay separate from Mail.
+- Mail does not read or write the calendar or contacts widgets.

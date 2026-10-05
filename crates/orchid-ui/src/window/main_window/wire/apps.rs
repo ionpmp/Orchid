@@ -639,5 +639,117 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_contacts_select({
+            let t = t.clone();
+            move |id, card| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_select(&id, &card);
+                }
+            }
+        });
+        self.window.on_contacts_new({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_new(&id);
+                }
+            }
+        });
+        self.window.on_contacts_set_field({
+            let t = t.clone();
+            move |id, key, value| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_set_field(&id, &key, &value);
+                }
+            }
+        });
+        self.window.on_contacts_save({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_save(&id);
+                }
+            }
+        });
+        self.window.on_contacts_delete({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_delete(&id);
+                }
+            }
+        });
+        self.window.on_contacts_save_account({
+            let t = t.clone();
+            move |id, url, user, password| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_save_account(&id, &url, &user, &password);
+                }
+            }
+        });
+        self.window.on_contacts_sync({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_sync(&id);
+                }
+            }
+        });
+        self.window.on_contacts_select({
+            let t = t.clone();
+            move |id, card| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_select(&id, &card);
+                }
+            }
+        });
+        self.window.on_contacts_new({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_new(&id);
+                }
+            }
+        });
+        self.window.on_contacts_set_field({
+            let t = t.clone();
+            move |id, key, value| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_set_field(&id, &key, &value);
+                }
+            }
+        });
+        self.window.on_contacts_save({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_save(&id);
+                }
+            }
+        });
+        self.window.on_contacts_delete({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_delete(&id);
+                }
+            }
+        });
+        self.window.on_contacts_save_account({
+            let t = t.clone();
+            move |id, url, user, password| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_save_account(&id, &url, &user, &password);
+                }
+            }
+        });
+        self.window.on_contacts_sync({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_contacts_sync(&id);
+                }
+            }
+        });
     }
 }

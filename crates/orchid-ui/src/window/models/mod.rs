@@ -8,6 +8,7 @@ mod browser;
 mod calculator;
 mod calendar;
 mod clock;
+mod contacts;
 mod file_manager;
 mod jyotish;
 mod mail;
@@ -42,6 +43,7 @@ pub(crate) use calculator::{
 };
 pub(crate) use calendar::{build_calendar_model, empty_calendar_model, patch_calendar_model};
 pub(crate) use clock::{build_clock_model, empty_clock_model, patch_clock_model};
+pub(crate) use contacts::{build_contacts_model, empty_contacts_model, patch_contacts_model};
 pub(crate) use file_manager::{
     build_context_menu, build_file_manager_model, build_managed_policy_state, empty_confirm_dialog,
     empty_conflict_dialog, empty_context_menu, empty_file_manager_model, empty_find_state,

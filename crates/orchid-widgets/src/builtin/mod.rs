@@ -15,6 +15,7 @@ pub mod browser;
 pub mod calculator;
 pub mod calendar;
 pub mod clock;
+pub mod contacts;
 pub mod file_manager;
 pub mod jyotish;
 pub mod mail;
@@ -60,6 +61,7 @@ pub fn register_core(registry: &WidgetRegistry, http: reqwest::Client) -> Result
     registry.register(agent::descriptor())?;
     registry.register(browser::descriptor())?;
     registry.register(calendar::descriptor())?;
+    registry.register(contacts::descriptor())?;
     registry.register(rss::descriptor(http))?;
     registry.register(search::descriptor_stub())?;
     registry.register(media::descriptor())?;
@@ -95,6 +97,7 @@ pub fn register_all(
     registry.register(agent::descriptor())?;
     registry.register(browser::descriptor())?;
     registry.register(calendar::descriptor())?;
+    registry.register(contacts::descriptor())?;
     registry.register(rss::descriptor(http))?;
     registry.register(search::descriptor(search_aggregator))?;
     registry.register(media::descriptor())?;

@@ -231,6 +231,13 @@ export component WorkspaceView inherits Rectangle {
     callback calendar-editor-color(string, int);
     callback calendar-caldav-save(string, string, string, string);
     callback calendar-caldav-sync(string);
+    callback contacts-select(string, string);
+    callback contacts-new(string);
+    callback contacts-set-field(string, string, string);
+    callback contacts-save(string);
+    callback contacts-delete(string);
+    callback contacts-save-account(string, string, string, string);
+    callback contacts-sync(string);
     callback password-search-changed(string);
     callback password-entry-clicked(string);
     callback password-copy-password(string);
@@ -694,6 +701,13 @@ export component WorkspaceView inherits Rectangle {
                     calendar-editor-color(id, c) => { root.calendar-editor-color(id, c); }
                     calendar-caldav-save(id, url, user, password) => { root.calendar-caldav-save(id, url, user, password); }
                     calendar-caldav-sync(id) => { root.calendar-caldav-sync(id); }
+                    contacts-select(id, card) => { root.contacts-select(id, card); }
+                    contacts-new(id) => { root.contacts-new(id); }
+                    contacts-set-field(id, key, value) => { root.contacts-set-field(id, key, value); }
+                    contacts-save(id) => { root.contacts-save(id); }
+                    contacts-delete(id) => { root.contacts-delete(id); }
+                    contacts-save-account(id, url, user, password) => { root.contacts-save-account(id, url, user, password); }
+                    contacts-sync(id) => { root.contacts-sync(id); }
                     password-search-changed(q) => { root.password-search-changed(q); }
                     password-entry-clicked(id) => { root.password-entry-clicked(id); }
                     password-copy-password(id) => { root.password-copy-password(id); }
@@ -959,6 +973,13 @@ export component WorkspaceView inherits Rectangle {
             calendar-editor-color(id, c) => { root.calendar-editor-color(id, c); }
             calendar-caldav-save(id, url, user, password) => { root.calendar-caldav-save(id, url, user, password); }
             calendar-caldav-sync(id) => { root.calendar-caldav-sync(id); }
+            contacts-select(id, card) => { root.contacts-select(id, card); }
+            contacts-new(id) => { root.contacts-new(id); }
+            contacts-set-field(id, key, value) => { root.contacts-set-field(id, key, value); }
+            contacts-save(id) => { root.contacts-save(id); }
+            contacts-delete(id) => { root.contacts-delete(id); }
+            contacts-save-account(id, url, user, password) => { root.contacts-save-account(id, url, user, password); }
+            contacts-sync(id) => { root.contacts-sync(id); }
             viewer-media-command(id, c) => { root.viewer-media-command(id, c); }
             viewer-media-seek-frac(id, f) => { root.viewer-media-seek-frac(id, f); }
             viewer-document-action(id, a) => { root.viewer-document-action(id, a); }

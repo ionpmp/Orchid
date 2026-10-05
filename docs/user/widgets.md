@@ -14,6 +14,7 @@
 | Notes | `notes` | In-widget scratchpad |
 | Agent | `agent` | Shared conversation; file writes wait for confirmation |
 | Calendar | `calendar` | Local events, plus one CalDAV collection |
+| Contacts | `contacts` | Local cards, plus one CardDAV collection |
 | Browser | `browser` | WebView2: tabs, bookmarks, find, zoom |
 | News Feed | `rss` | RSS/Atom |
 | Universal Search | `universal-search` | [search.md](search.md) |
@@ -106,6 +107,16 @@ Needs libmpv. Mutually pauses with a media Viewer.
 
 Embedded WebView2. Needs the Evergreen runtime. Distinct from the HTML
 **file** viewer.
+
+## Contacts
+
+A card stores a name, one email, one phone number, and a note. Other vCard
+fields, including photos and groups, are ignored. One collection URL uses
+basic authentication. Saving the account with an empty password keeps the
+previous secret. Sync downloads at most 500 cards and replaces linked cards
+with the server copy. A card that has not been uploaded stays on this
+computer. A conflict response leaves that local card in place. There is no
+address-book discovery and no OAuth.
 
 ## Notes / Calendar / Processes
 

@@ -11,6 +11,7 @@ pub mod browser;
 pub mod calculator;
 pub mod calendar;
 pub mod clock;
+pub mod contacts;
 pub mod file_manager;
 pub mod jyotish;
 pub mod mail;
@@ -38,6 +39,7 @@ pub use browser::{BrowserBookmarkRow, BrowserDownloadRow, BrowserPayload, Browse
 pub use calculator::{CalcHistoryRow, CalculatorPayload};
 pub use calendar::{CalendarDayCell, CalendarEventRow, CalendarPayload, CalendarUpcomingRow};
 pub use clock::{ClockCityView, ClockPayload, ClockSearchHit};
+pub use contacts::{ContactRow, ContactsPayload};
 pub use file_manager::{
     EntryPayload, FileManagerPayload, FmViewMode, ManagedFolderSidebarPayload, NetworkMountPayload,
     PanePayload, TabPayload, VisitHistoryItemPayload,

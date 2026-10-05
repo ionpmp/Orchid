@@ -220,6 +220,7 @@ pub(super) fn is_known_widget_type(type_id: &str) -> bool {
             | "agent"
             | "mail"
             | "calendar"
+            | "contacts"
             | "rss"
             | "recent-files"
             | "universal-search"
@@ -250,6 +251,7 @@ fn apply_catalog_row_visibility(g: &WidgetCatalog, visible_ids: &std::collection
     g.set_show_agent(visible_ids.contains("agent"));
     g.set_show_mail(visible_ids.contains("mail"));
     g.set_show_calendar(visible_ids.contains("calendar"));
+    g.set_show_contacts(visible_ids.contains("contacts"));
     g.set_show_rss(visible_ids.contains("rss"));
     g.set_show_recent_files(visible_ids.contains("recent-files"));
     g.set_show_search(visible_ids.contains("search"));
@@ -294,6 +296,7 @@ pub(super) fn dock_widget_description(locale: &LocaleManager, type_id: &str) -> 
         "agent" => "widget-agent-desc",
         "mail" => "widget-mail-desc",
         "calendar" => "widget-calendar-desc",
+        "contacts" => "widget-contacts-desc",
         "rss" => "widget-rss-desc",
         "recent-files" => "widget-recent-files-desc",
         "search" | "universal-search" => "widget-search-desc",
@@ -396,6 +399,12 @@ pub(super) fn dock_types_vec(locale: &LocaleManager) -> Vec<DockWidgetType> {
             label: locale.tr("dock-widget-calendar").into(),
             description: dock_widget_description(locale, "calendar"),
             icon: "calendar".into(),
+        },
+        DockWidgetType {
+            type_id: "contacts".into(),
+            label: locale.tr("dock-widget-contacts").into(),
+            description: dock_widget_description(locale, "contacts"),
+            icon: "contacts".into(),
         },
         DockWidgetType {
             type_id: "rss".into(),

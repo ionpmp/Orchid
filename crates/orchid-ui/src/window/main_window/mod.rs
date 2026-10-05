@@ -65,6 +65,7 @@ mod calendar;
 mod canvas;
 mod catalog;
 mod clock;
+mod contacts;
 mod diagnostics;
 mod floating;
 mod fm;
@@ -696,6 +697,7 @@ impl MainWindowController {
         g.set_dock_widget_agent(mgr.tr("dock-widget-agent").into());
         g.set_dock_widget_mail(mgr.tr("dock-widget-mail").into());
         g.set_dock_widget_calendar(mgr.tr("dock-widget-calendar").into());
+        g.set_dock_widget_contacts(mgr.tr("dock-widget-contacts").into());
         g.set_dock_widget_rss(mgr.tr("dock-widget-rss").into());
         g.set_dock_widget_recent_files(mgr.tr("dock-widget-recent-files").into());
         g.set_dock_widget_search(mgr.tr("dock-widget-search").into());
@@ -722,6 +724,7 @@ impl MainWindowController {
         g.set_widget_agent_desc(mgr.tr("widget-agent-desc").into());
         g.set_widget_mail_desc(mgr.tr("widget-mail-desc").into());
         g.set_widget_calendar_desc(mgr.tr("widget-calendar-desc").into());
+        g.set_widget_contacts_desc(mgr.tr("widget-contacts-desc").into());
         g.set_widget_rss_desc(mgr.tr("widget-rss-desc").into());
         g.set_widget_recent_files_desc(mgr.tr("widget-recent-files-desc").into());
         g.set_widget_search_desc(mgr.tr("widget-search-desc").into());

@@ -2401,6 +2401,38 @@ export struct MailModel {
     save-attachment-label: string,
 }
 
+export struct ContactEntry {
+    id: string,
+    label: string,
+    selected: bool,
+}
+
+export struct ContactsModel {
+    rows: [ContactEntry],
+    name: string,
+    email: string,
+    phone: string,
+    notes: string,
+    has-selection: bool,
+    account-url: string,
+    account-user: string,
+    status: string,
+    new-label: string,
+    save-label: string,
+    delete-label: string,
+    sync-label: string,
+    name-label: string,
+    email-label: string,
+    phone-label: string,
+    notes-label: string,
+    url-label: string,
+    user-label: string,
+    password-label: string,
+    save-account-label: string,
+    empty-label: string,
+    hint: string,
+}
+
 export struct OptimizeRow {
     id: string,
     title: string,
@@ -2538,6 +2570,7 @@ export struct WidgetFrameModel {
     agent: AgentModel,
     mail: MailModel,
     calendar: CalendarModel,
+    contacts: ContactsModel,
     rss: RssModel,
     recent-files: RecentFilesModel,
     search: SearchModel,

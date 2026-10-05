@@ -36,6 +36,7 @@ pub(crate) fn payload_renders_equal(a: &WidgetPayload, b: &WidgetPayload) -> boo
         (WidgetPayload::Mail(a), WidgetPayload::Mail(b)) => mail_payload_eq(a, b),
         (WidgetPayload::Browser(a), WidgetPayload::Browser(b)) => browser_payload_eq(a, b),
         (WidgetPayload::Calendar(a), WidgetPayload::Calendar(b)) => calendar_payload_eq(a, b),
+        (WidgetPayload::Contacts(a), WidgetPayload::Contacts(b)) => a == b,
         (WidgetPayload::RssFeed(a), WidgetPayload::RssFeed(b)) => rss_payload_eq(a, b),
         (WidgetPayload::UniversalSearch(a), WidgetPayload::UniversalSearch(b)) => {
             search_payload_eq(a, b)

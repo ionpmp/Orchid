@@ -21,6 +21,7 @@ import { AgentView } from "../widgets/agent.slint";
 import { MailView } from "../widgets/mail.slint";
 import { BrowserView } from "../widgets/browser.slint";
 import { CalendarView } from "../widgets/calendar.slint";
+import { ContactsView } from "../widgets/contacts.slint";
 import { RssView } from "../widgets/rss.slint";
 import { RecentFilesView } from "../widgets/recent_files.slint";
 import { SearchView } from "../widgets/search.slint";
@@ -281,6 +282,13 @@ export component WidgetFrame inherits Rectangle {
     callback calendar-editor-color(string, int);
     callback calendar-caldav-save(string, string, string, string);
     callback calendar-caldav-sync(string);
+    callback contacts-select(string, string);
+    callback contacts-new(string);
+    callback contacts-set-field(string, string, string);
+    callback contacts-save(string);
+    callback contacts-delete(string);
+    callback contacts-save-account(string, string, string, string);
+    callback contacts-sync(string);
 
     // Password
     callback password-search-changed(string);
@@ -453,6 +461,7 @@ export component WidgetFrame inherits Rectangle {
             type_id == "agent" ? "Ag" :
             type_id == "mail" ? "@" :
             type_id == "calendar" ? "Ca" :
+            type_id == "contacts" ? "Ct" :
             "*";
     }
 
@@ -1020,6 +1029,19 @@ export component WidgetFrame inherits Rectangle {
                     editor-color-changed(c) => { root.calendar-editor-color(root.model.instance-id, c); }
                     caldav-save(url, user, password) => { root.calendar-caldav-save(root.model.instance-id, url, user, password); }
                     caldav-sync => { root.calendar-caldav-sync(root.model.instance-id); }
+                }
+
+                if model.type-id == "contacts" : ContactsView {
+                    width: parent.width;
+                    height: parent.height;
+                    model: root.model.contacts;
+                    select-contact(id) => { root.contacts-select(root.model.instance-id, id); }
+                    new-contact => { root.contacts-new(root.model.instance-id); }
+                    set-field(key, value) => { root.contacts-set-field(root.model.instance-id, key, value); }
+                    save-contact => { root.contacts-save(root.model.instance-id); }
+                    delete-contact => { root.contacts-delete(root.model.instance-id); }
+                    save-account(url, user, password) => { root.contacts-save-account(root.model.instance-id, url, user, password); }
+                    sync => { root.contacts-sync(root.model.instance-id); }
                 }
 
                 if model.type-id == "rss" : RssView {
