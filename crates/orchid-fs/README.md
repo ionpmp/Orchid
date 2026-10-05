@@ -3,7 +3,9 @@
 Filesystem layer for Orchid. Exposes a pluggable provider abstraction (with a working `LocalProvider`), a cross-provider `FileWatcher` that fans notify events into the Orchid event bus, tagging via `orchid-storage`, archive browsing (ZIP / 7z / TAR / TAR.GZ / TAR.XZ), high-level file operations (copy / move / delete / recycle-bin), and two domain engines: managed (content-addressed dedup) and encrypted (`age` + reveal sessions) folders.
 
 Network listing uses a long-lived `rclone rcd` on localhost when available,
-falling back to per-operation CLI. Transfers still spawn the CLI.
+falling back to per-operation CLI. Transfers still spawn the CLI. **Connect
+cloud…** runs rclone's browser flow for Google Drive, personal OneDrive, and
+Dropbox, then bookmarks the remote name. The token stays in rclone's config.
 
 ## Managed folders
 

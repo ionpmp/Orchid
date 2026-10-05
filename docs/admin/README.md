@@ -12,6 +12,6 @@ releases and do not install binaries. Telemetry is opt-in.
 |---------|----------|
 | [Install](install.md) | Desktop install, portable zip, DLLs, `.orchid` association |
 | [Configuration](configuration.md) | `config.toml` |
-| [Data and operations](data-and-operations.md) | Paths, redb, search index, backups |
+| [Data and operations](data-and-operations.md) | Paths, redb, mail cache, search index, backups |
 | [Network](network.md) | rclone RC + CLI, credentials |
-| [Security](security.md) | Vault, encryption, chunks |
+| [Security](security.md) | Vault, mail and agent secrets, encryption, chunks |

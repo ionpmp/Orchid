@@ -15,10 +15,9 @@ bridge between `orchid-widgets` snapshots and Slint models.
   [`ConfigUpdated`]; the next UI tick in [`MainWindowController`] re-applies
   theme, locale, density, shortcut overrides, and rebuilds the workspace model.
 
-## Slint shell (46+ components)
+## Slint shell
 
-All UI is compiled from `ui/main.slint` via `build.rs`. The tree currently
-includes 39 exported components and 8 shared globals (47 Slint units total):
+All UI is compiled from `ui/main.slint` via `build.rs`. The tree includes:
 
 - **Windows** — `MainWindow` (workspace + onboarding modes via `AppState.mode`);
   `StartupWindow` is a legacy alias of the same component
@@ -34,10 +33,13 @@ includes 39 exported components and 8 shared globals (47 Slint units total):
 - **Window manager** — per-widget grid or floating placement; undock / dock,
   minimize / maximize / restore, edge snap, in-app taskbar, Ctrl+Tab
 - **Built-in widgets** — terminal, weather, moon, system, processes,
-  calculator, clock, notes, calendar, Jyotish, RSS, recent files,
-  universal search, media / audio / video, **browser** (WebView2),
-  password manager, file manager, viewer (image / PDF / text / archive /
+  optimize, protect, calculator, clock, notes, agent, mail, calendar,
+  contacts, Jyotish, RSS, recent files, universal search, media / audio /
+  video, **browser** (WebView2), password manager, file manager, viewer
+  (image / PDF forms / text / archive / spreadsheet / slide cards /
   media / HTML / **DOCX** / **`.orchid`**)
+- **Text mode** is not this crate. `orchid --tui` lives in `orchid-app`
+  and never constructs `OrchidApp`
 
 Every component reads design tokens from the shared [`Theme`] global and user
 strings from [`Strings`] (populated from `orchid-i18n`).

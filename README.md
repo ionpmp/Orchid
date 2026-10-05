@@ -18,17 +18,19 @@ Every gesture has a textual command. Every command can spawn a graphical widget.
 ## What works today
 
 - **Workspace shell** — up to nine workspaces, 16×10 widget grid, catalog, dock, tab groups, in-app window manager, cinema control kit
-- **File manager** — dual-pane, tags, virtual folders, archives, encryption, managed folders, rclone mounts (RC keep-alive for list/stat), Find, **Wrap as .orchid**
-- **Viewers** — images, PDF (pdfium), text (Tree-sitter), archives, HTML (WebView2 overlay), media (libmpv), Tier-1 DOCX / native `.orchid` editor
+- **File manager** — dual-pane, tags, virtual folders, Photos (people / events / albums), archives, encryption, managed folders (block-clone ingest), rclone mounts (RC keep-alive for list/stat), cloud sign-in for Drive / personal OneDrive / Dropbox, Find, **Wrap as .orchid**
+- **Viewers** — images (including tone-mapped HDR / OpenEXR and stored face boxes), PDF (pdfium, AcroForm fill, highlight, sticky notes), text (Tree-sitter), archives, HTML (WebView2 overlay), media (libmpv), spreadsheets (edit simple formulas), slide card preview, Tier-1 DOCX / native `.orchid` editor
 - **Browser** — catalog widget with WebView2 (tabs, bookmarks, find-in-page)
-- **Terminal** — PowerShell, cmd, WSL, SSH; tabs and splits
-- **Widgets** — weather, moon, Jyotish, clock, system, processes, calculator, notes, calendar, RSS, search, passwords, audio player (synced lyrics panel), video player, now-playing, recent files
-- **Search** — Tantivy full-text + universal search; hybrid ANN exists in-crate (stub embedder) and is not the universal-search UI yet
-- **`.orchid` container** — sealed and linked (CAS) files, age encryption, C2PA, CRDT structured region, stub embeddings (`orchid-format` / `orchid-embed`)
-- **Security** — KDBX4 vault, Windows Hello, age encrypt/reveal
-- **Theming & i18n** — nine bundled themes + JSON user themes, 11 Fluent locales including RTL (`ar-SA`)
+- **Mail** — IMAP/SMTP widget: account wizard, DPAPI secrets, SQLite cache, HTML reading pane, IDLE, attachments
+- **Terminal** — PowerShell, cmd, WSL, SSH; tabs and splits; built-in or Alacritty grid (Sixel, Kitty, OSC 52, OSC 7)
+- **Widgets** — weather, moon, Jyotish, clock, system (60-sample graphs), processes (per-process graphs), Optimize, Protection, calculator, notes, calendar (one CalDAV collection), contacts (one CardDAV collection), RSS, search, agent, passwords, audio player (synced lyrics panel), video player, now-playing, recent files
+- **Search** — Universal Search fuses Tantivy BM25 with ANN (compiled-in quantized ONNX, 64-d; synonym stub without the `ort` feature). `?` asks the agent. File Manager Find is a separate walk
+- **Agent** — Ollama or an OpenAI-compatible chat API. Shared transcript, local file tools, writes only after confirmation. Off until enabled
+- **`.orchid` container** — sealed and linked (CAS) files, age encryption, C2PA, CRDT structured region, embeddings (`orchid-format` / `orchid-embed`)
+- **Security** — KDBX4 vault, Windows Hello, age encrypt/reveal, DPAPI for mail / agent / CalDAV / CardDAV / inline mount passwords
+- **Theming & i18n** — nine bundled themes + JSON user themes and a four-palette marketplace, 11 Fluent locales including RTL (`ar-SA`)
 - **Text mode** — `orchid --tui` lists a local folder and previews small text files. It does not open the desktop window
-- **Policy** — `policy.toml` beside the config file makes listed settings read-only. An optional https address refreshes that file at startup. `audit.log` stays on this computer
+- **Policy and shell** — `policy.toml` beside the config file makes listed settings read-only. An optional https address refreshes that file at startup. `audit.log` stays on this computer. Settings can replace Explorer for this Windows user; `orchid --restore-shell` puts it back
 
 How to use it: [User guide](docs/user/README.md). How to deploy and configure it: [Admin guide](docs/admin/README.md).
 
@@ -39,20 +41,21 @@ How to use it: [User guide](docs/user/README.md). How to deploy and configure it
 | Language | Rust (MSRV 1.98) |
 | GUI | Slint + Skia (Ganesh, winit-skia); `orchid --tui` uses ratatui |
 | Storage | redb (state) + KDBX4 (passwords) + files (CAS chunks) |
-| Terminal | portable-pty + custom vte emulator |
+| Terminal | portable-pty + vte grid, or Alacritty grid (`alacritty-grid`) |
 | Encryption | age (rage) |
 | Content addressing | BLAKE3 + FastCDC |
-| Search | Tantivy (+ ANN/RRF in `orchid-search`, stub embedder) |
+| Search | Tantivy + ANN/RRF (`orchid-search`); ONNX or stub (`orchid-embed`) |
+| Mail | In-process IMAP/SMTP (`orchid-mail`), SQLite cache |
 | Documents | OOXML + parley/swash; native `.orchid` |
 | PDF | pdfium-render |
 | Media | libmpv |
-| HTML / browser | WebView2 |
+| HTML / browser / mail | WebView2 |
 | Network FS | rclone (`rcd` keep-alive + CLI transfers) |
 | Configuration | TOML |
 
 ## Status
 
-**Pre-alpha.** Active development toward v0.1. Planned work (mobile companion, …): [`docs/ROADMAP.md`](docs/ROADMAP.md). Release notes: [`CHANGELOG.md`](CHANGELOG.md).
+**Pre-alpha.** Active development toward v0.1. The guides describe this tree (14 crates, reviewed 2026-10-05). Planned work (mobile companion, plugins): [`docs/ROADMAP.md`](docs/ROADMAP.md). Release notes: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## System requirements
 

@@ -1,7 +1,7 @@
 # Orchid File Format (`.orchid`)
 
 Specification for Orchid’s native container format. This document is the
-design source of truth for implementers. Phase 1 sealed framing ships in
+design source of truth for implementers. Phases 1–5 ship in
 [`crates/orchid-format`](../crates/orchid-format). Related reading:
 [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITY.md](SECURITY.md),
 [ROADMAP.md](ROADMAP.md).

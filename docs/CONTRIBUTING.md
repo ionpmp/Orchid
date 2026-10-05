@@ -148,7 +148,9 @@ template.
    - Extend `WidgetPayload` / snapshot types when the widget needs a
      structured payload.
    - Register the descriptor in `OrchidApp::bootstrap`
-     (`crates/orchid-ui/src/app.rs`).
+     (`crates/orchid-ui/src/app.rs`). `register_all` is not enough for the
+     desktop binary. A widget that needs another crate (mail) is constructed
+     there and passed into `descriptor(...)`.
 
 2. **`orchid-i18n` — strings**
    - Add `widget-<name>-name`, `widget-<name>-desc`, and any widget-specific

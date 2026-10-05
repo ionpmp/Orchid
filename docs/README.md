@@ -19,7 +19,7 @@ lives in the user and admin guides. **Planned** work lives only in
 
 | Document | Description |
 |----------|-------------|
-| [user/README.md](user/README.md) | Workspace, FM, viewers, widgets, terminal, search, vault, settings |
+| [user/README.md](user/README.md) | Workspace, FM, viewers, widgets, mail, terminal, search, vault, settings, text mode |
 | [admin/README.md](admin/README.md) | Install, `config.toml`, data layout, rclone, backups |
 | [jyotish.md](jyotish.md) | Jyotish widget details |
 | [DESIGN.md](DESIGN.md) | UX philosophy + cinema kit |
@@ -30,7 +30,7 @@ lives in the user and admin guides. **Planned** work lives only in
 | Document | Description |
 |----------|-------------|
 | [ROADMAP.md](ROADMAP.md) | Planned features only |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 13-crate map, runtime, persistence |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 14-crate map, runtime, persistence |
 | [commands.md](commands.md) | `orc` verbs vs `fs.*` action ids |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 | [BUILDING.md](BUILDING.md) | Toolchain, pdfium, libmpv, WebView2, CI |

@@ -546,6 +546,10 @@ release yet.
   builds write Start Menu `Orchid.lnk` with AppUserModelID `IonPmp.Orchid`.
 
 ### Documentation
+- Guides, crate READMEs, and the backup manifest now match this tree:
+  mail, contacts, CalDAV, the agent, ONNX search, and the files the
+  backup zip leaves out (`data/mail`, the agent transcript, face data,
+  telemetry).
 - Rebuilt project, GitHub, [user](docs/user/README.md), and
   [admin](docs/admin/README.md) docs from the current tree (13 crates,
   `.orchid` Phases 1–5, WebView2 Browser, cinema kit). Planned work is

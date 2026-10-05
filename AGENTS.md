@@ -32,7 +32,8 @@ libmpv, WebView2).
 
 - Fluent: `crates/orchid-i18n/locales/en-US/main.ftl` + 11 locales
 - Widgets: `crates/orchid-widgets/src/builtin/<name>/` + Slint +
-  `OrchidApp::bootstrap` when extra deps are required
+  `OrchidApp::bootstrap` when extra deps are required. Mail's engine is
+  `crates/orchid-mail`; the widget only receives a `MailEngine`
 - Themes: `crates/orchid-ui/src/theme/bundled.rs` + JSON in `themes_dir`
 - Checklists: [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md)
 

@@ -14,7 +14,7 @@
 | Notes | `notes` | In-widget scratchpad |
 | Agent | `agent` | Shared conversation; file writes wait for confirmation |
 | Calendar | `calendar` | Local events, plus one CalDAV collection |
-| Contacts | `contacts` | Local cards, plus one CardDAV collection |
+| Contacts | `contacts` | Local cards in `state.redb`, plus one CardDAV collection |
 | Browser | `browser` | WebView2: tabs, bookmarks, find, zoom |
 | News Feed | `rss` | RSS/Atom |
 | Universal Search | `universal-search` | [search.md](search.md) |
@@ -110,7 +110,8 @@ Embedded WebView2. Needs the Evergreen runtime. Distinct from the HTML
 
 ## Contacts
 
-A card stores a name, one email, one phone number, and a note. Other vCard
+Cards and the CardDAV account live in that widget's config inside
+`state.redb`. A card stores a name, one email, one phone number, and a note. Other vCard
 fields, including photos and groups, are ignored. One collection URL uses
 basic authentication. Saving the account with an empty password keeps the
 previous secret. Sync downloads at most 500 cards and replaces linked cards
@@ -118,10 +119,37 @@ with the server copy. A card that has not been uploaded stays on this
 computer. A conflict response leaves that local card in place. There is no
 address-book discovery and no OAuth.
 
-## Notes / Calendar / Processes
+## Notes
 
-Notes are not files on disk. Calendar events stay on this computer. A collection URL, user, and password at the bottom of the calendar sync CalDAV. Extra collection URLs, separated by a space or a new line, use the same account. Sync covers 90 days ago through the next year. A time written with `Z` is shown in the local offset. A named timezone is stored as the numbers in the file. Daily, weekly, monthly, and yearly repeats, with interval, count, until, and weekly weekdays, are shown on each day in that window. A date listed in EXDATE is left out. Other rule parts and exception forms are ignored, and a rule this build cannot expand stays on the server. A multi-day event is shown on each day, up to 14 days and 400 occurrences. Editing or deleting one of those days stays on this computer and does not change the series; the next sync restores the series days. Saving or deleting a one-time synced event writes that change back. A local event with no account stays local. The password is stored with the widget config (DPAPI on Windows) and is not shown again. There is no server discovery and no OAuth. The Processes tab draws
-CPU and memory for the selected process: the last 60 samples, oldest on
-the left. CPU is that process's percent. Memory bars are scaled to the
-peak working set in the window. The samples stay with the widget instance
-and are not written to disk. Services, Startup, and Users have no graphs.
+Notes stay in the widget config inside `state.redb`. They are not files
+you can open from the file manager.
+
+## Calendar
+
+Local events stay on this computer. A collection URL, user, and password
+at the bottom of the calendar sync CalDAV. Extra collection URLs in that
+field, separated by a space or a new line, use the same account. Sync
+covers 90 days ago through the next year.
+
+A time written with `Z` is shown in the local offset. A named timezone is
+stored as the numbers in the file. Daily, weekly, monthly, and yearly
+repeats, with interval, count, until, and weekly weekdays, are shown on
+each day in that window. A date listed in EXDATE is left out. Other rule
+parts and exception forms are ignored, and a rule this build cannot expand
+stays on the server. A multi-day event is shown on each day, up to 14 days
+and 400 occurrences.
+
+Editing or deleting one of those generated days stays on this computer and
+does not change the series. The next sync restores the series days. Saving
+or deleting a one-time synced event writes that change back. A local event
+with no account stays local. The password is stored with the widget config
+(DPAPI on Windows) and is not shown again. There is no server discovery
+and no OAuth.
+
+## Processes
+
+The Processes tab draws CPU and memory for the selected process: the last
+60 samples, oldest on the left. CPU is that process's percent. Memory bars
+are scaled to the peak working set in the window. The samples stay with
+the widget instance and are not written to disk. Services, Startup, and
+Users have no graphs.

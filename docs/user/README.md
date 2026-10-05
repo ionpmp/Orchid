@@ -8,7 +8,8 @@ that are not built yet live in the [roadmap](../ROADMAP.md), not here.
 | [Workspace](workspace.md) | Canvas, dock, catalog, groups, floating windows |
 | [File manager](file-manager.md) | Panes, tools, archives, encryption, network, `.orchid` wrap |
 | [Viewers](viewers.md) | Images, PDF, text, archives, media, HTML, DOCX / `.orchid` |
-| [Widgets](widgets.md) | Catalog types including Browser, Mail, Protection, audio/video |
+| [Widgets](widgets.md) | Catalog types including Browser, Mail, Contacts, Agent, Optimize, Protection |
+| [Mail](mail.md) | IMAP/SMTP account wizard, reading, attachments |
 | [Terminal](terminal.md) | Shells, tabs, splits |
 | [Search](search.md) | Universal search and indexed files |
 | [Passwords](passwords.md) | KDBX vault, Hello, TOTP |

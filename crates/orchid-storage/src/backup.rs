@@ -1,8 +1,9 @@
 //! In-app backup of Orchid data (config, state, vault, chunks).
 //!
-//! The zip is written to a caller-chosen path. Search index and logs are
-//! omitted (rebuildable / noisy). The Hello/DPAPI sidecar is included and
-//! remains bound to the exporting Windows user and machine.
+//! The zip is written to a caller-chosen path. Search index, logs, cache,
+//! `data/mail`, `agent-chat.json`, `photo-faces.json`, and `telemetry.jsonl`
+//! are omitted. The Hello/DPAPI sidecar is included and remains bound to the
+//! exporting Windows user and machine.
 
 use std::fs::{self, File};
 use std::io::{self, Write};
@@ -38,7 +39,7 @@ pub fn write_backup_zip(paths: &OrchidPaths, dest_zip: &Path) -> Result<PathBuf>
     let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
     let manifest = format!(
-        "Orchid backup\ncreated: {}\nversion: {}\n\nIncludes: config, state.redb, vault, chunks, network bookmarks.\nOmits: search_index, logs, cache.\nDPAPI sidecar (passwords.master.dpapi) is machine/user bound.\n",
+        "Orchid backup\ncreated: {}\nversion: {}\n\nIncludes: config, state.redb, vault, chunks, network bookmarks.\nOmits: search_index, logs, cache, data/mail, agent-chat.json, photo-faces.json, telemetry.jsonl.\nDPAPI sidecar (passwords.master.dpapi) is machine/user bound.\n",
         chrono::Utc::now().to_rfc3339(),
         env!("CARGO_PKG_VERSION"),
     );

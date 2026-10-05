@@ -162,6 +162,19 @@ and `pen-double-tap`. Photos adds `photos-auto-tag` and
 key). Shortcuts and Marketplace stay editable. Editing `config.toml` by
 hand still changes a locked value; the Settings panel refuses the change.
 
+## Not in `config.toml`
+
+These live under `data\` and are described in
+[data-and-operations.md](data-and-operations.md):
+
+| Data | Path |
+|------|------|
+| Mail accounts, secrets, cache | `data\mail\` |
+| Agent transcript | `data\agent-chat.json` |
+| Face rectangles | `data\photo-faces.json` |
+| Telemetry lines | `data\telemetry.jsonl` |
+| Calendar, contacts, notes | widget rows in `state.redb` |
+
 ## Text mode
 
 `orchid --tui [path]` lists a local folder in the terminal. See

@@ -23,6 +23,7 @@ Prefix every line with `orc `.
 |------|------------|
 | `settings open` | `settings.open` |
 | `settings open config file` | `settings.open_config_file` |
+| `settings check update` | `settings.check_update` |
 | `password lock` | `password.lock` |
 | `diagnostics export` | `diagnostics.export_bundle` |
 | `data export backup` | `data.export_backup` |
@@ -61,6 +62,9 @@ Prefix every line with `orc `.
 | `terminal focus previous pane` | `terminal.focus_previous_pane` |
 | `terminal tab next` | `terminal.tab_next` |
 | `terminal tab previous` | `terminal.tab_previous` |
+
+Terminal verbs accept `--instance=<uuid>`. Without it they target the first
+terminal widget on the active workspace.
 
 Source: `crates/orchid-ui/src/commands.rs`,
 `crates/orchid-widgets/src/commands.rs`,

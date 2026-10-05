@@ -11,7 +11,7 @@ Cryptography layer for Orchid. Three independent subsystems sharing common secre
 - `age`-encrypted blobs protect confidentiality at rest: a stolen `.age` file is inert without the passphrase or X25519 identity. Tamper detection is end-to-end via age's HMAC and an additional BLAKE3 plaintext hash in the `.age.meta` sidecar.
 - KDBX4 vaults use Argon2id (KeePassXC "Interactive" defaults); the vault is only in cleartext inside the running Orchid process.
 - Reveal sessions narrow the window in which plaintext is on disk but do NOT defend against a concurrent attacker running as the same user.
-- Content-addressed chunks are plaintext by design. Encrypted files that need dedup should be encrypted *after* chunking; this is the responsibility of `orchid-fs` later.
+- Content-addressed chunks are plaintext by design. `orchid-fs` managed folders store those chunks as-is (block-clone or copy, then hard-link identical whole files). age encryption is a separate path: encrypt the file, do not expect the chunk store to hide it.
 - Windows DPAPI helpers (`secret::dpapi`) protect short blobs against an offline attacker without access to the user's Windows profile; they do NOT protect against malware running as the same user.
 
 ## Scope

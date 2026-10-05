@@ -58,11 +58,12 @@ python scripts/fetch_mpv.py
 
 **WebView2 (HTML preview and Browser widget)**
 
-The HTML viewer and the catalog **Browser** widget host an embedded WebView2
-overlay. Windows 10/11 typically already have the
+The HTML viewer, the catalog **Browser** widget, and HTML bodies in **Mail**
+host an embedded WebView2 overlay. Windows 10/11 typically already have the
 [Evergreen WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
-If it is missing, the HTML viewer shows source plus **Open in browser**, and the
-Browser widget shows an unavailable hint. No extra DLL is bundled.
+If it is missing, the HTML viewer shows source plus **Open in browser**, the
+Browser widget shows an unavailable hint, and Mail does not overlay the HTML
+body. No extra DLL is bundled.
 
 ## Cloning
 
@@ -122,6 +123,7 @@ Targeted crates while iterating:
 cargo test -p orchid-viewers
 cargo test -p orchid-widgets
 cargo test -p orchid-search
+cargo test -p orchid-mail
 cargo test -p orchid-i18n
 ```
 

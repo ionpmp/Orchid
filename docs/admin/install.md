@@ -34,7 +34,7 @@ Place under `third-party/` **before** cargo build, or copy beside the exe:
 | `third-party/mpv/win-x64/mpv-1.dll` or `libmpv-2.dll` | Media chrome; system-player handoff |
 | rclone on `PATH` or `RCLONE_BIN` | Network mounts fail |
 | 7-Zip | Some archive create/SFX paths unavailable |
-| WebView2 Evergreen | HTML source fallback; Browser widget unavailable |
+| WebView2 Evergreen | HTML viewer falls back to source; Browser widget unavailable; Mail HTML is not overlaid (the plain-text body still renders) |
 
 Do not commit DLL blobs. Uninstall the exe folder; user data stays under
 `%APPDATA%\Orchid\Orchid\` until deleted.

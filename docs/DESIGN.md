@@ -23,24 +23,29 @@ Orchid is built for devices where touch is the primary input (Surface, 2-in-1, t
 - Respect the physical thumb-zone (lower third of the screen = comfort zone)
 - Provide Density modes for mouse-driven adaptation
 
-When a mouse is in use, density switches to a compact mode, hover effects appear, and right-click context menus become available.
+Hover and right-click context menus are available with a pointer. Density
+does not change because a mouse moved.
 
 ## Density Modes
 
-- **Touch:** 48dp targets, larger fonts
-- **Mouse:** 32dp targets, denser layout
-- **Hybrid:** 40dp, the middle ground (default for 2-in-1)
+Settings → Appearance chooses the density. The three modes scale the UI:
 
-Switches automatically based on detected input type, or manually.
+- **Touch:** 1.2× (48 dp targets at the 40 dp baseline)
+- **Hybrid:** 1.0×, the default. On a narrow canvas the scale moves toward
+  touch; past 1600 px it moves toward mouse
+- **Mouse:** 0.8×
+
+The choice is stored in `[appearance].density`. It is not inferred from the
+last input device.
 
 ## Discoverability
 
 Gestures are invisible. This is the central problem of touch-first interfaces. Solutions:
 
-- **Onboarding tour** on first launch
-- **Hint mode (`Win+?`)** — overlay showing all gestures available in the current context
+- **Onboarding tour** on first launch (four steps; can be skipped)
+- **Hint mode (`Win+?`)** — overlay for gestures on the dock and workspace
 - **Command palette** displays the keyboard shortcut for every command
-- **Periodic tips** in the notification center
+- **One startup tip** in the notification center the first time the window opens
 
 ## Screen Zones and Priorities
 
@@ -51,9 +56,11 @@ Gestures are invisible. This is the central problem of touch-first interfaces. S
 
 ## Left-Handed Adaptivity
 
-- Edge swipes are configurable (sides can be swapped)
-- All keyboard shortcuts have mirror versions
-- One-handed mode shrinks the interface toward a chosen corner
+- `[input].primary-hand` and `mirror-edge-swipes` swap which edge opens the
+  workspace panel and the notification center
+- Screen zones in `orchid-core` score how comfortable a region is for a
+  thumb. There is no separate one-handed layout that shrinks the window
+  into a corner, and shortcuts are not mirrored automatically
 
 ## Visual Design Principles
 
@@ -68,10 +75,17 @@ Gestures are invisible. This is the central problem of touch-first interfaces. S
 
 These are implemented today and should stay consistent with the principles above:
 
-- **Workspace canvas** — 16×10 grid, widget frames, group tab stacks, dock
-- **In-app window manager** — floating overlays, edge snap, taskbar, Ctrl+Tab
-- **Viewers** — images, PDF, text, archives, media, HTML (WebView2), DOCX / `.orchid`
-- **Browser widget** — WebView2 tabs
+- **Workspace canvas** — 16×10 grid, widget frames, group tab stacks, dock,
+  catalog (including Mail, Contacts, Agent, Optimize, Protection)
+- **In-app window manager** — floating overlays (soft cap 8), edge snap,
+  taskbar, Ctrl+Tab
+- **Viewers** — images, PDF, text, archives, spreadsheets, slide cards,
+  media, HTML (WebView2), DOCX / `.orchid`
+- **Browser and Mail** — WebView2 (browser chrome, and HTML message bodies)
+- **Terminal** — built-in VT grid or the optional Alacritty grid
+- **Text mode** — `orchid --tui`, no desktop window
 - **Overlays** — command palette, settings, notifications, onboarding, hints
+- **Cinema kit** — `kit.slint` tokens, Tab focus, Space/Enter activation.
+  AccessKit stays off on Windows
 
 Roadmap status: [`ROADMAP.md`](ROADMAP.md). Recent product notes: [`CHANGELOG.md`](../CHANGELOG.md).

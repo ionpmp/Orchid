@@ -1,3 +1,8 @@
+# Universal search empty list (fixed)
+
+Regression note kept for the repro checklist. Current search behavior is
+[user/search.md](user/search.md). This is not a user guide.
+
 ## Universal search not working (notes)
 
 ### Symptom
