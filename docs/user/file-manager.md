@@ -15,6 +15,9 @@ drives; **Ctrl+Shift+T** new tab; **Ctrl+Shift+Enter** other pane.
 Sort is the menu next to the view button; in Details, click a column
 header. Narrow panes keep name and size; modified and type appear when
 the pane is wide enough. The column header stays put while the list scrolls.
+A narrow toolbar keeps back, forward, up, the address, view, and sort.
+Home, history, a new folder, and branch appear as the pane widens. The
+quick filter is a button until the field fits beside the address.
 
 ## Selection, clipboard, undo
 

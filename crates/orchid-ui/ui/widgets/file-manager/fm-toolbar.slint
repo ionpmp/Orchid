@@ -81,6 +81,34 @@ export component FmToolbar inherits Rectangle {
     background: Theme.surface-raised;
     clip: false;
 
+    // Reading `width` directly loops: hiding a button changes the preferred
+    // width, which changes the width the threshold just read. Copy the
+    // allocated width out of the layout binding instead.
+    property <length> pane-width: 0px;
+    property <bool> pane-sized: false;
+    changed width => {
+        root.pane-width = root.width;
+        root.pane-sized = true;
+    }
+    measure-width := Timer {
+        interval: 16ms;
+        running: !root.pane-sized;
+        triggered => {
+            if (root.width > 0px) {
+                root.pane-width = root.width;
+                root.pane-sized = true;
+            }
+        }
+    }
+
+    // Narrow panes (dual-pane, docked widgets) keep back / address / view / sort.
+    // Wider panes add home, history, new folder, and branch.
+    // 640px fits home, history, and a real filter field beside the address bar.
+    // 780px also fits new-folder and branch without squeezing the path.
+    property <bool> show-places: root.pane-width >= 640px;
+    property <bool> show-create: root.pane-width >= 780px;
+    property <bool> show-filter-field: root.show-places || root.filter-open || tab.quick-filter != "";
+    property <bool> filter-open: false;
     property <string> volume-label: tab.breadcrumbs.length > 0 ? tab.breadcrumbs[0].label : "";
     property <string> view-icon: tab.view-mode == 0 ? "grid"
         : tab.view-mode == 1 ? "rows"
@@ -147,7 +175,7 @@ export component FmToolbar inherits Rectangle {
             }
         }
 
-        IconButton {
+        if root.show-places : IconButton {
             icon: "home";
             size: ControlSize.sm;
             y: (parent.height - self.height) / 2;
@@ -158,7 +186,7 @@ export component FmToolbar inherits Rectangle {
             }
         }
 
-        Rectangle {
+        if root.show-places : Rectangle {
             width: Theme.icon-button-sm;
             height: Theme.icon-button-sm;
             y: (parent.height - self.height) / 2;
@@ -293,7 +321,7 @@ export component FmToolbar inherits Rectangle {
             edit-commit(t) => { root.path-edit-commit(t); }
         }
 
-        Rectangle {
+        if root.show-places || !root.filter-open : Rectangle {
             width: root.volume-label == "" ? Theme.icon-button-sm : 52px;
             height: Theme.icon-button-sm;
             y: (parent.height - self.height) / 2;
@@ -387,7 +415,7 @@ export component FmToolbar inherits Rectangle {
             }
         }
 
-        IconButton {
+        if root.show-create : IconButton {
             icon: "plus";
             size: ControlSize.sm;
             y: (parent.height - self.height) / 2;
@@ -398,7 +426,7 @@ export component FmToolbar inherits Rectangle {
             }
         }
 
-        IconButton {
+        if root.show-create : IconButton {
             icon: "tree";
             size: ControlSize.sm;
             y: (parent.height - self.height) / 2;
@@ -564,8 +592,20 @@ export component FmToolbar inherits Rectangle {
             }
         }
 
-        Rectangle {
-            width: 112px;
+        if !root.show-filter-field : IconButton {
+            icon: "search";
+            size: ControlSize.sm;
+            y: (parent.height - self.height) / 2;
+            tooltip: Strings.fm-quick-filter-placeholder;
+            tooltip-flip: true;
+            clicked => {
+                root.close-popovers();
+                root.filter-open = true;
+            }
+        }
+
+        if root.show-filter-field : Rectangle {
+            width: root.show-places ? 160px : 96px;
             height: Theme.icon-button-sm;
             y: (parent.height - self.height) / 2;
             background: Theme.surface-sunken;
@@ -581,6 +621,12 @@ export component FmToolbar inherits Rectangle {
             filter-fs := FocusScope {
                 width: parent.width;
                 height: parent.height;
+                init => {
+                    if (root.filter-open && tab.quick-filter == "") {
+                        self.focus();
+                    }
+                }
+
                 TouchArea {
                     clicked => { filter-input.focus(); }
                 }
@@ -624,6 +670,7 @@ export component FmToolbar inherits Rectangle {
                                     if (tab.quick-filter != "") {
                                         root.quick-filter-changed("");
                                     }
+                                    root.filter-open = false;
                                     return accept;
                                 }
                                 return reject;
