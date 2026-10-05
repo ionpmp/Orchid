@@ -3031,3 +3031,10 @@ contacts-conflict = Карточка изменилась на сервере
 contacts-one-url = Укажите один адрес коллекции
 contacts-bad-url = Адрес коллекции должен быть http или https
 contacts-failed = Сервер ответил { $reason }
+
+mail-attach = Приложить файл
+mail-remove = Убрать
+mail-attach-hint = Файлы читаются при отправке или сохранении черновика. Не больше 10 файлов и 25 МБ. Предпросмотра нет.
+mail-attach-missing = Этого файла нет на компьютере
+mail-attach-too-big = Вложения ограничены 25 МБ
+mail-attach-too-many = Не больше 10 файлов

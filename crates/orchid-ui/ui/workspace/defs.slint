@@ -2368,6 +2368,7 @@ export struct MailModel {
     compose-cc: string,
     compose-subject: string,
     compose-body: string,
+    compose-files: [MailAttachmentEntry],
     search-query: string,
     attachments: [MailAttachmentEntry],
     empty-label: string,
@@ -2399,6 +2400,9 @@ export struct MailModel {
     subject-label: string,
     body-label: string,
     save-attachment-label: string,
+    attach-label: string,
+    remove-label: string,
+    attach-hint: string,
 }
 
 export struct ContactEntry {

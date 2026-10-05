@@ -3028,3 +3028,10 @@ contacts-conflict = 名片已在服务器上更改
 contacts-one-url = 请只填写一个通讯录地址
 contacts-bad-url = 地址必须是 http 或 https
 contacts-failed = 服务器返回 { $reason }
+
+mail-attach = 添加附件
+mail-remove = 移除
+mail-attach-hint = 发送或保存草稿时才会读取文件。最多 10 个文件、25 MB。没有预览。
+mail-attach-missing = 这台电脑上没有该文件
+mail-attach-too-big = 附件合计不超过 25 MB
+mail-attach-too-many = 最多 10 个文件

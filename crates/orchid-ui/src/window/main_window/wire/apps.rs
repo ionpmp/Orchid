@@ -324,6 +324,22 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_mail_compose_attach({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_compose_attach(&id);
+                }
+            }
+        });
+        self.window.on_mail_compose_remove({
+            let t = t.clone();
+            move |id, path| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_compose_remove(&id, &path);
+                }
+            }
+        });
         self.window.on_mail_toggle_seen({
             let t = t.clone();
             move |id| {

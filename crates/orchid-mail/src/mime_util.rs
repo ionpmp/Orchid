@@ -160,12 +160,32 @@ pub fn build_rfc822(
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("attachment");
-        builder = builder.attachment("application/octet-stream", name, data);
+        builder = builder.attachment(content_type_for(name), name, data);
     }
 
     builder
         .write_to_vec()
         .map_err(|e| MailError::Mime(e.to_string()))
+}
+
+/// A few extensions get a specific type. Everything else is sent as bytes.
+fn content_type_for(name: &str) -> &'static str {
+    match std::path::Path::new(name)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("txt") => "text/plain",
+        Some("pdf") => "application/pdf",
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("zip") => "application/zip",
+        Some("json") => "application/json",
+        _ => "application/octet-stream",
+    }
 }
 
 fn split_addrs(raw: &str) -> Vec<String> {
@@ -267,6 +287,29 @@ mod tests {
         assert_eq!(body.attachments.len(), 1);
         assert_eq!(body.attachments[0].filename, "note.txt");
         assert_eq!(body.parts, vec![b"note".to_vec()]);
+        let raw_text = String::from_utf8_lossy(&raw);
+        assert!(raw_text.contains("text/plain"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn unknown_extension_is_octet_stream_and_a_missing_file_fails() {
+        let dir = std::env::temp_dir().join(format!("orchid-mail-bin-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("blob.bin");
+        std::fs::write(&path, b"xyz").unwrap();
+        let compose = ComposeMessage {
+            to: "a@b.com".into(),
+            attachments: vec![path.to_string_lossy().into_owned()],
+            ..Default::default()
+        };
+        let raw = build_rfc822("Me", "me@example.com", &compose).expect("build");
+        assert!(String::from_utf8_lossy(&raw).contains("application/octet-stream"));
+        let missing = ComposeMessage {
+            attachments: vec![dir.join("nope.bin").to_string_lossy().into_owned()],
+            ..Default::default()
+        };
+        assert!(build_rfc822("Me", "me@example.com", &missing).is_err());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

@@ -67,7 +67,11 @@ release yet.
   syncs again when new mail arrives. Toolbar Refresh does not wait on IDLE.
   Opening a message keeps attachment names and bytes in the local cache.
   The reading pane lists those names, and Save writes the cached bytes.
-  There is no preview, and Compose has no file picker.
+  There is no preview. Compose can attach up to 10 files and 25 MB from
+  this computer. Send and Save draft read the files then. A few extensions
+  get a matching type; other files are `application/octet-stream`. There
+  is no preview and no drag-and-drop. Forward does not copy the original
+  files.
   Rules and Microsoft Graph are not included.
 - **Agent conversation:** Universal Search `?` and the Agent widget share
   `data/agent-chat.json`. The model can read a local text file, list one

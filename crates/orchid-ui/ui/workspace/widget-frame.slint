@@ -239,6 +239,8 @@ export component WidgetFrame inherits Rectangle {
     callback mail-compose-set(string, string, string);
     callback mail-compose-send(string);
     callback mail-compose-draft(string);
+    callback mail-compose-attach(string);
+    callback mail-compose-remove(string, string);
     callback mail-toggle-seen(string);
     callback mail-toggle-flagged(string);
     callback mail-delete(string);
@@ -978,6 +980,8 @@ export component WidgetFrame inherits Rectangle {
                     compose-set(f, v) => { root.mail-compose-set(root.model.instance-id, f, v); }
                     compose-send => { root.mail-compose-send(root.model.instance-id); }
                     compose-draft => { root.mail-compose-draft(root.model.instance-id); }
+                    compose-attach => { root.mail-compose-attach(root.model.instance-id); }
+                    compose-remove(path) => { root.mail-compose-remove(root.model.instance-id, path); }
                     toggle-seen => { root.mail-toggle-seen(root.model.instance-id); }
                     toggle-flagged => { root.mail-toggle-flagged(root.model.instance-id); }
                     delete-selected => { root.mail-delete(root.model.instance-id); }

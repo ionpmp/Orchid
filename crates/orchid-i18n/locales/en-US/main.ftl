@@ -3045,3 +3045,10 @@ contacts-conflict = The card changed on the server
 contacts-one-url = Enter one collection URL
 contacts-bad-url = The collection URL must be http or https
 contacts-failed = The server returned { $reason }
+
+mail-attach = Attach file
+mail-remove = Remove
+mail-attach-hint = Files are read when you send or save the draft. At most 10 files and 25 MB. There is no preview.
+mail-attach-missing = That file is not on this computer
+mail-attach-too-big = Attachments are limited to 25 MB
+mail-attach-too-many = At most 10 files

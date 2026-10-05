@@ -3030,3 +3030,10 @@ contacts-conflict = تغيّرت البطاقة على الخادم
 contacts-one-url = أدخل عنوان مجموعة واحداً
 contacts-bad-url = يجب أن يكون العنوان http أو https
 contacts-failed = رد الخادم { $reason }
+
+mail-attach = إرفاق ملف
+mail-remove = إزالة
+mail-attach-hint = تُقرأ الملفات عند الإرسال أو حفظ المسودة. 10 ملفات و25 م.ب على الأكثر. لا معاينة.
+mail-attach-missing = هذا الملف غير موجود على هذا الجهاز
+mail-attach-too-big = المرفقات محدودة بـ 25 م.ب
+mail-attach-too-many = 10 ملفات على الأكثر

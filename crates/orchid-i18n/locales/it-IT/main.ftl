@@ -3028,3 +3028,10 @@ contacts-conflict = La scheda è cambiata sul server
 contacts-one-url = Indica un solo URL di raccolta
 contacts-bad-url = L’URL deve essere http o https
 contacts-failed = Il server ha risposto { $reason }
+
+mail-attach = Allega file
+mail-remove = Rimuovi
+mail-attach-hint = I file vengono letti all’invio o al salvataggio della bozza. Al massimo 10 file e 25 MB. Nessuna anteprima.
+mail-attach-missing = Quel file non è su questo computer
+mail-attach-too-big = Gli allegati sono limitati a 25 MB
+mail-attach-too-many = Al massimo 10 file

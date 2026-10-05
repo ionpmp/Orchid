@@ -3029,3 +3029,10 @@ contacts-conflict = Die Karte wurde auf dem Server geändert
 contacts-one-url = Nur eine Sammlungsadresse
 contacts-bad-url = Die Adresse muss http oder https sein
 contacts-failed = Der Server antwortete { $reason }
+
+mail-attach = Datei anhängen
+mail-remove = Entfernen
+mail-attach-hint = Dateien werden beim Senden oder Speichern des Entwurfs gelesen. Höchstens 10 Dateien und 25 MB. Keine Vorschau.
+mail-attach-missing = Diese Datei ist nicht auf diesem Computer
+mail-attach-too-big = Anhänge sind auf 25 MB begrenzt
+mail-attach-too-many = Höchstens 10 Dateien

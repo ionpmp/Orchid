@@ -80,6 +80,7 @@ struct UiState {
     compose_cc: String,
     compose_subject: String,
     compose_body: String,
+    compose_files: Vec<String>,
     compose_in_reply_to: Option<String>,
     compose_references: Option<String>,
     search: String,
@@ -119,6 +120,7 @@ impl Default for UiState {
             compose_cc: String::new(),
             compose_subject: String::new(),
             compose_body: String::new(),
+            compose_files: Vec::new(),
             compose_in_reply_to: None,
             compose_references: None,
             search: String::new(),
@@ -256,6 +258,7 @@ impl MailHandle {
             compose_cc: st.compose_cc,
             compose_subject: st.compose_subject,
             compose_body: st.compose_body,
+            compose_files: compose_file_rows(&st.compose_files),
             search_query: st.search,
             attachments: if st.selected_uid.is_some() {
                 self.parts
@@ -996,7 +999,45 @@ pub fn open_compose(instance_id: Uuid, kind: &str) {
             next.compose_body.clear();
         }
     }
+    next.compose_files.clear();
     *h.state.write() = next;
+    h.publish();
+}
+
+/// Add files chosen in the compose form. Directories are skipped.
+pub fn compose_add_files(instance_id: Uuid, paths: &[std::path::PathBuf]) {
+    let Some(h) = MAIL_LIVE.get(&instance_id) else {
+        return;
+    };
+    let mut st = h.state.write();
+    let existing: Vec<(String, u64)> = st
+        .compose_files
+        .iter()
+        .filter_map(|path| file_len(path).map(|size| (path.clone(), size)))
+        .collect();
+    let incoming: Vec<(String, Option<u64>)> = paths
+        .iter()
+        .map(|path| {
+            let text = path.to_string_lossy().into_owned();
+            let size = file_len(&text);
+            (text, size)
+        })
+        .collect();
+    let (planned, note) = plan_compose_add(&existing, &incoming);
+    st.compose_files = planned.into_iter().map(|(path, _)| path).collect();
+    if let Some(token) = note {
+        st.status = token.into();
+    }
+    drop(st);
+    h.publish();
+}
+
+/// Drop one compose file. `path` is the row id.
+pub fn compose_remove_file(instance_id: Uuid, path: &str) {
+    let Some(h) = MAIL_LIVE.get(&instance_id) else {
+        return;
+    };
+    h.state.write().compose_files.retain(|item| item != path);
     h.publish();
 }
 
@@ -1028,6 +1069,15 @@ pub fn compose_send(instance_id: Uuid) {
     let Some(account_id) = account_id else {
         return;
     };
+    let attachments = match compose_ready(&st.compose_files) {
+        Ok(paths) => paths,
+        Err(token) => {
+            drop(st);
+            h.state.write().status = token.into();
+            h.publish();
+            return;
+        }
+    };
     let compose = ComposeMessage {
         account_id: Some(account_id),
         to: st.compose_to,
@@ -1035,7 +1085,7 @@ pub fn compose_send(instance_id: Uuid) {
         bcc: String::new(),
         subject: st.compose_subject,
         body: st.compose_body,
-        attachments: Vec::new(),
+        attachments,
         in_reply_to: st.compose_in_reply_to,
         references: st.compose_references,
     };
@@ -1055,6 +1105,7 @@ pub fn compose_send(instance_id: Uuid) {
                     s.compose_cc.clear();
                     s.compose_subject.clear();
                     s.compose_body.clear();
+                    s.compose_files.clear();
                 }
                 Err(e) => {
                     handle.state.write().status = e.to_string();
@@ -1077,6 +1128,15 @@ pub fn compose_save_draft(instance_id: Uuid) {
     let Some(account_id) = account_id else {
         return;
     };
+    let attachments = match compose_ready(&st.compose_files) {
+        Ok(paths) => paths,
+        Err(token) => {
+            drop(st);
+            h.state.write().status = token.into();
+            h.publish();
+            return;
+        }
+    };
     let compose = ComposeMessage {
         account_id: Some(account_id),
         to: st.compose_to,
@@ -1084,7 +1144,7 @@ pub fn compose_save_draft(instance_id: Uuid) {
         bcc: String::new(),
         subject: st.compose_subject,
         body: st.compose_body,
-        attachments: Vec::new(),
+        attachments,
         in_reply_to: None,
         references: None,
     };
@@ -1097,8 +1157,10 @@ pub fn compose_save_draft(instance_id: Uuid) {
         async move {
             match handle.engine.save_draft(&compose).await {
                 Ok(()) => {
-                    handle.state.write().status = "draft-saved".into();
-                    handle.state.write().mode = 0;
+                    let mut s = handle.state.write();
+                    s.status = "draft-saved".into();
+                    s.mode = 0;
+                    s.compose_files.clear();
                 }
                 Err(e) => {
                     handle.state.write().status = e.to_string();
@@ -1304,6 +1366,86 @@ fn header_matches(header: &orchid_mail::MessageHeader, query: &str) -> bool {
         || header.snippet.to_lowercase().contains(query)
 }
 
+/// Outgoing compose keeps at most this many files.
+const COMPOSE_FILE_MAX: usize = 10;
+/// Outgoing compose keeps at most this many bytes, read at send or draft time.
+const COMPOSE_BYTES_MAX: u64 = 25 * 1024 * 1024;
+
+fn file_len(path: &str) -> Option<u64> {
+    let meta = std::fs::metadata(path).ok()?;
+    if meta.is_file() {
+        Some(meta.len())
+    } else {
+        None
+    }
+}
+
+fn compose_file_rows(paths: &[String]) -> Vec<MailAttachmentRow> {
+    paths
+        .iter()
+        .map(|path| {
+            let name = std::path::Path::new(path)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or(path);
+            let label = match file_len(path) {
+                Some(size) => format!("{} · {}", attachment_label(name), size_text(size)),
+                None => attachment_label(name),
+            };
+            MailAttachmentRow {
+                id: path.clone(),
+                label,
+            }
+        })
+        .collect()
+}
+
+fn compose_ready(paths: &[String]) -> Result<Vec<String>, &'static str> {
+    if paths.len() > COMPOSE_FILE_MAX {
+        return Err("attach-too-many");
+    }
+    let mut total = 0u64;
+    for path in paths {
+        let Some(size) = file_len(path) else {
+            return Err("attach-missing");
+        };
+        total = total.saturating_add(size);
+        if total > COMPOSE_BYTES_MAX {
+            return Err("attach-too-big");
+        }
+    }
+    Ok(paths.to_vec())
+}
+
+/// `incoming` size is `None` when the path is not a readable file.
+fn plan_compose_add(
+    existing: &[(String, u64)],
+    incoming: &[(String, Option<u64>)],
+) -> (Vec<(String, u64)>, Option<&'static str>) {
+    let mut out = existing.to_vec();
+    let mut note = None;
+    for (path, size) in incoming {
+        if out.iter().any(|(have, _)| have == path) {
+            continue;
+        }
+        let Some(size) = size else {
+            note = Some("attach-missing");
+            continue;
+        };
+        if out.len() >= COMPOSE_FILE_MAX {
+            note = Some("attach-too-many");
+            break;
+        }
+        let used: u64 = out.iter().map(|(_, n)| *n).sum();
+        if used.saturating_add(*size) > COMPOSE_BYTES_MAX {
+            note = Some("attach-too-big");
+            continue;
+        }
+        out.push((path.clone(), *size));
+    }
+    (out, note)
+}
+
 fn attachment_label(name: &str) -> String {
     let trimmed = name.trim();
     if trimmed.is_empty() {
@@ -1321,5 +1463,33 @@ fn size_text(size: u64) -> String {
     } else {
         let mb = size as f64 / (1024.0 * 1024.0);
         format!("{mb:.1} MB")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plan_keeps_a_small_file_and_skips_a_duplicate_and_a_huge_one() {
+        let existing = vec![("a.txt".into(), 10u64)];
+        let incoming = vec![
+            ("a.txt".into(), Some(10)),
+            ("gone.txt".into(), None),
+            ("b.txt".into(), Some(20)),
+            ("huge.bin".into(), Some(COMPOSE_BYTES_MAX)),
+        ];
+        let (planned, note) = plan_compose_add(&existing, &incoming);
+        assert_eq!(planned, vec![("a.txt".into(), 10), ("b.txt".into(), 20)]);
+        assert_eq!(note, Some("attach-too-big"));
+    }
+
+    #[test]
+    fn plan_stops_at_ten_files() {
+        let existing: Vec<(String, u64)> = (0..10).map(|i| (format!("f{i}"), 1)).collect();
+        let incoming = vec![("extra".into(), Some(1u64))];
+        let (planned, note) = plan_compose_add(&existing, &incoming);
+        assert_eq!(planned.len(), 10);
+        assert_eq!(note, Some("attach-too-many"));
     }
 }

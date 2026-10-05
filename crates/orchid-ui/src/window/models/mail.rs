@@ -44,6 +44,7 @@ pub(crate) fn empty_mail_model(locale: &LocaleManager) -> MailModel {
             compose_cc: String::new(),
             compose_subject: String::new(),
             compose_body: String::new(),
+            compose_files: Vec::new(),
             search_query: String::new(),
             attachments: Vec::new(),
         },
@@ -125,6 +126,16 @@ pub(crate) fn build_mail_model(payload: &MailPayload, locale: &LocaleManager) ->
         compose_cc: payload.compose_cc.clone().into(),
         compose_subject: payload.compose_subject.clone().into(),
         compose_body: payload.compose_body.clone().into(),
+        compose_files: ModelRc::new(VecModel::from(
+            payload
+                .compose_files
+                .iter()
+                .map(|row| MailAttachmentEntry {
+                    id: row.id.clone().into(),
+                    label: row.label.clone().into(),
+                })
+                .collect::<Vec<_>>(),
+        )),
         search_query: payload.search_query.clone().into(),
         attachments: ModelRc::new(VecModel::from(
             payload
@@ -165,6 +176,9 @@ pub(crate) fn build_mail_model(payload: &MailPayload, locale: &LocaleManager) ->
         subject_label: locale.tr("mail-subject").into(),
         body_label: locale.tr("mail-body").into(),
         save_attachment_label: locale.tr("mail-save-attachment").into(),
+        attach_label: locale.tr("mail-attach").into(),
+        remove_label: locale.tr("mail-remove").into(),
+        attach_hint: locale.tr("mail-attach-hint").into(),
     }
 }
 
@@ -178,6 +192,7 @@ pub(crate) fn patch_mail_model(
     sync_eq_rows(&model.folders, rows_of(&fresh.folders));
     sync_eq_rows(&model.messages, rows_of(&fresh.messages));
     sync_eq_rows(&model.attachments, rows_of(&fresh.attachments));
+    sync_eq_rows(&model.compose_files, rows_of(&fresh.compose_files));
     model.mode = fresh.mode;
     model.selected_account_id = fresh.selected_account_id;
     model.selected_folder = fresh.selected_folder;
@@ -235,6 +250,9 @@ pub(crate) fn patch_mail_model(
     model.subject_label = fresh.subject_label;
     model.body_label = fresh.body_label;
     model.save_attachment_label = fresh.save_attachment_label;
+    model.attach_label = fresh.attach_label;
+    model.remove_label = fresh.remove_label;
+    model.attach_hint = fresh.attach_hint;
 }
 
 fn rows_of<T: Clone + 'static>(model: &ModelRc<T>) -> Vec<T> {
@@ -254,6 +272,9 @@ fn status_label(locale: &LocaleManager, status: &str) -> String {
         "draft-saved" => locale.tr("mail-draft-saved"),
         "attachment-saved" => locale.tr("mail-attachment-saved"),
         "attachment-missing" => locale.tr("mail-attachment-missing"),
+        "attach-missing" => locale.tr("mail-attach-missing"),
+        "attach-too-big" => locale.tr("mail-attach-too-big"),
+        "attach-too-many" => locale.tr("mail-attach-too-many"),
         other => other.to_string(),
     }
 }

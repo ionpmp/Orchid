@@ -165,6 +165,28 @@ impl MainWindowController {
         }
     }
 
+    pub(super) fn on_mail_compose_attach(self: &Arc<Self>, id: &SharedString) {
+        let Some(iid) = Self::parse_mail_id(id) else {
+            return;
+        };
+        crate::window::spawn::spawn_local_compat(async move {
+            let picked = tokio::task::spawn_blocking(|| rfd::FileDialog::new().pick_files())
+                .await
+                .ok()
+                .flatten();
+            let Some(paths) = picked else {
+                return;
+            };
+            orchid_widgets::builtin::mail::compose_add_files(iid, &paths);
+        });
+    }
+
+    pub(super) fn on_mail_compose_remove(self: &Arc<Self>, id: &SharedString, path: &SharedString) {
+        if let Some(iid) = Self::parse_mail_id(id) {
+            orchid_widgets::builtin::mail::compose_remove_file(iid, path.as_str());
+        }
+    }
+
     pub(super) fn on_mail_toggle_seen(self: &Arc<Self>, id: &SharedString) {
         if let Some(iid) = Self::parse_mail_id(id) {
             orchid_widgets::builtin::mail::toggle_seen(iid);

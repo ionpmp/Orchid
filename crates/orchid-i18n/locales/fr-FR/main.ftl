@@ -3028,3 +3028,10 @@ contacts-conflict = La fiche a changé sur le serveur
 contacts-one-url = Indiquez une seule URL de collection
 contacts-bad-url = L’URL doit être http ou https
 contacts-failed = Le serveur a répondu { $reason }
+
+mail-attach = Joindre un fichier
+mail-remove = Retirer
+mail-attach-hint = Les fichiers sont lus à l’envoi ou à l’enregistrement du brouillon. 10 fichiers et 25 Mo au plus. Pas d’aperçu.
+mail-attach-missing = Ce fichier n’est pas sur cet ordinateur
+mail-attach-too-big = Les pièces jointes sont limitées à 25 Mo
+mail-attach-too-many = 10 fichiers au plus

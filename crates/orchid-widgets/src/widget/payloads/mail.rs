@@ -83,6 +83,8 @@ pub struct MailPayload {
     pub compose_cc: String,
     pub compose_subject: String,
     pub compose_body: String,
+    /// Files chosen for the outgoing message. `id` is the path on this computer.
+    pub compose_files: Vec<MailAttachmentRow>,
     /// Current mailbox search. Empty shows the cached folder.
     pub search_query: String,
     /// Files on the open message. Empty when no message is open.

@@ -272,6 +272,8 @@ export component MainWindow inherits Window {
     callback mail-compose-set(string, string, string);
     callback mail-compose-send(string);
     callback mail-compose-draft(string);
+    callback mail-compose-attach(string);
+    callback mail-compose-remove(string, string);
     callback mail-toggle-seen(string);
     callback mail-toggle-flagged(string);
     callback mail-delete(string);
@@ -788,6 +790,8 @@ export component MainWindow inherits Window {
             mail-compose-set(id, f, v) => { root.mail-compose-set(id, f, v); }
             mail-compose-send(id) => { root.mail-compose-send(id); }
             mail-compose-draft(id) => { root.mail-compose-draft(id); }
+            mail-compose-attach(id) => { root.mail-compose-attach(id); }
+            mail-compose-remove(id, path) => { root.mail-compose-remove(id, path); }
             mail-toggle-seen(id) => { root.mail-toggle-seen(id); }
             mail-toggle-flagged(id) => { root.mail-toggle-flagged(id); }
             mail-delete(id) => { root.mail-delete(id); }

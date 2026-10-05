@@ -12,9 +12,11 @@ The **Mail** widget (`mail`) is an IMAP/SMTP client on the workspace.
    **Sign in with browser** when the provider requires OAuth (Gmail /
    Microsoft 365).
 
-Passwords and OAuth refresh tokens are stored under `data/mail/` in a
-DPAPI-protected blob. Account metadata is in `data/mail/accounts.json`.
-Message headers and bodies are cached in `data/mail/cache.db`.
+Passwords and OAuth refresh tokens are stored in
+`data/mail/secrets.dpapi` (DPAPI). Account metadata, without secrets, is
+`data/mail/accounts.json`. Message headers, bodies, and saved attachment
+bytes are cached in `data/mail/cache.db`. The in-app backup zip does not
+include this folder.
 
 For Google OAuth set `ORCHID_MAIL_GOOGLE_CLIENT_ID`. Microsoft OAuth uses
 a public client id that you can override with `ORCHID_MAIL_MS_CLIENT_ID`.
@@ -50,5 +52,11 @@ selected account and folder.
 - Opening a message stores its attachment names and bytes in the local
   cache. The reading pane lists those names, and Save writes the cached
   bytes to a file you choose. There is no preview. A message cached before
-  this version is downloaded again once. Compose has no file picker.
+  this version is downloaded again once.
+- Compose can attach files from this computer. Attach lists the name and
+  size. Send and Save draft read those files then. At most 10 files and
+  25 MB. A few extensions (text, PDF, PNG, JPEG, GIF, WebP, ZIP, JSON)
+  get a matching type; other files are sent as `application/octet-stream`.
+  There is no preview and no drag-and-drop. Forward does not copy the
+  original message's files.
 - Mail does not read or write the calendar or contacts widgets.

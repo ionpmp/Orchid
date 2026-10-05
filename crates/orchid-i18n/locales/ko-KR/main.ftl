@@ -3028,3 +3028,10 @@ contacts-conflict = 카드가 서버에서 바뀌었습니다
 contacts-one-url = 모음 URL은 하나만 입력하세요
 contacts-bad-url = URL은 http 또는 https여야 합니다
 contacts-failed = 서버 응답: { $reason }
+
+mail-attach = 파일 첨부
+mail-remove = 제거
+mail-attach-hint = 파일은 보내거나 임시 보관할 때 읽습니다. 최대 10개, 25 MB입니다. 미리보기는 없습니다.
+mail-attach-missing = 그 파일은 이 컴퓨터에 없습니다
+mail-attach-too-big = 첨부는 25 MB까지입니다
+mail-attach-too-many = 최대 10개입니다

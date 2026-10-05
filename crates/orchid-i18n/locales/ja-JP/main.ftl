@@ -3027,3 +3027,10 @@ contacts-conflict = カードはサーバー側で変更されています
 contacts-one-url = コレクション URL は 1 つだけ入力してください
 contacts-bad-url = URL は http または https です
 contacts-failed = サーバーの応答: { $reason }
+
+mail-attach = ファイルを添付
+mail-remove = 外す
+mail-attach-hint = ファイルは送信時または下書き保存時に読みます。最大 10 ファイル、25 MB です。プレビューはありません。
+mail-attach-missing = そのファイルはこのコンピューターにありません
+mail-attach-too-big = 添付は 25 MB までです
+mail-attach-too-many = 最大 10 ファイルです
