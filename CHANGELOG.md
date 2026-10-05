@@ -570,6 +570,9 @@ release yet.
   same row as back, up, and the view and sort menus. The places list stays
   visible in a single pane. The drive button shows the current root. Details
   columns shrink to the pane, and the header stays visible while scrolling.
+  A narrow pane keeps back, forward, up, the address, view, and sort; home,
+  history, a new folder, and branch return as the pane widens. The quick
+  filter is a button until the field fits.
 - **Terminal resize**: a content tick reuses the frame size already read
   while patching the row, instead of cloning that row again to measure the PTY.
 - **Terminal output**: the first chunk records which widget owns the
@@ -931,6 +934,13 @@ release yet.
 
 ### Fixed
 
+- Audio and video browse tabs, and audio playlist chips, stay as wide as
+  their labels instead of collapsing in the strip.
+- **Jyotish**: locating and failed states stay on Current location. The
+  place row shows the UTC offset beside the place name. Profile edit and
+  remove buttons have tooltips, and the editor closes when editing ends.
+  An event year stays inside the birth-to-next-year span. Month days, year
+  rows, life years, and birth-date cells activate from the keyboard.
 - **Contacts:** the desktop app registers the contacts widget, so Add from
   the catalog creates it.
 - Audio and video players keep transport controls on screen: seek and volume

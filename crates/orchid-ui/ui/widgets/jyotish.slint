@@ -150,6 +150,10 @@ component ProfileDateCal inherits VerticalLayout {
             border-color: cell.is-selected ? Theme.accent-muted : Theme.border-default;
             animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
 
+            accessible-role: AccessibleRole.button;
+            accessible-label: cell.label;
+            accessible-action-default => { root.pick(root.mode == 0 ? j : cell.value); }
+
             cal-cell-ta := TouchArea {
                 mouse-cursor: MouseCursor.pointer;
                 clicked => { root.pick(root.mode == 0 ? j : cell.value); }
@@ -399,9 +403,45 @@ export component JyotishView inherits Rectangle {
 
     property <int> draft-event-kind: 0;
     property <int> draft-event-year: 2000;
-    property <string> draft-profile-name;
+    // The name field binds only to this draft, so clearing it does not snap
+    // back to the model on the next snapshot.
+    property <string> draft-profile-name: "";
+    property <bool> was-editing: false;
     /// Profile editor: -1 collapsed, 0 date, 1 time, 2 place.
     property <int> profile-pane: -1;
+
+    property <bool> viewing-current: model.active-city-index == 0;
+    property <string> location-caption:
+        root.viewing-current && model.current-locating ? model.current-locating-label
+        : root.viewing-current && model.current-failed && model.location-name == "" ? model.current-failed-label
+        : model.location-name != "" ? model.location-name
+        : root.viewing-current ? model.current-location-label
+        : model.empty-location;
+
+    // An inverted range has no legal year yet; a single year (max == min) sticks.
+    function clamp-year(year: int) -> int {
+        if (root.model.rectify.event-year-max < root.model.rectify.event-year-min) {
+            return year;
+        }
+        if (year < root.model.rectify.event-year-min) {
+            return root.model.rectify.event-year-min;
+        }
+        if (year > root.model.rectify.event-year-max) {
+            return root.model.rectify.event-year-max;
+        }
+        return year;
+    }
+
+    changed model => {
+        if (root.was-editing && !root.model.profile-editing) {
+            root.profile-pane = -1;
+            root.draft-profile-name = "";
+        }
+        root.was-editing = root.model.profile-editing;
+        if (root.model.rectify.step == 3) {
+            root.draft-event-year = root.clamp-year(root.draft-event-year);
+        }
+    }
 
     background: transparent;
 
@@ -471,6 +511,10 @@ export component JyotishView inherits Rectangle {
                             background: location-ta.has-hover ? Theme.state-hover : Colors.transparent;
                             animate background { duration: Theme.motion-fast; easing: ease-out; }
 
+                            accessible-role: AccessibleRole.button;
+                            accessible-label: root.location-caption;
+                            accessible-action-default => { root.open-cities(); }
+
                             location-ta := TouchArea {
                                 mouse-cursor: MouseCursor.pointer;
                                 clicked => { root.open-cities(); }
@@ -484,11 +528,7 @@ export component JyotishView inherits Rectangle {
                                 padding-right: Theme.space-1;
 
                                 Text {
-                                    text: model.current-locating ? model.current-locating-label
-                                        : (model.current-failed && model.location-name == "" ? model.current-failed-label
-                                            : (model.location-name == ""
-                                                ? (model.active-city-index == 0 ? model.current-location-label : model.empty-location)
-                                                : model.location-name));
+                                    text: root.location-caption;
                                     color: model.location-name == "" && !model.current-locating ? Theme.text-tertiary : Theme.text-secondary;
                                     font-size: Theme.font-size-sm;
                                     horizontal-alignment: center;
@@ -512,7 +552,7 @@ export component JyotishView inherits Rectangle {
                     }
                 }
 
-                if model.cities.length > 0 : Flickable {
+                if model.cities.length > 1 : Flickable {
                     height: Theme.control-sm;
                     viewport-height: self.height;
                     viewport-width: city-row.preferred-width.max(self.width);
@@ -1009,6 +1049,10 @@ export component JyotishView inherits Rectangle {
                     border-color: cell.is-selected ? Theme.accent-muted : Theme.border-default;
                     animate background, border-color { duration: Theme.motion-fast; easing: ease-out; }
 
+                    accessible-role: AccessibleRole.button;
+                    accessible-label: cell.day;
+                    accessible-action-default => { root.select-offset(cell.offset); }
+
                     cell-ta := TouchArea {
                         mouse-cursor: MouseCursor.pointer;
                         clicked => { root.select-offset(cell.offset); }
@@ -1120,6 +1164,10 @@ export component JyotishView inherits Rectangle {
                         background: month-ta.has-hover ? Theme.state-hover : Colors.transparent;
                         animate background { duration: Theme.motion-fast; easing: ease-out; }
 
+                        accessible-role: AccessibleRole.button;
+                        accessible-label: row.name;
+                        accessible-action-default => { root.open-month(row.month-offset); }
+
                         month-ta := TouchArea {
                             mouse-cursor: MouseCursor.pointer;
                             clicked => { root.open-month(row.month-offset); }
@@ -1207,6 +1255,10 @@ export component JyotishView inherits Rectangle {
                             border-width: row.is-current ? Theme.hairline : 0px;
                             border-color: Theme.accent-muted;
                             animate background { duration: Theme.motion-fast; easing: ease-out; }
+
+                            accessible-role: AccessibleRole.button;
+                            accessible-label: row.year;
+                            accessible-action-default => { root.select-life-year(row.year); }
 
                             year-ta := TouchArea {
                                 mouse-cursor: MouseCursor.pointer;
@@ -1498,7 +1550,7 @@ export component JyotishView inherits Rectangle {
                     }
                 }
 
-                if model.profiles-hint != "" : Text {
+                if !model.profile-editing && model.profiles-hint != "" : Text {
                     text: model.profiles-hint;
                     color: Theme.text-tertiary;
                     font-size: Theme.font-size-sm;
@@ -1532,6 +1584,7 @@ export component JyotishView inherits Rectangle {
                                 IconButton {
                                     icon: "more";
                                     size: ControlSize.sm;
+                                    tooltip: model.profiles-edit-label;
                                     tooltip-flip: true;
                                     clicked => {
                                         root.draft-profile-name = profile.name;
@@ -1544,6 +1597,7 @@ export component JyotishView inherits Rectangle {
                                     icon: "trash";
                                     size: ControlSize.sm;
                                     danger: true;
+                                    tooltip: model.profiles-remove-hint;
                                     tooltip-flip: true;
                                     clicked => { root.remove-profile(i); }
                                 }
@@ -1587,7 +1641,9 @@ export component JyotishView inherits Rectangle {
                                 background: Theme.surface-base;
                                 border-radius: Theme.radius-pill;
                                 border-width: Theme.hairline;
-                                border-color: Theme.border-default;
+                                border-color: name-input.has-focus ? Theme.border-focus : Theme.border-default;
+                                forward-focus: name-input;
+                                animate border-color { duration: Theme.motion-fast; easing: ease-out; }
                                 name-input := TextInput {
                                     x: Theme.space-3;
                                     y: 0px;
@@ -1670,7 +1726,9 @@ export component JyotishView inherits Rectangle {
                             }
 
                             TouchButton {
-                                text: model.profile-place-placeholder + "  " + (model.profile-edit-place-name == "" ? model.profile-offset-placeholder : model.profile-edit-place-name);
+                                text: model.profile-place-placeholder + "  " + (model.profile-edit-place-name == ""
+                                    ? model.profile-offset-placeholder
+                                    : model.profile-edit-place-name + " · " + model.profile-edit-offset-text);
                                 tone: root.profile-pane == 2 ? ButtonTone.tonal : ButtonTone.ghost;
                                 active: root.profile-pane == 2;
                                 size: ControlSize.sm;
@@ -1975,12 +2033,12 @@ export component JyotishView inherits Rectangle {
                             text: "−10";
                             tone: ButtonTone.ghost;
                             size: ControlSize.sm;
-                            clicked => { root.draft-event-year = max(model.rectify.event-year-min, root.draft-event-year - 10); }
+                            clicked => { root.draft-event-year = root.clamp-year(root.draft-event-year - 10); }
                         }
                         IconButton {
                             icon: "minus";
                             size: ControlSize.sm;
-                            clicked => { root.draft-event-year = max(model.rectify.event-year-min, root.draft-event-year - 1); }
+                            clicked => { root.draft-event-year = root.clamp-year(root.draft-event-year - 1); }
                         }
                         Text {
                             text: model.rectify.year-placeholder + " " + root.draft-event-year;
@@ -1995,13 +2053,13 @@ export component JyotishView inherits Rectangle {
                         IconButton {
                             icon: "plus";
                             size: ControlSize.sm;
-                            clicked => { root.draft-event-year = min(model.rectify.event-year-max, root.draft-event-year + 1); }
+                            clicked => { root.draft-event-year = root.clamp-year(root.draft-event-year + 1); }
                         }
                         TouchButton {
                             text: "+10";
                             tone: ButtonTone.ghost;
                             size: ControlSize.sm;
-                            clicked => { root.draft-event-year = min(model.rectify.event-year-max, root.draft-event-year + 10); }
+                            clicked => { root.draft-event-year = root.clamp-year(root.draft-event-year + 10); }
                         }
                     }
                     TouchButton {

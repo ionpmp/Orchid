@@ -3,11 +3,13 @@
 Catalog **Jyotish** (`type_id` `jyotish`). See also the
 [user widget list](user/widgets.md).
 
-The Jyotish widget is a local, offline Vedic panchanga (tithi / nakshatra /
-yoga / karana / vara) with an optional personal layer, day-quality "traffic
-light" scores, and a birth-time rectification wizard. Everything is computed
-on-device from the current position and clock — there is no network call and
-no ephemeris file.
+The Jyotish widget is a Vedic panchanga (tithi / nakshatra / yoga / karana /
+vara) with an optional personal layer, day-quality "traffic light" scores,
+and a birth-time rectification wizard. The panchanga itself is computed
+on-device from a position and the clock. There is no ephemeris file. Two
+lookups do use the network when you ask for them: the current place (Windows
+location, then `ipwho.is` if that fails) and birth-place search (Open-Meteo
+geocoding). A saved place is reused without another request.
 
 This document covers what the score means, the two data layers it can draw
 on, the inauspicious daylight windows, how to set up birth data, the
@@ -88,9 +90,11 @@ Tap the location name on the Day tab to open the location picker. From there
 you can search for a place by name (Open-Meteo geocoding, same provider as
 the Weather widget), add it to your saved locations, switch the active
 location via the chip strip or the picker list, and remove any location you
-no longer need (at least one location is always kept). Locations are no
-longer edited from the settings panel — latitude/longitude/name fields there
-have been replaced by this in-widget picker.
+no longer need (at least one location is always kept). The chip strip appears
+once another location is saved; Current location alone stays in the caption.
+Locating and failed states are shown only while Current location is selected.
+Locations are no longer edited from the settings panel — latitude/longitude/name
+fields there have been replaced by this in-widget picker.
 
 The Day tab keeps the date, location, and profile chips above a seven-day
 strip and the score, so nearby days can be opened without scrolling past the
@@ -130,7 +134,10 @@ Each profile stores:
 Name and gender stay visible in the editor. Date, time, and place are rows
 that open one at a time: a calendar (with month and year sheets), hour and
 minute steppers (one step, or six hours / five minutes), and place search.
-The UTC offset is edited with the place, in steps of 30 and 60 minutes.
+The place row shows the UTC offset beside the place name. The offset is
+edited with the place, in steps of 30 and 60 minutes. Edit and remove on
+each profile have tooltips. The editor closes when saving or cancelling
+finishes.
 Saving with an empty place name keeps the place already chosen, including
 its coordinates.
 
