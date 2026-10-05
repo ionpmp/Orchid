@@ -927,6 +927,8 @@ release yet.
 
 ### Fixed
 
+- **Contacts:** the desktop app registers the contacts widget, so Add from
+  the catalog creates it.
 - Audio and video players keep transport controls on screen: seek and volume
   are finger-sized sliders, library actions scroll instead of being clipped,
   and track buttons use icons with readable labels. Lyrics follow the

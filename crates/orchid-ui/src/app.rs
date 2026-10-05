@@ -425,6 +425,9 @@ impl OrchidApp {
             .register(orchid_widgets::builtin::calendar::descriptor())
             .map_err(|e| UiError::Slint(format!("register calendar: {e}")))?;
         widget_registry
+            .register(orchid_widgets::builtin::contacts::descriptor())
+            .map_err(|e| UiError::Slint(format!("register contacts: {e}")))?;
+        widget_registry
             .register(orchid_widgets::builtin::rss::descriptor(http))
             .map_err(|e| UiError::Slint(format!("register rss: {e}")))?;
         widget_registry
