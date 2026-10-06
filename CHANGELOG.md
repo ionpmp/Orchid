@@ -99,7 +99,7 @@ release yet.
   `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`,
   `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`,
   `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`, and
-  `SMALL`, `TRUNC`, `ISEVEN`, and `ISODD` on that sheet.
+  `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, and `CHAR` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -150,7 +150,11 @@ release yet.
   toward zero, the same way as `ROUNDDOWN`. The digit count defaults to 0
   and must be from -10 through 10. `ISEVEN` and `ISODD` write 1 or 0. The
   fraction is dropped toward zero. Zero is even. A magnitude at or above
-  1e15, or text, leaves the stored value. `IF` stays numeric.
+  1e15, or text, leaves the stored value. `CODE` and `CHAR` use Unicode
+  scalar values. `CODE` reads the first scalar. A number is shown as text
+  first, and an empty text leaves the stored value. `CHAR` drops the
+  fraction toward zero. Code 0, a surrogate, or a value above 1114111
+  leaves the stored value. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label
