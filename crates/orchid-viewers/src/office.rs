@@ -2,11 +2,9 @@
 //!
 //! Spreadsheets become a sheet and cell table. One stored cell can be
 //! written back into the package. A formula cell is left unchanged. After a
-//! value edit, arithmetic, comparisons, cell references, `SUM`, `AVERAGE`,
-//! `MIN`, `MAX`, `COUNT`, `IF`, `ROUND`, `ABS`, `INT`, text joined with
-//! `&` or `CONCAT`, and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, and `LOWER`
-//! on that sheet are recalculated. Anything else keeps its stored value.
-//! Presentations become one HTML card per slide.
+//! value edit, the functions named in the spreadsheet section of
+//! `docs/user/viewers.md` are recalculated on that sheet. Other formulas
+//! keep their stored value. Presentations become one HTML card per slide.
 
 use std::any::Any;
 use std::io::{Cursor, Read, Seek, Write};
@@ -621,6 +619,21 @@ fn exp_excel(number: f64) -> Option<f64> {
     } else {
         None
     }
+}
+
+fn fact_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() || number < 0.0 || number >= 171.0 {
+        return None;
+    }
+    let count = number.trunc() as u32;
+    let mut acc = 1.0;
+    for step in 2..=count {
+        acc *= f64::from(step);
+        if !acc.is_finite() {
+            return None;
+        }
+    }
+    Some(acc)
 }
 
 fn round_directed(value: f64, digits: f64, away: bool) -> Option<f64> {
@@ -1245,6 +1258,11 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return exp_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("FACT") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return fact_excel(number).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("POWER") {
                 let base = calc_num(self.compare(env)?)?;
@@ -3042,6 +3060,32 @@ mod tests {
         assert!(sheet.contains(r#"<f>LN(-1)</f><v>7</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>LOG(8,1)</f><v>8</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>EXP(1000)</f><v>9</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_factorial() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>FACT(5)</f><v>0</v></c><c r="C1"><f>FACT(0)</f><v>0</v></c><c r="D1"><f>FACT(5.9)</f><v>0</v></c><c r="E1"><f>FACT(-1)</f><v>7</v></c><c r="F1"><f>FACT(171)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>FACT(5)</f><v>120</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>FACT(0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>FACT(5.9)</f><v>120</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>FACT(-1)</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>FACT(171)</f><v>8</v>"#), "{sheet}");
     }
 
     #[tokio::test]
