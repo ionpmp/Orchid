@@ -97,7 +97,7 @@ release yet.
   `QUOTIENT`, `PI`, `EVEN`, `ODD`, `REPLACE`, `VALUE`, `T`, `N`, `ROUNDUP`,
   `ROUNDDOWN`, `CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`,
   `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`,
-  `TAN`, `RADIANS`, and `DEGREES` on that sheet.
+  `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, and `ATAN2` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -134,7 +134,8 @@ release yet.
   and above, leaves the stored value. Above 22 the product is no longer an
   exact integer. `SIN`, `COS`, and `TAN` take radians. `RADIANS` and
   `DEGREES` convert a number. A non-finite result leaves the stored value.
-  `IF` stays numeric.
+  `ASIN` and `ACOS` need a number from -1 through 1. `ATAN2` takes x then
+  y, and leaves the stored value when both are zero. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label

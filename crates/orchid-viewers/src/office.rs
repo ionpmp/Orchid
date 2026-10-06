@@ -677,6 +677,55 @@ fn degrees_excel(number: f64) -> Option<f64> {
     }
 }
 
+fn asin_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() || !(-1.0..=1.0).contains(&number) {
+        return None;
+    }
+    let value = number.asin();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn acos_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() || !(-1.0..=1.0).contains(&number) {
+        return None;
+    }
+    let value = number.acos();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn atan_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = number.atan();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+/// Excel `ATAN2(x, y)` is the angle of the point `(x, y)`.
+fn atan2_excel(x_coord: f64, y_coord: f64) -> Option<f64> {
+    if !x_coord.is_finite() || !y_coord.is_finite() || (x_coord == 0.0 && y_coord == 0.0) {
+        return None;
+    }
+    let value = y_coord.atan2(x_coord);
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn round_directed(value: f64, digits: f64, away: bool) -> Option<f64> {
     if !value.is_finite() || !digits.is_finite() {
         return None;
@@ -1323,6 +1372,26 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return degrees_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ASIN") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return asin_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ACOS") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return acos_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ATAN2") {
+                let x_coord = calc_num(self.compare(env)?)?;
+                let y_coord = self.comma_number(env)?;
+                return atan2_excel(x_coord, y_coord).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ATAN") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return atan_excel(number).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("POWER") {
                 let base = calc_num(self.compare(env)?)?;
@@ -2595,7 +2664,7 @@ mod tests {
             ),
             (
                 "xl/worksheets/sheet1.xml",
-                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>2</v></c><c r="B1"><v>3</v></c><c r="C1"><f>A1+B1</f><v>0</v></c><c r="D1"><f>SUM(A1:A2)</f><v>0</v></c><c r="E1"><f>AVERAGE(A1,B1)</f><v>0</v></c><c r="F1"><f>ASIN(A1)</f><v>9</v></c></row><row r="2"><c r="A2"><v>4</v></c></row></sheetData></worksheet>"#,
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>2</v></c><c r="B1"><v>3</v></c><c r="C1"><f>A1+B1</f><v>0</v></c><c r="D1"><f>SUM(A1:A2)</f><v>0</v></c><c r="E1"><f>AVERAGE(A1,B1)</f><v>0</v></c><c r="F1"><f>ROMAN(A1)</f><v>9</v></c></row><row r="2"><c r="A2"><v>4</v></c></row></sheetData></worksheet>"#,
             ),
         ]);
         let refused = set_sheet_cell(&bytes, "Budgets", "C1", "9").unwrap_err();
@@ -2612,7 +2681,7 @@ mod tests {
             sheet.contains(r#"<f>AVERAGE(A1,B1)</f><v>3.5</v>"#),
             "{sheet}"
         );
-        assert!(sheet.contains(r#"<f>ASIN(A1)</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ROMAN(A1)</f><v>9</v>"#), "{sheet}");
     }
 
     #[test]
@@ -2657,7 +2726,7 @@ mod tests {
             ),
             (
                 "xl/worksheets/sheet1.xml",
-                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1.26</v></c><c r="B1"><f>ROUND(A1,1)</f><v>0</v></c><c r="C1"><f>ABS(-4)</f><v>0</v></c><c r="D1"><f>INT(-1.2)</f><v>0</v></c><c r="E1" t="inlineStr"><is><t>x</t></is></c><c r="F1"><f>A1&amp;E1</f><v>0</v></c><c r="G1"><f>CONCAT("a","b")</f><v>0</v></c><c r="H1"><f>ASIN(A1)</f><v>9</v></c></row></sheetData></worksheet>"#,
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1.26</v></c><c r="B1"><f>ROUND(A1,1)</f><v>0</v></c><c r="C1"><f>ABS(-4)</f><v>0</v></c><c r="D1"><f>INT(-1.2)</f><v>0</v></c><c r="E1" t="inlineStr"><is><t>x</t></is></c><c r="F1"><f>A1&amp;E1</f><v>0</v></c><c r="G1"><f>CONCAT("a","b")</f><v>0</v></c><c r="H1"><f>ROMAN(A1)</f><v>9</v></c></row></sheetData></worksheet>"#,
             ),
         ]);
         let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2.26").unwrap();
@@ -2676,7 +2745,7 @@ mod tests {
             ),
             "{sheet}"
         );
-        assert!(sheet.contains(r#"<f>ASIN(A1)</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ROMAN(A1)</f><v>9</v>"#), "{sheet}");
     }
 
     #[test]
@@ -3183,6 +3252,44 @@ mod tests {
             sheet.contains(r#"<f>RADIANS(180)</f><v>3.14159265</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_inverse_trig() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>ASIN(0)</f><v>0</v></c><c r="C1"><f>ACOS(0)</f><v>0</v></c><c r="D1"><f>ATAN(0)</f><v>0</v></c><c r="E1"><f>ATAN(1)</f><v>0</v></c><c r="F1"><f>ATAN2(1,0)</f><v>0</v></c><c r="G1"><f>ATAN2(0,1)</f><v>0</v></c><c r="H1"><f>ASIN(2)</f><v>7</v></c><c r="I1"><f>ATAN2(0,0)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>ASIN(0)</f><v>0</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>ACOS(0)</f><v>1.57079633</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>ATAN(0)</f><v>0</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>ATAN(1)</f><v>0.78539816</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>ATAN2(1,0)</f><v>0</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>ATAN2(0,1)</f><v>1.57079633</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>ASIN(2)</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ATAN2(0,0)</f><v>8</v>"#), "{sheet}");
     }
 
     #[tokio::test]
