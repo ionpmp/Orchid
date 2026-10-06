@@ -1955,6 +1955,11 @@ impl<'a> CalcParser<'a> {
                 };
                 return Some(CalcValue::Num(if flag { 1.0 } else { 0.0 }));
             }
+            if word.eq_ignore_ascii_case("XOR") {
+                let args = self.logic_args(env)?;
+                let odds = args.iter().filter(|number| **number != 0.0).count();
+                return Some(CalcValue::Num(if odds % 2 == 1 { 1.0 } else { 0.0 }));
+            }
             if word.eq_ignore_ascii_case("LARGE") || word.eq_ignore_ascii_case("SMALL") {
                 let small = word.eq_ignore_ascii_case("SMALL");
                 let mut args = self.arg_list(env)?;
@@ -4168,6 +4173,32 @@ mod tests {
             sheet.contains(r#"<f>SWITCH(1,"1",9)</f><v>6</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_xor() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>XOR(1,0)</f><v>0</v></c><c r="C1"><f>XOR(1,0,1)</f><v>0</v></c><c r="D1"><f>XOR(0,0)</f><v>0</v></c><c r="E1"><f>XOR(1,1,1)</f><v>0</v></c><c r="F1"><f>XOR()</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>XOR(1,0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>XOR(1,0,1)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>XOR(0,0)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>XOR(1,1,1)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>XOR()</f><v>7</v>"#), "{sheet}");
     }
 
     #[tokio::test]

@@ -100,13 +100,14 @@ release yet.
   `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`,
   `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`,
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
-  `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, and `SWITCH` on that sheet.
+  `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, and `XOR` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
   `REPT` stops at 32,767 scalar values. `EXACT` writes 1 or 0. `AND` and
   `OR` take up to 255 comma-separated numbers or comparisons and write 1
-  or 0; a cell range is not expanded. `NOT` turns zero into 1 and any
+  or 0; a cell range is not expanded. `XOR` uses those same arguments and
+  writes 1 when an odd count of them is not zero. `NOT` turns zero into 1 and any
   other number into 0. `SQRT` of a negative number leaves the stored
   value. `POWER` of a negative base with a non-integer exponent leaves
   the stored value. `MOD` follows the sign of the divisor, and a zero
