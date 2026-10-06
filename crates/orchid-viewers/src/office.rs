@@ -729,6 +729,32 @@ fn hyper_excel(number: f64, kind: &str) -> Option<f64> {
         None
     }
 }
+
+fn combin_excel(n: f64, k: f64) -> Option<f64> {
+    if !n.is_finite() || !k.is_finite() || n < 0.0 || k < 0.0 || n >= 1_000_000.0 {
+        return None;
+    }
+    let n = n.trunc() as u64;
+    let k = k.trunc() as u64;
+    if k > n {
+        return None;
+    }
+    let k = k.min(n - k);
+    let mut acc = 1.0;
+    for index in 0..k {
+        acc *= (n - index) as f64;
+        acc /= (index + 1) as f64;
+        if !acc.is_finite() {
+            return None;
+        }
+    }
+    if acc < 1e15 {
+        Some(acc.round())
+    } else {
+        Some(acc)
+    }
+}
+
 fn atan2_excel(x_coord: f64, y_coord: f64) -> Option<f64> {
     if !x_coord.is_finite() || !y_coord.is_finite() || (x_coord == 0.0 && y_coord == 0.0) {
         return None;
@@ -1416,6 +1442,11 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return hyper_excel(number, &kind).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("COMBIN") {
+                let n = calc_num(self.compare(env)?)?;
+                let k = self.comma_number(env)?;
+                return combin_excel(n, k).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("POWER") {
                 let base = calc_num(self.compare(env)?)?;
@@ -3343,6 +3374,36 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>COSH(1000)</f><v>7</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_combin() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>COMBIN(5,2)</f><v>0</v></c><c r="C1"><f>COMBIN(5,0)</f><v>0</v></c><c r="D1"><f>COMBIN(5,5)</f><v>0</v></c><c r="E1"><f>COMBIN(5.9,2.2)</f><v>0</v></c><c r="F1"><f>COMBIN(4,5)</f><v>7</v></c><c r="G1"><f>COMBIN(-1,1)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>COMBIN(5,2)</f><v>10</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COMBIN(5,0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COMBIN(5,5)</f><v>1</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>COMBIN(5.9,2.2)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>COMBIN(4,5)</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COMBIN(-1,1)</f><v>8</v>"#), "{sheet}");
     }
 
     #[tokio::test]

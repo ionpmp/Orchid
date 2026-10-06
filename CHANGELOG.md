@@ -98,7 +98,7 @@ release yet.
   `ROUNDDOWN`, `CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`,
   `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`,
   `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`,
-  `COSH`, and `TANH` on that sheet.
+  `COSH`, `TANH`, and `COMBIN` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -137,8 +137,11 @@ release yet.
   `DEGREES` convert a number. A non-finite result leaves the stored value.
   `ASIN` and `ACOS` need a number from -1 through 1. `ATAN2` takes x then
   y, and leaves the stored value when both are zero. `SINH`, `COSH`, and
-  `TANH` leave the stored value when the result is not finite.
-  `IF` stays numeric.
+  `TANH` leave the stored value when the result is not finite. `COMBIN`
+  drops the fraction toward zero. A negative number, a second number
+  larger than the first, or a first number at or above one million leaves
+  the stored value. While the result is below 1e15 it is rounded to an
+  integer. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label
