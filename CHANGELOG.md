@@ -99,7 +99,7 @@ release yet.
   `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`,
   `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`,
   `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`, and
-  `TRUNC` on that sheet.
+  `SMALL`, `TRUNC`, `ISEVEN`, and `ISODD` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -148,7 +148,9 @@ release yet.
   as `SUM`, and the last argument is a 1-based rank. A rank below 1 or past
   the last number leaves the stored value. `TRUNC` drops the fraction
   toward zero, the same way as `ROUNDDOWN`. The digit count defaults to 0
-  and must be from -10 through 10. `IF` stays numeric.
+  and must be from -10 through 10. `ISEVEN` and `ISODD` write 1 or 0. The
+  fraction is dropped toward zero. Zero is even. A magnitude at or above
+  1e15, or text, leaves the stored value. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label
