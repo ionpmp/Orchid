@@ -802,6 +802,45 @@ fn replace_span(text: &str, start: f64, count: f64, new: &str) -> Option<String>
     Some(out)
 }
 
+fn value_excel(text: &str) -> Option<f64> {
+    let text = text.trim_matches(' ');
+    if text.is_empty() {
+        return None;
+    }
+    let bytes = text.as_bytes();
+    let (sign, digits) = match bytes.first() {
+        Some(b'+') => (1.0, &bytes[1..]),
+        Some(b'-') => (-1.0, &bytes[1..]),
+        _ => (1.0, bytes),
+    };
+    if digits.is_empty() || !digits.iter().any(u8::is_ascii_digit) {
+        return None;
+    }
+    let mut saw_dot = false;
+    for byte in digits {
+        if *byte == b'.' {
+            if saw_dot {
+                return None;
+            }
+            saw_dot = true;
+            continue;
+        }
+        if !byte.is_ascii_digit() {
+            return None;
+        }
+    }
+    let parsed = std::str::from_utf8(digits).ok()?.parse::<f64>().ok()?;
+    if !parsed.is_finite() {
+        return None;
+    }
+    let value = sign * parsed;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn open_tag_inline(open: &str) -> Option<String> {
     if open.contains("t=") {
         return None;
@@ -1204,6 +1243,30 @@ impl<'a> CalcParser<'a> {
                 let new = calc_text(&self.compare(env)?);
                 self.close_paren()?;
                 return replace_span(&text, start, count, &new).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("VALUE") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return value_excel(&text).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("T") {
+                let value = self.compare(env)?;
+                self.close_paren()?;
+                let text = match value {
+                    CalcValue::Text(text) => text,
+                    CalcValue::Num(_) => String::new(),
+                };
+                return Some(CalcValue::Text(text));
+            }
+            if word.eq_ignore_ascii_case("N") {
+                let value = self.compare(env)?;
+                self.close_paren()?;
+                let number = match value {
+                    CalcValue::Num(number) if number.is_finite() => number,
+                    CalcValue::Num(_) => return None,
+                    CalcValue::Text(_) => 0.0,
+                };
+                return Some(CalcValue::Num(number));
             }
             if word.eq_ignore_ascii_case("NOT") {
                 let number = calc_num(self.compare(env)?)?;
@@ -2576,6 +2639,40 @@ mod tests {
             sheet.contains(r#"<f>REPLACE("ab",0,1,"X")</f><v>7</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_value_t_and_n() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>VALUE(" 2.5 ")</f><v>0</v></c><c r="C1"><f>VALUE("-3")</f><v>0</v></c><c r="D1"><f>VALUE("x")</f><v>7</v></c><c r="E1"><f>T("ab")</f><v>0</v></c><c r="F1"><f>T(4)</f><v>0</v></c><c r="G1"><f>N("ab")</f><v>0</v></c><c r="H1"><f>N(4)</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>VALUE(" 2.5 ")</f><v>2.5</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>VALUE("-3")</f><v>-3</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>VALUE("x")</f><v>7</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>T("ab")</f><is><t>ab</t></is>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>T(4)</f><is><t></t></is>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>N("ab")</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>N(4)</f><v>4</v>"#), "{sheet}");
     }
 
     #[tokio::test]

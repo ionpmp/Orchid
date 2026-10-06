@@ -14,7 +14,7 @@ arithmetic, comparisons, cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`,
 and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, `LOWER`, `TRIM`,
 `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`, `EXACT`, `AND`, `OR`, `NOT`,
 `SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`, `QUOTIENT`, `PI`, `EVEN`,
-`ODD`, and `REPLACE` on that same sheet.
+`ODD`, `REPLACE`, `VALUE`, `T`, and `N` on that same sheet.
 Text results are stored as inline strings. `LEN`, the slice functions,
 and `FIND` / `SEARCH` count Unicode scalar values. `TRIM` collapses only
 the space character U+0020. `SEARCH` ignores ASCII letter case and does
@@ -38,7 +38,10 @@ zero; zero stays even, and a magnitude at or above 1e15 leaves the stored
 value. `REPLACE` removes a 1-based span of Unicode scalar values and writes
 the new text there. A start before 1, or more than one past the end, leaves
 the stored value. A count that runs past the end removes only the tail.
-`IF` stays
+`VALUE` reads an optional sign, digits, and one dot. Spaces around the
+text are ignored. Thousands separators, exponents, and dates leave the
+stored value. `T` keeps text and writes an empty string for a number.
+`N` keeps a number and writes 0 for text. `IF` stays
 numeric. Shared-string cells and formulas on another sheet are left as
 stored. Other formulas keep their stored value. Drawings are copied through. A blank cell that the
 table only filled in so the columns line up is not inserted. PowerPoint
