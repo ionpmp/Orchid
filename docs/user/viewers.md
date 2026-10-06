@@ -15,7 +15,7 @@ and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, `LOWER`, `TRIM`,
 `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`, `EXACT`, `AND`, `OR`, `NOT`,
 `SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`, `QUOTIENT`, `PI`, `EVEN`,
 `ODD`, `REPLACE`, `VALUE`, `T`, `N`, `ROUNDUP`, `ROUNDDOWN`,
-`CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`, `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`, `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`, `COSH`, `TANH`, `COMBIN`, `PERMUT`, and `PERMUTATIONA` on that same sheet.
+`CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`, `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`, `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`, `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, and `SMALL` on that same sheet.
 Text results are stored as inline strings. `LEN`, the slice functions,
 and `FIND` / `SEARCH` count Unicode scalar values. `TRIM` collapses only
 the space character U+0020. `SEARCH` ignores ASCII letter case and does
@@ -70,7 +70,10 @@ than the first, or a first number at or above one million leaves the
 stored value. While the result is below 1e15 it is rounded to an integer. `PERMUT` uses
 the same limits and does not repeat items, so the second number cannot be
 larger than the first. `PERMUTATIONA` allows repetition. Zero to a positive
-power is 0, and zero to the power 0 is 1. `IF` stays
+power is 0, and zero to the power 0 is 1. `LARGE` and `SMALL` use the same
+numeric arguments as `SUM`, and the last argument is a 1-based rank. The
+rank is truncated toward zero. A rank below 1 or past the last number
+leaves the stored value. `IF` stays
 numeric. Shared-string cells and formulas on another sheet are left as
 stored. Other formulas keep their stored value. Drawings are copied through. A blank cell that the
 table only filled in so the columns line up is not inserted. PowerPoint

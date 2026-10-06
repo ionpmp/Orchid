@@ -98,7 +98,8 @@ release yet.
   `ROUNDDOWN`, `CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`,
   `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`,
   `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`,
-  `COSH`, `TANH`, `COMBIN`, `PERMUT`, and `PERMUTATIONA` on that sheet.
+  `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, and `SMALL`
+  on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -143,7 +144,9 @@ release yet.
   the stored value. While the result is below 1e15 it is rounded to an
   integer. `PERMUT` uses the same limits and does not repeat items.
   `PERMUTATIONA` allows repetition. Zero to a positive power is 0, and zero
-  to the power 0 is 1. `IF` stays numeric.
+  to the power 0 is 1. `LARGE` and `SMALL` use the same numeric arguments
+  as `SUM`, and the last argument is a 1-based rank. A rank below 1 or past
+  the last number leaves the stored value. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label

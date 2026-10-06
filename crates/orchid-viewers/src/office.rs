@@ -812,6 +812,24 @@ fn permutationa_excel(n: f64, k: f64) -> Option<f64> {
     round_count(acc)
 }
 
+fn ranked_excel(values: &mut [f64], rank: f64, small: bool) -> Option<f64> {
+    if values.is_empty()
+        || !rank.is_finite()
+        || rank < 1.0
+        || rank > values.len() as f64
+        || values.iter().any(|number| !number.is_finite())
+    {
+        return None;
+    }
+    let rank = rank.trunc() as usize;
+    if rank < 1 || rank > values.len() {
+        return None;
+    }
+    values.sort_by(|left, right| left.total_cmp(right));
+    let index = if small { rank - 1 } else { values.len() - rank };
+    Some(values[index])
+}
+
 fn atan2_excel(x_coord: f64, y_coord: f64) -> Option<f64> {
     if !x_coord.is_finite() || !y_coord.is_finite() || (x_coord == 0.0 && y_coord == 0.0) {
         return None;
@@ -1720,6 +1738,14 @@ impl<'a> CalcParser<'a> {
                     args.iter().all(|number| *number != 0.0)
                 };
                 return Some(CalcValue::Num(if flag { 1.0 } else { 0.0 }));
+            }
+            if word.eq_ignore_ascii_case("LARGE") || word.eq_ignore_ascii_case("SMALL") {
+                let small = word.eq_ignore_ascii_case("SMALL");
+                let mut args = self.arg_list(env)?;
+                let Some(rank) = args.pop() else {
+                    return None;
+                };
+                return ranked_excel(&mut args, rank, small).map(CalcValue::Num);
             }
             let args = self.arg_list(env)?;
             return match word.to_ascii_uppercase().as_str() {
@@ -3509,6 +3535,48 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>PERMUT(-1,1)</f><v>8</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_large_and_small() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>8</v></c><c r="C1"><f>LARGE(1,9,3,1)</f><v>0</v></c><c r="D1"><f>LARGE(1,9,3,2)</f><v>0</v></c><c r="E1"><f>SMALL(1,9,3,1)</f><v>0</v></c><c r="F1"><f>SMALL(1,9,3,2.9)</f><v>0</v></c><c r="G1"><f>LARGE(A1:B1,1)</f><v>0</v></c><c r="H1"><f>LARGE(1,9,0)</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>LARGE(1,9,3,1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LARGE(1,9,3,2)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SMALL(1,9,3,1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SMALL(1,9,3,2.9)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LARGE(A1:B1,1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>LARGE(1,9,0)</f><v>7</v>"#), "{sheet}");
     }
 
     #[tokio::test]
