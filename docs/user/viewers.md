@@ -15,7 +15,7 @@ and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, `LOWER`, `TRIM`,
 `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`, `EXACT`, `AND`, `OR`, `NOT`,
 `SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`, `QUOTIENT`, `PI`, `EVEN`,
 `ODD`, `REPLACE`, `VALUE`, `T`, `N`, `ROUNDUP`, `ROUNDDOWN`,
-`CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`, and `ISTEXT` on that same sheet.
+`CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`, `ISTEXT`, `GCD`, and `LCM` on that same sheet.
 Text results are stored as inline strings. `LEN`, the slice functions,
 and `FIND` / `SEARCH` count Unicode scalar values. `TRIM` collapses only
 the space character U+0020. `SEARCH` ignores ASCII letter case and does
@@ -50,7 +50,10 @@ significance argument leaves the stored value. `MEDIAN` uses the same
 numeric arguments as `SUM`, including a cell range. An even count averages
 the two middle numbers. An empty call leaves the stored value. `ISNUMBER`
 and `ISTEXT` write 1 or 0. A missing cell leaves the stored value, and a
-shared-string cell is not classified. `IF` stays
+shared-string cell is not classified. `GCD` and `LCM` use those same
+numeric arguments. A fraction is dropped toward zero. A negative number,
+a magnitude at or above 1e15, or an empty call leaves the stored value.
+`LCM` of a zero writes 0. `IF` stays
 numeric. Shared-string cells and formulas on another sheet are left as
 stored. Other formulas keep their stored value. Drawings are copied through. A blank cell that the
 table only filled in so the columns line up is not inserted. PowerPoint

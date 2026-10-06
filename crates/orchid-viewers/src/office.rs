@@ -696,6 +696,52 @@ fn even_odd_excel(number: f64, odd: bool) -> Option<f64> {
     }
 }
 
+fn gcd_u64(mut left: u64, mut right: u64) -> u64 {
+    while right != 0 {
+        let next = left % right;
+        left = right;
+        right = next;
+    }
+    left
+}
+
+fn whole_arg(number: f64) -> Option<u64> {
+    if !number.is_finite() || number < 0.0 || number >= 1e15 {
+        return None;
+    }
+    Some(number.trunc() as u64)
+}
+
+fn gcd_excel(args: &[f64]) -> Option<f64> {
+    if args.is_empty() {
+        return None;
+    }
+    let mut acc = 0u64;
+    for number in args {
+        acc = gcd_u64(acc, whole_arg(*number)?);
+    }
+    Some(acc as f64)
+}
+
+fn lcm_excel(args: &[f64]) -> Option<f64> {
+    if args.is_empty() {
+        return None;
+    }
+    let mut acc = 1u64;
+    for number in args {
+        let next = whole_arg(*number)?;
+        if next == 0 || acc == 0 {
+            return Some(0.0);
+        }
+        let divisor = gcd_u64(acc, next);
+        acc = acc / divisor * next;
+        if acc as f64 >= 1e15 {
+            return None;
+        }
+    }
+    Some(acc as f64)
+}
+
 fn text_count(count: f64) -> Option<usize> {
     if !count.is_finite() || count < 0.0 || count > 32_767.0 {
         return None;
@@ -1383,6 +1429,8 @@ impl<'a> CalcParser<'a> {
                         }
                     }
                 }
+                "GCD" => gcd_excel(&args).map(CalcValue::Num),
+                "LCM" => lcm_excel(&args).map(CalcValue::Num),
                 "AVERAGE" if !args.is_empty() => {
                     Some(CalcValue::Num(args.iter().sum::<f64>() / args.len() as f64))
                 }
@@ -2877,6 +2925,33 @@ mod tests {
         assert!(sheet.contains(r#"<f>ISTEXT("ab")</f><v>1</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>ISTEXT(4)</f><v>0</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>ISNUMBER(Z9)</f><v>7</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_gcd_and_lcm() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>GCD(12,18)</f><v>0</v></c><c r="C1"><f>GCD(12.9,18)</f><v>0</v></c><c r="D1"><f>LCM(4,6)</f><v>0</v></c><c r="E1"><f>LCM(0,5)</f><v>0</v></c><c r="F1"><f>GCD(-2,4)</f><v>7</v></c><c r="G1"><f>GCD()</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>GCD(12,18)</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GCD(12.9,18)</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>LCM(4,6)</f><v>12</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>LCM(0,5)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GCD(-2,4)</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GCD()</f><v>8</v>"#), "{sheet}");
     }
 
     #[tokio::test]
