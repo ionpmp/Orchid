@@ -28,9 +28,11 @@ Plain-text bodies render in Slint. HTML bodies use WebView2 with scripts
 disabled and remote images off until you allow them.
 
 Toolbar actions: reply, reply all, forward, flag, read/unread, delete
-(move to Trash), compose, and **Mark read**. Mark read sets the seen flag
-on unread messages in the open folder's current list (the latest 100
-headers). Messages outside that list stay unread. When a message is open, **Move to** lists
+(move to Trash), compose, **Mark read**, and **Mark unread**. Mark read sets
+the seen flag on unread messages in the open folder's current list (the
+latest 100 headers). Messages outside that list stay unread. Mark unread
+clears that flag on messages in the same list that are already read.
+Messages outside that list keep their flags. When a message is open, **Move to** lists
 the account's other folders and moves that one message. Compose can send
 via SMTP, including a Bcc line, or save a draft on the IMAP Drafts folder.
 

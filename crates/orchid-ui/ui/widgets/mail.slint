@@ -10,6 +10,7 @@ export component MailView inherits Rectangle {
     callback search-changed(string);
     callback refresh();
     callback mark-read();
+    callback mark-unread();
     callback open-wizard();
     callback show-mailbox();
     callback wizard-set(string, string);
@@ -374,6 +375,17 @@ export component MailView inherits Rectangle {
                     TouchArea { clicked => { root.mark-read(); } }
                     Text {
                         text: root.model.mark-read-label;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    border-radius: Theme.radius-pill;
+                    background: Theme.state-hover;
+                    TouchArea { clicked => { root.mark-unread(); } }
+                    Text {
+                        text: root.model.mark-unread-label;
                         color: Theme.text-secondary;
                         font-size: Theme.font-size-sm;
                         vertical-alignment: center;

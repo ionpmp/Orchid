@@ -263,6 +263,7 @@ export component MainWindow inherits Window {
     callback mail-save-attachment(string, string);
     callback mail-refresh(string);
     callback mail-mark-read(string);
+    callback mail-mark-unread(string);
     callback mail-open-wizard(string);
     callback mail-show-mailbox(string);
     callback mail-wizard-set(string, string, string);
@@ -783,6 +784,7 @@ export component MainWindow inherits Window {
             mail-save-attachment(id, part) => { root.mail-save-attachment(id, part); }
             mail-refresh(id) => { root.mail-refresh(id); }
             mail-mark-read(id) => { root.mail-mark-read(id); }
+            mail-mark-unread(id) => { root.mail-mark-unread(id); }
             mail-open-wizard(id) => { root.mail-open-wizard(id); }
             mail-show-mailbox(id) => { root.mail-show-mailbox(id); }
             mail-wizard-set(id, f, v) => { root.mail-wizard-set(id, f, v); }

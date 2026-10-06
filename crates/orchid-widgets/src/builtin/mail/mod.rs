@@ -998,6 +998,55 @@ pub fn mark_folder_read(instance_id: Uuid) {
     });
 }
 
+/// Clear the seen flag on read messages in the open folder's current list.
+///
+/// The list is the latest 100 headers already cached for this folder.
+/// Messages outside that list keep their flags.
+pub fn mark_folder_unread(instance_id: Uuid) {
+    let Some(h) = MAIL_LIVE.get(&instance_id) else {
+        return;
+    };
+    let st = h.state.read().clone();
+    let Some(account_id) = st.selected_account else {
+        return;
+    };
+    let headers = h
+        .engine
+        .headers(account_id, &st.selected_folder, 100)
+        .unwrap_or_default();
+    let uids = seen_uids(&headers);
+    if uids.is_empty() {
+        h.state.write().status = "marked-unread-none".into();
+        h.publish();
+        return;
+    }
+    let handle = Arc::clone(h.value());
+    let folder = st.selected_folder;
+    let jobs = Arc::clone(&handle.jobs);
+    let handle = Arc::clone(&handle);
+    jobs.spawn_coalesced(format!("mail-unread-folder:{instance_id}"), move || {
+        let handle = Arc::clone(&handle);
+        let folder = folder.clone();
+        let uids = uids.clone();
+        async move {
+            match handle
+                .engine
+                .set_unseen_many(account_id, &folder, &uids)
+                .await
+            {
+                Ok(()) => {
+                    handle.state.write().status = "marked-unread".into();
+                }
+                Err(e) => {
+                    handle.state.write().status = e.to_string();
+                }
+            }
+            let _ = handle.engine.sync_account(account_id, Some(&folder)).await;
+            handle.publish();
+        }
+    });
+}
+
 /// Move the open message into another folder this account already lists.
 ///
 /// The current folder and a path that is not in that list are ignored.
@@ -1305,6 +1354,15 @@ fn unseen_uids(headers: &[orchid_mail::MessageHeader]) -> Vec<u32> {
     headers
         .iter()
         .filter(|header| !header.seen)
+        .map(|header| header.uid)
+        .collect()
+}
+
+/// UIDs in `headers` that are marked seen, in list order.
+fn seen_uids(headers: &[orchid_mail::MessageHeader]) -> Vec<u32> {
+    headers
+        .iter()
+        .filter(|header| header.seen)
         .map(|header| header.uid)
         .collect()
 }
@@ -1634,6 +1692,13 @@ mod tests {
         let headers = vec![header(1, false), header(2, true), header(3, false)];
         assert_eq!(unseen_uids(&headers), vec![1, 3]);
         assert!(unseen_uids(&[header(4, true)]).is_empty());
+    }
+
+    #[test]
+    fn seen_uids_skip_messages_still_unread() {
+        let headers = vec![header(1, false), header(2, true), header(3, true)];
+        assert_eq!(seen_uids(&headers), vec![2, 3]);
+        assert!(seen_uids(&[header(4, false)]).is_empty());
     }
 
     fn header(uid: u32, seen: bool) -> orchid_mail::MessageHeader {

@@ -205,6 +205,12 @@ impl MainWindowController {
         }
     }
 
+    pub(super) fn on_mail_mark_unread(self: &Arc<Self>, id: &SharedString) {
+        if let Some(iid) = Self::parse_mail_id(id) {
+            orchid_widgets::builtin::mail::mark_folder_unread(iid);
+        }
+    }
+
     pub(super) fn on_mail_delete(self: &Arc<Self>, id: &SharedString) {
         if let Some(iid) = Self::parse_mail_id(id) {
             orchid_widgets::builtin::mail::delete_selected(iid);

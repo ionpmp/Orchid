@@ -230,6 +230,7 @@ export component WidgetFrame inherits Rectangle {
     callback mail-save-attachment(string, string);
     callback mail-refresh(string);
     callback mail-mark-read(string);
+    callback mail-mark-unread(string);
     callback mail-open-wizard(string);
     callback mail-show-mailbox(string);
     callback mail-wizard-set(string, string, string);
@@ -973,6 +974,7 @@ export component WidgetFrame inherits Rectangle {
                     save-attachment(part) => { root.mail-save-attachment(root.model.instance-id, part); }
                     refresh => { root.mail-refresh(root.model.instance-id); }
                     mark-read => { root.mail-mark-read(root.model.instance-id); }
+                    mark-unread => { root.mail-mark-unread(root.model.instance-id); }
                     open-wizard => { root.mail-open-wizard(root.model.instance-id); }
                     show-mailbox => { root.mail-show-mailbox(root.model.instance-id); }
                     wizard-set(f, v) => { root.mail-wizard-set(root.model.instance-id, f, v); }

@@ -36,4 +36,6 @@ Product how-to: [`docs/user/mail.md`](../../docs/user/mail.md).
   lists.
 - Mark read stores `\Seen` on the UIDs in the open folder's cached list
   (at most 100) in one command. It does not walk the rest of the mailbox.
+- Mark unread clears `\Seen` on the read UIDs in that same list, also in
+  one command. Messages outside the list keep their flags.
 - Rules and Microsoft Graph are not implemented.

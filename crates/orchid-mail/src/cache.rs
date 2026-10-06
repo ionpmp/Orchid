@@ -336,6 +336,20 @@ impl MailCache {
         Ok(())
     }
 
+    /// Mark several cached headers as unseen.
+    pub fn set_unseen_many(&self, account_id: Uuid, folder: &str, uids: &[u32]) -> Result<()> {
+        let mut conn = self.conn.lock();
+        let tx = conn.transaction()?;
+        for uid in uids {
+            tx.execute(
+                "UPDATE headers SET seen = 0 WHERE account_id = ?1 AND folder = ?2 AND uid = ?3",
+                params![account_id.to_string(), folder, uid],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Drop all rows for an account.
     pub fn purge_account(&self, account_id: Uuid) -> Result<()> {
         let conn = self.conn.lock();

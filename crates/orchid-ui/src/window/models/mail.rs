@@ -157,6 +157,7 @@ pub(crate) fn build_mail_model(payload: &MailPayload, locale: &LocaleManager) ->
         cancel_label: locale.tr("mail-cancel").into(),
         refresh_label: locale.tr("mail-refresh").into(),
         mark_read_label: locale.tr("mail-mark-read").into(),
+        mark_unread_label: locale.tr("mail-mark-unread").into(),
         search_placeholder: locale.tr("mail-search-placeholder").into(),
         compose_label: locale.tr("mail-compose").into(),
         send_label: locale.tr("mail-send").into(),
@@ -236,6 +237,7 @@ pub(crate) fn patch_mail_model(
     model.cancel_label = fresh.cancel_label;
     model.refresh_label = fresh.refresh_label;
     model.mark_read_label = fresh.mark_read_label;
+    model.mark_unread_label = fresh.mark_unread_label;
     model.compose_label = fresh.compose_label;
     model.send_label = fresh.send_label;
     model.draft_label = fresh.draft_label;
@@ -282,6 +284,8 @@ fn status_label(locale: &LocaleManager, status: &str) -> String {
         "moved" => locale.tr("mail-moved"),
         "marked-read" => locale.tr("mail-marked-read"),
         "marked-none" => locale.tr("mail-marked-none"),
+        "marked-unread" => locale.tr("mail-marked-unread"),
+        "marked-unread-none" => locale.tr("mail-marked-unread-none"),
         "attachment-saved" => locale.tr("mail-attachment-saved"),
         "attachment-missing" => locale.tr("mail-attachment-missing"),
         "attach-missing" => locale.tr("mail-attach-missing"),

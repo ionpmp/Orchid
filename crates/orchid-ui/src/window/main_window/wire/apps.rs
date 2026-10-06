@@ -364,6 +364,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_mail_mark_unread({
+            let t = t.clone();
+            move |id| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_mark_unread(&id);
+                }
+            }
+        });
         self.window.on_mail_delete({
             let t = t.clone();
             move |id| {
