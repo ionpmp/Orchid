@@ -547,6 +547,16 @@ fn kept_calc(value: CalcValue) -> Option<CalcValue> {
     }
 }
 
+fn values_match(left: &CalcValue, right: &CalcValue) -> bool {
+    match (left, right) {
+        (CalcValue::Num(left), CalcValue::Num(right)) => {
+            left.is_finite() && right.is_finite() && (left - right).abs() < 1e-9
+        }
+        (CalcValue::Text(left), CalcValue::Text(right)) => left == right,
+        _ => false,
+    }
+}
+
 fn eval_slice(bytes: &[u8], env: &mut CalcEnv<'_>) -> Option<CalcValue> {
     let mut parser = CalcParser { bytes, index: 0 };
     let value = parser.compare(env)?;
@@ -1564,6 +1574,36 @@ impl<'a> CalcParser<'a> {
                 }
                 let chosen = args[index as usize];
                 return eval_slice(&self.bytes[chosen.0..chosen.1], env);
+            }
+            if word.eq_ignore_ascii_case("SWITCH") {
+                let (args, end) = split_top_args(self.bytes, self.index)?;
+                self.index = end;
+                if args.len() < 3 || args.len() > 255 {
+                    return None;
+                }
+                let expr_at = args[0];
+                let expr = eval_slice(&self.bytes[expr_at.0..expr_at.1], env)?;
+                let default_at = if args.len() % 2 == 0 {
+                    Some(args.len() - 1)
+                } else {
+                    None
+                };
+                let pair_end = default_at.unwrap_or(args.len());
+                let mut pair = 1usize;
+                while pair + 1 < pair_end {
+                    let match_at = args[pair];
+                    let matched = eval_slice(&self.bytes[match_at.0..match_at.1], env)?;
+                    if values_match(&expr, &matched) {
+                        let result = args[pair + 1];
+                        return eval_slice(&self.bytes[result.0..result.1], env);
+                    }
+                    pair += 2;
+                }
+                let Some(default_at) = default_at else {
+                    return None;
+                };
+                let default = args[default_at];
+                return eval_slice(&self.bytes[default.0..default.1], env);
             }
             if word.eq_ignore_ascii_case("ABS") {
                 let number = calc_num(self.compare(env)?)?;
@@ -4083,6 +4123,51 @@ mod tests {
         );
         assert!(sheet.contains(r#"<f>CHOOSE(0,1,2)</f><v>8</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>CHOOSE(3,1,2)</f><v>9</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_switch() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>SWITCH(2,1,10,2,20)</f><v>0</v></c><c r="C1"><f>SWITCH(2,1,10,9)</f><v>0</v></c><c r="D1"><f>SWITCH(3,1,10)</f><v>7</v></c><c r="E1"><f>SWITCH("b","a",1,"b",2)</f><v>0</v></c><c r="F1"><f>SWITCH(1,1,SQRT(-1))</f><v>8</v></c><c r="G1"><f>SWITCH(1,"1",9)</f><v>6</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SWITCH(2,1,10,2,20)</f><v>20</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SWITCH(2,1,10,9)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SWITCH(3,1,10)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SWITCH("b","a",1,"b",2)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SWITCH(1,1,SQRT(-1))</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SWITCH(1,"1",9)</f><v>6</v>"#),
+            "{sheet}"
+        );
     }
 
     #[tokio::test]
