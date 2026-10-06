@@ -1066,6 +1066,35 @@ fn proper_excel(text: &str) -> String {
     out
 }
 
+fn text_join(delim: &str, ignore_empty: bool, parts: &[String]) -> Option<String> {
+    let mut out = String::new();
+    let mut count = 0usize;
+    let mut started = false;
+    for part in parts {
+        if ignore_empty && part.is_empty() {
+            continue;
+        }
+        if started {
+            for ch in delim.chars() {
+                count += 1;
+                if count > 32_767 {
+                    return None;
+                }
+                out.push(ch);
+            }
+        }
+        started = true;
+        for ch in part.chars() {
+            count += 1;
+            if count > 32_767 {
+                return None;
+            }
+            out.push(ch);
+        }
+    }
+    Some(out)
+}
+
 fn note_presence(value: &CalcValue, present: &mut f64, blank: &mut f64) -> Option<()> {
     match value {
         CalcValue::Num(number) if number.is_finite() => *present += 1.0,
@@ -1815,6 +1844,27 @@ impl<'a> CalcParser<'a> {
             if word.eq_ignore_ascii_case("CONCAT") {
                 return self.concat_args(env).map(CalcValue::Text);
             }
+            if word.eq_ignore_ascii_case("TEXTJOIN") {
+                let delim = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let ignore = calc_num(self.compare(env)?)?;
+                if !ignore.is_finite() {
+                    return None;
+                }
+                self.skip();
+                let parts = match self.bytes.get(self.index) {
+                    Some(&b')') => {
+                        self.index += 1;
+                        Vec::new()
+                    }
+                    Some(&b',') => {
+                        self.index += 1;
+                        self.join_parts(env)?
+                    }
+                    _ => return None,
+                };
+                return text_join(&delim, ignore != 0.0, &parts).map(CalcValue::Text);
+            }
             if word.eq_ignore_ascii_case("LEN") {
                 let text = calc_text(&self.compare(env)?);
                 self.close_paren()?;
@@ -2284,6 +2334,56 @@ impl<'a> CalcParser<'a> {
         } else {
             Some(parts.concat())
         }
+    }
+
+    fn join_parts(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<String>> {
+        let mut parts = Vec::new();
+        loop {
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                break;
+            }
+            let saved = self.index;
+            if let Some(start) = self.cell_token() {
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b':') {
+                    self.index += 1;
+                    self.skip();
+                    let Some(end) = self.cell_token() else {
+                        return None;
+                    };
+                    let Some(cells) = cells_in_range(&start, &end) else {
+                        return None;
+                    };
+                    for address in cells {
+                        match self.cell_value(&address, env) {
+                            Some(value) => parts.push(calc_text(&value)),
+                            None => parts.push(String::new()),
+                        }
+                    }
+                } else {
+                    self.index = saved;
+                    parts.push(calc_text(&self.expr(env)?));
+                }
+            } else {
+                self.index = saved;
+                parts.push(calc_text(&self.expr(env)?));
+            }
+            if parts.len() > 4096 {
+                return None;
+            }
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => self.index += 1,
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        Some(parts)
     }
 
     fn number(&mut self) -> Option<f64> {
@@ -4199,6 +4299,55 @@ mod tests {
         assert!(sheet.contains(r#"<f>XOR(0,0)</f><v>0</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>XOR(1,1,1)</f><v>1</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>XOR()</f><v>7</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_text_join() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="C1" t="inlineStr"><is><t>ab</t></is></c><c r="D1"><f>TEXTJOIN(",",1,"a","","b")</f><v>0</v></c><c r="E1"><f>TEXTJOIN(",",0,"a","","b")</f><v>0</v></c><c r="F1"><f>TEXTJOIN(",",1,A1:C1)</f><v>0</v></c><c r="G1"><f>TEXTJOIN(",",0,A1:C1)</f><v>0</v></c><c r="H1"><f>TEXTJOIN(",",1)</f><v>0</v></c><c r="I1"><f>TEXTJOIN("x",0,REPT("a",32767),"b")</f><v>7</v></c><c r="J1"><f>TEXTJOIN(",",1,Z9)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>TEXTJOIN(",",1,"a","","b")</f><is><t>a,b</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTJOIN(",",0,"a","","b")</f><is><t>a,,b</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTJOIN(",",1,A1:C1)</f><is><t>2,ab</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTJOIN(",",0,A1:C1)</f><is><t>2,,ab</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTJOIN(",",1)</f><is><t></t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTJOIN("x",0,REPT("a",32767),"b")</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTJOIN(",",1,Z9)</f><v>8</v>"#),
+            "{sheet}"
+        );
     }
 
     #[tokio::test]

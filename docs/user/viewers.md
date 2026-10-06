@@ -15,7 +15,7 @@ and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, `LOWER`, `TRIM`,
 `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`, `EXACT`, `AND`, `OR`, `NOT`,
 `SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`, `QUOTIENT`, `PI`, `EVEN`,
 `ODD`, `REPLACE`, `VALUE`, `T`, `N`, `ROUNDUP`, `ROUNDDOWN`,
-`CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`, `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`, `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`, `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`, `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`, `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, and `XOR` on that same sheet.
+`CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`, `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`, `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`, `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`, `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`, `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, and `TEXTJOIN` on that same sheet.
 Text results are stored as inline strings. `LEN`, the slice functions,
 and `FIND` / `SEARCH` count Unicode scalar values. `TRIM` collapses only
 the space character U+0020. `SEARCH` ignores ASCII letter case and does
@@ -27,7 +27,12 @@ scalar values. `EXACT` writes 1 or 0. `AND` and `OR` take up to 255
 comma-separated numbers or comparisons and write 1 or 0. A cell range
 is not expanded, and an empty call or a text argument leaves the stored
 value. `XOR` uses those same arguments and writes 1 when an odd count of
-them is not zero. `NOT` turns zero into 1 and any other number into 0. `SQRT` of a
+them is not zero. `TEXTJOIN` takes a delimiter, a number, and the same text
+arguments as `CONCAT`, including a cell range. A nonzero number skips
+empty text. A missing cell inside a range is empty text, and a
+shared-string cell is empty. A missing cell named on its own leaves the
+stored value. The joined text stops at 32,767 scalar values. An empty
+value list writes an empty string. `NOT` turns zero into 1 and any other number into 0. `SQRT` of a
 negative number leaves the stored value. `POWER` of a negative base with
 a non-integer exponent leaves the stored value. `MOD` uses the sign of
 the divisor, and a zero divisor leaves the stored value. `SIGN` writes
