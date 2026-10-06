@@ -13,7 +13,8 @@ arithmetic, comparisons, cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`,
 `COUNT`, `IF`, `ROUND`, `ABS`, `INT`, text joined with `&` or `CONCAT`,
 and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, `LOWER`, `TRIM`,
 `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`, `EXACT`, `AND`, `OR`, `NOT`,
-`SQRT`, `POWER`, and `MOD` on that same sheet.
+`SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`, `QUOTIENT`, `PI`, `EVEN`,
+and `ODD` on that same sheet.
 Text results are stored as inline strings. `LEN`, the slice functions,
 and `FIND` / `SEARCH` count Unicode scalar values. `TRIM` collapses only
 the space character U+0020. `SEARCH` ignores ASCII letter case and does
@@ -27,7 +28,14 @@ is not expanded, and an empty call or a text argument leaves the stored
 value. `NOT` turns zero into 1 and any other number into 0. `SQRT` of a
 negative number leaves the stored value. `POWER` of a negative base with
 a non-integer exponent leaves the stored value. `MOD` uses the sign of
-the divisor, and a zero divisor leaves the stored value. `IF` stays
+the divisor, and a zero divisor leaves the stored value. `SIGN` writes
+-1, 0, or 1. `PRODUCT` multiplies the same numeric arguments as `SUM`;
+an empty call writes 0, and a non-finite product leaves the stored value.
+`QUOTIENT` drops the fraction toward zero. A zero divisor, or a magnitude
+at or above 1e15, leaves the stored value. `PI` writes the 64-bit
+constant, shown to eight decimal places. `EVEN` and `ODD` round away from
+zero; zero stays even, and a magnitude at or above 1e15 leaves the stored
+value. `IF` stays
 numeric. Shared-string cells and formulas on another sheet are left as
 stored. Other formulas keep their stored value. Drawings are copied through. A blank cell that the
 table only filled in so the columns line up is not inserted. PowerPoint

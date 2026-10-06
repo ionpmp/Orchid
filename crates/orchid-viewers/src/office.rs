@@ -614,6 +614,55 @@ fn mod_excel(number: f64, divisor: f64) -> Option<f64> {
     }
 }
 
+fn sign_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    if number == 0.0 {
+        Some(0.0)
+    } else if number > 0.0 {
+        Some(1.0)
+    } else {
+        Some(-1.0)
+    }
+}
+
+fn quotient_excel(number: f64, divisor: f64) -> Option<f64> {
+    if !number.is_finite()
+        || !divisor.is_finite()
+        || divisor == 0.0
+        || number.abs() >= 1e15
+        || divisor.abs() >= 1e15
+    {
+        return None;
+    }
+    let value = (number / divisor).trunc();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+/// Round away from zero. `odd` selects the next odd integer; otherwise the next even one.
+fn even_odd_excel(number: f64, odd: bool) -> Option<f64> {
+    if !number.is_finite() || number.abs() >= 1e15 {
+        return None;
+    }
+    let sign = if number < 0.0 { -1.0 } else { 1.0 };
+    let mut magnitude = number.abs().ceil();
+    let even_magnitude = magnitude % 2.0 == 0.0;
+    if odd == even_magnitude {
+        magnitude += 1.0;
+    }
+    let value = sign * magnitude;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn text_count(count: f64) -> Option<usize> {
     if !count.is_finite() || count < 0.0 || count > 32_767.0 {
         return None;
@@ -1011,6 +1060,26 @@ impl<'a> CalcParser<'a> {
                 let divisor = self.comma_number(env)?;
                 return mod_excel(number, divisor).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("PI") {
+                self.close_paren()?;
+                return Some(CalcValue::Num(std::f64::consts::PI));
+            }
+            if word.eq_ignore_ascii_case("SIGN") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return sign_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("QUOTIENT") {
+                let number = calc_num(self.compare(env)?)?;
+                let divisor = self.comma_number(env)?;
+                return quotient_excel(number, divisor).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("EVEN") || word.eq_ignore_ascii_case("ODD") {
+                let odd = word.eq_ignore_ascii_case("ODD");
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return even_odd_excel(number, odd).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("ROUND") {
                 let number = calc_num(self.compare(env)?)?;
                 self.skip();
@@ -1122,6 +1191,18 @@ impl<'a> CalcParser<'a> {
             let args = self.arg_list(env)?;
             return match word.to_ascii_uppercase().as_str() {
                 "SUM" => Some(CalcValue::Num(args.iter().sum())),
+                "PRODUCT" => {
+                    let value = if args.is_empty() {
+                        0.0
+                    } else {
+                        args.iter().product()
+                    };
+                    if value.is_finite() {
+                        Some(CalcValue::Num(value))
+                    } else {
+                        None
+                    }
+                }
                 "AVERAGE" if !args.is_empty() => {
                     Some(CalcValue::Num(args.iter().sum::<f64>() / args.len() as f64))
                 }
@@ -2388,6 +2469,44 @@ mod tests {
         assert!(sheet.contains(r#"<f>SQRT(-1)</f><v>7</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>POWER(-8,0.5)</f><v>8</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>MOD(5,0)</f><v>9</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_sign_product_and_quotient() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>SIGN(-4)</f><v>0</v></c><c r="C1"><f>SIGN(0)</f><v>0</v></c><c r="D1"><f>PRODUCT(2,3,4)</f><v>0</v></c><c r="E1"><f>PRODUCT()</f><v>0</v></c><c r="F1"><f>QUOTIENT(5,2)</f><v>0</v></c><c r="G1"><f>QUOTIENT(-5,2)</f><v>0</v></c><c r="H1"><f>QUOTIENT(5,0)</f><v>7</v></c><c r="I1"><f>EVEN(2.1)</f><v>0</v></c><c r="J1"><f>EVEN(-2.1)</f><v>0</v></c><c r="K1"><f>ODD(0)</f><v>0</v></c><c r="L1"><f>PI()</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>SIGN(-4)</f><v>-1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SIGN(0)</f><v>0</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>PRODUCT(2,3,4)</f><v>24</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>PRODUCT()</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>QUOTIENT(5,2)</f><v>2</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>QUOTIENT(-5,2)</f><v>-2</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>QUOTIENT(5,0)</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>EVEN(2.1)</f><v>4</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>EVEN(-2.1)</f><v>-4</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ODD(0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>PI()</f><v>3.14159265</v>"#), "{sheet}");
     }
 
     #[tokio::test]

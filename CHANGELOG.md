@@ -91,7 +91,8 @@ release yet.
   cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `IF`, `ROUND`,
   `ABS`, `INT`, text joined with `&` or `CONCAT`, `LEN`, `LEFT`, `RIGHT`,
   `MID`, `UPPER`, `LOWER`, `TRIM`, `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`,
-  `EXACT`, `AND`, `OR`, `NOT`, `SQRT`, `POWER`, and `MOD` on that sheet.
+  `EXACT`, `AND`, `OR`, `NOT`, `SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`,
+  `QUOTIENT`, `PI`, `EVEN`, and `ODD` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -101,7 +102,12 @@ release yet.
   other number into 0. `SQRT` of a negative number leaves the stored
   value. `POWER` of a negative base with a non-integer exponent leaves
   the stored value. `MOD` follows the sign of the divisor, and a zero
-  divisor leaves the stored value. `IF` stays numeric.
+  divisor leaves the stored value. `SIGN` writes -1, 0, or 1. `PRODUCT`
+  multiplies the same numeric arguments as `SUM`; an empty call writes 0.
+  `QUOTIENT` drops the fraction toward zero. A zero divisor, or a magnitude
+  at or above 1e15, leaves the stored value. `PI` writes the 64-bit
+  constant to eight decimal places. `EVEN` and `ODD` round away from zero.
+  `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label
