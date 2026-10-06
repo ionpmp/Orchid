@@ -29,5 +29,9 @@ Product how-to: [`docs/user/mail.md`](../../docs/user/mail.md).
 - Search is an IMAP `TEXT` query plus a filter over the cached folder.
 - IDLE waits about 90 seconds, then syncs again when the server reports mail.
 - Compose attachments are read at send or save-draft time (at most 10 files
-  and 25 MB). Forward does not copy the original files.
+  and 25 MB). Forward does not copy the original files. Bcc addresses are
+  part of the compose message the widget sends.
+- `move_message` copies one message into a destination folder and removes
+  it from the source. The widget only offers folders the account already
+  lists.
 - Rules and Microsoft Graph are not implemented.

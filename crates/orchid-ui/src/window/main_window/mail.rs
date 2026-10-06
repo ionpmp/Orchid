@@ -206,6 +206,13 @@ impl MainWindowController {
         }
     }
 
+    pub(super) fn on_mail_move(self: &Arc<Self>, id: &SharedString, dest: &SharedString) {
+        if let Some(iid) = Self::parse_mail_id(id) {
+            orchid_widgets::builtin::mail::move_selected(iid, dest);
+            self.html_webview.set_document(iid, HtmlDocument::None);
+        }
+    }
+
     pub(super) fn on_mail_set_remote_images(self: &Arc<Self>, id: &SharedString, allow: bool) {
         if let Some(iid) = Self::parse_mail_id(id) {
             orchid_widgets::builtin::mail::set_allow_remote_images(iid, allow);

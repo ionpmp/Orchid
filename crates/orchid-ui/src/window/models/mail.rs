@@ -42,6 +42,7 @@ pub(crate) fn empty_mail_model(locale: &LocaleManager) -> MailModel {
             wizard_error: String::new(),
             compose_to: String::new(),
             compose_cc: String::new(),
+            compose_bcc: String::new(),
             compose_subject: String::new(),
             compose_body: String::new(),
             compose_files: Vec::new(),
@@ -124,6 +125,7 @@ pub(crate) fn build_mail_model(payload: &MailPayload, locale: &LocaleManager) ->
         wizard_error: wizard_error_label(locale, &payload.wizard_error).into(),
         compose_to: payload.compose_to.clone().into(),
         compose_cc: payload.compose_cc.clone().into(),
+        compose_bcc: payload.compose_bcc.clone().into(),
         compose_subject: payload.compose_subject.clone().into(),
         compose_body: payload.compose_body.clone().into(),
         compose_files: ModelRc::new(VecModel::from(
@@ -173,6 +175,8 @@ pub(crate) fn build_mail_model(payload: &MailPayload, locale: &LocaleManager) ->
         smtp_label: locale.tr("mail-smtp").into(),
         to_label: locale.tr("mail-to").into(),
         cc_label: locale.tr("mail-cc").into(),
+        bcc_label: locale.tr("mail-bcc").into(),
+        move_label: locale.tr("mail-move").into(),
         subject_label: locale.tr("mail-subject").into(),
         body_label: locale.tr("mail-body").into(),
         save_attachment_label: locale.tr("mail-save-attachment").into(),
@@ -220,6 +224,7 @@ pub(crate) fn patch_mail_model(
     model.wizard_error = fresh.wizard_error;
     model.compose_to = fresh.compose_to;
     model.compose_cc = fresh.compose_cc;
+    model.compose_bcc = fresh.compose_bcc;
     model.compose_subject = fresh.compose_subject;
     model.compose_body = fresh.compose_body;
     model.empty_label = fresh.empty_label;
@@ -247,6 +252,8 @@ pub(crate) fn patch_mail_model(
     model.smtp_label = fresh.smtp_label;
     model.to_label = fresh.to_label;
     model.cc_label = fresh.cc_label;
+    model.bcc_label = fresh.bcc_label;
+    model.move_label = fresh.move_label;
     model.subject_label = fresh.subject_label;
     model.body_label = fresh.body_label;
     model.save_attachment_label = fresh.save_attachment_label;
@@ -270,6 +277,7 @@ fn status_label(locale: &LocaleManager, status: &str) -> String {
         "" => String::new(),
         "syncing" => locale.tr("mail-syncing"),
         "draft-saved" => locale.tr("mail-draft-saved"),
+        "moved" => locale.tr("mail-moved"),
         "attachment-saved" => locale.tr("mail-attachment-saved"),
         "attachment-missing" => locale.tr("mail-attachment-missing"),
         "attach-missing" => locale.tr("mail-attach-missing"),

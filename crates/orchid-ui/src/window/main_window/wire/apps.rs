@@ -364,6 +364,14 @@ impl MainWindowController {
                 }
             }
         });
+        self.window.on_mail_move({
+            let t = t.clone();
+            move |id, path| {
+                if let Some(c) = t.upgrade() {
+                    c.on_mail_move(&id, &path);
+                }
+            }
+        });
         self.window.on_mail_set_remote_images({
             let t = t.clone();
             move |id, allow| {

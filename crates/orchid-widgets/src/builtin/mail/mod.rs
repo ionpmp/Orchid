@@ -78,6 +78,7 @@ struct UiState {
     oauth_port: Option<u16>,
     compose_to: String,
     compose_cc: String,
+    compose_bcc: String,
     compose_subject: String,
     compose_body: String,
     compose_files: Vec<String>,
@@ -118,6 +119,7 @@ impl Default for UiState {
             oauth_port: None,
             compose_to: String::new(),
             compose_cc: String::new(),
+            compose_bcc: String::new(),
             compose_subject: String::new(),
             compose_body: String::new(),
             compose_files: Vec::new(),
@@ -256,6 +258,7 @@ impl MailHandle {
             wizard_error: st.wizard_error,
             compose_to: st.compose_to,
             compose_cc: st.compose_cc,
+            compose_bcc: st.compose_bcc,
             compose_subject: st.compose_subject,
             compose_body: st.compose_body,
             compose_files: compose_file_rows(&st.compose_files),
@@ -946,6 +949,64 @@ pub fn delete_selected(instance_id: Uuid) {
     });
 }
 
+/// Move the open message into another folder this account already lists.
+///
+/// The current folder and a path that is not in that list are ignored.
+/// One message at a time.
+pub fn move_selected(instance_id: Uuid, dest: &str) {
+    let Some(h) = MAIL_LIVE.get(&instance_id) else {
+        return;
+    };
+    let st = h.state.read().clone();
+    let Some(account_id) = st.selected_account else {
+        return;
+    };
+    let Some(uid) = st.selected_uid else {
+        return;
+    };
+    let known: Vec<String> = h
+        .engine
+        .folders(account_id)
+        .map(|folders| folders.into_iter().map(|folder| folder.path).collect())
+        .unwrap_or_default();
+    if !can_move_message(&st.selected_folder, dest, &known) {
+        return;
+    }
+    let handle = Arc::clone(h.value());
+    let folder = st.selected_folder;
+    let dest = dest.to_string();
+    let jobs = Arc::clone(&handle.jobs);
+    let handle = Arc::clone(&handle);
+    jobs.spawn_coalesced(format!("mail-move:{instance_id}"), move || {
+        let handle = Arc::clone(&handle);
+        let folder = folder.clone();
+        let dest = dest.clone();
+        async move {
+            match handle
+                .engine
+                .move_message(account_id, &folder, uid, &dest)
+                .await
+            {
+                Ok(()) => {
+                    {
+                        let mut s = handle.state.write();
+                        s.selected_uid = None;
+                        s.reading_text.clear();
+                        s.reading_html.clear();
+                        s.status = "moved".into();
+                    }
+                    handle.parts.write().clear();
+                }
+                Err(e) => {
+                    handle.state.write().status = e.to_string();
+                }
+            }
+            let _ = handle.engine.sync_account(account_id, Some(&folder)).await;
+            handle.publish();
+        }
+    });
+}
+
 /// Open compose mode.
 pub fn open_compose(instance_id: Uuid, kind: &str) {
     let Some(h) = MAIL_LIVE.get(&instance_id) else {
@@ -1000,6 +1061,7 @@ pub fn open_compose(instance_id: Uuid, kind: &str) {
         }
     }
     next.compose_files.clear();
+    next.compose_bcc.clear();
     *h.state.write() = next;
     h.publish();
 }
@@ -1048,6 +1110,7 @@ pub fn compose_set(instance_id: Uuid, field: &str, value: &str) {
         match field {
             "to" => st.compose_to = value.into(),
             "cc" => st.compose_cc = value.into(),
+            "bcc" => st.compose_bcc = value.into(),
             "subject" => st.compose_subject = value.into(),
             "body" => st.compose_body = value.into(),
             _ => {}
@@ -1082,7 +1145,7 @@ pub fn compose_send(instance_id: Uuid) {
         account_id: Some(account_id),
         to: st.compose_to,
         cc: st.compose_cc,
-        bcc: String::new(),
+        bcc: st.compose_bcc,
         subject: st.compose_subject,
         body: st.compose_body,
         attachments,
@@ -1103,6 +1166,7 @@ pub fn compose_send(instance_id: Uuid) {
                     s.status.clear();
                     s.compose_to.clear();
                     s.compose_cc.clear();
+                    s.compose_bcc.clear();
                     s.compose_subject.clear();
                     s.compose_body.clear();
                     s.compose_files.clear();
@@ -1141,7 +1205,7 @@ pub fn compose_save_draft(instance_id: Uuid) {
         account_id: Some(account_id),
         to: st.compose_to,
         cc: st.compose_cc,
-        bcc: String::new(),
+        bcc: st.compose_bcc,
         subject: st.compose_subject,
         body: st.compose_body,
         attachments,
@@ -1185,6 +1249,11 @@ fn parse_tls(raw: &str) -> TlsMode {
         "none" => TlsMode::None,
         _ => TlsMode::Implicit,
     }
+}
+
+/// True when `dest` is a listed folder and is not the folder the message is already in.
+fn can_move_message(current: &str, dest: &str, known: &[String]) -> bool {
+    !dest.is_empty() && dest != current && known.iter().any(|path| path == dest)
 }
 
 fn email_local(email: &str) -> String {
@@ -1491,5 +1560,14 @@ mod tests {
         let (planned, note) = plan_compose_add(&existing, &incoming);
         assert_eq!(planned.len(), 10);
         assert_eq!(note, Some("attach-too-many"));
+    }
+
+    #[test]
+    fn move_accepts_another_listed_folder_only() {
+        let known = vec!["INBOX".into(), "Archive".into(), "Trash".into()];
+        assert!(can_move_message("INBOX", "Archive", &known));
+        assert!(!can_move_message("INBOX", "INBOX", &known));
+        assert!(!can_move_message("INBOX", "Sent", &known));
+        assert!(!can_move_message("INBOX", "", &known));
     }
 }

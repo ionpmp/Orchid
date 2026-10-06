@@ -81,6 +81,8 @@ pub struct MailPayload {
     // Compose
     pub compose_to: String,
     pub compose_cc: String,
+    /// Bcc addresses. They go on the SMTP envelope and into a Bcc header.
+    pub compose_bcc: String,
     pub compose_subject: String,
     pub compose_body: String,
     /// Files chosen for the outgoing message. `id` is the path on this computer.

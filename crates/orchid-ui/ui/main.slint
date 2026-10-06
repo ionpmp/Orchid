@@ -277,6 +277,7 @@ export component MainWindow inherits Window {
     callback mail-toggle-seen(string);
     callback mail-toggle-flagged(string);
     callback mail-delete(string);
+    callback mail-move(string, string);
     callback mail-set-remote-images(string, bool);
     callback mail-embed-bounds(string, length, length, length, length, bool);
     callback browser-select-tab(string, int);
@@ -795,6 +796,7 @@ export component MainWindow inherits Window {
             mail-toggle-seen(id) => { root.mail-toggle-seen(id); }
             mail-toggle-flagged(id) => { root.mail-toggle-flagged(id); }
             mail-delete(id) => { root.mail-delete(id); }
+            mail-move(id, path) => { root.mail-move(id, path); }
             mail-set-remote-images(id, a) => { root.mail-set-remote-images(id, a); }
             mail-embed-bounds(id, x, y, w, h, vis) => { root.mail-embed-bounds(id, x, y, w, h, vis); }
             browser-select-tab(id, i) => { root.browser-select-tab(id, i); }

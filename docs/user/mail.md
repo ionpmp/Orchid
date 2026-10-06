@@ -28,8 +28,9 @@ Plain-text bodies render in Slint. HTML bodies use WebView2 with scripts
 disabled and remote images off until you allow them.
 
 Toolbar actions: reply, reply all, forward, flag, read/unread, delete
-(move to Trash), and compose. Compose can send via SMTP or save a draft
-on the IMAP Drafts folder.
+(move to Trash), and compose. When a message is open, **Move to** lists
+the account's other folders and moves that one message. Compose can send
+via SMTP, including a Bcc line, or save a draft on the IMAP Drafts folder.
 
 Accounts are shared across Mail widgets. Each widget remembers the
 selected account and folder.
@@ -58,5 +59,9 @@ selected account and folder.
   25 MB. A few extensions (text, PDF, PNG, JPEG, GIF, WebP, ZIP, JSON)
   get a matching type; other files are sent as `application/octet-stream`.
   There is no preview and no drag-and-drop. Forward does not copy the
-  original message's files.
+  original message's files. Bcc is a separate line. Those addresses are
+  on the SMTP envelope, and the sent message also keeps a Bcc header.
+  Reply and forward start with that line empty.
+- Move sends one open message to a folder the account already lists. It
+  does not move a whole selection, and it does not create a folder.
 - Mail does not read or write the calendar or contacts widgets.

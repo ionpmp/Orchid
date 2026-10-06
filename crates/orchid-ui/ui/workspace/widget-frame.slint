@@ -244,6 +244,7 @@ export component WidgetFrame inherits Rectangle {
     callback mail-toggle-seen(string);
     callback mail-toggle-flagged(string);
     callback mail-delete(string);
+    callback mail-move(string, string);
     callback mail-set-remote-images(string, bool);
     callback mail-embed-bounds(string, length, length, length, length, bool);
 
@@ -985,6 +986,7 @@ export component WidgetFrame inherits Rectangle {
                     toggle-seen => { root.mail-toggle-seen(root.model.instance-id); }
                     toggle-flagged => { root.mail-toggle-flagged(root.model.instance-id); }
                     delete-selected => { root.mail-delete(root.model.instance-id); }
+                    move-to(path) => { root.mail-move(root.model.instance-id, path); }
                     set-remote-images(a) => { root.mail-set-remote-images(root.model.instance-id, a); }
                     embed-bounds(x, y, w, h, vis) => { root.mail-embed-bounds(root.model.instance-id, x, y, w, h, vis); }
                 }
