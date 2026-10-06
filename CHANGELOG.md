@@ -85,9 +85,11 @@ release yet.
 - **Spreadsheets:** `.xlsx` and `.xlsm` open as a sheet and cell table.
   Enter or Save writes the current cell back into the workbook. A formula
   cell is left unchanged. A value edit recalculates arithmetic, comparisons,
-  cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, and `IF` on
-  that sheet. Other formulas keep their stored value, and drawings are
-  copied through. PowerPoint stays an HTML card preview.
+  cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `IF`, `ROUND`,
+  `ABS`, `INT`, and text joined with `&` or `CONCAT` on that sheet. A
+  joined result is stored as an inline string. `IF` stays numeric.
+  Shared-string cells and formulas on another sheet keep their stored
+  value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label
   from the Form bar. Free text and signatures stay unchanged, and a
   compressed choice field is left as it was.
