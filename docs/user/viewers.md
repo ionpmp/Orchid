@@ -10,10 +10,12 @@ keys; the bar shows that cell's address and a field for its value; the
 first 400 rows and 32 columns). Enter or Save writes that cell back into
 the workbook. A formula cell is left unchanged. A value edit recalculates
 arithmetic, comparisons, cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`,
-`COUNT`, `IF`, `ROUND`, `ABS`, `INT`, and text joined with `&` or `CONCAT`
-on that same sheet. A joined result is stored as an inline string. `IF`
-stays numeric. Shared-string cells and formulas on another sheet are left
-as stored. Other formulas keep their stored value. Drawings are copied through. A blank cell that the
+`COUNT`, `IF`, `ROUND`, `ABS`, `INT`, text joined with `&` or `CONCAT`,
+and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, and `LOWER` on that same sheet.
+Text results are stored as inline strings. `LEN` and the slice functions
+count Unicode scalar values. `IF` stays numeric. Shared-string cells and
+formulas on another sheet are left as stored. Other formulas keep their
+stored value. Drawings are copied through. A blank cell that the
 table only filled in so the columns line up is not inserted. PowerPoint
 (`.pptx`, `.pptm`, `.ppsx`) → a read-only HTML preview (one card per
 slide, including speaker notes).

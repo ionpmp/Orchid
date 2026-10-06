@@ -3,9 +3,10 @@
 //! Spreadsheets become a sheet and cell table. One stored cell can be
 //! written back into the package. A formula cell is left unchanged. After a
 //! value edit, arithmetic, comparisons, cell references, `SUM`, `AVERAGE`,
-//! `MIN`, `MAX`, `COUNT`, `IF`, `ROUND`, `ABS`, `INT`, and text joined with
-//! `&` or `CONCAT` on that sheet are recalculated. Anything else keeps its
-//! stored value. Presentations become one HTML card per slide.
+//! `MIN`, `MAX`, `COUNT`, `IF`, `ROUND`, `ABS`, `INT`, text joined with
+//! `&` or `CONCAT`, and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, and `LOWER`
+//! on that sheet are recalculated. Anything else keeps its stored value.
+//! Presentations become one HTML card per slide.
 
 use std::any::Any;
 use std::io::{Cursor, Read, Seek, Write};
@@ -215,9 +216,11 @@ pub(crate) fn render_office(
 /// A formula cell is left unchanged. After a value edit, simple formulas on
 /// that sheet (`+`, `-`, `*`, `/`, comparisons, parentheses, cell references,
 /// `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `IF`, `ROUND`, `ABS`, `INT`,
-/// `&`, and `CONCAT`) are written back. A number stays in `<v>`. Joined text
-/// is written as an inline string. An unsupported formula keeps its previous
-/// value. Other zip parts, including drawings, are copied through.
+/// `&`, `CONCAT`, `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, and `LOWER`) are
+/// written back. A number stays in `<v>`. Text is written as an inline
+/// string. Length and slices count Unicode scalar values. An unsupported
+/// formula keeps its previous value. Other zip parts, including drawings,
+/// are copied through.
 pub(crate) fn set_sheet_cell(
     bytes: &[u8],
     sheet_name: &str,
@@ -583,6 +586,26 @@ fn round_excel(value: f64, digits: f64) -> Option<f64> {
     Some(scaled.round() / scale)
 }
 
+fn text_count(count: f64) -> Option<usize> {
+    if !count.is_finite() || count < 0.0 || count > 32_767.0 {
+        return None;
+    }
+    Some(count.trunc() as usize)
+}
+
+fn slice_text(text: &str, start: usize, count: f64) -> Option<String> {
+    let count = text_count(count)?;
+    Some(text.chars().skip(start).take(count).collect())
+}
+
+fn slice_mid(text: &str, start: f64, count: f64) -> Option<String> {
+    if !start.is_finite() || start < 1.0 || start > 32_767.0 {
+        return None;
+    }
+    let start = (start.trunc() as usize).saturating_sub(1);
+    slice_text(text, start, count)
+}
+
 fn open_tag_inline(open: &str) -> Option<String> {
     if open.contains("t=") {
         return None;
@@ -854,6 +877,45 @@ impl<'a> CalcParser<'a> {
             if word.eq_ignore_ascii_case("CONCAT") {
                 return self.concat_args(env).map(CalcValue::Text);
             }
+            if word.eq_ignore_ascii_case("LEN") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Num(text.chars().count() as f64));
+            }
+            if word.eq_ignore_ascii_case("UPPER") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Text(text.to_uppercase()));
+            }
+            if word.eq_ignore_ascii_case("LOWER") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Text(text.to_lowercase()));
+            }
+            if word.eq_ignore_ascii_case("LEFT") {
+                let text = calc_text(&self.compare(env)?);
+                let count = self.comma_number(env)?;
+                return slice_text(&text, 0, count).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("RIGHT") {
+                let text = calc_text(&self.compare(env)?);
+                let count = self.comma_number(env)?;
+                let count = text_count(count)?;
+                let chars: Vec<char> = text.chars().collect();
+                let start = chars.len().saturating_sub(count);
+                return Some(CalcValue::Text(chars[start..].iter().collect()));
+            }
+            if word.eq_ignore_ascii_case("MID") {
+                let text = calc_text(&self.compare(env)?);
+                self.skip();
+                if self.bytes.get(self.index) != Some(&b',') {
+                    return None;
+                }
+                self.index += 1;
+                let start = calc_num(self.compare(env)?)?;
+                let count = self.comma_number(env)?;
+                return slice_mid(&text, start, count).map(CalcValue::Text);
+            }
             let args = self.arg_list(env)?;
             return match word.to_ascii_uppercase().as_str() {
                 "SUM" => Some(CalcValue::Num(args.iter().sum())),
@@ -867,6 +929,17 @@ impl<'a> CalcParser<'a> {
             };
         }
         self.cell_value(&word, env)
+    }
+
+    fn comma_number(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b',') {
+            return None;
+        }
+        self.index += 1;
+        let number = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        Some(number)
     }
 
     fn close_paren(&mut self) -> Option<()> {
@@ -1897,6 +1970,49 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>SIN(A1)</f><v>9</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_measures_and_slices_text() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>LEN("Orchid")</f><v>0</v></c><c r="C1"><f>LEFT("Orchid",2)</f><v>0</v></c><c r="D1"><f>RIGHT("Orchid",3)</f><v>0</v></c><c r="E1"><f>MID("Orchid",2,3)</f><v>0</v></c><c r="F1"><f>UPPER("ab")</f><v>0</v></c><c r="G1"><f>LOWER("AB")</f><v>0</v></c><c r="H1"><f>LEFT("ab",-1)</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>LEN("Orchid")</f><v>6</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>LEFT("Orchid",2)</f><is><t>Or</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RIGHT("Orchid",3)</f><is><t>hid</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MID("Orchid",2,3)</f><is><t>rch</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>UPPER("ab")</f><is><t>AB</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOWER("AB")</f><is><t>ab</t></is>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>LEFT("ab",-1)</f><v>7</v>"#), "{sheet}");
     }
 
     #[tokio::test]
