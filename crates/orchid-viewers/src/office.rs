@@ -586,6 +586,34 @@ fn round_excel(value: f64, digits: f64) -> Option<f64> {
     Some(scaled.round() / scale)
 }
 
+fn power_excel(base: f64, exponent: f64) -> Option<f64> {
+    if !base.is_finite() || !exponent.is_finite() {
+        return None;
+    }
+    if base < 0.0 && exponent.fract() != 0.0 {
+        return None;
+    }
+    let value = base.powf(exponent);
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn mod_excel(number: f64, divisor: f64) -> Option<f64> {
+    if !number.is_finite() || !divisor.is_finite() || divisor == 0.0 {
+        return None;
+    }
+    let quotient = (number / divisor).floor();
+    let value = number - divisor * quotient;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn text_count(count: f64) -> Option<usize> {
     if !count.is_finite() || count < 0.0 || count > 32_767.0 {
         return None;
@@ -960,6 +988,28 @@ impl<'a> CalcParser<'a> {
                     return None;
                 }
                 return Some(CalcValue::Num(number.floor()));
+            }
+            if word.eq_ignore_ascii_case("SQRT") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if number < 0.0 || !number.is_finite() {
+                    return None;
+                }
+                let value = number.sqrt();
+                if !value.is_finite() {
+                    return None;
+                }
+                return Some(CalcValue::Num(value));
+            }
+            if word.eq_ignore_ascii_case("POWER") {
+                let base = calc_num(self.compare(env)?)?;
+                let exponent = self.comma_number(env)?;
+                return power_excel(base, exponent).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("MOD") {
+                let number = calc_num(self.compare(env)?)?;
+                let divisor = self.comma_number(env)?;
+                return mod_excel(number, divisor).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("ROUND") {
                 let number = calc_num(self.compare(env)?)?;
@@ -2310,6 +2360,34 @@ mod tests {
         assert!(sheet.contains(r#"<f>NOT(A1)</f><v>0</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>AND()</f><v>7</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>NOT("a")</f><v>8</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_sqrt_power_and_mod() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>SQRT(9)</f><v>0</v></c><c r="C1"><f>POWER(2,3)</f><v>0</v></c><c r="D1"><f>MOD(-3,2)</f><v>0</v></c><c r="E1"><f>MOD(3,-2)</f><v>0</v></c><c r="F1"><f>SQRT(-1)</f><v>7</v></c><c r="G1"><f>POWER(-8,0.5)</f><v>8</v></c><c r="H1"><f>MOD(5,0)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>SQRT(9)</f><v>3</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>POWER(2,3)</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MOD(-3,2)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MOD(3,-2)</f><v>-1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SQRT(-1)</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>POWER(-8,0.5)</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MOD(5,0)</f><v>9</v>"#), "{sheet}");
     }
 
     #[tokio::test]

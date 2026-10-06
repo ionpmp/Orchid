@@ -12,8 +12,8 @@ the workbook. A formula cell is left unchanged. A value edit recalculates
 arithmetic, comparisons, cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`,
 `COUNT`, `IF`, `ROUND`, `ABS`, `INT`, text joined with `&` or `CONCAT`,
 and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, `LOWER`, `TRIM`,
-`SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`, `EXACT`, `AND`, `OR`, and `NOT`
-on that same sheet.
+`SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`, `EXACT`, `AND`, `OR`, `NOT`,
+`SQRT`, `POWER`, and `MOD` on that same sheet.
 Text results are stored as inline strings. `LEN`, the slice functions,
 and `FIND` / `SEARCH` count Unicode scalar values. `TRIM` collapses only
 the space character U+0020. `SEARCH` ignores ASCII letter case and does
@@ -24,7 +24,10 @@ past the last match leaves the text unchanged. `REPT` stops at 32,767
 scalar values. `EXACT` writes 1 or 0. `AND` and `OR` take up to 255
 comma-separated numbers or comparisons and write 1 or 0. A cell range
 is not expanded, and an empty call or a text argument leaves the stored
-value. `NOT` turns zero into 1 and any other number into 0. `IF` stays
+value. `NOT` turns zero into 1 and any other number into 0. `SQRT` of a
+negative number leaves the stored value. `POWER` of a negative base with
+a non-integer exponent leaves the stored value. `MOD` uses the sign of
+the divisor, and a zero divisor leaves the stored value. `IF` stays
 numeric. Shared-string cells and formulas on another sheet are left as
 stored. Other formulas keep their stored value. Drawings are copied through. A blank cell that the
 table only filled in so the columns line up is not inserted. PowerPoint

@@ -91,13 +91,17 @@ release yet.
   cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `IF`, `ROUND`,
   `ABS`, `INT`, text joined with `&` or `CONCAT`, `LEN`, `LEFT`, `RIGHT`,
   `MID`, `UPPER`, `LOWER`, `TRIM`, `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`,
-  `EXACT`, `AND`, `OR`, and `NOT` on that sheet. Text is stored as an inline string. Length,
+  `EXACT`, `AND`, `OR`, `NOT`, `SQRT`, `POWER`, and `MOD` on that sheet.
+  Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
   `REPT` stops at 32,767 scalar values. `EXACT` writes 1 or 0. `AND` and
   `OR` take up to 255 comma-separated numbers or comparisons and write 1
   or 0; a cell range is not expanded. `NOT` turns zero into 1 and any
-  other number into 0. `IF` stays numeric.
+  other number into 0. `SQRT` of a negative number leaves the stored
+  value. `POWER` of a negative base with a non-integer exponent leaves
+  the stored value. `MOD` follows the sign of the divisor, and a zero
+  divisor leaves the stored value. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label
