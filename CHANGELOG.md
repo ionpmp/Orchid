@@ -96,7 +96,7 @@ release yet.
   `EXACT`, `AND`, `OR`, `NOT`, `SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`,
   `QUOTIENT`, `PI`, `EVEN`, `ODD`, `REPLACE`, `VALUE`, `T`, `N`, `ROUNDUP`,
   `ROUNDDOWN`, `CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`,
-  `ISTEXT`, `GCD`, and `LCM` on that sheet.
+  `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, and `EXP` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -126,7 +126,10 @@ release yet.
   cell is not classified. `GCD` and `LCM` use those same numeric arguments.
   A fraction is dropped toward zero. A negative number, a magnitude at or
   above 1e15, or an empty call leaves the stored value. `LCM` of a zero
-  writes 0. `IF` stays numeric.
+  writes 0. `LN` and `LOG10` need a positive number. `LOG` uses base 10
+  when the base is omitted. A base that is not positive, or is 1, leaves
+  the stored value. `EXP` leaves the stored value when the result is not
+  finite. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label

@@ -586,6 +586,43 @@ fn round_excel(value: f64, digits: f64) -> Option<f64> {
     Some(scaled.round() / scale)
 }
 
+fn finite_positive_log(number: f64) -> Option<f64> {
+    if number.is_finite() && number > 0.0 {
+        let value = number.ln();
+        if value.is_finite() {
+            Some(value)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+fn log_base(number: f64, base: f64) -> Option<f64> {
+    if !base.is_finite() || base <= 0.0 || base == 1.0 {
+        return None;
+    }
+    let value = finite_positive_log(number)? / base.ln();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn exp_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = number.exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn round_directed(value: f64, digits: f64, away: bool) -> Option<f64> {
     if !value.is_finite() || !digits.is_finite() {
         return None;
@@ -1188,6 +1225,26 @@ impl<'a> CalcParser<'a> {
                     return None;
                 }
                 return Some(CalcValue::Num(value));
+            }
+            if word.eq_ignore_ascii_case("LN") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return finite_positive_log(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("LOG10") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return log_base(number, 10.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("LOG") {
+                let number = calc_num(self.compare(env)?)?;
+                let base = self.optional_number(env, 10.0)?;
+                return log_base(number, base).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("EXP") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return exp_excel(number).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("POWER") {
                 let base = calc_num(self.compare(env)?)?;
@@ -2952,6 +3009,39 @@ mod tests {
         assert!(sheet.contains(r#"<f>LCM(0,5)</f><v>0</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>GCD(-2,4)</f><v>7</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>GCD()</f><v>8</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_logs_and_exp() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>LN(1)</f><v>0</v></c><c r="C1"><f>LOG10(100)</f><v>0</v></c><c r="D1"><f>LOG(100)</f><v>0</v></c><c r="E1"><f>LOG(8,2)</f><v>0</v></c><c r="F1"><f>EXP(0)</f><v>0</v></c><c r="G1"><f>EXP(1)</f><v>0</v></c><c r="H1"><f>LN(-1)</f><v>7</v></c><c r="I1"><f>LOG(8,1)</f><v>8</v></c><c r="J1"><f>EXP(1000)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>LN(1)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>LOG10(100)</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>LOG(100)</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>LOG(8,2)</f><v>3</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>EXP(0)</f><v>1</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>EXP(1)</f><v>2.71828183</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>LN(-1)</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>LOG(8,1)</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>EXP(1000)</f><v>9</v>"#), "{sheet}");
     }
 
     #[tokio::test]
