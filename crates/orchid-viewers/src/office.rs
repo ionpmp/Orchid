@@ -1054,6 +1054,21 @@ impl<'a> CalcParser<'a> {
                 };
                 return substitute_text(&text, &old, &new, instance).map(CalcValue::Text);
             }
+            if word.eq_ignore_ascii_case("NOT") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return Some(CalcValue::Num(if number == 0.0 { 1.0 } else { 0.0 }));
+            }
+            if word.eq_ignore_ascii_case("AND") || word.eq_ignore_ascii_case("OR") {
+                let any = word.eq_ignore_ascii_case("OR");
+                let args = self.logic_args(env)?;
+                let flag = if any {
+                    args.iter().any(|number| *number != 0.0)
+                } else {
+                    args.iter().all(|number| *number != 0.0)
+                };
+                return Some(CalcValue::Num(if flag { 1.0 } else { 0.0 }));
+            }
             let args = self.arg_list(env)?;
             return match word.to_ascii_uppercase().as_str() {
                 "SUM" => Some(CalcValue::Num(args.iter().sum())),
@@ -1114,6 +1129,30 @@ impl<'a> CalcParser<'a> {
             }
             _ => None,
         }
+    }
+
+    fn logic_args(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
+        let mut values = Vec::new();
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            return None;
+        }
+        loop {
+            values.push(calc_num(self.compare(env)?)?);
+            if values.len() > 255 {
+                return None;
+            }
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => self.index += 1,
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        Some(values)
     }
 
     fn quoted(&mut self) -> Option<String> {
@@ -2236,6 +2275,41 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>REPT("a",-1)</f><v>9</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_and_or_not() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>AND(A1&gt;0,1)</f><v>0</v></c><c r="C1"><f>AND(A1&gt;5,1)</f><v>0</v></c><c r="D1"><f>OR(A1&gt;5,0)</f><v>0</v></c><c r="E1"><f>OR(0,A1)</f><v>0</v></c><c r="F1"><f>NOT(0)</f><v>0</v></c><c r="G1"><f>NOT(A1)</f><v>0</v></c><c r="H1"><f>AND()</f><v>7</v></c><c r="I1"><f>NOT("a")</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>AND(A1&gt;0,1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>AND(A1&gt;5,1)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>OR(A1&gt;5,0)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>OR(0,A1)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>NOT(0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>NOT(A1)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>AND()</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>NOT("a")</f><v>8</v>"#), "{sheet}");
     }
 
     #[tokio::test]
