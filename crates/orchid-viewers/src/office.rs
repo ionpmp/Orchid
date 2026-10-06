@@ -972,6 +972,16 @@ fn char_excel(code: f64) -> Option<String> {
     char::from_u32(code).map(|ch| ch.to_string())
 }
 
+fn note_presence(value: &CalcValue, present: &mut f64, blank: &mut f64) -> Option<()> {
+    match value {
+        CalcValue::Num(number) if number.is_finite() => *present += 1.0,
+        CalcValue::Num(_) => return None,
+        CalcValue::Text(text) if text.is_empty() => *blank += 1.0,
+        CalcValue::Text(_) => *present += 1.0,
+    }
+    Some(())
+}
+
 fn gcd_u64(mut left: u64, mut right: u64) -> u64 {
     while right != 0 {
         let next = left % right;
@@ -1788,6 +1798,11 @@ impl<'a> CalcParser<'a> {
                 };
                 return ranked_excel(&mut args, rank, small).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("COUNTA") || word.eq_ignore_ascii_case("COUNTBLANK") {
+                let blanks = word.eq_ignore_ascii_case("COUNTBLANK");
+                let (present, blank) = self.tally_args(env)?;
+                return Some(CalcValue::Num(if blanks { blank } else { present }));
+            }
             let args = self.arg_list(env)?;
             return match word.to_ascii_uppercase().as_str() {
                 "SUM" => Some(CalcValue::Num(args.iter().sum())),
@@ -1981,6 +1996,69 @@ impl<'a> CalcParser<'a> {
         } else {
             Some(values)
         }
+    }
+
+    fn tally_args(&mut self, env: &mut CalcEnv<'_>) -> Option<(f64, f64)> {
+        let mut present = 0.0;
+        let mut blank = 0.0;
+        let mut seen = 0usize;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some((0.0, 0.0));
+        }
+        loop {
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                break;
+            }
+            let saved = self.index;
+            if let Some(start) = self.cell_token() {
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b':') {
+                    self.index += 1;
+                    self.skip();
+                    let Some(end) = self.cell_token() else {
+                        return None;
+                    };
+                    let Some(cells) = cells_in_range(&start, &end) else {
+                        return None;
+                    };
+                    for address in cells {
+                        seen += 1;
+                        if seen > 4096 {
+                            return None;
+                        }
+                        match self.cell_value(&address, env) {
+                            Some(value) => note_presence(&value, &mut present, &mut blank)?,
+                            None => blank += 1.0,
+                        }
+                    }
+                } else {
+                    self.index = saved;
+                    seen += 1;
+                    note_presence(&self.expr(env)?, &mut present, &mut blank)?;
+                }
+            } else {
+                self.index = saved;
+                seen += 1;
+                note_presence(&self.expr(env)?, &mut present, &mut blank)?;
+            }
+            if seen > 4096 {
+                return None;
+            }
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => self.index += 1,
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        Some((present, blank))
     }
 
     fn concat_args(&mut self, env: &mut CalcEnv<'_>) -> Option<String> {
@@ -3722,6 +3800,43 @@ mod tests {
         assert!(sheet.contains(r#"<f>CHAR(0)</f><v>8</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>CODE(A1)</f><v>50</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>CHAR(55296)</f><v>9</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_counts_text_and_blanks() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="C1" t="inlineStr"><is><t>ab</t></is></c><c r="D1"><f>COUNTA(A1:C1)</f><v>0</v></c><c r="E1"><f>COUNTBLANK(A1:C1)</f><v>0</v></c><c r="F1"><f>COUNTA(1,"ab","")</f><v>0</v></c><c r="G1"><f>COUNTBLANK("")</f><v>0</v></c><c r="H1"><f>COUNTBLANK(4)</f><v>0</v></c><c r="I1"><f>COUNTA()</f><v>0</v></c><c r="J1"><f>COUNTA(Z9)</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>COUNTA(A1:C1)</f><v>2</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>COUNTBLANK(A1:C1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTA(1,"ab","")</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTBLANK("")</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>COUNTBLANK(4)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COUNTA()</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COUNTA(Z9)</f><v>7</v>"#), "{sheet}");
     }
 
     #[tokio::test]
