@@ -11,11 +11,18 @@ first 400 rows and 32 columns). Enter or Save writes that cell back into
 the workbook. A formula cell is left unchanged. A value edit recalculates
 arithmetic, comparisons, cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`,
 `COUNT`, `IF`, `ROUND`, `ABS`, `INT`, text joined with `&` or `CONCAT`,
-and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, and `LOWER` on that same sheet.
-Text results are stored as inline strings. `LEN` and the slice functions
-count Unicode scalar values. `IF` stays numeric. Shared-string cells and
-formulas on another sheet are left as stored. Other formulas keep their
-stored value. Drawings are copied through. A blank cell that the
+and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, `LOWER`, `TRIM`,
+`SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`, and `EXACT` on that same sheet.
+Text results are stored as inline strings. `LEN`, the slice functions,
+and `FIND` / `SEARCH` count Unicode scalar values. `TRIM` collapses only
+the space character U+0020. `SEARCH` ignores ASCII letter case and does
+not treat `*` or `?` as wildcards; a miss leaves the stored value.
+`SUBSTITUTE` replaces every match, or the one match named by a fourth
+1-based count. An empty search text leaves the stored value, and a count
+past the last match leaves the text unchanged. `REPT` stops at 32,767
+scalar values. `EXACT` writes 1 or 0. `IF` stays numeric. Shared-string
+cells and formulas on another sheet are left as stored. Other formulas
+keep their stored value. Drawings are copied through. A blank cell that the
 table only filled in so the columns line up is not inserted. PowerPoint
 (`.pptx`, `.pptm`, `.ppsx`) → a read-only HTML preview (one card per
 slide, including speaker notes).

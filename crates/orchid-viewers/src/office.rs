@@ -606,6 +606,104 @@ fn slice_mid(text: &str, start: f64, count: f64) -> Option<String> {
     slice_text(text, start, count)
 }
 
+/// Excel `TRIM`: drop leading and trailing U+0020 and collapse inner runs of that space.
+fn trim_spaces(text: &str) -> String {
+    let mut out = String::new();
+    let mut gap = false;
+    let mut started = false;
+    for ch in text.chars() {
+        if ch == ' ' {
+            if started {
+                gap = true;
+            }
+        } else {
+            if gap {
+                out.push(' ');
+                gap = false;
+            }
+            started = true;
+            out.push(ch);
+        }
+    }
+    out
+}
+
+fn substitute_text(text: &str, old: &str, new: &str, instance: Option<f64>) -> Option<String> {
+    if old.is_empty() {
+        return None;
+    }
+    let nth = match instance {
+        None => None,
+        Some(number) => {
+            let count = text_count(number)?;
+            if count < 1 {
+                return None;
+            }
+            Some(count)
+        }
+    };
+    let Some(nth) = nth else {
+        return Some(text.replace(old, new));
+    };
+    let mut seen = 0usize;
+    let mut rest = text;
+    let mut out = String::new();
+    while let Some(at) = rest.find(old) {
+        seen += 1;
+        if seen == nth {
+            out.push_str(&rest[..at]);
+            out.push_str(new);
+            out.push_str(&rest[at + old.len()..]);
+            return Some(out);
+        }
+        let next = at + old.len();
+        out.push_str(&rest[..next]);
+        rest = &rest[next..];
+    }
+    Some(text.to_string())
+}
+
+fn find_scalar(haystack: &str, needle: &str, start: f64, ignore_ascii_case: bool) -> Option<f64> {
+    if needle.is_empty() || !start.is_finite() || start < 1.0 || start > 32_767.0 {
+        return None;
+    }
+    let start = (start.trunc() as usize).saturating_sub(1);
+    let hay: Vec<char> = haystack.chars().collect();
+    let ned: Vec<char> = needle.chars().collect();
+    if start > hay.len() || ned.len() > hay.len().saturating_sub(start) {
+        return None;
+    }
+    let last = hay.len() - ned.len();
+    for index in start..=last {
+        let matched = hay[index..index + ned.len()]
+            .iter()
+            .zip(&ned)
+            .all(|(left, right)| {
+                if ignore_ascii_case {
+                    left.eq_ignore_ascii_case(right)
+                } else {
+                    left == right
+                }
+            });
+        if matched {
+            return Some((index + 1) as f64);
+        }
+    }
+    None
+}
+
+fn rept_text(text: &str, count: f64) -> Option<String> {
+    let count = text_count(count)?;
+    if text.is_empty() || count == 0 {
+        return Some(String::new());
+    }
+    let chars = text.chars().count();
+    if chars.saturating_mul(count) > 32_767 {
+        return None;
+    }
+    Some(text.repeat(count))
+}
+
 fn open_tag_inline(open: &str) -> Option<String> {
     if open.contains("t=") {
         return None;
@@ -916,6 +1014,46 @@ impl<'a> CalcParser<'a> {
                 let count = self.comma_number(env)?;
                 return slice_mid(&text, start, count).map(CalcValue::Text);
             }
+            if word.eq_ignore_ascii_case("TRIM") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Text(trim_spaces(&text)));
+            }
+            if word.eq_ignore_ascii_case("EXACT") {
+                let left = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let right = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Num(if left == right { 1.0 } else { 0.0 }));
+            }
+            if word.eq_ignore_ascii_case("REPT") {
+                let text = calc_text(&self.compare(env)?);
+                let count = self.comma_number(env)?;
+                return rept_text(&text, count).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("FIND") || word.eq_ignore_ascii_case("SEARCH") {
+                let ignore_ascii_case = word.eq_ignore_ascii_case("SEARCH");
+                let needle = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let haystack = calc_text(&self.compare(env)?);
+                let start = self.optional_number(env, 1.0)?;
+                return find_scalar(&haystack, &needle, start, ignore_ascii_case)
+                    .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SUBSTITUTE") {
+                let text = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let old = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let new = calc_text(&self.compare(env)?);
+                let instance = self.optional_number(env, f64::NAN)?;
+                let instance = if instance.is_nan() {
+                    None
+                } else {
+                    Some(instance)
+                };
+                return substitute_text(&text, &old, &new, instance).map(CalcValue::Text);
+            }
             let args = self.arg_list(env)?;
             return match word.to_ascii_uppercase().as_str() {
                 "SUM" => Some(CalcValue::Num(args.iter().sum())),
@@ -949,6 +1087,33 @@ impl<'a> CalcParser<'a> {
         }
         self.index += 1;
         Some(())
+    }
+
+    fn require_comma(&mut self) -> Option<()> {
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b',') {
+            return None;
+        }
+        self.index += 1;
+        Some(())
+    }
+
+    /// A following comma reads one number. `missing` is used when the call ends at `)`.
+    fn optional_number(&mut self, env: &mut CalcEnv<'_>, missing: f64) -> Option<f64> {
+        self.skip();
+        match self.bytes.get(self.index) {
+            Some(&b')') => {
+                self.index += 1;
+                Some(missing)
+            }
+            Some(&b',') => {
+                self.index += 1;
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                Some(number)
+            }
+            _ => None,
+        }
     }
 
     fn quoted(&mut self) -> Option<String> {
@@ -2013,6 +2178,64 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>LEFT("ab",-1)</f><v>7</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_trims_finds_and_repeats_text() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>TRIM("  a   b  ")</f><v>0</v></c><c r="C1"><f>SUBSTITUTE("ababa","a","X")</f><v>0</v></c><c r="D1"><f>SUBSTITUTE("ababa","a","X",2)</f><v>0</v></c><c r="E1"><f>FIND("ch","Orchid")</f><v>0</v></c><c r="F1"><f>SEARCH("CH","Orchid")</f><v>0</v></c><c r="G1"><f>FIND("CH","Orchid")</f><v>7</v></c><c r="H1"><f>REPT("ab",3)</f><v>0</v></c><c r="I1"><f>EXACT("Ab","Ab")</f><v>0</v></c><c r="J1"><f>EXACT("Ab","ab")</f><v>0</v></c><c r="K1"><f>REPT("a",-1)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>TRIM("  a   b  ")</f><is><t>a b</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBSTITUTE("ababa","a","X")</f><is><t>XbXbX</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBSTITUTE("ababa","a","X",2)</f><is><t>abXba</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>FIND("ch","Orchid")</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SEARCH("CH","Orchid")</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>FIND("CH","Orchid")</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>REPT("ab",3)</f><is><t>ababab</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>EXACT("Ab","Ab")</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>EXACT("Ab","ab")</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>REPT("a",-1)</f><v>9</v>"#), "{sheet}");
     }
 
     #[tokio::test]

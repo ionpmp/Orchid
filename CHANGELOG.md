@@ -89,9 +89,12 @@ release yet.
   Enter or Save writes the current cell back into the workbook. A formula
   cell is left unchanged. A value edit recalculates arithmetic, comparisons,
   cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `IF`, `ROUND`,
-  `ABS`, `INT`, text joined with `&` or `CONCAT`, and `LEN`, `LEFT`,
-  `RIGHT`, `MID`, `UPPER`, and `LOWER` on that sheet. Text is stored as an
-  inline string. Length and slices count Unicode scalar values. `IF` stays
+  `ABS`, `INT`, text joined with `&` or `CONCAT`, `LEN`, `LEFT`, `RIGHT`,
+  `MID`, `UPPER`, `LOWER`, `TRIM`, `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`,
+  and `EXACT` on that sheet. Text is stored as an inline string. Length,
+  slices, and find positions count Unicode scalar values. `TRIM` collapses
+  only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
+  `REPT` stops at 32,767 scalar values. `EXACT` writes 1 or 0. `IF` stays
   numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
