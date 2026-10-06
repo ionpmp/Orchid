@@ -100,7 +100,7 @@ release yet.
   `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`,
   `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`,
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
-  `IFERROR`, `CLEAN`, and `PROPER` on that sheet.
+  `IFERROR`, `CLEAN`, `PROPER`, and `CHOOSE` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -165,7 +165,10 @@ release yet.
   A third argument, or a second that also fails, leaves the stored value.
   `CLEAN` removes characters below U+0020. `PROPER` uppercases the first
   Unicode letter of each word and lowercases the rest. A character that is
-  not a letter starts a new word. `IF` stays numeric.
+  not a letter starts a new word. `CHOOSE` takes a 1-based index and up to
+  254 values. The index is truncated toward zero. Only the chosen value is
+  calculated. An index below 1, an index past the last value, or a chosen
+  value that cannot be calculated leaves the stored value. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label
