@@ -1323,6 +1323,17 @@ impl<'a> CalcParser<'a> {
                 };
                 return Some(CalcValue::Num(number));
             }
+            if word.eq_ignore_ascii_case("ISNUMBER") || word.eq_ignore_ascii_case("ISTEXT") {
+                let want_text = word.eq_ignore_ascii_case("ISTEXT");
+                let value = self.compare(env)?;
+                self.close_paren()?;
+                let flag = match value {
+                    CalcValue::Num(number) if number.is_finite() => !want_text,
+                    CalcValue::Num(_) => return None,
+                    CalcValue::Text(_) => want_text,
+                };
+                return Some(CalcValue::Num(if flag { 1.0 } else { 0.0 }));
+            }
             if word.eq_ignore_ascii_case("NOT") {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
@@ -2837,6 +2848,35 @@ mod tests {
         );
         assert!(sheet.contains(r#"<f>MEDIAN(A1:B1)</f><v>5</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>MEDIAN()</f><v>7</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_classifies_number_and_text() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>ISNUMBER(4)</f><v>0</v></c><c r="C1"><f>ISNUMBER("ab")</f><v>0</v></c><c r="D1"><f>ISTEXT("ab")</f><v>0</v></c><c r="E1"><f>ISTEXT(4)</f><v>0</v></c><c r="F1"><f>ISNUMBER(Z9)</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>ISNUMBER(4)</f><v>1</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>ISNUMBER("ab")</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>ISTEXT("ab")</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ISTEXT(4)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ISNUMBER(Z9)</f><v>7</v>"#), "{sheet}");
     }
 
     #[tokio::test]

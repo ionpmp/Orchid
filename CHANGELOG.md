@@ -95,7 +95,8 @@ release yet.
   `MID`, `UPPER`, `LOWER`, `TRIM`, `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`,
   `EXACT`, `AND`, `OR`, `NOT`, `SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`,
   `QUOTIENT`, `PI`, `EVEN`, `ODD`, `REPLACE`, `VALUE`, `T`, `N`, `ROUNDUP`,
-  `ROUNDDOWN`, `CEILING.MATH`, `FLOOR.MATH`, and `MEDIAN` on that sheet.
+  `ROUNDDOWN`, `CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`, and
+  `ISTEXT` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -120,7 +121,9 @@ release yet.
   move to an integer toward +infinity or -infinity. A significance argument
   leaves the stored value. `MEDIAN` uses the same numeric arguments as
   `SUM`, including a cell range. An even count averages the two middle
-  numbers. An empty call leaves the stored value. `IF` stays numeric.
+  numbers. An empty call leaves the stored value. `ISNUMBER` and `ISTEXT`
+  write 1 or 0. A missing cell leaves the stored value, and a shared-string
+  cell is not classified. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label
