@@ -586,6 +586,39 @@ fn round_excel(value: f64, digits: f64) -> Option<f64> {
     Some(scaled.round() / scale)
 }
 
+fn round_directed(value: f64, digits: f64, away: bool) -> Option<f64> {
+    if !value.is_finite() || !digits.is_finite() {
+        return None;
+    }
+    let places = digits.trunc();
+    if !(-10.0..=10.0).contains(&places) {
+        return None;
+    }
+    let scale = 10f64.powi(places as i32);
+    if !scale.is_finite() {
+        return None;
+    }
+    let scaled = value * scale;
+    if !scaled.is_finite() {
+        return None;
+    }
+    let rounded = if away {
+        if scaled >= 0.0 {
+            scaled.ceil()
+        } else {
+            scaled.floor()
+        }
+    } else {
+        scaled.trunc()
+    };
+    let result = rounded / scale;
+    if result.is_finite() {
+        Some(result)
+    } else {
+        None
+    }
+}
+
 fn power_excel(base: f64, exponent: f64) -> Option<f64> {
     if !base.is_finite() || !exponent.is_finite() {
         return None;
@@ -1151,6 +1184,28 @@ impl<'a> CalcParser<'a> {
                 self.close_paren()?;
                 return round_excel(number, digits).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("ROUNDUP") || word.eq_ignore_ascii_case("ROUNDDOWN") {
+                let away = word.eq_ignore_ascii_case("ROUNDUP");
+                let number = calc_num(self.compare(env)?)?;
+                let digits = self.comma_number(env)?;
+                return round_directed(number, digits, away).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CEILING.MATH") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !number.is_finite() {
+                    return None;
+                }
+                return Some(CalcValue::Num(number.ceil()));
+            }
+            if word.eq_ignore_ascii_case("FLOOR.MATH") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !number.is_finite() {
+                    return None;
+                }
+                return Some(CalcValue::Num(number.floor()));
+            }
             if word.eq_ignore_ascii_case("CONCAT") {
                 return self.concat_args(env).map(CalcValue::Text);
             }
@@ -1529,12 +1584,21 @@ impl<'a> CalcParser<'a> {
 
     fn word(&mut self) -> Option<String> {
         let start = self.index;
-        while self
-            .bytes
-            .get(self.index)
-            .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'$' || *byte == b'_')
-        {
-            self.index += 1;
+        while let Some(byte) = self.bytes.get(self.index).copied() {
+            if byte.is_ascii_alphanumeric() || byte == b'$' || byte == b'_' {
+                self.index += 1;
+                continue;
+            }
+            if byte == b'.'
+                && self
+                    .bytes
+                    .get(self.index + 1)
+                    .is_some_and(|next| next.is_ascii_alphabetic())
+            {
+                self.index += 1;
+                continue;
+            }
+            break;
         }
         if start == self.index {
             return None;
@@ -2673,6 +2737,59 @@ mod tests {
         assert!(sheet.contains(r#"<f>T(4)</f><is><t></t></is>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>N("ab")</f><v>0</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>N(4)</f><v>4</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_rounds_up_and_down() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>ROUNDUP(1.234,2)</f><v>0</v></c><c r="C1"><f>ROUNDDOWN(1.239,2)</f><v>0</v></c><c r="D1"><f>ROUNDUP(-1.234,2)</f><v>0</v></c><c r="E1"><f>ROUNDDOWN(-1.239,2)</f><v>0</v></c><c r="F1"><f>CEILING.MATH(-1.2)</f><v>0</v></c><c r="G1"><f>FLOOR.MATH(-1.2)</f><v>0</v></c><c r="H1"><f>ROUNDUP(1.2,20)</f><v>7</v></c><c r="I1"><f>CEILING.MATH(1.2,1)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>ROUNDUP(1.234,2)</f><v>1.24</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>ROUNDDOWN(1.239,2)</f><v>1.23</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>ROUNDUP(-1.234,2)</f><v>-1.24</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>ROUNDDOWN(-1.239,2)</f><v>-1.23</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CEILING.MATH(-1.2)</f><v>-1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>FLOOR.MATH(-1.2)</f><v>-2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>ROUNDUP(1.2,20)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CEILING.MATH(1.2,1)</f><v>8</v>"#),
+            "{sheet}"
+        );
     }
 
     #[tokio::test]

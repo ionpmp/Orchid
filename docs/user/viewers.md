@@ -14,7 +14,8 @@ arithmetic, comparisons, cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`,
 and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, `LOWER`, `TRIM`,
 `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`, `EXACT`, `AND`, `OR`, `NOT`,
 `SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`, `QUOTIENT`, `PI`, `EVEN`,
-`ODD`, `REPLACE`, `VALUE`, `T`, and `N` on that same sheet.
+`ODD`, `REPLACE`, `VALUE`, `T`, `N`, `ROUNDUP`, `ROUNDDOWN`,
+`CEILING.MATH`, and `FLOOR.MATH` on that same sheet.
 Text results are stored as inline strings. `LEN`, the slice functions,
 and `FIND` / `SEARCH` count Unicode scalar values. `TRIM` collapses only
 the space character U+0020. `SEARCH` ignores ASCII letter case and does
@@ -41,7 +42,11 @@ the stored value. A count that runs past the end removes only the tail.
 `VALUE` reads an optional sign, digits, and one dot. Spaces around the
 text are ignored. Thousands separators, exponents, and dates leave the
 stored value. `T` keeps text and writes an empty string for a number.
-`N` keeps a number and writes 0 for text. `IF` stays
+`N` keeps a number and writes 0 for text. `ROUNDUP` rounds away from
+zero and `ROUNDDOWN` rounds toward zero. The digit count is truncated
+and must be from -10 through 10. `CEILING.MATH` and `FLOOR.MATH` take one
+number and move to an integer toward +infinity or -infinity. A
+significance argument leaves the stored value. `IF` stays
 numeric. Shared-string cells and formulas on another sheet are left as
 stored. Other formulas keep their stored value. Drawings are copied through. A blank cell that the
 table only filled in so the columns line up is not inserted. PowerPoint

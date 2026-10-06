@@ -94,7 +94,8 @@ release yet.
   `ABS`, `INT`, text joined with `&` or `CONCAT`, `LEN`, `LEFT`, `RIGHT`,
   `MID`, `UPPER`, `LOWER`, `TRIM`, `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`,
   `EXACT`, `AND`, `OR`, `NOT`, `SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`,
-  `QUOTIENT`, `PI`, `EVEN`, `ODD`, `REPLACE`, `VALUE`, `T`, and `N` on that sheet.
+  `QUOTIENT`, `PI`, `EVEN`, `ODD`, `REPLACE`, `VALUE`, `T`, `N`, `ROUNDUP`,
+  `ROUNDDOWN`, `CEILING.MATH`, and `FLOOR.MATH` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -113,7 +114,11 @@ release yet.
   1, or more than one past the end, leaves the stored value. `VALUE` reads
   an optional sign, digits, and one dot. Thousands separators, exponents,
   and dates leave the stored value. `T` keeps text and writes an empty
-  string for a number. `N` keeps a number and writes 0 for text. `IF` stays numeric.
+  string for a number. `N` keeps a number and writes 0 for text. `ROUNDUP`
+  rounds away from zero and `ROUNDDOWN` toward zero, with a digit count
+  from -10 through 10. `CEILING.MATH` and `FLOOR.MATH` take one number and
+  move to an integer toward +infinity or -infinity. A significance argument
+  leaves the stored value. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label
