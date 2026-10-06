@@ -636,6 +636,47 @@ fn fact_excel(number: f64) -> Option<f64> {
     Some(acc)
 }
 
+fn trig_excel(number: f64, kind: &str) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = match kind {
+        "SIN" => number.sin(),
+        "COS" => number.cos(),
+        "TAN" => number.tan(),
+        _ => return None,
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn radians_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = number * std::f64::consts::PI / 180.0;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn degrees_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = number * 180.0 / std::f64::consts::PI;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn round_directed(value: f64, digits: f64, away: bool) -> Option<f64> {
     if !value.is_finite() || !digits.is_finite() {
         return None;
@@ -1263,6 +1304,25 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return fact_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SIN")
+                || word.eq_ignore_ascii_case("COS")
+                || word.eq_ignore_ascii_case("TAN")
+            {
+                let kind = word.to_ascii_uppercase();
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return trig_excel(number, &kind).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("RADIANS") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return radians_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("DEGREES") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return degrees_excel(number).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("POWER") {
                 let base = calc_num(self.compare(env)?)?;
@@ -2535,7 +2595,7 @@ mod tests {
             ),
             (
                 "xl/worksheets/sheet1.xml",
-                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>2</v></c><c r="B1"><v>3</v></c><c r="C1"><f>A1+B1</f><v>0</v></c><c r="D1"><f>SUM(A1:A2)</f><v>0</v></c><c r="E1"><f>AVERAGE(A1,B1)</f><v>0</v></c><c r="F1"><f>SIN(A1)</f><v>9</v></c></row><row r="2"><c r="A2"><v>4</v></c></row></sheetData></worksheet>"#,
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>2</v></c><c r="B1"><v>3</v></c><c r="C1"><f>A1+B1</f><v>0</v></c><c r="D1"><f>SUM(A1:A2)</f><v>0</v></c><c r="E1"><f>AVERAGE(A1,B1)</f><v>0</v></c><c r="F1"><f>ASIN(A1)</f><v>9</v></c></row><row r="2"><c r="A2"><v>4</v></c></row></sheetData></worksheet>"#,
             ),
         ]);
         let refused = set_sheet_cell(&bytes, "Budgets", "C1", "9").unwrap_err();
@@ -2552,7 +2612,7 @@ mod tests {
             sheet.contains(r#"<f>AVERAGE(A1,B1)</f><v>3.5</v>"#),
             "{sheet}"
         );
-        assert!(sheet.contains(r#"<f>SIN(A1)</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ASIN(A1)</f><v>9</v>"#), "{sheet}");
     }
 
     #[test]
@@ -2597,7 +2657,7 @@ mod tests {
             ),
             (
                 "xl/worksheets/sheet1.xml",
-                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1.26</v></c><c r="B1"><f>ROUND(A1,1)</f><v>0</v></c><c r="C1"><f>ABS(-4)</f><v>0</v></c><c r="D1"><f>INT(-1.2)</f><v>0</v></c><c r="E1" t="inlineStr"><is><t>x</t></is></c><c r="F1"><f>A1&amp;E1</f><v>0</v></c><c r="G1"><f>CONCAT("a","b")</f><v>0</v></c><c r="H1"><f>SIN(A1)</f><v>9</v></c></row></sheetData></worksheet>"#,
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1.26</v></c><c r="B1"><f>ROUND(A1,1)</f><v>0</v></c><c r="C1"><f>ABS(-4)</f><v>0</v></c><c r="D1"><f>INT(-1.2)</f><v>0</v></c><c r="E1" t="inlineStr"><is><t>x</t></is></c><c r="F1"><f>A1&amp;E1</f><v>0</v></c><c r="G1"><f>CONCAT("a","b")</f><v>0</v></c><c r="H1"><f>ASIN(A1)</f><v>9</v></c></row></sheetData></worksheet>"#,
             ),
         ]);
         let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2.26").unwrap();
@@ -2616,7 +2676,7 @@ mod tests {
             ),
             "{sheet}"
         );
-        assert!(sheet.contains(r#"<f>SIN(A1)</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ASIN(A1)</f><v>9</v>"#), "{sheet}");
     }
 
     #[test]
@@ -3086,6 +3146,43 @@ mod tests {
         assert!(sheet.contains(r#"<f>FACT(5.9)</f><v>120</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>FACT(-1)</f><v>7</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>FACT(171)</f><v>8</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_trig_in_radians() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>SIN(0)</f><v>0</v></c><c r="C1"><f>COS(0)</f><v>0</v></c><c r="D1"><f>TAN(0)</f><v>0</v></c><c r="E1"><f>COS(PI())</f><v>0</v></c><c r="F1"><f>SIN(RADIANS(90))</f><v>0</v></c><c r="G1"><f>DEGREES(PI())</f><v>0</v></c><c r="H1"><f>RADIANS(180)</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>SIN(0)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COS(0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>TAN(0)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COS(PI())</f><v>-1</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>SIN(RADIANS(90))</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DEGREES(PI())</f><v>180</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RADIANS(180)</f><v>3.14159265</v>"#),
+            "{sheet}"
+        );
     }
 
     #[tokio::test]
