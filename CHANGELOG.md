@@ -99,7 +99,8 @@ release yet.
   `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`,
   `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`,
   `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`, and
-  `ISODD`, `CODE`, `CHAR`, `COUNTA`, and `COUNTBLANK` on that sheet.
+  `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`, and `IFERROR` on that
+  sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -158,7 +159,11 @@ release yet.
   inline text. `COUNTBLANK` counts the rest, including an empty inline
   string. A missing cell inside a range counts as blank, and a missing
   cell named on its own leaves the stored value. A shared-string cell
-  counts as blank. An empty call writes 0. `IF` stays numeric.
+  counts as blank. An empty call writes 0. `IFERROR` takes two arguments.
+  When the first cannot be calculated, or is not a finite number, the
+  second is written. The second is left unread when the first succeeds.
+  A third argument, or a second that also fails, leaves the stored value.
+  `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label

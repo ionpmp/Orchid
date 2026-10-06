@@ -539,6 +539,67 @@ fn eval_formula(
     }
 }
 
+fn kept_calc(value: CalcValue) -> Option<CalcValue> {
+    match value {
+        CalcValue::Num(number) if number.is_finite() => Some(CalcValue::Num(number)),
+        CalcValue::Num(_) => None,
+        text @ CalcValue::Text(_) => Some(text),
+    }
+}
+
+fn eval_slice(bytes: &[u8], env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+    let mut parser = CalcParser { bytes, index: 0 };
+    let value = parser.compare(env)?;
+    parser.skip();
+    if parser.index == parser.bytes.len() {
+        kept_calc(value)
+    } else {
+        None
+    }
+}
+
+/// Splits the arguments of the call whose opening `(` is already consumed.
+/// Returns each argument's byte range and the index just past the closing `)`.
+fn split_top_args(bytes: &[u8], start: usize) -> Option<(Vec<(usize, usize)>, usize)> {
+    let mut index = start;
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut arg_start = start;
+    let mut args = Vec::new();
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if in_string {
+            if byte == b'"' {
+                if bytes.get(index + 1) == Some(&b'"') {
+                    index += 2;
+                    continue;
+                }
+                in_string = false;
+            }
+            index += 1;
+            continue;
+        }
+        match byte {
+            b'"' => in_string = true,
+            b'(' => depth += 1,
+            b')' if depth == 0 => {
+                args.push((arg_start, index));
+                return Some((args, index + 1));
+            }
+            b')' => depth -= 1,
+            b',' if depth == 0 => {
+                args.push((arg_start, index));
+                index += 1;
+                arg_start = index;
+                continue;
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    None
+}
+
 enum CalcValue {
     Num(f64),
     Text(String),
@@ -1449,6 +1510,19 @@ impl<'a> CalcParser<'a> {
                 }
                 self.index += 1;
                 return Some(CalcValue::Num(if cond != 0.0 { yes } else { no }));
+            }
+            if word.eq_ignore_ascii_case("IFERROR") {
+                let (args, end) = split_top_args(self.bytes, self.index)?;
+                if args.len() != 2 {
+                    return None;
+                }
+                let first = args[0];
+                let second = args[1];
+                self.index = end;
+                if let Some(value) = eval_slice(&self.bytes[first.0..first.1], env) {
+                    return Some(value);
+                }
+                return eval_slice(&self.bytes[second.0..second.1], env);
             }
             if word.eq_ignore_ascii_case("ABS") {
                 let number = calc_num(self.compare(env)?)?;
@@ -3837,6 +3911,51 @@ mod tests {
         assert!(sheet.contains(r#"<f>COUNTBLANK(4)</f><v>0</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>COUNTA()</f><v>0</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>COUNTA(Z9)</f><v>7</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_iferror() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>IFERROR(SQRT(4),0)</f><v>0</v></c><c r="C1"><f>IFERROR(SQRT(-1),9)</f><v>0</v></c><c r="D1"><f>IFERROR(1/0,5)</f><v>0</v></c><c r="E1"><f>IFERROR(SQRT(-1),"no")</f><v>0</v></c><c r="F1"><f>IFERROR(SQRT(-1),SQRT(-1))</f><v>7</v></c><c r="G1"><f>IFERROR(1,2,3)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>IFERROR(SQRT(4),0)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>IFERROR(SQRT(-1),9)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>IFERROR(1/0,5)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>IFERROR(SQRT(-1),"no")</f><is><t>no</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>IFERROR(SQRT(-1),SQRT(-1))</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>IFERROR(1,2,3)</f><v>8</v>"#),
+            "{sheet}"
+        );
     }
 
     #[tokio::test]
