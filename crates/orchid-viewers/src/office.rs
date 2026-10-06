@@ -1580,6 +1580,11 @@ impl<'a> CalcParser<'a> {
                 let digits = self.comma_number(env)?;
                 return round_directed(number, digits, away).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("TRUNC") {
+                let number = calc_num(self.compare(env)?)?;
+                let digits = self.optional_number(env, 0.0)?;
+                return round_directed(number, digits, false).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("CEILING.MATH") {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
@@ -3577,6 +3582,41 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>LARGE(1,9,0)</f><v>7</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_truncates() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>TRUNC(1.239)</f><v>0</v></c><c r="C1"><f>TRUNC(1.239,2)</f><v>0</v></c><c r="D1"><f>TRUNC(-1.239,2)</f><v>0</v></c><c r="E1"><f>TRUNC(128,-1)</f><v>0</v></c><c r="F1"><f>TRUNC(1.2,20)</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>TRUNC(1.239)</f><v>1</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>TRUNC(1.239,2)</f><v>1.23</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TRUNC(-1.239,2)</f><v>-1.23</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TRUNC(128,-1)</f><v>120</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>TRUNC(1.2,20)</f><v>7</v>"#), "{sheet}");
     }
 
     #[tokio::test]
