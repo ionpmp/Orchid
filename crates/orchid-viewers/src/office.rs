@@ -713,7 +713,22 @@ fn atan_excel(number: f64) -> Option<f64> {
     }
 }
 
-/// Excel `ATAN2(x, y)` is the angle of the point `(x, y)`.
+fn hyper_excel(number: f64, kind: &str) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = match kind {
+        "SINH" => number.sinh(),
+        "COSH" => number.cosh(),
+        "TANH" => number.tanh(),
+        _ => return None,
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
 fn atan2_excel(x_coord: f64, y_coord: f64) -> Option<f64> {
     if !x_coord.is_finite() || !y_coord.is_finite() || (x_coord == 0.0 && y_coord == 0.0) {
         return None;
@@ -1392,6 +1407,15 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return atan_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SINH")
+                || word.eq_ignore_ascii_case("COSH")
+                || word.eq_ignore_ascii_case("TANH")
+            {
+                let kind = word.to_ascii_uppercase();
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return hyper_excel(number, &kind).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("POWER") {
                 let base = calc_num(self.compare(env)?)?;
@@ -3290,6 +3314,35 @@ mod tests {
         );
         assert!(sheet.contains(r#"<f>ASIN(2)</f><v>7</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>ATAN2(0,0)</f><v>8</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_hyperbolic() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>SINH(0)</f><v>0</v></c><c r="C1"><f>COSH(0)</f><v>0</v></c><c r="D1"><f>TANH(0)</f><v>0</v></c><c r="E1"><f>SINH(1)</f><v>0</v></c><c r="F1"><f>COSH(1000)</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>SINH(0)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COSH(0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>TANH(0)</f><v>0</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>SINH(1)</f><v>1.17520119</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>COSH(1000)</f><v>7</v>"#), "{sheet}");
     }
 
     #[tokio::test]
