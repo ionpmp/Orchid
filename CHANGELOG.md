@@ -92,7 +92,7 @@ release yet.
   `ABS`, `INT`, text joined with `&` or `CONCAT`, `LEN`, `LEFT`, `RIGHT`,
   `MID`, `UPPER`, `LOWER`, `TRIM`, `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`,
   `EXACT`, `AND`, `OR`, `NOT`, `SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`,
-  `QUOTIENT`, `PI`, `EVEN`, and `ODD` on that sheet.
+  `QUOTIENT`, `PI`, `EVEN`, `ODD`, and `REPLACE` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -107,7 +107,8 @@ release yet.
   `QUOTIENT` drops the fraction toward zero. A zero divisor, or a magnitude
   at or above 1e15, leaves the stored value. `PI` writes the 64-bit
   constant to eight decimal places. `EVEN` and `ODD` round away from zero.
-  `IF` stays numeric.
+  `REPLACE` removes a 1-based span of Unicode scalar values. A start before
+  1, or more than one past the end, leaves the stored value. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label

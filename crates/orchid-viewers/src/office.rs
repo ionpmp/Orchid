@@ -781,6 +781,27 @@ fn rept_text(text: &str, count: f64) -> Option<String> {
     Some(text.repeat(count))
 }
 
+fn replace_span(text: &str, start: f64, count: f64, new: &str) -> Option<String> {
+    if !start.is_finite() || start < 1.0 || start > 32_767.0 {
+        return None;
+    }
+    let count = text_count(count)?;
+    let chars: Vec<char> = text.chars().collect();
+    let from = (start.trunc() as usize).saturating_sub(1);
+    if from > chars.len() {
+        return None;
+    }
+    let to = (from + count).min(chars.len());
+    let mut out = String::new();
+    out.extend(chars[..from].iter());
+    out.push_str(new);
+    out.extend(chars[to..].iter());
+    if out.chars().count() > 32_767 {
+        return None;
+    }
+    Some(out)
+}
+
 fn open_tag_inline(open: &str) -> Option<String> {
     if open.contains("t=") {
         return None;
@@ -1172,6 +1193,17 @@ impl<'a> CalcParser<'a> {
                     Some(instance)
                 };
                 return substitute_text(&text, &old, &new, instance).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("REPLACE") {
+                let text = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let start = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let count = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let new = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return replace_span(&text, start, count, &new).map(CalcValue::Text);
             }
             if word.eq_ignore_ascii_case("NOT") {
                 let number = calc_num(self.compare(env)?)?;
@@ -2507,6 +2539,43 @@ mod tests {
         assert!(sheet.contains(r#"<f>EVEN(-2.1)</f><v>-4</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>ODD(0)</f><v>1</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>PI()</f><v>3.14159265</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_replaces_a_span() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>REPLACE("Orchid",3,2,"XY")</f><v>0</v></c><c r="C1"><f>REPLACE("ab",3,1,"X")</f><v>0</v></c><c r="D1"><f>REPLACE("abcd",2,10,"Z")</f><v>0</v></c><c r="E1"><f>REPLACE("ab",0,1,"X")</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>REPLACE("Orchid",3,2,"XY")</f><is><t>OrXYid</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>REPLACE("ab",3,1,"X")</f><is><t>abX</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>REPLACE("abcd",2,10,"Z")</f><is><t>aZ</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>REPLACE("ab",0,1,"X")</f><v>7</v>"#),
+            "{sheet}"
+        );
     }
 
     #[tokio::test]
