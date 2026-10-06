@@ -949,6 +949,55 @@ pub fn delete_selected(instance_id: Uuid) {
     });
 }
 
+/// Mark unread messages in the open folder's current list as read.
+///
+/// The list is the latest 100 headers already cached for this folder.
+/// Older messages that are not in that list stay unread.
+pub fn mark_folder_read(instance_id: Uuid) {
+    let Some(h) = MAIL_LIVE.get(&instance_id) else {
+        return;
+    };
+    let st = h.state.read().clone();
+    let Some(account_id) = st.selected_account else {
+        return;
+    };
+    let headers = h
+        .engine
+        .headers(account_id, &st.selected_folder, 100)
+        .unwrap_or_default();
+    let uids = unseen_uids(&headers);
+    if uids.is_empty() {
+        h.state.write().status = "marked-none".into();
+        h.publish();
+        return;
+    }
+    let handle = Arc::clone(h.value());
+    let folder = st.selected_folder;
+    let jobs = Arc::clone(&handle.jobs);
+    let handle = Arc::clone(&handle);
+    jobs.spawn_coalesced(format!("mail-read-folder:{instance_id}"), move || {
+        let handle = Arc::clone(&handle);
+        let folder = folder.clone();
+        let uids = uids.clone();
+        async move {
+            match handle
+                .engine
+                .set_seen_many(account_id, &folder, &uids)
+                .await
+            {
+                Ok(()) => {
+                    handle.state.write().status = "marked-read".into();
+                }
+                Err(e) => {
+                    handle.state.write().status = e.to_string();
+                }
+            }
+            let _ = handle.engine.sync_account(account_id, Some(&folder)).await;
+            handle.publish();
+        }
+    });
+}
+
 /// Move the open message into another folder this account already lists.
 ///
 /// The current folder and a path that is not in that list are ignored.
@@ -1249,6 +1298,15 @@ fn parse_tls(raw: &str) -> TlsMode {
         "none" => TlsMode::None,
         _ => TlsMode::Implicit,
     }
+}
+
+/// UIDs in `headers` that are not marked seen, in list order.
+fn unseen_uids(headers: &[orchid_mail::MessageHeader]) -> Vec<u32> {
+    headers
+        .iter()
+        .filter(|header| !header.seen)
+        .map(|header| header.uid)
+        .collect()
 }
 
 /// True when `dest` is a listed folder and is not the folder the message is already in.
@@ -1569,5 +1627,30 @@ mod tests {
         assert!(!can_move_message("INBOX", "INBOX", &known));
         assert!(!can_move_message("INBOX", "Sent", &known));
         assert!(!can_move_message("INBOX", "", &known));
+    }
+
+    #[test]
+    fn unseen_uids_skip_messages_already_read() {
+        let headers = vec![header(1, false), header(2, true), header(3, false)];
+        assert_eq!(unseen_uids(&headers), vec![1, 3]);
+        assert!(unseen_uids(&[header(4, true)]).is_empty());
+    }
+
+    fn header(uid: u32, seen: bool) -> orchid_mail::MessageHeader {
+        orchid_mail::MessageHeader {
+            account_id: Uuid::nil(),
+            folder: "INBOX".into(),
+            uid,
+            message_id: None,
+            from: String::new(),
+            to: String::new(),
+            subject: String::new(),
+            date: String::new(),
+            date_unix: 0,
+            seen,
+            flagged: false,
+            has_attachment: false,
+            snippet: String::new(),
+        }
     }
 }

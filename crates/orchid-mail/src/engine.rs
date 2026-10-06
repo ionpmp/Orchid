@@ -305,6 +305,32 @@ impl MailEngine {
         Ok(())
     }
 
+    /// Mark the given messages read in one IMAP command, then update the cache.
+    ///
+    /// An empty list does nothing. Callers pass the headers already listed,
+    /// not every message in the folder.
+    pub async fn set_seen_many(&self, account_id: Uuid, folder: &str, uids: &[u32]) -> Result<()> {
+        if uids.is_empty() {
+            return Ok(());
+        }
+        let account = self
+            .accounts
+            .get(account_id)
+            .ok_or_else(|| MailError::NotFound(account_id.to_string()))?;
+        let mut secrets = self.secrets.get(account_id);
+        if account.auth == AuthKind::Oauth2 {
+            secrets =
+                oauth::ensure_access_token(&account, &secrets, Some(&self.secrets), &self.http)
+                    .await?;
+        }
+        let mut session = imap::connect(&account, &secrets).await?;
+        let result = imap::set_flag_uids(&mut session, folder, uids, "\\Seen", true).await;
+        let _ = session.logout().await;
+        result?;
+        self.cache.set_seen_many(account_id, folder, uids)?;
+        Ok(())
+    }
+
     /// Toggle flagged.
     pub async fn set_flagged(
         &self,

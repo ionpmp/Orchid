@@ -34,4 +34,6 @@ Product how-to: [`docs/user/mail.md`](../../docs/user/mail.md).
 - `move_message` copies one message into a destination folder and removes
   it from the source. The widget only offers folders the account already
   lists.
+- Mark read stores `\Seen` on the UIDs in the open folder's cached list
+  (at most 100) in one command. It does not walk the rest of the mailbox.
 - Rules and Microsoft Graph are not implemented.

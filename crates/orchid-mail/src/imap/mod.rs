@@ -337,15 +337,47 @@ pub async fn set_flag(
     flag: &str,
     add: bool,
 ) -> Result<()> {
+    store_flag_set(session, folder, &uid.to_string(), flag, add).await
+}
+
+/// Add or remove one flag on several UIDs in a single command.
+pub async fn set_flag_uids(
+    session: &mut ImapSession,
+    folder: &str,
+    uids: &[u32],
+    flag: &str,
+    add: bool,
+) -> Result<()> {
+    if uids.is_empty() {
+        return Ok(());
+    }
+    store_flag_set(session, folder, &uid_set(uids), flag, add).await
+}
+
+async fn store_flag_set(
+    session: &mut ImapSession,
+    folder: &str,
+    set: &str,
+    flag: &str,
+    add: bool,
+) -> Result<()> {
     session.select(folder).await?;
     let query = if add {
-        format!("+FLAGS ({flag})")
+        format!("+FLAGS.SILENT ({flag})")
     } else {
-        format!("-FLAGS ({flag})")
+        format!("-FLAGS.SILENT ({flag})")
     };
-    let stream = session.uid_store(uid.to_string(), &query).await?;
+    let stream = session.uid_store(set, &query).await?;
     let _: Vec<_> = stream.try_collect().await.map_err(MailError::from)?;
     Ok(())
+}
+
+/// Comma-separated IMAP UID set.
+pub fn uid_set(uids: &[u32]) -> String {
+    uids.iter()
+        .map(|uid| uid.to_string())
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// Move (COPY + delete) a message.
@@ -402,6 +434,12 @@ pub fn password_secret(password: &SecretString) -> AccountSecrets {
 mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[test]
+    fn uid_set_joins_the_listed_ids() {
+        assert_eq!(uid_set(&[3, 8, 21]), "3,8,21");
+        assert_eq!(uid_set(&[]), "");
+    }
     use tokio::net::TcpListener;
 
     async fn read_line(sock: &mut TcpStream) -> String {

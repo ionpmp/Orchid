@@ -73,7 +73,9 @@ release yet.
   get a matching type; other files are `application/octet-stream`. There
   is no preview and no drag-and-drop. Forward does not copy the original
   files. Compose has a Bcc line. The open message can move to another
-  folder the account already lists, one message at a time.
+  folder the account already lists, one message at a time. Mark read sets
+  the seen flag on unread messages in the open folder's current list, the
+  latest 100 headers. Messages outside that list stay unread.
   Rules and Microsoft Graph are not included.
 - **Agent conversation:** Universal Search `?` and the Agent widget share
   `data/agent-chat.json`. The model can read a local text file, list one

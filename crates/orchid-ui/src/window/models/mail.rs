@@ -156,6 +156,7 @@ pub(crate) fn build_mail_model(payload: &MailPayload, locale: &LocaleManager) ->
         oauth_label: locale.tr("mail-oauth").into(),
         cancel_label: locale.tr("mail-cancel").into(),
         refresh_label: locale.tr("mail-refresh").into(),
+        mark_read_label: locale.tr("mail-mark-read").into(),
         search_placeholder: locale.tr("mail-search-placeholder").into(),
         compose_label: locale.tr("mail-compose").into(),
         send_label: locale.tr("mail-send").into(),
@@ -234,6 +235,7 @@ pub(crate) fn patch_mail_model(
     model.oauth_label = fresh.oauth_label;
     model.cancel_label = fresh.cancel_label;
     model.refresh_label = fresh.refresh_label;
+    model.mark_read_label = fresh.mark_read_label;
     model.compose_label = fresh.compose_label;
     model.send_label = fresh.send_label;
     model.draft_label = fresh.draft_label;
@@ -278,6 +280,8 @@ fn status_label(locale: &LocaleManager, status: &str) -> String {
         "syncing" => locale.tr("mail-syncing"),
         "draft-saved" => locale.tr("mail-draft-saved"),
         "moved" => locale.tr("mail-moved"),
+        "marked-read" => locale.tr("mail-marked-read"),
+        "marked-none" => locale.tr("mail-marked-none"),
         "attachment-saved" => locale.tr("mail-attachment-saved"),
         "attachment-missing" => locale.tr("mail-attachment-missing"),
         "attach-missing" => locale.tr("mail-attach-missing"),
