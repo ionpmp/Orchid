@@ -1353,6 +1353,25 @@ impl<'a> CalcParser<'a> {
                         None
                     }
                 }
+                "MEDIAN" => {
+                    if args.is_empty() || args.iter().any(|number| !number.is_finite()) {
+                        None
+                    } else {
+                        let mut sorted = args;
+                        sorted.sort_by(|left, right| left.total_cmp(right));
+                        let mid = sorted.len() / 2;
+                        let value = if sorted.len() % 2 == 1 {
+                            sorted[mid]
+                        } else {
+                            (sorted[mid - 1] + sorted[mid]) / 2.0
+                        };
+                        if value.is_finite() {
+                            Some(CalcValue::Num(value))
+                        } else {
+                            None
+                        }
+                    }
+                }
                 "AVERAGE" if !args.is_empty() => {
                     Some(CalcValue::Num(args.iter().sum::<f64>() / args.len() as f64))
                 }
@@ -2790,6 +2809,34 @@ mod tests {
             sheet.contains(r#"<f>CEILING.MATH(1.2,1)</f><v>8</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_takes_a_median() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>8</v></c><c r="C1"><f>MEDIAN(1,9,3)</f><v>0</v></c><c r="D1"><f>MEDIAN(1,2,3,4)</f><v>0</v></c><c r="E1"><f>MEDIAN(A1:B1)</f><v>0</v></c><c r="F1"><f>MEDIAN()</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>MEDIAN(1,9,3)</f><v>3</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>MEDIAN(1,2,3,4)</f><v>2.5</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>MEDIAN(A1:B1)</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MEDIAN()</f><v>7</v>"#), "{sheet}");
     }
 
     #[tokio::test]
