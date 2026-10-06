@@ -755,6 +755,63 @@ fn combin_excel(n: f64, k: f64) -> Option<f64> {
     }
 }
 
+fn count_pair(n: f64, k: f64) -> Option<(u64, u64)> {
+    if !n.is_finite()
+        || !k.is_finite()
+        || n < 0.0
+        || k < 0.0
+        || n >= 1_000_000.0
+        || k >= 1_000_000.0
+    {
+        return None;
+    }
+    Some((n.trunc() as u64, k.trunc() as u64))
+}
+
+fn round_count(acc: f64) -> Option<f64> {
+    if !acc.is_finite() {
+        return None;
+    }
+    if acc < 1e15 {
+        Some(acc.round())
+    } else {
+        Some(acc)
+    }
+}
+
+fn permut_excel(n: f64, k: f64) -> Option<f64> {
+    let (n, k) = count_pair(n, k)?;
+    if k > n {
+        return None;
+    }
+    let mut acc = 1.0;
+    for index in 0..k {
+        acc *= (n - index) as f64;
+        if !acc.is_finite() {
+            return None;
+        }
+    }
+    round_count(acc)
+}
+
+fn permutationa_excel(n: f64, k: f64) -> Option<f64> {
+    let (n, k) = count_pair(n, k)?;
+    if k == 0 {
+        return Some(1.0);
+    }
+    if n == 0 {
+        return Some(0.0);
+    }
+    let mut acc = 1.0;
+    for _ in 0..k {
+        acc *= n as f64;
+        if !acc.is_finite() {
+            return None;
+        }
+    }
+    round_count(acc)
+}
+
 fn atan2_excel(x_coord: f64, y_coord: f64) -> Option<f64> {
     if !x_coord.is_finite() || !y_coord.is_finite() || (x_coord == 0.0 && y_coord == 0.0) {
         return None;
@@ -1447,6 +1504,16 @@ impl<'a> CalcParser<'a> {
                 let n = calc_num(self.compare(env)?)?;
                 let k = self.comma_number(env)?;
                 return combin_excel(n, k).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PERMUTATIONA") {
+                let n = calc_num(self.compare(env)?)?;
+                let k = self.comma_number(env)?;
+                return permutationa_excel(n, k).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PERMUT") {
+                let n = calc_num(self.compare(env)?)?;
+                let k = self.comma_number(env)?;
+                return permut_excel(n, k).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("POWER") {
                 let base = calc_num(self.compare(env)?)?;
@@ -3404,6 +3471,44 @@ mod tests {
         );
         assert!(sheet.contains(r#"<f>COMBIN(4,5)</f><v>7</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>COMBIN(-1,1)</f><v>8</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_permutations() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>PERMUT(5,2)</f><v>0</v></c><c r="C1"><f>PERMUT(5,0)</f><v>0</v></c><c r="D1"><f>PERMUT(5,5)</f><v>0</v></c><c r="E1"><f>PERMUT(4,5)</f><v>7</v></c><c r="F1"><f>PERMUTATIONA(3,2)</f><v>0</v></c><c r="G1"><f>PERMUTATIONA(0,0)</f><v>0</v></c><c r="H1"><f>PERMUTATIONA(0,2)</f><v>0</v></c><c r="I1"><f>PERMUT(-1,1)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>PERMUT(5,2)</f><v>20</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>PERMUT(5,0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>PERMUT(5,5)</f><v>120</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>PERMUT(4,5)</f><v>7</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>PERMUTATIONA(3,2)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERMUTATIONA(0,0)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERMUTATIONA(0,2)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>PERMUT(-1,1)</f><v>8</v>"#), "{sheet}");
     }
 
     #[tokio::test]
