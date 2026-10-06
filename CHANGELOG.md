@@ -98,9 +98,9 @@ release yet.
   `ROUNDDOWN`, `CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`,
   `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`,
   `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`,
-  `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`, and
-  `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`, and `IFERROR` on that
-  sheet.
+  `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`,
+  `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
+  `IFERROR`, `CLEAN`, and `PROPER` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -163,7 +163,9 @@ release yet.
   When the first cannot be calculated, or is not a finite number, the
   second is written. The second is left unread when the first succeeds.
   A third argument, or a second that also fails, leaves the stored value.
-  `IF` stays numeric.
+  `CLEAN` removes characters below U+0020. `PROPER` uppercases the first
+  Unicode letter of each word and lowercases the rest. A character that is
+  not a letter starts a new word. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label

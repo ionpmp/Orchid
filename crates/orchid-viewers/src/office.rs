@@ -1033,6 +1033,29 @@ fn char_excel(code: f64) -> Option<String> {
     char::from_u32(code).map(|ch| ch.to_string())
 }
 
+fn clean_excel(text: &str) -> String {
+    text.chars().filter(|ch| u32::from(*ch) >= 32).collect()
+}
+
+fn proper_excel(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut word_start = true;
+    for ch in text.chars() {
+        if ch.is_alphabetic() {
+            if word_start {
+                out.extend(ch.to_uppercase());
+            } else {
+                out.extend(ch.to_lowercase());
+            }
+            word_start = false;
+        } else {
+            out.push(ch);
+            word_start = true;
+        }
+    }
+    out
+}
+
 fn note_presence(value: &CalcValue, present: &mut f64, blank: &mut f64) -> Option<()> {
     match value {
         CalcValue::Num(number) if number.is_finite() => *present += 1.0,
@@ -1704,6 +1727,16 @@ impl<'a> CalcParser<'a> {
                 let code = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return char_excel(code).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("CLEAN") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Text(clean_excel(&text)));
+            }
+            if word.eq_ignore_ascii_case("PROPER") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Text(proper_excel(&text)));
             }
             if word.eq_ignore_ascii_case("CEILING.MATH") {
                 let number = calc_num(self.compare(env)?)?;
@@ -3954,6 +3987,47 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>IFERROR(1,2,3)</f><v>8</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_clean_and_proper() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                "<worksheet><sheetData><row r=\"1\"><c r=\"A1\"><v>1</v></c><c r=\"B1\"><f>CLEAN(CHAR(10)&amp;\"ab\")</f><v>0</v></c><c r=\"C1\"><f>CLEAN(\"ab\")</f><v>0</v></c><c r=\"D1\"><f>PROPER(\"ab cd\")</f><v>0</v></c><c r=\"E1\"><f>PROPER(\"a1b\")</f><v>0</v></c><c r=\"F1\"><f>PROPER(\"\u{00C9}RIC\")</f><v>0</v></c></row></sheetData></worksheet>",
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>CLEAN(CHAR(10)&amp;"ab")</f><is><t>ab</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CLEAN("ab")</f><is><t>ab</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PROPER("ab cd")</f><is><t>Ab Cd</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PROPER("a1b")</f><is><t>A1B</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains("<f>PROPER(\"\u{00C9}RIC\")</f><is><t>\u{00C9}ric</t></is>"),
             "{sheet}"
         );
     }
