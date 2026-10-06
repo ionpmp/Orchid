@@ -549,6 +549,8 @@ release yet.
   builds write Start Menu `Orchid.lnk` with AppUserModelID `IonPmp.Orchid`.
 
 ### Documentation
+- The libmpv playback session documents its public frame, transport, and
+  command fields.
 - Guides, crate READMEs, and the backup manifest now match this tree:
   mail, contacts, CalDAV, the agent, ONNX search, and the files the
   backup zip leaves out (`data/mail`, the agent transcript, face data,

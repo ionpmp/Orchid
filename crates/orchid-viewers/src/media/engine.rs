@@ -27,61 +27,93 @@ const MAX_FRAME_H: u32 = 1080;
 /// OSD flash duration after volume / speed / seek / mute changes.
 const OSD_SECS: f64 = 1.4;
 
+/// One software RGBA frame.
 #[derive(Debug, Clone)]
 pub struct FrameBuf {
+    /// Packed RGBA bytes, row-major.
     pub rgba: Arc<Vec<u8>>,
+    /// Width in pixels.
     pub width: u32,
+    /// Height in pixels.
     pub height: u32,
 }
 
 /// Shared playback state read by [`super::MediaViewer::snapshot`].
 #[derive(Debug)]
 pub struct SharedPlayback {
+    /// False when libmpv could not be loaded. Commands are then ignored.
     pub available: AtomicBool,
+    /// True while playback is not paused.
     pub playing: AtomicBool,
+    /// Current position in milliseconds.
     pub position_ms: AtomicU64,
+    /// Duration in milliseconds. Zero until mpv reports one.
     pub duration_ms: AtomicU64,
+    /// Volume percent, clamped to 0–150 when set from the engine.
     pub volume: AtomicU32,
+    /// True when audio is muted.
     pub muted: AtomicBool,
     /// Playback rate × 100 (100 = 1.0×).
     pub speed_x100: AtomicU32,
+    /// True when the file has a video track.
     pub has_video: AtomicBool,
+    /// Increments each time a new software frame is stored.
     pub frame_gen: AtomicU64,
+    /// Latest software frame. Empty for audio-only sessions.
     pub frame: RwLock<Option<FrameBuf>>,
     /// Still image for audio-only (APIC / folder cover); not updated every frame.
     pub cover: RwLock<Option<FrameBuf>>,
+    /// Title shown in the player chrome.
     pub title: RwLock<String>,
+    /// Artist shown in the player chrome.
     pub artist: RwLock<String>,
     /// OS path of the current file (for resume bookmarks).
     pub resume_path: RwLock<Option<PathBuf>>,
     /// Seek once duration is known after load.
     pub pending_resume_secs: RwLock<Option<f64>>,
+    /// A-B loop status text for the on-screen display.
     pub ab_label: RwLock<String>,
+    /// Equalizer preset name.
     pub eq_label: RwLock<String>,
+    /// Equalizer preset index.
     pub eq_index: AtomicU32,
     /// Subtitle color/outline preset index.
     pub sub_style_index: AtomicU32,
+    /// Subtitle color and outline preset name.
     pub sub_style_label: RwLock<String>,
     /// ReplayGain mode index (0=off, 1=track, 2=album).
     pub replaygain_index: AtomicU32,
+    /// ReplayGain mode name.
     pub replaygain_label: RwLock<String>,
     /// 0 = `auto-copy` (HW decode → system RAM for SW blit), 1 = `no`.
     pub hwdec_mode: AtomicU32,
+    /// Hardware-decode mode name.
     pub hwdec_label: RwLock<String>,
     /// Sleep timer deadline; when reached, pause and clear.
     pub sleep_until: RwLock<Option<Instant>>,
+    /// Sleep-timer preset index. Zero is off.
     pub sleep_index: AtomicU32,
+    /// Sleep-timer label.
     pub sleep_label: RwLock<String>,
+    /// Aspect-ratio preset index.
     pub aspect_index: AtomicU32,
+    /// Aspect-ratio label.
     pub aspect_label: RwLock<String>,
+    /// Video rotation in degrees.
     pub rotate_deg: AtomicU32,
+    /// Audio delay in milliseconds.
     pub audio_delay_ms: AtomicI32,
+    /// Short status line flashed after a transport change.
     pub osd_text: RwLock<String>,
     /// Instant::now() + duration; cleared when expired in poll.
     pub osd_until: RwLock<Option<Instant>>,
+    /// Current subtitle track name.
     pub sub_label: RwLock<String>,
+    /// True when subtitles are shown.
     pub sub_visible: AtomicBool,
+    /// Current audio track name.
     pub audio_label: RwLock<String>,
+    /// Current chapter title.
     pub chapter_label: RwLock<String>,
     /// Current chapter index (`-1` when none).
     pub chapter_index: AtomicI32,
@@ -89,9 +121,11 @@ pub struct SharedPlayback {
     pub chapter_items: RwLock<Vec<(u32, String)>>,
     /// Set when mpv reaches end-of-file (cleared on load / take).
     pub eof_reached: AtomicBool,
+    /// Last playback error. Empty when the session is healthy.
     pub error: RwLock<Option<String>>,
     /// Soft target blit size from the UI viewport (`0` = uncapped aside from MAX_*).
     pub target_w: AtomicU32,
+    /// Soft target blit height in pixels. Zero leaves the height cap at 1080.
     pub target_h: AtomicU32,
     /// Keep musical pitch when speed ≠ 1 (`audio-pitch-correction` / scaletempo2).
     pub pitch_preserve: AtomicBool,
@@ -266,6 +300,7 @@ impl MpvEngine {
         }
     }
 
+    /// Open `path`, attach sidecar subtitles, and seek to a saved resume point when one exists.
     pub fn load(&self, path: &Path) {
         let sidecars = discover_sidecar_subs(path);
         let resume_secs = resume::take_resume(path);
@@ -289,6 +324,7 @@ impl MpvEngine {
         self.shared.dirty.store(true, Ordering::Release);
     }
 
+    /// Toggle play and pause.
     pub fn play_pause(&self) {
         let _ = self.tx.send(EngineCmd::PlayPause);
     }
@@ -303,142 +339,177 @@ impl MpvEngine {
         let _ = self.tx.send(EngineCmd::SetPaused(false));
     }
 
+    /// Seek by `seconds` from the current position.
     pub fn seek_rel(&self, seconds: f64) {
         let _ = self.tx.send(EngineCmd::SeekRel(seconds));
     }
 
+    /// Seek to `seconds` from the start of the file.
     pub fn seek_abs(&self, seconds: f64) {
         let _ = self.tx.send(EngineCmd::SeekAbs(seconds));
     }
 
+    /// Set volume as a percent, clamped to 0–150.
     pub fn set_volume(&self, volume: f64) {
         let _ = self.tx.send(EngineCmd::SetVolume(volume));
     }
 
+    /// Add `delta` percent to the current volume, clamped to 0–150.
     pub fn volume_delta(&self, delta: f64) {
         let _ = self.tx.send(EngineCmd::VolumeDelta(delta));
     }
 
+    /// Set the playback rate, clamped to 0.25–3.0.
     pub fn set_speed(&self, speed: f64) {
         let _ = self.tx.send(EngineCmd::SetSpeed(speed));
     }
 
+    /// Add `delta` to the playback rate, clamped to 0.25–3.0.
     pub fn speed_delta(&self, delta: f64) {
         let _ = self.tx.send(EngineCmd::SpeedDelta(delta));
     }
 
+    /// Mute or unmute audio.
     pub fn mute_toggle(&self) {
         let _ = self.tx.send(EngineCmd::MuteToggle);
     }
 
+    /// Select the next subtitle track.
     pub fn cycle_sub(&self) {
         let _ = self.tx.send(EngineCmd::CycleSub);
     }
 
+    /// Show or hide subtitles.
     pub fn toggle_sub(&self) {
         let _ = self.tx.send(EngineCmd::ToggleSub);
     }
 
+    /// Select the next audio track.
     pub fn cycle_audio(&self) {
         let _ = self.tx.send(EngineCmd::CycleAudio);
     }
 
+    /// Jump to the next chapter.
     pub fn chapter_next(&self) {
         let _ = self.tx.send(EngineCmd::ChapterNext);
     }
 
+    /// Jump to the previous chapter.
     pub fn chapter_prev(&self) {
         let _ = self.tx.send(EngineCmd::ChapterPrev);
     }
 
+    /// Jump to the chapter at `index`.
     pub fn set_chapter(&self, index: i64) {
         let _ = self.tx.send(EngineCmd::SetChapter(index));
     }
 
+    /// Mark the start of an A-B loop at the current position.
     pub fn ab_mark_a(&self) {
         let _ = self.tx.send(EngineCmd::AbMarkA);
     }
 
+    /// Mark the end of an A-B loop at the current position.
     pub fn ab_mark_b(&self) {
         let _ = self.tx.send(EngineCmd::AbMarkB);
     }
 
+    /// Clear the A-B loop.
     pub fn ab_clear(&self) {
         let _ = self.tx.send(EngineCmd::AbClear);
     }
 
+    /// Load an extra subtitle file.
     pub fn add_sub(&self, path: &Path) {
         let _ = self.tx.send(EngineCmd::AddSub(path.to_path_buf()));
     }
 
+    /// Change the subtitle scale by `delta`.
     pub fn sub_scale_delta(&self, delta: f64) {
         let _ = self.tx.send(EngineCmd::SubScaleDelta(delta));
     }
 
+    /// Move the subtitle position by `delta`.
     pub fn sub_pos_delta(&self, delta: f64) {
         let _ = self.tx.send(EngineCmd::SubPosDelta(delta));
     }
 
+    /// Reset the subtitle color and outline preset.
     pub fn sub_style_reset(&self) {
         let _ = self.tx.send(EngineCmd::SubStyleReset);
     }
 
+    /// Select the next subtitle color and outline preset.
     pub fn cycle_sub_style(&self) {
         let _ = self.tx.send(EngineCmd::CycleSubStyle);
     }
 
+    /// Select the next equalizer preset.
     pub fn cycle_eq(&self) {
         let _ = self.tx.send(EngineCmd::CycleEq);
     }
 
+    /// Select the equalizer preset at `index`.
     pub fn set_eq_index(&self, index: u32) {
         let _ = self.tx.send(EngineCmd::SetEqIndex(index));
     }
 
+    /// Cycle ReplayGain through off, track, and album.
     pub fn cycle_replaygain(&self) {
         let _ = self.tx.send(EngineCmd::CycleReplayGain);
     }
 
+    /// Select the ReplayGain mode at `index` (0 off, 1 track, 2 album).
     pub fn set_replaygain_index(&self, index: u32) {
         let _ = self.tx.send(EngineCmd::SetReplayGainIndex(index));
     }
 
+    /// Toggle hardware decode between auto-copy and off.
     pub fn cycle_hwdec(&self) {
         let _ = self.tx.send(EngineCmd::CycleHwdec);
     }
 
+    /// Select the next sleep-timer length. The timer pauses playback when it ends.
     pub fn cycle_sleep(&self) {
         let _ = self.tx.send(EngineCmd::CycleSleep);
     }
 
+    /// Select the next aspect-ratio preset.
     pub fn cycle_aspect(&self) {
         let _ = self.tx.send(EngineCmd::CycleAspect);
     }
 
+    /// Rotate the video to the next step.
     pub fn cycle_rotate(&self) {
         let _ = self.tx.send(EngineCmd::CycleRotate);
     }
 
+    /// Shift audio relative to video by `delta_secs`.
     pub fn audio_delay_delta(&self, delta_secs: f64) {
         let _ = self.tx.send(EngineCmd::AudioDelayDelta(delta_secs));
     }
 
+    /// Toggle keeping musical pitch when the playback rate is not 1.
     pub fn toggle_pitch(&self) {
         let _ = self.tx.send(EngineCmd::TogglePitch);
     }
 
+    /// Stop playback.
     pub fn stop(&self) {
         let _ = self.tx.send(EngineCmd::Stop);
     }
 
+    /// Step one frame forward and pause.
     pub fn frame_fwd(&self) {
         let _ = self.tx.send(EngineCmd::FrameFwd);
     }
 
+    /// Step one frame backward and pause.
     pub fn frame_back(&self) {
         let _ = self.tx.send(EngineCmd::FrameBack);
     }
 
+    /// Write the current video frame as a PNG next to the open file.
     pub fn screenshot(&self) {
         let _ = self.tx.send(EngineCmd::Screenshot);
     }
