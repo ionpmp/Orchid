@@ -1,7 +1,7 @@
 //! Local contact cards plus one CardDAV collection.
 //!
-//! Basic authentication only. A card stores a name, one email, one phone
-//! number, and a note. Photos, groups, and extra addresses are ignored.
+//! Basic authentication only. A card stores a name, two emails, two phone
+//! numbers, and a note. Photos, groups, and further addresses are ignored.
 //! Sync replaces linked cards with the server copy. A card that has not been
 //! uploaded stays on this computer.
 
@@ -25,7 +25,7 @@ use crate::{
 };
 use orchid_storage::{LifecycleState, WidgetSize};
 
-pub use config::{merge_remote, Contact, ContactsConfig};
+pub use config::{load_config, merge_remote, Contact, ContactsConfig};
 
 /// Stable type id.
 pub const TYPE_ID: &str = "contacts";
@@ -78,7 +78,9 @@ impl ContactsHandle {
             rows,
             name: selected.map(|card| card.name.clone()).unwrap_or_default(),
             email: selected.map(|card| card.email.clone()).unwrap_or_default(),
+            email2: selected.map(|card| card.email2.clone()).unwrap_or_default(),
             phone: selected.map(|card| card.phone.clone()).unwrap_or_default(),
+            phone2: selected.map(|card| card.phone2.clone()).unwrap_or_default(),
             notes: selected.map(|card| card.notes.clone()).unwrap_or_default(),
             has_selection: selected.is_some(),
             account_url: ui.url.clone(),
@@ -93,8 +95,12 @@ fn display_name(card: &Contact) -> String {
         card.name.trim().to_string()
     } else if !card.email.trim().is_empty() {
         card.email.trim().to_string()
-    } else {
+    } else if !card.email2.trim().is_empty() {
+        card.email2.trim().to_string()
+    } else if !card.phone.trim().is_empty() {
         card.phone.trim().to_string()
+    } else {
+        card.phone2.trim().to_string()
     }
 }
 
@@ -130,7 +136,7 @@ pub fn set_field(instance_id: Uuid, field: &str, value: String) {
         "account_url" => h.ui.write().url = value,
         "account_user" => h.ui.write().user = value,
         "account_password" => h.ui.write().password = value,
-        "name" | "email" | "phone" | "notes" => {
+        "name" | "email" | "email2" | "phone" | "phone2" | "notes" => {
             let Some(id) = h.ui.read().selected_id.clone() else {
                 return;
             };
@@ -141,7 +147,9 @@ pub fn set_field(instance_id: Uuid, field: &str, value: String) {
             match field {
                 "name" => card.name = value,
                 "email" => card.email = value,
+                "email2" => card.email2 = value,
                 "phone" => card.phone = value,
+                "phone2" => card.phone2 = value,
                 "notes" => card.notes = value,
                 _ => {}
             }
@@ -423,13 +431,12 @@ impl Widget for ContactsWidget {
     }
 
     fn restore_state(&mut self, bytes: &[u8]) -> WidgetResult<()> {
-        if let Ok(cfg) = state_codec::restore_state::<ContactsConfig>(bytes) {
-            let mut ui = self.handle.ui.write();
-            ui.url = cfg.carddav_url.clone();
-            ui.user = cfg.carddav_user.clone();
-            drop(ui);
-            *self.handle.config.write() = cfg;
-        }
+        let cfg = load_config(bytes);
+        let mut ui = self.handle.ui.write();
+        ui.url = cfg.carddav_url.clone();
+        ui.user = cfg.carddav_user.clone();
+        drop(ui);
+        *self.handle.config.write() = cfg;
         Ok(())
     }
 
@@ -451,7 +458,7 @@ impl Widget for ContactsWidget {
 pub fn descriptor() -> WidgetDescriptor {
     let factory: WidgetFactory = Arc::new(|ctx: WidgetContext, state_bytes| {
         let config = match state_bytes {
-            Some(bytes) => state_codec::restore_state(bytes).unwrap_or_default(),
+            Some(bytes) => load_config(bytes),
             None => ContactsConfig::default(),
         };
         Ok(Box::new(ContactsWidget::new(&ctx, config)) as Box<dyn Widget>)

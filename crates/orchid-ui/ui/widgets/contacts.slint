@@ -104,12 +104,26 @@ export component ContactsView inherits Rectangle {
                     single-line: true;
                     edited => { root.set-field("email", self.text); }
                 }
+                Text { text: root.model.email2-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                TextInput {
+                    text: root.model.email2;
+                    color: Theme.text-primary;
+                    single-line: true;
+                    edited => { root.set-field("email2", self.text); }
+                }
                 Text { text: root.model.phone-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
                 TextInput {
                     text: root.model.phone;
                     color: Theme.text-primary;
                     single-line: true;
                     edited => { root.set-field("phone", self.text); }
+                }
+                Text { text: root.model.phone2-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
+                TextInput {
+                    text: root.model.phone2;
+                    color: Theme.text-primary;
+                    single-line: true;
+                    edited => { root.set-field("phone2", self.text); }
                 }
                 Text { text: root.model.notes-label; color: Theme.text-secondary; font-size: Theme.font-size-sm; }
                 TextInput {

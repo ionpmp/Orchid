@@ -1,7 +1,8 @@
 //! One CardDAV collection: pull vCards and write them back.
 //!
-//! Basic authentication only. A card keeps `FN`, one `EMAIL`, one `TEL`,
-//! `NOTE`, and `UID`. Other properties are ignored. At most 500 cards are kept.
+//! Basic authentication only. A card keeps `FN`, two `EMAIL` values, two
+//! `TEL` values, `NOTE`, and `UID`. Other properties are ignored. At most
+//! 500 cards are kept.
 
 use std::time::Duration;
 
@@ -158,25 +159,41 @@ pub fn pull_from_xml(xml: &str, collection: &str) -> Pull {
     Pull { cards, truncated }
 }
 
-/// Render the four stored fields as a vCard 3.0 body.
+/// Render the stored fields as a vCard 3.0 body.
+///
+/// A second email or phone is written only when it is not empty.
 pub fn render_vcard(card: &Contact) -> String {
-    format!(
-        "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:{uid}\r\nFN:{name}\r\nEMAIL:{email}\r\nTEL:{phone}\r\nNOTE:{notes}\r\nEND:VCARD\r\n",
-        uid = escape_text(&card.id),
-        name = escape_text(&card.name),
-        email = escape_text(&card.email),
-        phone = escape_text(&card.phone),
-        notes = escape_text(&card.notes),
-    )
+    let mut lines = vec![
+        "BEGIN:VCARD".to_string(),
+        "VERSION:3.0".to_string(),
+        format!("UID:{}", escape_text(&card.id)),
+        format!("FN:{}", escape_text(&card.name)),
+        format!("EMAIL:{}", escape_text(&card.email)),
+    ];
+    if !card.email2.trim().is_empty() {
+        lines.push(format!("EMAIL:{}", escape_text(&card.email2)));
+    }
+    lines.push(format!("TEL:{}", escape_text(&card.phone)));
+    if !card.phone2.trim().is_empty() {
+        lines.push(format!("TEL:{}", escape_text(&card.phone2)));
+    }
+    lines.push(format!("NOTE:{}", escape_text(&card.notes)));
+    lines.push("END:VCARD".to_string());
+    let mut body = lines.join("\r\n");
+    body.push_str("\r\n");
+    body
 }
 
-/// Read `UID`, `FN`, one `EMAIL`, one `TEL`, and `NOTE`. Other properties are dropped.
+/// Read `UID`, `FN`, two `EMAIL` values, two `TEL` values, and `NOTE`.
+/// Further properties are dropped.
 pub fn parse_vcard(raw: &str) -> Option<Contact> {
     let text = unfold(raw);
     let mut uid = String::new();
     let mut name = String::new();
     let mut email = String::new();
+    let mut email2 = String::new();
     let mut phone = String::new();
+    let mut phone2 = String::new();
     let mut notes = String::new();
     let mut in_card = false;
     for line in text.lines() {
@@ -197,7 +214,9 @@ pub fn parse_vcard(raw: &str) -> Option<Contact> {
             "UID" if uid.is_empty() => uid = value,
             "FN" if name.is_empty() => name = value,
             "EMAIL" if email.is_empty() => email = value,
+            "EMAIL" if email2.is_empty() => email2 = value,
             "TEL" if phone.is_empty() => phone = value,
+            "TEL" if phone2.is_empty() => phone2 = value,
             "NOTE" if notes.is_empty() => notes = value,
             _ => {}
         }
@@ -212,7 +231,9 @@ pub fn parse_vcard(raw: &str) -> Option<Contact> {
         id: uid,
         name,
         email,
+        email2,
         phone,
+        phone2,
         notes,
         href: String::new(),
         etag: String::new(),
@@ -479,7 +500,9 @@ mod tests {
             id: "uid-1".into(),
             name: "Lily & Rose".into(),
             email: "lily@example.com".into(),
+            email2: String::new(),
             phone: "+1 2".into(),
+            phone2: String::new(),
             notes: "line\ntwo".into(),
             href: String::new(),
             etag: String::new(),
@@ -490,6 +513,20 @@ mod tests {
         assert_eq!(parsed.phone, "+1 2");
         assert_eq!(parsed.notes, "line\ntwo");
         assert_eq!(parsed.id, "uid-1");
+        assert!(parsed.email2.is_empty());
+    }
+
+    #[test]
+    fn vcard_keeps_a_second_email_and_phone_and_drops_a_third() {
+        let raw = "BEGIN:VCARD\r\nUID:u\r\nFN:Ada\r\nEMAIL:a@example.com\r\nEMAIL:b@example.com\r\nEMAIL:c@example.com\r\nTEL:1\r\nTEL:2\r\nTEL:3\r\nEND:VCARD\r\n";
+        let card = parse_vcard(raw).unwrap();
+        assert_eq!(card.email, "a@example.com");
+        assert_eq!(card.email2, "b@example.com");
+        assert_eq!(card.phone, "1");
+        assert_eq!(card.phone2, "2");
+        let again = parse_vcard(&render_vcard(&card)).unwrap();
+        assert_eq!(again.email2, "b@example.com");
+        assert_eq!(again.phone2, "2");
     }
 
     #[test]

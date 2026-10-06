@@ -13,7 +13,9 @@ pub(crate) fn empty_contacts_model(locale: &LocaleManager) -> ContactsModel {
             rows: Vec::new(),
             name: String::new(),
             email: String::new(),
+            email2: String::new(),
             phone: String::new(),
+            phone2: String::new(),
             notes: String::new(),
             has_selection: false,
             account_url: String::new(),
@@ -42,7 +44,9 @@ pub(crate) fn build_contacts_model(
         )),
         name: payload.name.clone().into(),
         email: payload.email.clone().into(),
+        email2: payload.email2.clone().into(),
         phone: payload.phone.clone().into(),
+        phone2: payload.phone2.clone().into(),
         notes: payload.notes.clone().into(),
         has_selection: payload.has_selection,
         account_url: payload.account_url.clone().into(),
@@ -54,7 +58,9 @@ pub(crate) fn build_contacts_model(
         sync_label: locale.tr("contacts-sync").into(),
         name_label: locale.tr("contacts-name").into(),
         email_label: locale.tr("contacts-email").into(),
+        email2_label: locale.tr("contacts-email-2").into(),
         phone_label: locale.tr("contacts-phone").into(),
+        phone2_label: locale.tr("contacts-phone-2").into(),
         notes_label: locale.tr("contacts-notes").into(),
         url_label: locale.tr("contacts-url").into(),
         user_label: locale.tr("contacts-user").into(),
@@ -74,7 +80,9 @@ pub(crate) fn patch_contacts_model(
     sync_eq_rows(&model.rows, rows_of(&fresh.rows));
     model.name = fresh.name;
     model.email = fresh.email;
+    model.email2 = fresh.email2;
     model.phone = fresh.phone;
+    model.phone2 = fresh.phone2;
     model.notes = fresh.notes;
     model.has_selection = fresh.has_selection;
     model.account_url = fresh.account_url;
@@ -86,7 +94,9 @@ pub(crate) fn patch_contacts_model(
     model.sync_label = fresh.sync_label;
     model.name_label = fresh.name_label;
     model.email_label = fresh.email_label;
+    model.email2_label = fresh.email2_label;
     model.phone_label = fresh.phone_label;
+    model.phone2_label = fresh.phone2_label;
     model.notes_label = fresh.notes_label;
     model.url_label = fresh.url_label;
     model.user_label = fresh.user_label;

@@ -111,7 +111,7 @@ Embedded WebView2. Needs the Evergreen runtime. Distinct from the HTML
 ## Contacts
 
 Cards and the CardDAV account live in that widget's config inside
-`state.redb`. A card stores a name, one email, one phone number, and a note. Other vCard
+`state.redb`. A card stores a name, two emails, two phone numbers, and a note. Other vCard
 fields, including photos and groups, are ignored. One collection URL uses
 basic authentication. Saving the account with an empty password keeps the
 previous secret. Sync downloads at most 500 cards and replaces linked cards

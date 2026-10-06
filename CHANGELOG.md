@@ -52,8 +52,9 @@ release yet.
   password is kept with the widget config (DPAPI on Windows) and is not
   shown again. There is no server discovery and no OAuth.
 - **Contacts:** local cards plus one CardDAV collection. A card stores a
-  name, one email, one phone number, and a note. Sync uses basic
-  authentication and replaces linked cards with the server copy. A card
+  name, two emails, two phone numbers, and a note. A third address is
+  dropped. Cards saved earlier still open, with the new fields empty.
+  Sync uses basic authentication and replaces linked cards with the server copy. A card
   that has not been uploaded stays on this computer. Photos, groups,
   address-book discovery, and OAuth are not included. At most 500 cards.
 - **Mail widget:** IMAP/SMTP client with an account wizard (built-in
