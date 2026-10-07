@@ -1051,6 +1051,30 @@ fn bit_excel(left: f64, right: f64, and: bool, xor: bool) -> Option<f64> {
     Some(value as f64)
 }
 
+fn bit_shift(number: f64, shift: f64, right: bool) -> Option<f64> {
+    let number = bit_whole(number)?;
+    if !shift.is_finite() || shift.trunc().abs() > 53.0 {
+        return None;
+    }
+    let mut places = shift.trunc() as i64;
+    if right {
+        places = -places;
+    }
+    let value = if places >= 0 {
+        if places >= 48 && number != 0 {
+            return None;
+        }
+        let shifted = number.checked_shl(places as u32)?;
+        if shifted >= 281_474_976_710_656 {
+            return None;
+        }
+        shifted
+    } else {
+        number >> ((-places) as u32)
+    };
+    Some(value as f64)
+}
+
 fn step_multiple(number: f64, significance: f64, away: bool) -> Option<f64> {
     if !number.is_finite()
         || !significance.is_finite()
@@ -2096,6 +2120,12 @@ impl<'a> CalcParser<'a> {
                 let left = calc_num(self.compare(env)?)?;
                 let right = self.comma_number(env)?;
                 return bit_excel(left, right, and, xor).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("BITLSHIFT") || word.eq_ignore_ascii_case("BITRSHIFT") {
+                let right = word.eq_ignore_ascii_case("BITRSHIFT");
+                let number = calc_num(self.compare(env)?)?;
+                let shift = self.comma_number(env)?;
+                return bit_shift(number, shift, right).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("LARGE") || word.eq_ignore_ascii_case("SMALL") {
                 let small = word.eq_ignore_ascii_case("SMALL");
@@ -4541,6 +4571,55 @@ mod tests {
         );
         assert!(sheet.contains(r#"<f>FLOOR(4,0)</f><v>8</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>CEILING(2.5)</f><v>9</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_bit_shift() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>BITLSHIFT(5,2)</f><v>0</v></c><c r="C1"><f>BITRSHIFT(20,2)</f><v>0</v></c><c r="D1"><f>BITLSHIFT(5,-1)</f><v>0</v></c><c r="E1"><f>BITRSHIFT(5,-1)</f><v>0</v></c><c r="F1"><f>BITLSHIFT(1,48)</f><v>7</v></c><c r="G1"><f>BITLSHIFT(1,54)</f><v>8</v></c><c r="H1"><f>BITLSHIFT(-1,1)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>BITLSHIFT(5,2)</f><v>20</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BITRSHIFT(20,2)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BITLSHIFT(5,-1)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BITRSHIFT(5,-1)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BITLSHIFT(1,48)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BITLSHIFT(1,54)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BITLSHIFT(-1,1)</f><v>9</v>"#),
+            "{sheet}"
+        );
     }
 
     #[tokio::test]
