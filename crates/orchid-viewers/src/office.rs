@@ -779,6 +779,23 @@ fn covariance_excel(pairs: &[(f64, f64)], sample: bool) -> Option<f64> {
     }
 }
 
+fn rank_excel(number: f64, values: &[f64], ascending: bool) -> Option<f64> {
+    if !number.is_finite() || !values.iter().any(|value| (value - number).abs() < 1e-9) {
+        return None;
+    }
+    let ahead = values
+        .iter()
+        .filter(|value| {
+            if ascending {
+                **value + 1e-9 < number
+            } else {
+                **value > number + 1e-9
+            }
+        })
+        .count();
+    Some((ahead + 1) as f64)
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2340,6 +2357,9 @@ impl<'a> CalcParser<'a> {
                 let pairs = self.paired_ranges(env)?;
                 return covariance_excel(&pairs, sample).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("RANK") || word.eq_ignore_ascii_case("RANK.EQ") {
+                return self.rank_call(env).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("MINIFS") || word.eq_ignore_ascii_case("MAXIFS") {
                 let max = word.eq_ignore_ascii_case("MAXIFS");
                 let matched = self.ifs_values(env)?;
@@ -3015,6 +3035,38 @@ impl<'a> CalcParser<'a> {
         self.skip();
         let end = self.cell_token()?;
         cells_in_range(&start, &end)
+    }
+
+    fn rank_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let number = calc_num(self.compare(env)?)?;
+        self.require_comma()?;
+        let cells = self.cell_range()?;
+        self.skip();
+        let ascending = match self.bytes.get(self.index) {
+            Some(&b')') => {
+                self.index += 1;
+                false
+            }
+            Some(&b',') => {
+                self.index += 1;
+                let order = calc_num(self.compare(env)?)?;
+                if !order.is_finite() {
+                    return None;
+                }
+                self.close_paren()?;
+                order != 0.0
+            }
+            _ => return None,
+        };
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        rank_excel(number, &values, ascending)
     }
 
     /// Y range then X range, same length. A pair is kept when both cells are finite numbers.
@@ -5735,6 +5787,52 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>COVARIANCE.P(1,2)</f><v>10</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_rank() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>20</v></c><c r="C1"><v>20</v></c><c r="D1"><v>30</v></c><c r="E1" t="inlineStr"><is><t>xy</t></is></c><c r="F1"><f>RANK(D1,A1:E1)</f><v>0</v></c><c r="G1"><f>RANK.EQ(B1,A1:E1)</f><v>0</v></c><c r="H1"><f>RANK(A1,A1:E1)</f><v>0</v></c><c r="I1"><f>RANK(B1,A1:E1,1)</f><v>0</v></c><c r="J1"><f>RANK(15,A1:E1)</f><v>7</v></c><c r="K1"><f>RANK(B1,A1)</f><v>8</v></c><c r="L1"><f>RANK(B1,A1:E1,1,2)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "10").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>RANK(D1,A1:E1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RANK.EQ(B1,A1:E1)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RANK(A1,A1:E1)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RANK(B1,A1:E1,1)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RANK(15,A1:E1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>RANK(B1,A1)</f><v>8</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>RANK(B1,A1:E1,1,2)</f><v>9</v>"#),
             "{sheet}"
         );
     }
