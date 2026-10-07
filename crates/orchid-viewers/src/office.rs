@@ -1536,6 +1536,51 @@ fn expon_dist_excel(x_value: f64, lambda: f64, cumulative: bool) -> Option<f64> 
     }
 }
 
+fn negbinom_dist_excel(
+    failures: f64,
+    successes: f64,
+    probability: f64,
+    cumulative: bool,
+) -> Option<f64> {
+    if !failures.is_finite()
+        || !successes.is_finite()
+        || !probability.is_finite()
+        || failures < 0.0
+        || successes < 1.0
+        || failures >= 171.0
+        || successes >= 171.0
+        || !(probability > 0.0 && probability < 1.0)
+    {
+        return None;
+    }
+    let failures = failures.trunc() as u32;
+    let successes = successes.trunc() as u32;
+    let mut term = probability.powi(successes as i32);
+    if term == 0.0 || !term.is_finite() {
+        return None;
+    }
+    let mut sum = term;
+    let miss = 1.0 - probability;
+    let mut count = 0u32;
+    while count < failures {
+        term *= f64::from(count + successes) / f64::from(count + 1) * miss;
+        if !term.is_finite() {
+            return None;
+        }
+        sum += term;
+        if !sum.is_finite() {
+            return None;
+        }
+        count += 1;
+    }
+    let value = if cumulative { sum } else { term };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -2763,6 +2808,30 @@ impl<'a> CalcParser<'a> {
                     return None;
                 }
                 return expon_dist_excel(x_value, lambda, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NEGBINOM.DIST")
+                || word.eq_ignore_ascii_case("NEGBINOMDIST")
+            {
+                let legacy = word.eq_ignore_ascii_case("NEGBINOMDIST");
+                let failures = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let successes = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let probability = calc_num(self.compare(env)?)?;
+                let cumulative = if legacy {
+                    self.close_paren()?;
+                    false
+                } else {
+                    self.require_comma()?;
+                    let flag = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    if !flag.is_finite() {
+                        return None;
+                    }
+                    flag != 0.0
+                };
+                return negbinom_dist_excel(failures, successes, probability, cumulative)
+                    .map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -7559,6 +7628,75 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>EXPON.DIST(&quot;ab&quot;,2,0)</f><v>12</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_negbinom_dist() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>3</v></c><c r="C1"><f>NEGBINOM.DIST(A1,B1,0.5,0)</f><v>0</v></c><c r="D1"><f>NEGBINOM.DIST(A1,B1,0.5,1)</f><v>0</v></c><c r="E1"><f>NEGBINOMDIST(2,3,0.5)</f><v>0</v></c><c r="F1"><f>NEGBINOM.DIST(2.9,3.2,0.5,0)</f><v>0</v></c><c r="G1"><f>NEGBINOM.DIST(0,1,0.5,0)</f><v>0</v></c><c r="H1"><f>NEGBINOM.DIST(-1,3,0.5,0)</f><v>7</v></c><c r="I1"><f>NEGBINOM.DIST(2,0,0.5,0)</f><v>8</v></c><c r="J1"><f>NEGBINOM.DIST(2,3,0,0)</f><v>9</v></c><c r="K1"><f>NEGBINOM.DIST(2,3,1,1)</f><v>10</v></c><c r="L1"><f>NEGBINOM.DIST(171,1,0.5,0)</f><v>11</v></c><c r="M1"><f>NEGBINOM.DIST(2,3,0.5)</f><v>12</v></c><c r="N1"><f>NEGBINOM.DIST(&quot;ab&quot;,3,0.5,0)</f><v>13</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>NEGBINOM.DIST(A1,B1,0.5,0)</f><v>0.1875</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NEGBINOM.DIST(A1,B1,0.5,1)</f><v>0.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NEGBINOMDIST(2,3,0.5)</f><v>0.1875</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NEGBINOM.DIST(2.9,3.2,0.5,0)</f><v>0.1875</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NEGBINOM.DIST(0,1,0.5,0)</f><v>0.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NEGBINOM.DIST(-1,3,0.5,0)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NEGBINOM.DIST(2,0,0.5,0)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NEGBINOM.DIST(2,3,0,0)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NEGBINOM.DIST(2,3,1,1)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NEGBINOM.DIST(171,1,0.5,0)</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NEGBINOM.DIST(2,3,0.5)</f><v>12</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NEGBINOM.DIST(&quot;ab&quot;,3,0.5,0)</f><v>13</v>"#),
             "{sheet}"
         );
     }

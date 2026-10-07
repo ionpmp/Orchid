@@ -15,7 +15,7 @@ and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, `LOWER`, `TRIM`,
 `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`, `EXACT`, `AND`, `OR`, `NOT`,
 `SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`, `QUOTIENT`, `PI`, `EVEN`,
 `ODD`, `REPLACE`, `VALUE`, `T`, `N`, `ROUNDUP`, `ROUNDDOWN`,
-`CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`, `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`, `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`, `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`, `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`, `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`, `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`, `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, and `EXPONDIST` on that same sheet.
+`CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`, `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`, `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`, `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`, `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`, `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`, `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`, `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, `EXPONDIST`, `NEGBINOM.DIST`, and `NEGBINOMDIST` on that same sheet.
 Text results are stored as inline strings. `LEN`, the slice functions,
 and `FIND` / `SEARCH` count Unicode scalar values. `TRIM` collapses only
 the space character U+0020. `SEARCH` ignores ASCII letter case and does
@@ -291,7 +291,16 @@ number. A third number of 0 writes lambda times e to the power of minus
 lambda times x. Any other finite third number writes 1 minus that power of
 e. x must be at least 0. Lambda must be greater than 0. A negative x, a
 lambda of 0 or less, a missing third number, an exponent that overflows, or
-text leaves the stored value. `IF` stays
+text leaves the stored value. `NEGBINOM.DIST` takes a failure count, a
+success count, a probability, and a fourth number. A fourth number of 0
+writes the probability of that many failures before the success count. Any
+other finite fourth number writes the sum from 0 failures through that
+count. `NEGBINOMDIST` takes the same first three numbers and writes that
+point probability. Both counts are truncated toward zero. The failure count
+must be at least 0 and below 171. The success count must be at least 1 and
+below 171. The probability must be greater than 0 and less than 1. A count
+outside that span, a probability of 0 or 1, a missing fourth number on
+`NEGBINOM.DIST`, or text leaves the stored value. `IF` stays
 numeric. Shared-string cells and formulas on another sheet are left as
 stored. Other formulas keep their stored value. Drawings are copied through. A blank cell that the
 table only filled in so the columns line up is not inserted. PowerPoint

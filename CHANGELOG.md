@@ -102,7 +102,7 @@ release yet.
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
   `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`,
   `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`,
-  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, and `EXPONDIST` on that sheet.
+  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, `EXPONDIST`, `NEGBINOM.DIST`, and `NEGBINOMDIST` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -389,6 +389,16 @@ release yet.
   at least 0. Lambda must be greater than 0. A negative x, a lambda of 0 or
   less, a missing third number, an exponent that overflows, or text leaves
   the stored value.
+  `NEGBINOM.DIST` takes a failure count, a success count, a probability, and
+  a fourth number. A fourth number of 0 writes the probability of that many
+  failures before the success count. Any other finite fourth number writes
+  the sum from 0 failures through that count. `NEGBINOMDIST` takes the same
+  first three numbers and writes that point probability. Both counts are
+  truncated toward zero. The failure count must be at least 0 and below 171.
+  The success count must be at least 1 and below 171. The probability must be
+  greater than 0 and less than 1. A count outside that span, a probability of
+  0 or 1, a missing fourth number on `NEGBINOM.DIST`, or text leaves the
+  stored value.
   `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
