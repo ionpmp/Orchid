@@ -1426,6 +1426,56 @@ fn value_excel(text: &str) -> Option<f64> {
     }
 }
 
+#[derive(Clone, Copy)]
+enum CriterionOp {
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+}
+
+fn criterion_op(text: &str) -> Option<(CriterionOp, &str)> {
+    let text = text.trim_matches(' ');
+    for (prefix, op) in [
+        (">=", CriterionOp::Ge),
+        ("<=", CriterionOp::Le),
+        ("<>", CriterionOp::Ne),
+        (">", CriterionOp::Gt),
+        ("<", CriterionOp::Lt),
+        ("=", CriterionOp::Eq),
+    ] {
+        if let Some(rest) = text.strip_prefix(prefix) {
+            return Some((op, rest));
+        }
+    }
+    None
+}
+
+fn number_matches(cell: f64, op: CriterionOp, target: f64) -> bool {
+    let same = (cell - target).abs() < 1e-9;
+    match op {
+        CriterionOp::Eq => same,
+        CriterionOp::Ne => !same,
+        CriterionOp::Gt => !same && cell > target,
+        CriterionOp::Lt => !same && cell < target,
+        CriterionOp::Ge => same || cell > target,
+        CriterionOp::Le => same || cell < target,
+    }
+}
+
+fn compile_criterion(criteria: &CalcValue) -> Option<(CriterionOp, f64)> {
+    match criteria {
+        CalcValue::Num(target) if target.is_finite() => Some((CriterionOp::Eq, *target)),
+        CalcValue::Num(_) => None,
+        CalcValue::Text(text) => {
+            let (op, rest) = criterion_op(text)?;
+            Some((op, value_excel(rest)?))
+        }
+    }
+}
+
 fn open_tag_inline(open: &str) -> Option<String> {
     if open.contains("t=") {
         return None;
@@ -1956,6 +2006,9 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 let multiple = self.comma_number(env)?;
                 return mround_excel(number, multiple).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SUMIF") {
+                return self.sum_if(env).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("CEILING.MATH") {
                 let number = calc_num(self.compare(env)?)?;
@@ -2532,6 +2585,41 @@ impl<'a> CalcParser<'a> {
             }
         }
         Some(parts)
+    }
+
+    fn sum_if(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        self.skip();
+        let start = self.cell_token()?;
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b':') {
+            return None;
+        }
+        self.index += 1;
+        self.skip();
+        let end = self.cell_token()?;
+        self.require_comma()?;
+        let criteria = self.compare(env)?;
+        let (op, target) = compile_criterion(&criteria)?;
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b')') {
+            return None;
+        }
+        self.index += 1;
+        let cells = cells_in_range(&start, &end)?;
+        let mut total = 0.0;
+        for address in cells {
+            let Some(CalcValue::Num(number)) = self.cell_value(&address, env) else {
+                continue;
+            };
+            if number.is_finite() && number_matches(number, op, target) {
+                total += number;
+            }
+        }
+        if total.is_finite() {
+            Some(total)
+        } else {
+            None
+        }
     }
 
     fn number(&mut self) -> Option<f64> {
@@ -4681,6 +4769,51 @@ mod tests {
         assert!(sheet.contains(r#"<f>MROUND(-10,3)</f><v>7</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>MROUND(6,0)</f><v>8</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>MROUND(0,0)</f><v>0</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_sumif() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>8</v></c><c r="C1"><v>3</v></c><c r="D1"><f>SUMIF(A1:C1,"&gt;2")</f><v>0</v></c><c r="E1"><f>SUMIF(A1:C1,8)</f><v>0</v></c><c r="F1"><f>SUMIF(A1:C1,"&lt;&gt;8")</f><v>0</v></c><c r="G1"><f>SUMIF(A1:C1,"&lt;0")</f><v>0</v></c><c r="H1"><f>SUMIF(A1:C1,"ab")</f><v>7</v></c><c r="I1"><f>SUMIF(A1:C1,"&gt;2",A1)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SUMIF(A1:C1,"&gt;2")</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUMIF(A1:C1,8)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUMIF(A1:C1,"&lt;&gt;8")</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUMIF(A1:C1,"&lt;0")</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUMIF(A1:C1,"ab")</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUMIF(A1:C1,"&gt;2",A1)</f><v>8</v>"#),
+            "{sheet}"
+        );
     }
 
     #[tokio::test]
