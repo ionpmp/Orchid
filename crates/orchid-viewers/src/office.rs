@@ -978,6 +978,45 @@ fn standardize_excel(x_value: f64, mean: f64, scale: f64) -> Option<f64> {
     }
 }
 
+fn skew_excel(args: &[f64], population: bool) -> Option<f64> {
+    if args.len() < 3 || args.iter().any(|number| !number.is_finite()) {
+        return None;
+    }
+    let count = args.len() as f64;
+    let mean = args.iter().sum::<f64>() / count;
+    let mut square = 0.0;
+    for number in args {
+        let delta = number - mean;
+        square += delta * delta;
+    }
+    if !square.is_finite() {
+        return None;
+    }
+    let denom = if population { count } else { count - 1.0 };
+    let scale = (square / denom).sqrt();
+    if scale == 0.0 || !scale.is_finite() {
+        return None;
+    }
+    let mut cubes = 0.0;
+    for number in args {
+        let zed = (number - mean) / scale;
+        cubes += zed * zed * zed;
+    }
+    if !cubes.is_finite() {
+        return None;
+    }
+    let value = if population {
+        cubes / count
+    } else {
+        cubes * count / ((count - 1.0) * (count - 2.0))
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2882,6 +2921,8 @@ impl<'a> CalcParser<'a> {
                 "DEVSQ" => devsq_excel(&args).map(CalcValue::Num),
                 "GEOMEAN" => geomean_excel(&args).map(CalcValue::Num),
                 "HARMEAN" => harmean_excel(&args).map(CalcValue::Num),
+                "SKEW" => skew_excel(&args, false).map(CalcValue::Num),
+                "SKEW.P" => skew_excel(&args, true).map(CalcValue::Num),
                 _ => None,
             };
         }
@@ -6515,6 +6556,42 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>STANDARDIZE(&quot;ab&quot;,1,2)</f><v>11</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_skew() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>1</v></c><c r="C1"><v>4</v></c><c r="D1" t="inlineStr"><is><t>xy</t></is></c><c r="E1"><v>5</v></c><c r="F1"><v>5</v></c><c r="G1"><v>5</v></c><c r="H1"><f>SKEW(A1:D1)</f><v>0</v></c><c r="I1"><f>SKEW.P(A1:C1)</f><v>0</v></c><c r="J1"><f>SKEW(A1:B1)</f><v>5</v></c><c r="K1"><f>SKEW(E1:G1)</f><v>6</v></c><c r="L1"><f>SKEW()</f><v>7</v></c><c r="M1"><f>SKEW(&quot;ab&quot;)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SKEW(A1:D1)</f><v>1.73205081</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SKEW.P(A1:C1)</f><v>0.70710678</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>SKEW(A1:B1)</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SKEW(E1:G1)</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SKEW()</f><v>7</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>SKEW(&quot;ab&quot;)</f><v>8</v>"#),
             "{sheet}"
         );
     }
