@@ -1512,6 +1512,30 @@ fn binom_dist_excel(
     Some(sum)
 }
 
+fn expon_dist_excel(x_value: f64, lambda: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite() || !lambda.is_finite() || x_value < 0.0 || lambda <= 0.0 {
+        return None;
+    }
+    let exponent = -lambda * x_value;
+    if !exponent.is_finite() {
+        return None;
+    }
+    let decay = exponent.exp();
+    if !decay.is_finite() {
+        return None;
+    }
+    let value = if cumulative {
+        1.0 - decay
+    } else {
+        lambda * decay
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -2727,6 +2751,18 @@ impl<'a> CalcParser<'a> {
                 }
                 return binom_dist_excel(successes, trials, probability, flag != 0.0)
                     .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("EXPON.DIST") || word.eq_ignore_ascii_case("EXPONDIST") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let lambda = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let flag = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !flag.is_finite() {
+                    return None;
+                }
+                return expon_dist_excel(x_value, lambda, flag != 0.0).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -7466,6 +7502,63 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>BINOM.DIST(2,4,0.5)</f><v>11</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_expon_dist() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>2</v></c><c r="C1"><f>EXPON.DIST(A1,B1,0)</f><v>0</v></c><c r="D1"><f>EXPON.DIST(A1,B1,1)</f><v>0</v></c><c r="E1"><f>EXPONDIST(0,2,0)</f><v>0</v></c><c r="F1"><f>EXPON.DIST(0,2,1)</f><v>0</v></c><c r="G1"><f>EXPON.DIST(-1,2,0)</f><v>7</v></c><c r="H1"><f>EXPON.DIST(1,0,0)</f><v>8</v></c><c r="I1"><f>EXPON.DIST(1,-2,1)</f><v>9</v></c><c r="J1"><f>EXPON.DIST(1,2)</f><v>11</v></c><c r="K1"><f>EXPON.DIST(&quot;ab&quot;,2,0)</f><v>12</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "0.5").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>EXPON.DIST(A1,B1,0)</f><v>0.73575888</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>EXPON.DIST(A1,B1,1)</f><v>0.63212056</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>EXPONDIST(0,2,0)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>EXPON.DIST(0,2,1)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>EXPON.DIST(-1,2,0)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>EXPON.DIST(1,0,0)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>EXPON.DIST(1,-2,1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>EXPON.DIST(1,2)</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>EXPON.DIST(&quot;ab&quot;,2,0)</f><v>12</v>"#),
             "{sheet}"
         );
     }
