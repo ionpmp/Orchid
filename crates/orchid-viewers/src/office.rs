@@ -1017,6 +1017,43 @@ fn skew_excel(args: &[f64], population: bool) -> Option<f64> {
     }
 }
 
+fn kurt_excel(args: &[f64]) -> Option<f64> {
+    if args.len() < 4 || args.iter().any(|number| !number.is_finite()) {
+        return None;
+    }
+    let count = args.len() as f64;
+    let mean = args.iter().sum::<f64>() / count;
+    let mut square = 0.0;
+    for number in args {
+        let delta = number - mean;
+        square += delta * delta;
+    }
+    if !square.is_finite() {
+        return None;
+    }
+    let scale = (square / (count - 1.0)).sqrt();
+    if scale == 0.0 || !scale.is_finite() {
+        return None;
+    }
+    let mut fourth = 0.0;
+    for number in args {
+        let zed = (number - mean) / scale;
+        let square_zed = zed * zed;
+        fourth += square_zed * square_zed;
+    }
+    if !fourth.is_finite() {
+        return None;
+    }
+    let lead = count * (count + 1.0) / ((count - 1.0) * (count - 2.0) * (count - 3.0));
+    let adjust = 3.0 * (count - 1.0) * (count - 1.0) / ((count - 2.0) * (count - 3.0));
+    let value = lead * fourth - adjust;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2923,6 +2960,7 @@ impl<'a> CalcParser<'a> {
                 "HARMEAN" => harmean_excel(&args).map(CalcValue::Num),
                 "SKEW" => skew_excel(&args, false).map(CalcValue::Num),
                 "SKEW.P" => skew_excel(&args, true).map(CalcValue::Num),
+                "KURT" => kurt_excel(&args).map(CalcValue::Num),
                 _ => None,
             };
         }
@@ -6592,6 +6630,35 @@ mod tests {
         assert!(sheet.contains(r#"<f>SKEW()</f><v>7</v>"#), "{sheet}");
         assert!(
             sheet.contains(r#"<f>SKEW(&quot;ab&quot;)</f><v>8</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_kurt() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>1</v></c><c r="C1"><v>1</v></c><c r="D1"><v>3</v></c><c r="E1" t="inlineStr"><is><t>xy</t></is></c><c r="F1"><v>2</v></c><c r="G1"><v>2</v></c><c r="H1"><v>2</v></c><c r="I1"><v>2</v></c><c r="J1"><f>KURT(A1:E1)</f><v>0</v></c><c r="K1"><f>KURT(A1:C1)</f><v>5</v></c><c r="L1"><f>KURT(F1:I1)</f><v>6</v></c><c r="M1"><f>KURT()</f><v>7</v></c><c r="N1"><f>KURT(&quot;ab&quot;)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>KURT(A1:E1)</f><v>4</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>KURT(A1:C1)</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>KURT(F1:I1)</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>KURT()</f><v>7</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>KURT(&quot;ab&quot;)</f><v>8</v>"#),
             "{sheet}"
         );
     }
