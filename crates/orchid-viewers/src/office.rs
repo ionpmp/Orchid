@@ -1150,6 +1150,43 @@ fn delta_excel(left: f64, right: f64) -> Option<f64> {
     Some(if left == right { 1.0 } else { 0.0 })
 }
 
+fn multinomial_excel(args: &[f64]) -> Option<f64> {
+    if args.is_empty()
+        || args
+            .iter()
+            .any(|number| !number.is_finite() || *number < 0.0 || *number >= 1_000_000.0)
+    {
+        return None;
+    }
+    let mut whole = Vec::with_capacity(args.len());
+    let mut total = 0u64;
+    for number in args {
+        let value = number.trunc() as u64;
+        total = total.checked_add(value)?;
+        if total >= 1_000_000 {
+            return None;
+        }
+        whole.push(value);
+    }
+    let mut acc = 1.0;
+    let mut cursor = 0u64;
+    for count in whole {
+        for index in 1..=count {
+            cursor += 1;
+            acc *= cursor as f64;
+            acc /= index as f64;
+            if !acc.is_finite() {
+                return None;
+            }
+        }
+    }
+    if acc < 1e15 {
+        Some(acc.round())
+    } else {
+        Some(acc)
+    }
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -3135,6 +3172,7 @@ impl<'a> CalcParser<'a> {
                 "SKEW" => skew_excel(&args, false).map(CalcValue::Num),
                 "SKEW.P" => skew_excel(&args, true).map(CalcValue::Num),
                 "KURT" => kurt_excel(&args).map(CalcValue::Num),
+                "MULTINOMIAL" => multinomial_excel(&args).map(CalcValue::Num),
                 _ => None,
             };
         }
@@ -7065,6 +7103,48 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>DELTA(A1,&quot;ab&quot;)</f><v>8</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_multinomial() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>3</v></c><c r="C1"><v>4</v></c><c r="D1" t="inlineStr"><is><t>xy</t></is></c><c r="E1"><f>MULTINOMIAL(A1:D1)</f><v>0</v></c><c r="F1"><f>MULTINOMIAL(2.9,3.2)</f><v>0</v></c><c r="G1"><f>MULTINOMIAL(0)</f><v>0</v></c><c r="H1"><f>MULTINOMIAL()</f><v>7</v></c><c r="I1"><f>MULTINOMIAL(-1,2)</f><v>8</v></c><c r="J1"><f>MULTINOMIAL(&quot;ab&quot;)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>MULTINOMIAL(A1:D1)</f><v>1260</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MULTINOMIAL(2.9,3.2)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MULTINOMIAL(0)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>MULTINOMIAL()</f><v>7</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>MULTINOMIAL(-1,2)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MULTINOMIAL(&quot;ab&quot;)</f><v>9</v>"#),
             "{sheet}"
         );
     }
