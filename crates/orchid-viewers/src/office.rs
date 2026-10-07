@@ -1581,6 +1581,69 @@ fn negbinom_dist_excel(
     }
 }
 
+fn hypgeom_dist_excel(
+    sample_s: f64,
+    number_sample: f64,
+    population_s: f64,
+    number_pop: f64,
+    cumulative: bool,
+) -> Option<f64> {
+    if !sample_s.is_finite()
+        || !number_sample.is_finite()
+        || !population_s.is_finite()
+        || !number_pop.is_finite()
+        || sample_s < 0.0
+        || number_sample < 0.0
+        || population_s < 0.0
+        || number_pop < 0.0
+        || sample_s >= 171.0
+        || number_sample >= 171.0
+        || population_s >= 171.0
+        || number_pop >= 171.0
+    {
+        return None;
+    }
+    let drawn = sample_s.trunc() as u32;
+    let sample = number_sample.trunc() as u32;
+    let marked = population_s.trunc() as u32;
+    let population = number_pop.trunc() as u32;
+    if sample > population || marked > population || drawn > sample || drawn > marked {
+        return None;
+    }
+    let plain = population - marked;
+    if sample - drawn > plain {
+        return None;
+    }
+    let denom = combin_excel(f64::from(population), f64::from(sample))?;
+    if denom == 0.0 {
+        return None;
+    }
+    let low = if cumulative {
+        sample.saturating_sub(plain)
+    } else {
+        drawn
+    };
+    let mut sum = 0.0;
+    let mut count = low;
+    while count <= drawn {
+        let ways = combin_excel(f64::from(marked), f64::from(count))?
+            * combin_excel(f64::from(plain), f64::from(sample - count))?;
+        if !ways.is_finite() {
+            return None;
+        }
+        sum += ways / denom;
+        if !sum.is_finite() {
+            return None;
+        }
+        count += 1;
+    }
+    if sum.is_finite() {
+        Some(sum)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -2832,6 +2895,37 @@ impl<'a> CalcParser<'a> {
                 };
                 return negbinom_dist_excel(failures, successes, probability, cumulative)
                     .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("HYPGEOM.DIST") || word.eq_ignore_ascii_case("HYPGEOMDIST")
+            {
+                let legacy = word.eq_ignore_ascii_case("HYPGEOMDIST");
+                let sample_s = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let number_sample = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let population_s = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let number_pop = calc_num(self.compare(env)?)?;
+                let cumulative = if legacy {
+                    self.close_paren()?;
+                    false
+                } else {
+                    self.require_comma()?;
+                    let flag = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    if !flag.is_finite() {
+                        return None;
+                    }
+                    flag != 0.0
+                };
+                return hypgeom_dist_excel(
+                    sample_s,
+                    number_sample,
+                    population_s,
+                    number_pop,
+                    cumulative,
+                )
+                .map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -7697,6 +7791,75 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>NEGBINOM.DIST(&quot;ab&quot;,3,0.5,0)</f><v>13</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_hypgeom_dist() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>5</v></c><c r="C1"><f>HYPGEOM.DIST(A1,B1,4,10,0)</f><v>0</v></c><c r="D1"><f>HYPGEOM.DIST(A1,B1,4,10,1)</f><v>0</v></c><c r="E1"><f>HYPGEOMDIST(2,5,4,10)</f><v>0</v></c><c r="F1"><f>HYPGEOM.DIST(2.9,5.2,4.9,10.8,0)</f><v>0</v></c><c r="G1"><f>HYPGEOM.DIST(0,0,0,0,0)</f><v>0</v></c><c r="H1"><f>HYPGEOM.DIST(-1,5,4,10,0)</f><v>7</v></c><c r="I1"><f>HYPGEOM.DIST(6,5,4,10,0)</f><v>8</v></c><c r="J1"><f>HYPGEOM.DIST(1,11,4,10,0)</f><v>9</v></c><c r="K1"><f>HYPGEOM.DIST(1,5,8,10,0)</f><v>10</v></c><c r="L1"><f>HYPGEOM.DIST(0,171,0,171,0)</f><v>11</v></c><c r="M1"><f>HYPGEOM.DIST(2,5,4,10)</f><v>12</v></c><c r="N1"><f>HYPGEOM.DIST(&quot;ab&quot;,5,4,10,0)</f><v>13</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>HYPGEOM.DIST(A1,B1,4,10,0)</f><v>0.47619048</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HYPGEOM.DIST(A1,B1,4,10,1)</f><v>0.73809524</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HYPGEOMDIST(2,5,4,10)</f><v>0.47619048</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HYPGEOM.DIST(2.9,5.2,4.9,10.8,0)</f><v>0.47619048</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HYPGEOM.DIST(0,0,0,0,0)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HYPGEOM.DIST(-1,5,4,10,0)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HYPGEOM.DIST(6,5,4,10,0)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HYPGEOM.DIST(1,11,4,10,0)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HYPGEOM.DIST(1,5,8,10,0)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HYPGEOM.DIST(0,171,0,171,0)</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HYPGEOM.DIST(2,5,4,10)</f><v>12</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HYPGEOM.DIST(&quot;ab&quot;,5,4,10,0)</f><v>13</v>"#),
             "{sheet}"
         );
     }
