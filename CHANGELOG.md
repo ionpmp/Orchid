@@ -102,7 +102,7 @@ release yet.
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
   `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`,
   `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`,
-  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, and `MAXIFS` on that sheet.
+  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, and `SUMIFS` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -212,6 +212,8 @@ release yet.
   not a range leaves the stored value. `MINIFS` and `MAXIFS` take a value
   range, one criteria range of the same size, and one criterion of the same
   kind. Only stored numbers are considered. No match writes 0. A different
+  size, other text, or a second criterion leaves the stored value.
+  `SUMIFS` adds those same matching numbers. No match writes 0. A different
   size, other text, or a second criterion leaves the stored value.
   `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
