@@ -1684,6 +1684,111 @@ fn weibull_dist_excel(x_value: f64, alpha: f64, beta: f64, cumulative: bool) -> 
     }
 }
 
+fn ln_gamma_lanczos(number: f64) -> Option<f64> {
+    const COEFFS: [f64; 9] = [
+        0.99999999999980993,
+        676.5203681218851,
+        -1259.1392167224028,
+        771.32342877765313,
+        -176.61502916214059,
+        12.507343278686905,
+        -0.13857109526572012,
+        9.9843695780195716e-6,
+        1.5056327351493116e-7,
+    ];
+    let shifted = number - 1.0;
+    let mut acc = COEFFS[0];
+    let mut index = 1.0;
+    for coeff in COEFFS.iter().skip(1) {
+        acc += coeff / (shifted + index);
+        index += 1.0;
+    }
+    if !acc.is_finite() || acc <= 0.0 {
+        return None;
+    }
+    let base = shifted + 7.5;
+    if !base.is_finite() || base <= 0.0 {
+        return None;
+    }
+    let value =
+        0.5 * (2.0 * std::f64::consts::PI).ln() + (shifted + 0.5) * base.ln() - base + acc.ln();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn factorial_below(number: f64) -> Option<f64> {
+    if !(number > 0.0 && number < 171.0 && number.fract() == 0.0) {
+        return None;
+    }
+    let count = number as u32;
+    let mut acc = 1.0;
+    let mut step = 2u32;
+    while step < count {
+        acc *= f64::from(step);
+        if !acc.is_finite() {
+            return None;
+        }
+        step += 1;
+    }
+    Some(acc)
+}
+
+fn ln_gamma_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() || number <= 0.0 {
+        return None;
+    }
+    if let Some(fact) = factorial_below(number) {
+        return if fact > 0.0 { Some(fact.ln()) } else { None };
+    }
+    let value = if number < 0.5 {
+        let sine = (number * std::f64::consts::PI).sin();
+        if sine <= 0.0 || !sine.is_finite() {
+            return None;
+        }
+        std::f64::consts::PI.ln() - sine.ln() - ln_gamma_lanczos(1.0 - number)?
+    } else {
+        ln_gamma_lanczos(number)?
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn gamma_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    if number.fract() == 0.0 {
+        if number <= 0.0 || number > 170.0 {
+            return None;
+        }
+        return factorial_below(number);
+    }
+    if number > 0.0 {
+        let value = ln_gamma_excel(number)?.exp();
+        return if value.is_finite() { Some(value) } else { None };
+    }
+    let sine = (number * std::f64::consts::PI).sin();
+    if sine == 0.0 || !sine.is_finite() {
+        return None;
+    }
+    let denom = sine * gamma_excel(1.0 - number)?;
+    if denom == 0.0 || !denom.is_finite() {
+        return None;
+    }
+    let value = std::f64::consts::PI / denom;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -2980,6 +3085,16 @@ impl<'a> CalcParser<'a> {
                     return None;
                 }
                 return weibull_dist_excel(x_value, alpha, beta, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("GAMMALN") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return ln_gamma_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("GAMMA") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return gamma_excel(number).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -7991,6 +8106,55 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>WEIBULL.DIST(&quot;ab&quot;,2,1,0)</f><v>13</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_gamma() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>GAMMA(A1)</f><v>0</v></c><c r="C1"><f>GAMMALN(A1)</f><v>0</v></c><c r="D1"><f>GAMMA(0.5)</f><v>0</v></c><c r="E1"><f>GAMMA(-0.5)</f><v>0</v></c><c r="F1"><f>GAMMALN(0.5)</f><v>0</v></c><c r="G1"><f>GAMMA(1)</f><v>0</v></c><c r="H1"><f>GAMMALN(1)</f><v>0</v></c><c r="I1"><f>GAMMA(0)</f><v>7</v></c><c r="J1"><f>GAMMA(-2)</f><v>8</v></c><c r="K1"><f>GAMMA(171)</f><v>9</v></c><c r="L1"><f>GAMMALN(0)</f><v>10</v></c><c r="M1"><f>GAMMALN(-1)</f><v>11</v></c><c r="N1"><f>GAMMA(&quot;ab&quot;)</f><v>12</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "5").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>GAMMA(A1)</f><v>24</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>GAMMALN(A1)</f><v>3.17805383</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA(0.5)</f><v>1.77245385</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA(-0.5)</f><v>-3.5449077</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMALN(0.5)</f><v>0.57236494</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>GAMMA(1)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GAMMALN(1)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GAMMA(0)</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GAMMA(-2)</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GAMMA(171)</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GAMMALN(0)</f><v>10</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GAMMALN(-1)</f><v>11</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>GAMMA(&quot;ab&quot;)</f><v>12</v>"#),
             "{sheet}"
         );
     }
