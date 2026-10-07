@@ -102,7 +102,7 @@ release yet.
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
   `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`,
   `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`,
-  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, and `SUMSQ` on that sheet.
+  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, and `STDEV.P` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -221,6 +221,11 @@ release yet.
   `SUMSQ` adds the squares of the numbers `SUM` would read. Text inside a
   range is skipped. An empty call writes 0. Other text, or a result that is
   not finite, leaves the stored value.
+  `STDEV` and `STDEV.S` write the sample standard deviation, dividing by
+  one less than the count. Fewer than two numbers leaves the stored value.
+  `STDEVP` and `STDEV.P` divide by the count. One number writes 0. An empty
+  call leaves the stored value. Text inside a range is skipped. Other text,
+  or a result that is not finite, leaves the stored value.
   `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.

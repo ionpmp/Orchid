@@ -15,7 +15,7 @@ and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, `LOWER`, `TRIM`,
 `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`, `EXACT`, `AND`, `OR`, `NOT`,
 `SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`, `QUOTIENT`, `PI`, `EVEN`,
 `ODD`, `REPLACE`, `VALUE`, `T`, `N`, `ROUNDUP`, `ROUNDDOWN`,
-`CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`, `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`, `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`, `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`, `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`, `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`, `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`, `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, and `SUMSQ` on that same sheet.
+`CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`, `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`, `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`, `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`, `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`, `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`, `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`, `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, and `STDEV.P` on that same sheet.
 Text results are stored as inline strings. `LEN`, the slice functions,
 and `FIND` / `SEARCH` count Unicode scalar values. `TRIM` collapses only
 the space character U+0020. `SEARCH` ignores ASCII letter case and does
@@ -145,7 +145,12 @@ average of those same matching numbers. No match leaves the stored
 value. A different size, other text, or a second criterion leaves the
 stored value. `SUMSQ` adds the squares of the numbers `SUM` would
 read. Text inside a range is skipped. An empty call writes 0. Other text,
-or a result that is not finite, leaves the stored value. `IF` stays
+or a result that is not finite, leaves the stored value. `STDEV` and
+`STDEV.S` write the sample standard deviation, dividing by one less than
+the count. Fewer than two numbers leaves the stored value. `STDEVP` and
+`STDEV.P` divide by the count. One number writes 0. An empty call leaves
+the stored value. Text inside a range is skipped. Other text, or a result
+that is not finite, leaves the stored value. `IF` stays
 numeric. Shared-string cells and formulas on another sheet are left as
 stored. Other formulas keep their stored value. Drawings are copied through. A blank cell that the
 table only filled in so the columns line up is not inserted. PowerPoint
