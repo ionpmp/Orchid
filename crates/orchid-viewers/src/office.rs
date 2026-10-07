@@ -1446,6 +1446,72 @@ fn poisson_excel(x_value: f64, mean: f64, cumulative: bool) -> Option<f64> {
     Some(sum)
 }
 
+fn binom_dist_excel(
+    successes: f64,
+    trials: f64,
+    probability: f64,
+    cumulative: bool,
+) -> Option<f64> {
+    if !successes.is_finite()
+        || !trials.is_finite()
+        || !probability.is_finite()
+        || successes < 0.0
+        || trials < 0.0
+        || probability < 0.0
+        || probability > 1.0
+        || trials >= 171.0
+    {
+        return None;
+    }
+    let k = successes.trunc() as u32;
+    let n = trials.trunc() as u32;
+    if k > n {
+        return None;
+    }
+    if probability == 0.0 {
+        let point = if k == 0 { 1.0 } else { 0.0 };
+        return Some(if cumulative { 1.0 } else { point });
+    }
+    if probability == 1.0 {
+        let point = if k == n { 1.0 } else { 0.0 };
+        return Some(if cumulative {
+            if k == n {
+                1.0
+            } else {
+                0.0
+            }
+        } else {
+            point
+        });
+    }
+    let mut term = (1.0 - probability).powi(n as i32);
+    if !term.is_finite() || term == 0.0 {
+        return None;
+    }
+    let ratio = probability / (1.0 - probability);
+    if !cumulative {
+        for step in 0..k {
+            term *= f64::from(n - step) / f64::from(step + 1) * ratio;
+            if !term.is_finite() {
+                return None;
+            }
+        }
+        return Some(term);
+    }
+    let mut sum = term;
+    for step in 0..k {
+        term *= f64::from(n - step) / f64::from(step + 1) * ratio;
+        if !term.is_finite() {
+            return None;
+        }
+        sum += term;
+        if !sum.is_finite() {
+            return None;
+        }
+    }
+    Some(sum)
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -2646,6 +2712,21 @@ impl<'a> CalcParser<'a> {
                     return None;
                 }
                 return poisson_excel(x_value, mean, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("BINOM.DIST") || word.eq_ignore_ascii_case("BINOMDIST") {
+                let successes = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let trials = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let flag = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !flag.is_finite() {
+                    return None;
+                }
+                return binom_dist_excel(successes, trials, probability, flag != 0.0)
+                    .map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -7324,6 +7405,67 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>POISSON.DIST(&quot;ab&quot;,5,0)</f><v>13</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_binom_dist() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>4</v></c><c r="C1"><v>0.5</v></c><c r="D1"><f>BINOM.DIST(A1,B1,C1,0)</f><v>0</v></c><c r="E1"><f>BINOM.DIST(A1,B1,C1,1)</f><v>0</v></c><c r="F1"><f>BINOM.DIST(2.9,4.9,0.5,0)</f><v>0</v></c><c r="G1"><f>BINOMDIST(0,4,0,0)</f><v>0</v></c><c r="H1"><f>BINOM.DIST(1,4,0,0)</f><v>0</v></c><c r="I1"><f>BINOM.DIST(4,4,1,0)</f><v>0</v></c><c r="J1"><f>BINOM.DIST(3,4,1.1,0)</f><v>7</v></c><c r="K1"><f>BINOM.DIST(5,4,0.5,0)</f><v>8</v></c><c r="L1"><f>BINOM.DIST(2,171,0.5,0)</f><v>9</v></c><c r="M1"><f>BINOM.DIST(2,4,0.5)</f><v>11</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST(A1,B1,C1,0)</f><v>0.375</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST(A1,B1,C1,1)</f><v>0.6875</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST(2.9,4.9,0.5,0)</f><v>0.375</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOMDIST(0,4,0,0)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST(1,4,0,0)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST(4,4,1,0)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST(3,4,1.1,0)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST(5,4,0.5,0)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST(2,171,0.5,0)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST(2,4,0.5)</f><v>11</v>"#),
             "{sheet}"
         );
     }
