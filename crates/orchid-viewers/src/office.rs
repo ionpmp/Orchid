@@ -535,6 +535,39 @@ fn stdev_excel(args: &[f64], sample: bool) -> Option<f64> {
     }
 }
 
+fn var_excel(args: &[f64], sample: bool) -> Option<f64> {
+    if args.iter().any(|number| !number.is_finite()) {
+        return None;
+    }
+    let count = args.len();
+    if sample {
+        if count < 2 {
+            return None;
+        }
+    } else if count == 0 {
+        return None;
+    }
+    let mean = args.iter().sum::<f64>() / count as f64;
+    let squared = args
+        .iter()
+        .map(|number| {
+            let delta = number - mean;
+            delta * delta
+        })
+        .sum::<f64>();
+    let denom = if sample {
+        (count - 1) as f64
+    } else {
+        count as f64
+    };
+    let value = squared / denom;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2358,6 +2391,8 @@ impl<'a> CalcParser<'a> {
                 }
                 "STDEV" | "STDEV.S" => stdev_excel(&args, true).map(CalcValue::Num),
                 "STDEVP" | "STDEV.P" => stdev_excel(&args, false).map(CalcValue::Num),
+                "VAR" | "VAR.S" => var_excel(&args, true).map(CalcValue::Num),
+                "VARP" | "VAR.P" => var_excel(&args, false).map(CalcValue::Num),
                 _ => None,
             };
         }
@@ -5337,6 +5372,35 @@ mod tests {
         assert!(sheet.contains(r#"<f>STDEV.P(A1)</f><v>0</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>STDEV.S()</f><v>7</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>STDEV.S("ab")</f><v>8</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_var() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>4</v></c><c r="C1" t="inlineStr"><is><t>xy</t></is></c><c r="D1"><f>VAR.S(A1:C1)</f><v>0</v></c><c r="E1"><f>VAR(A1:B1)</f><v>0</v></c><c r="F1"><f>VAR.P(A1:B1)</f><v>0</v></c><c r="G1"><f>VARP(A1:B1)</f><v>0</v></c><c r="H1"><f>VAR.S(A1)</f><v>5</v></c><c r="I1"><f>VAR.P(A1)</f><v>6</v></c><c r="J1"><f>VAR.S()</f><v>7</v></c><c r="K1"><f>VAR.S("ab")</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>VAR.S(A1:C1)</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>VAR(A1:B1)</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>VAR.P(A1:B1)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>VARP(A1:B1)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>VAR.S(A1)</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>VAR.P(A1)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>VAR.S()</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>VAR.S("ab")</f><v>8</v>"#), "{sheet}");
     }
 
     #[tokio::test]
