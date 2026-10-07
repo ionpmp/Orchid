@@ -1075,6 +1075,32 @@ fn bit_shift(number: f64, shift: f64, right: bool) -> Option<f64> {
     Some(value as f64)
 }
 
+fn mround_excel(number: f64, multiple: f64) -> Option<f64> {
+    if !number.is_finite()
+        || !multiple.is_finite()
+        || number.abs() >= 1e15
+        || multiple.abs() >= 1e15
+    {
+        return None;
+    }
+    if multiple == 0.0 {
+        return if number == 0.0 { Some(0.0) } else { None };
+    }
+    if number == 0.0 {
+        return Some(0.0);
+    }
+    if number.signum() != multiple.signum() {
+        return None;
+    }
+    let steps = (number / multiple).abs();
+    let value = steps.round() * multiple.abs() * number.signum();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn step_multiple(number: f64, significance: f64, away: bool) -> Option<f64> {
     if !number.is_finite()
         || !significance.is_finite()
@@ -1925,6 +1951,11 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 let significance = self.comma_number(env)?;
                 return step_multiple(number, significance, away).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("MROUND") {
+                let number = calc_num(self.compare(env)?)?;
+                let multiple = self.comma_number(env)?;
+                return mround_excel(number, multiple).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("CEILING.MATH") {
                 let number = calc_num(self.compare(env)?)?;
@@ -4620,6 +4651,36 @@ mod tests {
             sheet.contains(r#"<f>BITLSHIFT(-1,1)</f><v>9</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_mround() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>MROUND(10,3)</f><v>0</v></c><c r="C1"><f>MROUND(10,4)</f><v>0</v></c><c r="D1"><f>MROUND(-10,-3)</f><v>0</v></c><c r="E1"><f>MROUND(-10,3)</f><v>7</v></c><c r="F1"><f>MROUND(6,0)</f><v>8</v></c><c r="G1"><f>MROUND(0,0)</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>MROUND(10,3)</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MROUND(10,4)</f><v>12</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>MROUND(-10,-3)</f><v>-9</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>MROUND(-10,3)</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MROUND(6,0)</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MROUND(0,0)</f><v>0</v>"#), "{sheet}");
     }
 
     #[tokio::test]

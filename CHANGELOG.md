@@ -101,8 +101,8 @@ release yet.
   `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`,
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
   `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`,
-  `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`, and
-  `BITRSHIFT` on that sheet.
+  `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`,
+  `BITRSHIFT`, and `MROUND` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -195,7 +195,10 @@ release yet.
   value. `BITLSHIFT` and `BITRSHIFT` use that same number. The shift count
   is truncated toward zero, and a negative count shifts the other way. A
   count past 53, or a result at or above 2^48, leaves the stored value.
-  `IF` stays numeric.
+  `MROUND` rounds to the nearest multiple. A tie moves away from zero. The
+  signs must match. A zero multiple leaves the stored value, and `MROUND`
+  of zero and zero writes 0. A magnitude at or above 1e15 leaves the stored
+  value. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label
