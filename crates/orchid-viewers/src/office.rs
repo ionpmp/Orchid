@@ -637,6 +637,32 @@ fn harmean_excel(args: &[f64]) -> Option<f64> {
     }
 }
 
+fn slope_excel(pairs: &[(f64, f64)]) -> Option<f64> {
+    if pairs.len() < 2 {
+        return None;
+    }
+    let count = pairs.len() as f64;
+    let mean_y = pairs.iter().map(|(y, _)| *y).sum::<f64>() / count;
+    let mean_x = pairs.iter().map(|(_, x)| *x).sum::<f64>() / count;
+    let mut numerator = 0.0;
+    let mut denominator = 0.0;
+    for (y, x) in pairs {
+        let dx = x - mean_x;
+        let dy = y - mean_y;
+        numerator += dx * dy;
+        denominator += dx * dx;
+    }
+    if !numerator.is_finite() || !denominator.is_finite() || denominator == 0.0 {
+        return None;
+    }
+    let value = numerator / denominator;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2163,6 +2189,10 @@ impl<'a> CalcParser<'a> {
             if word.eq_ignore_ascii_case("SUMPRODUCT") {
                 return self.sum_product(env).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("SLOPE") {
+                let pairs = self.paired_ranges(env)?;
+                return slope_excel(&pairs).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("MINIFS") || word.eq_ignore_ascii_case("MAXIFS") {
                 let max = word.eq_ignore_ascii_case("MAXIFS");
                 let matched = self.ifs_values(env)?;
@@ -2838,6 +2868,34 @@ impl<'a> CalcParser<'a> {
         self.skip();
         let end = self.cell_token()?;
         cells_in_range(&start, &end)
+    }
+
+    /// Y range then X range, same length. A pair is kept when both cells are finite numbers.
+    fn paired_ranges(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<(f64, f64)>> {
+        let ys = self.cell_range()?;
+        self.require_comma()?;
+        let xs = self.cell_range()?;
+        if ys.len() != xs.len() {
+            return None;
+        }
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b')') {
+            return None;
+        }
+        self.index += 1;
+        let mut pairs = Vec::new();
+        for (y_address, x_address) in ys.iter().zip(xs) {
+            let Some(CalcValue::Num(y)) = self.cell_value(y_address, env) else {
+                continue;
+            };
+            let Some(CalcValue::Num(x)) = self.cell_value(&x_address, env) else {
+                continue;
+            };
+            if y.is_finite() && x.is_finite() {
+                pairs.push((y, x));
+            }
+        }
+        Some(pairs)
     }
 
     /// One value range, one criteria range, and one criterion. The ranges must match in size.
@@ -5225,6 +5283,44 @@ mod tests {
             sheet.contains(r#"<f>COUNTIFS(A1:C1,"&gt;2",B1:B1,1)</f><v>8</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_slope() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>4</v></c><c r="C1" t="inlineStr"><is><t>xy</t></is></c><c r="D1"><v>1</v></c><c r="E1"><v>2</v></c><c r="F1"><v>3</v></c><c r="I1"><v>5</v></c><c r="J1"><v>5</v></c><c r="G1"><f>SLOPE(A1:C1,D1:F1)</f><v>0</v></c><c r="H1"><f>SLOPE(A1:B1,D1:F1)</f><v>7</v></c><c r="K1"><f>SLOPE(A1:B1,I1:J1)</f><v>8</v></c><c r="L1"><f>SLOPE(A1:A1,D1:D1)</f><v>9</v></c><c r="M1"><f>SLOPE(1,2)</f><v>10</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SLOPE(A1:C1,D1:F1)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SLOPE(A1:B1,D1:F1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SLOPE(A1:B1,I1:J1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SLOPE(A1:A1,D1:D1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>SLOPE(1,2)</f><v>10</v>"#), "{sheet}");
     }
 
     #[test]
