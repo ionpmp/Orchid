@@ -847,6 +847,41 @@ fn percentile_inc_excel(values: &mut [f64], k: f64) -> Option<f64> {
     }
 }
 
+fn percentile_exc_excel(values: &mut [f64], k: f64) -> Option<f64> {
+    if values.is_empty() || !k.is_finite() || k <= 0.0 || k >= 1.0 {
+        return None;
+    }
+    values.sort_by(|left, right| left.total_cmp(right));
+    let count = values.len() as f64;
+    let mut rank = k * (count + 1.0);
+    if !rank.is_finite() {
+        return None;
+    }
+    if (rank - 1.0).abs() < 1e-9 {
+        rank = 1.0;
+    } else if (rank - count).abs() < 1e-9 {
+        rank = count;
+    }
+    if rank < 1.0 || rank > count {
+        return None;
+    }
+    let lower = rank.floor() as usize;
+    let upper = rank.ceil() as usize;
+    if lower == 0 || upper > values.len() {
+        return None;
+    }
+    if lower == upper {
+        return Some(values[lower - 1]);
+    }
+    let fraction = rank - lower as f64;
+    let value = values[lower - 1] + fraction * (values[upper - 1] - values[lower - 1]);
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn mode_excel(values: &[f64]) -> Option<f64> {
     let mut best_count = 1usize;
     let mut best = None;
@@ -2469,6 +2504,9 @@ impl<'a> CalcParser<'a> {
             {
                 return self.percentile_call(env).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("PERCENTILE.EXC") {
+                return self.percentile_exc_call(env).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("QUARTILE") || word.eq_ignore_ascii_case("QUARTILE.INC") {
                 return self.quartile_call(env).map(CalcValue::Num);
             }
@@ -3207,6 +3245,22 @@ impl<'a> CalcParser<'a> {
             }
         }
         percentile_inc_excel(&mut values, k)
+    }
+
+    fn percentile_exc_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let cells = self.cell_range()?;
+        self.require_comma()?;
+        let k = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        percentile_exc_excel(&mut values, k)
     }
 
     fn quartile_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
@@ -6263,6 +6317,63 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>PERCENTRANK(A1:E1,20,3)</f><v>11</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_percentile_exc() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>20</v></c><c r="C1"><v>30</v></c><c r="D1"><v>40</v></c><c r="E1" t="inlineStr"><is><t>xy</t></is></c><c r="F1"><f>PERCENTILE.EXC(A1:E1,0.25)</f><v>0</v></c><c r="G1"><f>PERCENTILE.EXC(A1:E1,0.5)</f><v>0</v></c><c r="H1"><f>PERCENTILE.EXC(A1:E1,0.75)</f><v>0</v></c><c r="I1"><f>PERCENTILE.EXC(A1:E1,0.2)</f><v>0</v></c><c r="J1"><f>PERCENTILE.EXC(A1:E1,0.8)</f><v>0</v></c><c r="K1"><f>PERCENTILE.EXC(A1:E1,0)</f><v>7</v></c><c r="L1"><f>PERCENTILE.EXC(A1:E1,1)</f><v>8</v></c><c r="M1"><f>PERCENTILE.EXC(A1:E1,0.1)</f><v>9</v></c><c r="N1"><f>PERCENTILE.EXC(A1,0.5)</f><v>11</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "10").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>PERCENTILE.EXC(A1:E1,0.25)</f><v>12.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTILE.EXC(A1:E1,0.5)</f><v>25</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTILE.EXC(A1:E1,0.75)</f><v>37.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTILE.EXC(A1:E1,0.2)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTILE.EXC(A1:E1,0.8)</f><v>40</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTILE.EXC(A1:E1,0)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTILE.EXC(A1:E1,1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTILE.EXC(A1:E1,0.1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTILE.EXC(A1,0.5)</f><v>11</v>"#),
             "{sheet}"
         );
     }
