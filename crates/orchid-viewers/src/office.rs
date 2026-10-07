@@ -1924,6 +1924,38 @@ fn chisq_rt_excel(x_value: f64, degrees: f64) -> Option<f64> {
     }
 }
 
+fn norms_dist_excel(x_value: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite() {
+        return None;
+    }
+    if !cumulative {
+        let exponent = -0.5 * x_value * x_value;
+        if !exponent.is_finite() {
+            return None;
+        }
+        let value = exponent.exp() / (2.0 * std::f64::consts::PI).sqrt();
+        return if value.is_finite() { Some(value) } else { None };
+    }
+    if x_value == 0.0 {
+        return Some(0.5);
+    }
+    let half = 0.5 * x_value * x_value;
+    if !half.is_finite() {
+        return None;
+    }
+    let tail = gamma_cdf_series(0.5, half)?;
+    let value = if x_value > 0.0 {
+        0.5 * (1.0 + tail)
+    } else {
+        0.5 * (1.0 - tail)
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -3272,6 +3304,23 @@ impl<'a> CalcParser<'a> {
                     return None;
                 }
                 return chisq_dist_excel(x_value, degrees, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NORM.S.DIST") || word.eq_ignore_ascii_case("NORMSDIST") {
+                let legacy = word.eq_ignore_ascii_case("NORMSDIST");
+                let x_value = calc_num(self.compare(env)?)?;
+                let cumulative = if legacy {
+                    self.close_paren()?;
+                    true
+                } else {
+                    self.require_comma()?;
+                    let flag = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    if !flag.is_finite() {
+                        return None;
+                    }
+                    flag != 0.0
+                };
+                return norms_dist_excel(x_value, cumulative).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -8563,6 +8612,67 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>CHISQ.DIST(&quot;ab&quot;,2,0)</f><v>13</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_norms_dist() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>NORM.S.DIST(A1,0)</f><v>0</v></c><c r="C1"><f>NORM.S.DIST(A1,1)</f><v>0</v></c><c r="D1"><f>NORMSDIST(1)</f><v>0</v></c><c r="E1"><f>NORM.S.DIST(0,0)</f><v>0</v></c><c r="F1"><f>NORM.S.DIST(0,1)</f><v>0</v></c><c r="G1"><f>NORM.S.DIST(-1,1)</f><v>0</v></c><c r="H1"><f>NORM.S.DIST(40,0)</f><v>7</v></c><c r="I1"><f>NORM.S.DIST(40,1)</f><v>8</v></c><c r="J1"><f>NORM.S.DIST(1)</f><v>9</v></c><c r="K1"><f>NORM.S.DIST(&quot;ab&quot;,1)</f><v>10</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>NORM.S.DIST(A1,0)</f><v>0.24197072</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORM.S.DIST(A1,1)</f><v>0.84134475</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORMSDIST(1)</f><v>0.84134475</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORM.S.DIST(0,0)</f><v>0.39894228</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORM.S.DIST(0,1)</f><v>0.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORM.S.DIST(-1,1)</f><v>0.15865525</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORM.S.DIST(40,0)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORM.S.DIST(40,1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORM.S.DIST(1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORM.S.DIST(&quot;ab&quot;,1)</f><v>10</v>"#),
             "{sheet}"
         );
     }

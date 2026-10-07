@@ -15,7 +15,7 @@ and `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, `LOWER`, `TRIM`,
 `SUBSTITUTE`, `FIND`, `SEARCH`, `REPT`, `EXACT`, `AND`, `OR`, `NOT`,
 `SQRT`, `POWER`, `MOD`, `SIGN`, `PRODUCT`, `QUOTIENT`, `PI`, `EVEN`,
 `ODD`, `REPLACE`, `VALUE`, `T`, `N`, `ROUNDUP`, `ROUNDDOWN`,
-`CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`, `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`, `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`, `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`, `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`, `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`, `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`, `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, `EXPONDIST`, `NEGBINOM.DIST`, `NEGBINOMDIST`, `HYPGEOM.DIST`, `HYPGEOMDIST`, `WEIBULL.DIST`, `WEIBULL`, `GAMMA`, `GAMMALN`, `GAMMA.DIST`, `GAMMADIST`, `BINOM.INV`, `CRITBINOM`, `CHISQ.DIST`, `CHISQ.DIST.RT`, and `CHIDIST` on that same sheet.
+`CEILING.MATH`, `FLOOR.MATH`, `MEDIAN`, `ISNUMBER`, `ISTEXT`, `GCD`, `LCM`, `LN`, `LOG10`, `LOG`, `EXP`, `FACT`, `SIN`, `COS`, `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`, `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`, `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`, `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`, `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`, `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, `EXPONDIST`, `NEGBINOM.DIST`, `NEGBINOMDIST`, `HYPGEOM.DIST`, `HYPGEOMDIST`, `WEIBULL.DIST`, `WEIBULL`, `GAMMA`, `GAMMALN`, `GAMMA.DIST`, `GAMMADIST`, `BINOM.INV`, `CRITBINOM`, `CHISQ.DIST`, `CHISQ.DIST.RT`, `CHIDIST`, `NORM.S.DIST`, and `NORMSDIST` on that same sheet.
 Text results are stored as inline strings. `LEN`, the slice functions,
 and `FIND` / `SEARCH` count Unicode scalar values. `TRIM` collapses only
 the space character U+0020. `SEARCH` ignores ASCII letter case and does
@@ -351,7 +351,15 @@ An even degree count uses the Poisson sum on a cumulative call. That sum is
 refused when the degrees are 344 or more, or when x is 1400 or more. An odd
 degree count uses a series of at most 200 terms, and a series that does not
 settle leaves the stored value. A negative x, a degree count below 1, a
-missing third number on `CHISQ.DIST`, or text leaves the stored value. `IF` stays
+missing third number on `CHISQ.DIST`, or text leaves the stored value.
+`NORM.S.DIST` takes a z and a second number. A second number of 0 writes the
+standard normal density. Any other finite second number writes the cumulative
+probability. `NORMSDIST` takes one number and writes that cumulative
+probability. The cumulative value is one half times one plus or minus the
+lower gamma series for shape 1/2 and z squared over 2, using at most 200
+terms. A series that does not settle leaves the stored value. A density whose
+exponential underflows writes 0. A missing second number on `NORM.S.DIST`, or
+text, leaves the stored value. `IF` stays
 numeric. Shared-string cells and formulas on another sheet are left as
 stored. Other formulas keep their stored value. Drawings are copied through. A blank cell that the
 table only filled in so the columns line up is not inserted. PowerPoint
