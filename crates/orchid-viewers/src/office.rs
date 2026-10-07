@@ -676,6 +676,39 @@ fn intercept_excel(pairs: &[(f64, f64)]) -> Option<f64> {
     }
 }
 
+fn correl_excel(pairs: &[(f64, f64)]) -> Option<f64> {
+    if pairs.len() < 2 {
+        return None;
+    }
+    let count = pairs.len() as f64;
+    let mean_y = pairs.iter().map(|(y, _)| *y).sum::<f64>() / count;
+    let mean_x = pairs.iter().map(|(_, x)| *x).sum::<f64>() / count;
+    let mut numerator = 0.0;
+    let mut sum_x = 0.0;
+    let mut sum_y = 0.0;
+    for (y, x) in pairs {
+        let dx = x - mean_x;
+        let dy = y - mean_y;
+        numerator += dx * dy;
+        sum_x += dx * dx;
+        sum_y += dy * dy;
+    }
+    if !numerator.is_finite()
+        || !sum_x.is_finite()
+        || !sum_y.is_finite()
+        || sum_x == 0.0
+        || sum_y == 0.0
+    {
+        return None;
+    }
+    let value = numerator / (sum_x * sum_y).sqrt();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2209,6 +2242,10 @@ impl<'a> CalcParser<'a> {
             if word.eq_ignore_ascii_case("INTERCEPT") {
                 let pairs = self.paired_ranges(env)?;
                 return intercept_excel(&pairs).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CORREL") || word.eq_ignore_ascii_case("PEARSON") {
+                let pairs = self.paired_ranges(env)?;
+                return correl_excel(&pairs).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("MINIFS") || word.eq_ignore_ascii_case("MAXIFS") {
                 let max = word.eq_ignore_ascii_case("MAXIFS");
@@ -5379,6 +5416,52 @@ mod tests {
             sheet.contains(r#"<f>INTERCEPT(1,2)</f><v>10</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_correl() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>4</v></c><c r="C1" t="inlineStr"><is><t>xy</t></is></c><c r="D1"><v>1</v></c><c r="E1"><v>2</v></c><c r="F1"><v>3</v></c><c r="I1"><v>5</v></c><c r="J1"><v>5</v></c><c r="N1"><v>3</v></c><c r="O1"><v>3</v></c><c r="P1"><v>1</v></c><c r="Q1"><v>2</v></c><c r="G1"><f>CORREL(A1:C1,D1:F1)</f><v>0</v></c><c r="H1"><f>PEARSON(A1:C1,D1:F1)</f><v>0</v></c><c r="K1"><f>CORREL(A1:B1,D1:F1)</f><v>7</v></c><c r="L1"><f>CORREL(A1:B1,I1:J1)</f><v>8</v></c><c r="M1"><f>CORREL(N1:O1,P1:Q1)</f><v>11</v></c><c r="R1"><f>CORREL(A1:A1,D1:D1)</f><v>9</v></c><c r="S1"><f>CORREL(1,2)</f><v>10</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>CORREL(A1:C1,D1:F1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PEARSON(A1:C1,D1:F1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CORREL(A1:B1,D1:F1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CORREL(A1:B1,I1:J1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CORREL(N1:O1,P1:Q1)</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CORREL(A1:A1,D1:D1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>CORREL(1,2)</f><v>10</v>"#), "{sheet}");
     }
 
     #[test]
