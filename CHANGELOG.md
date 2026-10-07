@@ -102,7 +102,7 @@ release yet.
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
   `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`,
   `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`,
-  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, and `AVERAGEIF` on that sheet.
+  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, and `SUMPRODUCT` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -205,7 +205,11 @@ release yet.
   start with a range leaves the stored value. `COUNTIF` uses that same
   range and criterion and writes how many stored numbers match. No match
   writes 0. `AVERAGEIF` uses that same range and criterion and writes the
-  average. No match leaves the stored value. `IF` stays numeric.
+  average. No match leaves the stored value. `SUMPRODUCT` multiplies
+  equal-sized cell ranges and adds the products. One range is a sum. A
+  blank cell, a text cell, or a shared-string cell counts as 0. Up to 8
+  ranges are read. A different size, a ninth range, or an argument that is
+  not a range leaves the stored value. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label

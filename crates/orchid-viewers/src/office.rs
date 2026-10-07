@@ -2025,6 +2025,9 @@ impl<'a> CalcParser<'a> {
                 }
                 return Some(CalcValue::Num(average));
             }
+            if word.eq_ignore_ascii_case("SUMPRODUCT") {
+                return self.sum_product(env).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("CEILING.MATH") {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
@@ -2640,6 +2643,74 @@ impl<'a> CalcParser<'a> {
             }
         }
         Some(matched)
+    }
+
+    fn sum_product(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let mut ranges: Vec<Vec<f64>> = Vec::new();
+        loop {
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b')') {
+                if ranges.is_empty() {
+                    return None;
+                }
+                self.index += 1;
+                break;
+            }
+            let start = self.cell_token()?;
+            self.skip();
+            if self.bytes.get(self.index) != Some(&b':') {
+                return None;
+            }
+            self.index += 1;
+            self.skip();
+            let end = self.cell_token()?;
+            let cells = cells_in_range(&start, &end)?;
+            if ranges.len() == 8 {
+                return None;
+            }
+            if ranges
+                .first()
+                .is_some_and(|first| first.len() != cells.len())
+            {
+                return None;
+            }
+            let mut values = Vec::with_capacity(cells.len());
+            for address in cells {
+                let number = match self.cell_value(&address, env) {
+                    Some(CalcValue::Num(number)) if number.is_finite() => number,
+                    Some(CalcValue::Num(_)) => return None,
+                    _ => 0.0,
+                };
+                values.push(number);
+            }
+            ranges.push(values);
+            self.skip();
+            match self.bytes.get(self.index) {
+                Some(&b',') => self.index += 1,
+                Some(&b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        let width = ranges.first()?.len();
+        let mut total = 0.0;
+        for index in 0..width {
+            let mut product = 1.0;
+            for range in &ranges {
+                product *= range[index];
+            }
+            if !product.is_finite() {
+                return None;
+            }
+            total += product;
+        }
+        if total.is_finite() {
+            Some(total)
+        } else {
+            None
+        }
     }
 
     fn number(&mut self) -> Option<f64> {
@@ -4920,6 +4991,40 @@ mod tests {
             sheet.contains(r#"<f>AVERAGEIF(A1:C1,"&gt;2",A1)</f><v>9</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_sumproduct() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>8</v></c><c r="C1" t="inlineStr"><is><t>ab</t></is></c><c r="D1"><v>3</v></c><c r="E1"><v>4</v></c><c r="F1"><f>SUMPRODUCT(A1:C1)</f><v>0</v></c><c r="G1"><f>SUMPRODUCT(A1:B1,D1:E1)</f><v>0</v></c><c r="H1"><f>SUMPRODUCT(A1:C1,D1:E1)</f><v>7</v></c><c r="I1"><f>SUMPRODUCT()</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SUMPRODUCT(A1:C1)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUMPRODUCT(A1:B1,D1:E1)</f><v>38</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUMPRODUCT(A1:C1,D1:E1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>SUMPRODUCT()</f><v>8</v>"#), "{sheet}");
     }
 
     #[tokio::test]
