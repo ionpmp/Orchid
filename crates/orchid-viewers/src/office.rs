@@ -617,6 +617,26 @@ fn geomean_excel(args: &[f64]) -> Option<f64> {
     }
 }
 
+fn harmean_excel(args: &[f64]) -> Option<f64> {
+    if args.is_empty()
+        || args
+            .iter()
+            .any(|number| !number.is_finite() || *number <= 0.0)
+    {
+        return None;
+    }
+    let reciprocals = args.iter().map(|number| 1.0 / number).sum::<f64>();
+    if !reciprocals.is_finite() || reciprocals == 0.0 {
+        return None;
+    }
+    let value = args.len() as f64 / reciprocals;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2445,6 +2465,7 @@ impl<'a> CalcParser<'a> {
                 "AVEDEV" => avedev_excel(&args).map(CalcValue::Num),
                 "DEVSQ" => devsq_excel(&args).map(CalcValue::Num),
                 "GEOMEAN" => geomean_excel(&args).map(CalcValue::Num),
+                "HARMEAN" => harmean_excel(&args).map(CalcValue::Num),
                 _ => None,
             };
         }
@@ -5536,6 +5557,40 @@ mod tests {
         );
         assert!(sheet.contains(r#"<f>GEOMEAN()</f><v>7</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>GEOMEAN("ab")</f><v>8</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_harmean() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>8</v></c><c r="C1" t="inlineStr"><is><t>xy</t></is></c><c r="D1"><v>0</v></c><c r="E1"><v>-3</v></c><c r="L1"><v>1e-320</v></c><c r="F1"><f>HARMEAN(A1:C1)</f><v>0</v></c><c r="G1"><f>HARMEAN(A1)</f><v>0</v></c><c r="H1"><f>HARMEAN(D1)</f><v>5</v></c><c r="I1"><f>HARMEAN(A1,E1)</f><v>6</v></c><c r="J1"><f>HARMEAN()</f><v>7</v></c><c r="K1"><f>HARMEAN("ab")</f><v>8</v></c><c r="M1"><f>HARMEAN(L1)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>HARMEAN(A1:C1)</f><v>3.2</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>HARMEAN(A1)</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>HARMEAN(D1)</f><v>5</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>HARMEAN(A1,E1)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>HARMEAN()</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>HARMEAN("ab")</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>HARMEAN(L1)</f><v>9</v>"#), "{sheet}");
     }
 
     #[tokio::test]
