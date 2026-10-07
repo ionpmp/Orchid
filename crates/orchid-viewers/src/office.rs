@@ -1136,6 +1136,20 @@ fn sum_pair_excel(pairs: &[(f64, f64)], kind: u8) -> Option<f64> {
     Some(acc)
 }
 
+fn gestep_excel(number: f64, step: f64) -> Option<f64> {
+    if !number.is_finite() || !step.is_finite() {
+        return None;
+    }
+    Some(if number >= step { 1.0 } else { 0.0 })
+}
+
+fn delta_excel(left: f64, right: f64) -> Option<f64> {
+    if !left.is_finite() || !right.is_finite() {
+        return None;
+    }
+    Some(if left == right { 1.0 } else { 0.0 })
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2611,6 +2625,16 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return sign_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("GESTEP") {
+                let number = calc_num(self.compare(env)?)?;
+                let step = self.optional_number(env, 0.0)?;
+                return gestep_excel(number, step).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("DELTA") {
+                let number = calc_num(self.compare(env)?)?;
+                let other = self.optional_number(env, 0.0)?;
+                return delta_excel(number, other).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("QUOTIENT") {
                 let number = calc_num(self.compare(env)?)?;
@@ -7003,6 +7027,44 @@ mod tests {
         assert!(sheet.contains(r#"<f>SUMX2MY2(1,2)</f><v>8</v>"#), "{sheet}");
         assert!(
             sheet.contains(r#"<f>SUMX2MY2(L1:L1,M1:M1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_gestep() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>GESTEP(A1,4)</f><v>0</v></c><c r="C1"><f>GESTEP(A1,5)</f><v>0</v></c><c r="D1"><f>GESTEP(A1,6)</f><v>0</v></c><c r="E1"><f>GESTEP(A1)</f><v>0</v></c><c r="F1"><f>GESTEP(-1)</f><v>0</v></c><c r="G1"><f>DELTA(A1,5)</f><v>0</v></c><c r="H1"><f>DELTA(A1,4)</f><v>0</v></c><c r="I1"><f>DELTA(0)</f><v>0</v></c><c r="J1"><f>DELTA(A1)</f><v>0</v></c><c r="K1"><f>GESTEP(&quot;ab&quot;)</f><v>7</v></c><c r="L1"><f>DELTA(A1,&quot;ab&quot;)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "5").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>GESTEP(A1,4)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GESTEP(A1,5)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GESTEP(A1,6)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GESTEP(A1)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GESTEP(-1)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>DELTA(A1,5)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>DELTA(A1,4)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>DELTA(0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>DELTA(A1)</f><v>0</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>GESTEP(&quot;ab&quot;)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DELTA(A1,&quot;ab&quot;)</f><v>8</v>"#),
             "{sheet}"
         );
     }
