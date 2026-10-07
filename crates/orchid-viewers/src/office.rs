@@ -1438,6 +1438,27 @@ fn combin_excel(n: f64, k: f64) -> Option<f64> {
     }
 }
 
+fn combina_excel(n: f64, k: f64) -> Option<f64> {
+    if !n.is_finite()
+        || !k.is_finite()
+        || n < 0.0
+        || k < 0.0
+        || n >= 1_000_000.0
+        || k >= 1_000_000.0
+    {
+        return None;
+    }
+    let n = n.trunc();
+    let k = k.trunc();
+    if k == 0.0 {
+        return Some(1.0);
+    }
+    if n == 0.0 {
+        return Some(0.0);
+    }
+    combin_excel(n + k - 1.0, k)
+}
+
 fn count_pair(n: f64, k: f64) -> Option<(u64, u64)> {
     if !n.is_finite()
         || !k.is_finite()
@@ -2534,6 +2555,11 @@ impl<'a> CalcParser<'a> {
                 let n = calc_num(self.compare(env)?)?;
                 let k = self.comma_number(env)?;
                 return combin_excel(n, k).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("COMBINA") {
+                let n = calc_num(self.compare(env)?)?;
+                let k = self.comma_number(env)?;
+                return combina_excel(n, k).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("PERMUTATIONA") {
                 let n = calc_num(self.compare(env)?)?;
@@ -6861,6 +6887,44 @@ mod tests {
         assert!(sheet.contains(r#"<f>SQRTPI(-1)</f><v>7</v>"#), "{sheet}");
         assert!(
             sheet.contains(r#"<f>SQRTPI(&quot;ab&quot;)</f><v>8</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_combina() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>COMBINA(A1,3)</f><v>0</v></c><c r="C1"><f>COMBINA(4.9,3.2)</f><v>0</v></c><c r="D1"><f>COMBINA(4,0)</f><v>0</v></c><c r="E1"><f>COMBINA(0,0)</f><v>0</v></c><c r="F1"><f>COMBINA(0,2)</f><v>0</v></c><c r="G1"><f>COMBINA(-1,1)</f><v>7</v></c><c r="H1"><f>COMBINA(4,-1)</f><v>8</v></c><c r="I1"><f>COMBINA(&quot;ab&quot;,1)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "4").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>COMBINA(A1,3)</f><v>20</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COMBINA(4.9,3.2)</f><v>20</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>COMBINA(4,0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COMBINA(0,0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COMBINA(0,2)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COMBINA(-1,1)</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COMBINA(4,-1)</f><v>8</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>COMBINA(&quot;ab&quot;,1)</f><v>9</v>"#),
             "{sheet}"
         );
     }
