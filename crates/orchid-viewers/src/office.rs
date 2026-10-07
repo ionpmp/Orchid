@@ -932,6 +932,40 @@ fn percent_rank_inc(values: &mut [f64], x_value: f64) -> Option<f64> {
     }
 }
 
+fn percent_rank_exc(values: &mut [f64], x_value: f64) -> Option<f64> {
+    if values.is_empty() || !x_value.is_finite() {
+        return None;
+    }
+    values.sort_by(|left, right| left.total_cmp(right));
+    let last = values.len() - 1;
+    if x_value < values[0] - 1e-9 || x_value > values[last] + 1e-9 {
+        return None;
+    }
+    let span = (values.len() + 1) as f64;
+    if let Some(index) = values
+        .iter()
+        .position(|value| (*value - x_value).abs() < 1e-9)
+    {
+        return Some((index as f64 + 1.0) / span);
+    }
+    let upper = values.iter().position(|value| *value > x_value)?;
+    if upper == 0 {
+        return None;
+    }
+    let lower = upper - 1;
+    let gap = values[upper] - values[lower];
+    if gap == 0.0 {
+        return None;
+    }
+    let fraction = (x_value - values[lower]) / gap;
+    let value = (lower as f64 + 1.0 + fraction) / span;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2521,6 +2555,9 @@ impl<'a> CalcParser<'a> {
             {
                 return self.percent_rank_call(env).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("PERCENTRANK.EXC") {
+                return self.percent_rank_exc_call(env).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("MINIFS") || word.eq_ignore_ascii_case("MAXIFS") {
                 let max = word.eq_ignore_ascii_case("MAXIFS");
                 let matched = self.ifs_values(env)?;
@@ -3340,6 +3377,22 @@ impl<'a> CalcParser<'a> {
             }
         }
         percent_rank_inc(&mut values, x_value)
+    }
+
+    fn percent_rank_exc_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let cells = self.cell_range()?;
+        self.require_comma()?;
+        let x_value = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        percent_rank_exc(&mut values, x_value)
     }
 
     /// Y range then X range, same length. A pair is kept when both cells are finite numbers.
@@ -6343,6 +6396,59 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>PERCENTRANK(A1:E1,20,3)</f><v>11</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_percent_rank_exc() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>20</v></c><c r="C1"><v>30</v></c><c r="D1"><v>40</v></c><c r="E1" t="inlineStr"><is><t>xy</t></is></c><c r="F1"><f>PERCENTRANK.EXC(A1:E1,A1)</f><v>0</v></c><c r="G1"><f>PERCENTRANK.EXC(A1:E1,D1)</f><v>0</v></c><c r="H1"><f>PERCENTRANK.EXC(A1:E1,B1)</f><v>0</v></c><c r="I1"><f>PERCENTRANK.EXC(A1:E1,25)</f><v>0</v></c><c r="J1"><f>PERCENTRANK.EXC(A1:E1,5)</f><v>7</v></c><c r="K1"><f>PERCENTRANK.EXC(A1:E1,50)</f><v>8</v></c><c r="L1"><f>PERCENTRANK.EXC(A1,10)</f><v>9</v></c><c r="M1"><f>PERCENTRANK.EXC(A1:E1,20,3)</f><v>11</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "10").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>PERCENTRANK.EXC(A1:E1,A1)</f><v>0.2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTRANK.EXC(A1:E1,D1)</f><v>0.8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTRANK.EXC(A1:E1,B1)</f><v>0.4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTRANK.EXC(A1:E1,25)</f><v>0.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTRANK.EXC(A1:E1,5)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTRANK.EXC(A1:E1,50)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTRANK.EXC(A1,10)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PERCENTRANK.EXC(A1:E1,20,3)</f><v>11</v>"#),
             "{sheet}"
         );
     }
