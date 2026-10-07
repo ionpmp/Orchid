@@ -847,6 +847,22 @@ fn percentile_inc_excel(values: &mut [f64], k: f64) -> Option<f64> {
     }
 }
 
+fn mode_excel(values: &[f64]) -> Option<f64> {
+    let mut best_count = 1usize;
+    let mut best = None;
+    for value in values {
+        let count = values
+            .iter()
+            .filter(|other| (**other - *value).abs() < 1e-9)
+            .count();
+        if count > best_count {
+            best_count = count;
+            best = Some(*value);
+        }
+    }
+    best
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2422,6 +2438,9 @@ impl<'a> CalcParser<'a> {
             if word.eq_ignore_ascii_case("QUARTILE") || word.eq_ignore_ascii_case("QUARTILE.INC") {
                 return self.quartile_call(env).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("MODE") || word.eq_ignore_ascii_case("MODE.SNGL") {
+                return self.mode_call(env).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("MINIFS") || word.eq_ignore_ascii_case("MAXIFS") {
                 let max = word.eq_ignore_ascii_case("MAXIFS");
                 let matched = self.ifs_values(env)?;
@@ -3172,6 +3191,20 @@ impl<'a> CalcParser<'a> {
             }
         }
         percentile_inc_excel(&mut values, quart / 4.0)
+    }
+
+    fn mode_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let cells = self.cell_range()?;
+        self.close_paren()?;
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        mode_excel(&values)
     }
 
     /// Y range then X range, same length. A pair is kept when both cells are finite numbers.
@@ -6095,6 +6128,35 @@ mod tests {
             sheet.contains(r#"<f>QUARTILE(A1,0)</f><v>9</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_mode() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>20</v></c><c r="C1"><v>20</v></c><c r="D1"><v>10</v></c><c r="E1" t="inlineStr"><is><t>xy</t></is></c><c r="F1"><v>30</v></c><c r="G1"><v>30</v></c><c r="H1"><v>30</v></c><c r="J1"><f>MODE(A1:H1)</f><v>0</v></c><c r="K1"><f>MODE.SNGL(A1:D1)</f><v>0</v></c><c r="L1"><f>MODE(A1:A1)</f><v>7</v></c><c r="M1"><f>MODE(A1)</f><v>8</v></c><c r="N1"><f>MODE(A1:D1,1)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "10").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>MODE(A1:H1)</f><v>30</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>MODE.SNGL(A1:D1)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>MODE(A1:A1)</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MODE(A1)</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MODE(A1:D1,1)</f><v>9</v>"#), "{sheet}");
     }
 
     #[test]
