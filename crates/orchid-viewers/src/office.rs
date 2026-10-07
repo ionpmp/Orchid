@@ -709,6 +709,16 @@ fn correl_excel(pairs: &[(f64, f64)]) -> Option<f64> {
     }
 }
 
+fn rsq_excel(pairs: &[(f64, f64)]) -> Option<f64> {
+    let correl = correl_excel(pairs)?;
+    let value = correl * correl;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2246,6 +2256,10 @@ impl<'a> CalcParser<'a> {
             if word.eq_ignore_ascii_case("CORREL") || word.eq_ignore_ascii_case("PEARSON") {
                 let pairs = self.paired_ranges(env)?;
                 return correl_excel(&pairs).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("RSQ") {
+                let pairs = self.paired_ranges(env)?;
+                return rsq_excel(&pairs).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("MINIFS") || word.eq_ignore_ascii_case("MAXIFS") {
                 let max = word.eq_ignore_ascii_case("MAXIFS");
@@ -5462,6 +5476,48 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>CORREL(1,2)</f><v>10</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_rsq() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>4</v></c><c r="C1" t="inlineStr"><is><t>xy</t></is></c><c r="D1"><v>1</v></c><c r="E1"><v>2</v></c><c r="F1"><v>3</v></c><c r="I1"><v>5</v></c><c r="J1"><v>5</v></c><c r="N1"><v>4</v></c><c r="O1"><v>2</v></c><c r="P1"><v>1</v></c><c r="Q1"><v>2</v></c><c r="G1"><f>RSQ(A1:C1,D1:F1)</f><v>0</v></c><c r="H1"><f>RSQ(N1:O1,P1:Q1)</f><v>0</v></c><c r="K1"><f>RSQ(A1:B1,D1:F1)</f><v>7</v></c><c r="L1"><f>RSQ(A1:B1,I1:J1)</f><v>8</v></c><c r="R1"><f>RSQ(A1:A1,D1:D1)</f><v>9</v></c><c r="S1"><f>RSQ(1,2)</f><v>10</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>RSQ(A1:C1,D1:F1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RSQ(N1:O1,P1:Q1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RSQ(A1:B1,D1:F1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RSQ(A1:B1,I1:J1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RSQ(A1:A1,D1:D1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>RSQ(1,2)</f><v>10</v>"#), "{sheet}");
     }
 
     #[test]
