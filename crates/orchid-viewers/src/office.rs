@@ -752,6 +752,33 @@ fn steyx_excel(pairs: &[(f64, f64)]) -> Option<f64> {
     }
 }
 
+fn covariance_excel(pairs: &[(f64, f64)], sample: bool) -> Option<f64> {
+    if pairs.len() < 2 {
+        return None;
+    }
+    let count = pairs.len() as f64;
+    let mean_y = pairs.iter().map(|(y, _)| *y).sum::<f64>() / count;
+    let mean_x = pairs.iter().map(|(_, x)| *x).sum::<f64>() / count;
+    let mut numerator = 0.0;
+    for (y, x) in pairs {
+        numerator += (y - mean_y) * (x - mean_x);
+    }
+    if !numerator.is_finite() {
+        return None;
+    }
+    let denom = if sample {
+        (pairs.len() - 1) as f64
+    } else {
+        count
+    };
+    let value = numerator / denom;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2304,6 +2331,14 @@ impl<'a> CalcParser<'a> {
             if word.eq_ignore_ascii_case("STEYX") {
                 let pairs = self.paired_ranges(env)?;
                 return steyx_excel(&pairs).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("COVARIANCE.P")
+                || word.eq_ignore_ascii_case("COVAR")
+                || word.eq_ignore_ascii_case("COVARIANCE.S")
+            {
+                let sample = word.eq_ignore_ascii_case("COVARIANCE.S");
+                let pairs = self.paired_ranges(env)?;
+                return covariance_excel(&pairs, sample).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("MINIFS") || word.eq_ignore_ascii_case("MAXIFS") {
                 let max = word.eq_ignore_ascii_case("MAXIFS");
@@ -5653,6 +5688,55 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>STEYX(1,2)</f><v>10</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_covariance() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>4</v></c><c r="C1" t="inlineStr"><is><t>xy</t></is></c><c r="D1"><v>1</v></c><c r="E1"><v>2</v></c><c r="F1"><v>3</v></c><c r="I1"><v>5</v></c><c r="J1"><v>5</v></c><c r="G1"><f>COVARIANCE.P(A1:C1,D1:F1)</f><v>0</v></c><c r="H1"><f>COVARIANCE.S(A1:C1,D1:F1)</f><v>0</v></c><c r="K1"><f>COVAR(A1:C1,D1:F1)</f><v>0</v></c><c r="L1"><f>COVARIANCE.P(A1:B1,D1:F1)</f><v>7</v></c><c r="M1"><f>COVARIANCE.P(A1:B1,I1:J1)</f><v>9</v></c><c r="N1"><f>COVARIANCE.P(A1:A1,D1:D1)</f><v>8</v></c><c r="O1"><f>COVARIANCE.P(1,2)</f><v>10</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>COVARIANCE.P(A1:C1,D1:F1)</f><v>0.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COVARIANCE.S(A1:C1,D1:F1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COVAR(A1:C1,D1:F1)</f><v>0.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COVARIANCE.P(A1:B1,D1:F1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COVARIANCE.P(A1:B1,I1:J1)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COVARIANCE.P(A1:A1,D1:D1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COVARIANCE.P(1,2)</f><v>10</v>"#),
+            "{sheet}"
+        );
     }
 
     #[test]
