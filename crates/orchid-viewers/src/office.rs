@@ -600,6 +600,23 @@ fn devsq_excel(args: &[f64]) -> Option<f64> {
     }
 }
 
+fn geomean_excel(args: &[f64]) -> Option<f64> {
+    if args.is_empty()
+        || args
+            .iter()
+            .any(|number| !number.is_finite() || *number <= 0.0)
+    {
+        return None;
+    }
+    let sum_ln = args.iter().map(|number| number.ln()).sum::<f64>();
+    let value = (sum_ln / args.len() as f64).exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2427,6 +2444,7 @@ impl<'a> CalcParser<'a> {
                 "VARP" | "VAR.P" => var_excel(&args, false).map(CalcValue::Num),
                 "AVEDEV" => avedev_excel(&args).map(CalcValue::Num),
                 "DEVSQ" => devsq_excel(&args).map(CalcValue::Num),
+                "GEOMEAN" => geomean_excel(&args).map(CalcValue::Num),
                 _ => None,
             };
         }
@@ -5485,6 +5503,39 @@ mod tests {
         assert!(sheet.contains(r#"<f>DEVSQ(A1)</f><v>0</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>DEVSQ()</f><v>7</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>DEVSQ("ab")</f><v>8</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_geomean() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>8</v></c><c r="C1" t="inlineStr"><is><t>xy</t></is></c><c r="D1"><v>0</v></c><c r="E1"><v>-3</v></c><c r="F1"><f>GEOMEAN(A1:C1)</f><v>0</v></c><c r="G1"><f>GEOMEAN(A1)</f><v>0</v></c><c r="H1"><f>GEOMEAN(D1)</f><v>5</v></c><c r="I1"><f>GEOMEAN(A1,E1)</f><v>6</v></c><c r="J1"><f>GEOMEAN()</f><v>7</v></c><c r="K1"><f>GEOMEAN("ab")</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>GEOMEAN(A1:C1)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>GEOMEAN(A1)</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GEOMEAN(D1)</f><v>5</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>GEOMEAN(A1,E1)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>GEOMEAN()</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>GEOMEAN("ab")</f><v>8</v>"#), "{sheet}");
     }
 
     #[tokio::test]
