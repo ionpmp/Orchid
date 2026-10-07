@@ -101,7 +101,7 @@ release yet.
   `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`,
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
   `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`,
-  `IFS`, `BITAND`, `BITOR`, and `BITXOR` on that sheet.
+  `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, and `FLOOR` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -130,7 +130,12 @@ release yet.
   rounds away from zero and `ROUNDDOWN` toward zero, with a digit count
   from -10 through 10. `CEILING.MATH` and `FLOOR.MATH` take one number and
   move to an integer toward +infinity or -infinity. A significance argument
-  leaves the stored value. `MEDIAN` uses the same numeric arguments as
+  leaves the stored value. `CEILING` and `FLOOR` take a significance. The
+  signs must match. A zero significance makes `CEILING` write 0 and makes
+  `FLOOR` leave the stored value. `CEILING` moves away from zero and
+  `FLOOR` moves toward zero, to a multiple of that significance. A
+  magnitude at or above 1e15, or a call with one argument, leaves the
+  stored value. `MEDIAN` uses the same numeric arguments as
   `SUM`, including a cell range. An even count averages the two middle
   numbers. An empty call leaves the stored value. `ISNUMBER` and `ISTEXT`
   write 1 or 0. A missing cell leaves the stored value, and a shared-string
