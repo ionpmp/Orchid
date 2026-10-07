@@ -102,7 +102,7 @@ release yet.
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
   `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`,
   `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`,
-  `BITRSHIFT`, `MROUND`, and `SUMIF` on that sheet.
+  `BITRSHIFT`, `MROUND`, `SUMIF`, and `COUNTIF` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -202,7 +202,9 @@ release yet.
   number, or text that starts with `=`, `<>`, `>=`, `<=`, `>`, or `<` and
   then a number. Numbers match within 1e-9. Only stored numbers are added.
   No match writes 0. Other text, a third argument, or a call that does not
-  start with a range leaves the stored value. `IF` stays numeric.
+  start with a range leaves the stored value. `COUNTIF` uses that same
+  range and criterion and writes how many stored numbers match. No match
+  writes 0. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label

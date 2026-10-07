@@ -2010,6 +2010,10 @@ impl<'a> CalcParser<'a> {
             if word.eq_ignore_ascii_case("SUMIF") {
                 return self.sum_if(env).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("COUNTIF") {
+                let matched = self.matched_numbers(env)?;
+                return Some(CalcValue::Num(matched.len() as f64));
+            }
             if word.eq_ignore_ascii_case("CEILING.MATH") {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
@@ -2588,6 +2592,15 @@ impl<'a> CalcParser<'a> {
     }
 
     fn sum_if(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let total: f64 = self.matched_numbers(env)?.iter().sum();
+        if total.is_finite() {
+            Some(total)
+        } else {
+            None
+        }
+    }
+
+    fn matched_numbers(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
         self.skip();
         let start = self.cell_token()?;
         self.skip();
@@ -2606,20 +2619,16 @@ impl<'a> CalcParser<'a> {
         }
         self.index += 1;
         let cells = cells_in_range(&start, &end)?;
-        let mut total = 0.0;
+        let mut matched = Vec::new();
         for address in cells {
             let Some(CalcValue::Num(number)) = self.cell_value(&address, env) else {
                 continue;
             };
             if number.is_finite() && number_matches(number, op, target) {
-                total += number;
+                matched.push(number);
             }
         }
-        if total.is_finite() {
-            Some(total)
-        } else {
-            None
-        }
+        Some(matched)
     }
 
     fn number(&mut self) -> Option<f64> {
@@ -4812,6 +4821,51 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>SUMIF(A1:C1,"&gt;2",A1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_countif() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>8</v></c><c r="C1"><v>3</v></c><c r="D1"><f>COUNTIF(A1:C1,"&gt;2")</f><v>0</v></c><c r="E1"><f>COUNTIF(A1:C1,8)</f><v>0</v></c><c r="F1"><f>COUNTIF(A1:C1,"&lt;&gt;8")</f><v>0</v></c><c r="G1"><f>COUNTIF(A1:C1,"&lt;0")</f><v>0</v></c><c r="H1"><f>COUNTIF(A1:C1,"ab")</f><v>7</v></c><c r="I1"><f>COUNTIF(A1:C1,"&gt;2",A1)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>COUNTIF(A1:C1,"&gt;2")</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTIF(A1:C1,8)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTIF(A1:C1,"&lt;&gt;8")</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTIF(A1:C1,"&lt;0")</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTIF(A1:C1,"ab")</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTIF(A1:C1,"&gt;2",A1)</f><v>8</v>"#),
             "{sheet}"
         );
     }
