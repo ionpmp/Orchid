@@ -2315,6 +2315,14 @@ impl<'a> CalcParser<'a> {
                 "MIN" => args.into_iter().reduce(f64::min).map(CalcValue::Num),
                 "MAX" => args.into_iter().reduce(f64::max).map(CalcValue::Num),
                 "COUNT" => Some(CalcValue::Num(args.len() as f64)),
+                "SUMSQ" => {
+                    let value = args.iter().map(|number| number * number).sum::<f64>();
+                    if value.is_finite() {
+                        Some(CalcValue::Num(value))
+                    } else {
+                        None
+                    }
+                }
                 _ => None,
             };
         }
@@ -5231,6 +5239,31 @@ mod tests {
             sheet.contains(r#"<f>AVERAGEIFS(D1:F1,A1:C1,"&gt;2",A1:C1,1)</f><v>9</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_sumsq() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>8</v></c><c r="C1"><v>3</v></c><c r="D1" t="inlineStr"><is><t>xy</t></is></c><c r="E1"><v>1e200</v></c><c r="F1"><f>SUMSQ(A1:D1)</f><v>0</v></c><c r="G1"><f>SUMSQ()</f><v>5</v></c><c r="H1"><f>SUMSQ(E1)</f><v>6</v></c><c r="I1"><f>SUMSQ("ab")</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>SUMSQ(A1:D1)</f><v>77</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SUMSQ()</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SUMSQ(E1)</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SUMSQ("ab")</f><v>7</v>"#), "{sheet}");
     }
 
     #[tokio::test]
