@@ -1789,6 +1789,98 @@ fn gamma_excel(number: f64) -> Option<f64> {
     }
 }
 
+fn gamma_cdf_series(shape: f64, x_value: f64) -> Option<f64> {
+    if x_value == 0.0 {
+        return Some(0.0);
+    }
+    let log_prefix = -x_value + shape * x_value.ln() - ln_gamma_excel(shape)?;
+    if !log_prefix.is_finite() {
+        return None;
+    }
+    let mut term = 1.0 / shape;
+    if !term.is_finite() {
+        return None;
+    }
+    let mut sum = term;
+    let mut settled = false;
+    let mut step = 0.0;
+    while step < 200.0 {
+        step += 1.0;
+        term *= x_value / (shape + step);
+        if !term.is_finite() {
+            return None;
+        }
+        sum += term;
+        if !sum.is_finite() {
+            return None;
+        }
+        let scale = if sum.abs() > 1.0 { sum.abs() } else { 1.0 };
+        if term.abs() <= 1e-12 * scale {
+            settled = true;
+            break;
+        }
+    }
+    if !settled {
+        return None;
+    }
+    let value = log_prefix.exp() * sum;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn gamma_dist_excel(x_value: f64, alpha: f64, beta: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite()
+        || !alpha.is_finite()
+        || !beta.is_finite()
+        || x_value < 0.0
+        || alpha <= 0.0
+        || beta <= 0.0
+    {
+        return None;
+    }
+    if cumulative {
+        if x_value == 0.0 {
+            return Some(0.0);
+        }
+        let lambda = x_value / beta;
+        if !lambda.is_finite() {
+            return None;
+        }
+        if alpha.fract() == 0.0 {
+            let mass = poisson_excel(alpha - 1.0, lambda, true)?;
+            let value = 1.0 - mass;
+            return if value.is_finite() { Some(value) } else { None };
+        }
+        return gamma_cdf_series(alpha, lambda);
+    }
+    if x_value == 0.0 {
+        if alpha < 1.0 {
+            return None;
+        }
+        if alpha > 1.0 {
+            return Some(0.0);
+        }
+        let value = 1.0 / beta;
+        return if value.is_finite() { Some(value) } else { None };
+    }
+    let log_pdf = (alpha - 1.0) * x_value.ln()
+        - (x_value / beta)
+        - alpha * beta.ln()
+        - ln_gamma_excel(alpha)?;
+    if !log_pdf.is_finite() {
+        return None;
+    }
+    let value = log_pdf.exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -3095,6 +3187,20 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return gamma_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("GAMMA.DIST") || word.eq_ignore_ascii_case("GAMMADIST") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let alpha = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let beta = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let flag = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !flag.is_finite() {
+                    return None;
+                }
+                return gamma_dist_excel(x_value, alpha, beta, flag != 0.0).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -8155,6 +8261,91 @@ mod tests {
         assert!(sheet.contains(r#"<f>GAMMALN(-1)</f><v>11</v>"#), "{sheet}");
         assert!(
             sheet.contains(r#"<f>GAMMA(&quot;ab&quot;)</f><v>12</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_gamma_dist() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>2</v></c><c r="C1"><v>1</v></c><c r="D1"><f>GAMMA.DIST(A1,B1,C1,0)</f><v>0</v></c><c r="E1"><f>GAMMA.DIST(A1,B1,C1,1)</f><v>0</v></c><c r="F1"><f>GAMMADIST(0.5,1,0.5,0)</f><v>0</v></c><c r="G1"><f>GAMMA.DIST(1,0.5,1,0)</f><v>0</v></c><c r="H1"><f>GAMMA.DIST(1,1.5,1,1)</f><v>0</v></c><c r="I1"><f>GAMMA.DIST(0,2,1,0)</f><v>0</v></c><c r="J1"><f>GAMMA.DIST(0,2,1,1)</f><v>0</v></c><c r="K1"><f>GAMMA.DIST(0,1,2,0)</f><v>0</v></c><c r="L1"><f>GAMMA.DIST(0,0.5,1,0)</f><v>7</v></c><c r="M1"><f>GAMMA.DIST(-1,2,1,0)</f><v>8</v></c><c r="N1"><f>GAMMA.DIST(1,0,1,0)</f><v>9</v></c><c r="O1"><f>GAMMA.DIST(1,2,0,1)</f><v>10</v></c><c r="P1"><f>GAMMA.DIST(1,172,1,1)</f><v>11</v></c><c r="Q1"><f>GAMMA.DIST(1000,0.5,1,1)</f><v>12</v></c><c r="R1"><f>GAMMA.DIST(1,2,1)</f><v>13</v></c><c r="S1"><f>GAMMA.DIST(&quot;ab&quot;,2,1,0)</f><v>14</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(A1,B1,C1,0)</f><v>0.36787944</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(A1,B1,C1,1)</f><v>0.26424112</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMADIST(0.5,1,0.5,0)</f><v>0.73575888</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(1,0.5,1,0)</f><v>0.20755375</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(1,1.5,1,1)</f><v>0.4275933</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(0,2,1,0)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(0,2,1,1)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(0,1,2,0)</f><v>0.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(0,0.5,1,0)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(-1,2,1,0)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(1,0,1,0)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(1,2,0,1)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(1,172,1,1)</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(1000,0.5,1,1)</f><v>12</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(1,2,1)</f><v>13</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.DIST(&quot;ab&quot;,2,1,0)</f><v>14</v>"#),
             "{sheet}"
         );
     }
