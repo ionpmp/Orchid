@@ -1408,6 +1408,44 @@ fn fact_double_excel(number: f64) -> Option<f64> {
     Some(acc)
 }
 
+fn poisson_excel(x_value: f64, mean: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite()
+        || !mean.is_finite()
+        || x_value < 0.0
+        || mean < 0.0
+        || x_value >= 171.0
+        || mean >= 700.0
+    {
+        return None;
+    }
+    let count = x_value.trunc() as u32;
+    let mut term = (-mean).exp();
+    if !term.is_finite() {
+        return None;
+    }
+    if !cumulative {
+        for step in 1..=count {
+            term *= mean / f64::from(step);
+            if !term.is_finite() {
+                return None;
+            }
+        }
+        return Some(term);
+    }
+    let mut sum = term;
+    for step in 1..=count {
+        term *= mean / f64::from(step);
+        if !term.is_finite() {
+            return None;
+        }
+        sum += term;
+        if !sum.is_finite() {
+            return None;
+        }
+    }
+    Some(sum)
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -2596,6 +2634,18 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return fact_double_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("POISSON") || word.eq_ignore_ascii_case("POISSON.DIST") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let mean = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let flag = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !flag.is_finite() {
+                    return None;
+                }
+                return poisson_excel(x_value, mean, flag != 0.0).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -7209,6 +7259,71 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>FACTDOUBLE(&quot;ab&quot;)</f><v>9</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_poisson() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>5</v></c><c r="C1"><f>POISSON.DIST(A1,B1,0)</f><v>0</v></c><c r="D1"><f>POISSON(A1,B1,1)</f><v>0</v></c><c r="E1"><f>POISSON.DIST(2.9,5,0)</f><v>0</v></c><c r="F1"><f>POISSON.DIST(0,0,0)</f><v>0</v></c><c r="G1"><f>POISSON.DIST(A1,0,1)</f><v>0</v></c><c r="H1"><f>POISSON.DIST(-1,5,0)</f><v>7</v></c><c r="I1"><f>POISSON.DIST(2,-1,0)</f><v>8</v></c><c r="J1"><f>POISSON.DIST(171,1,0)</f><v>9</v></c><c r="K1"><f>POISSON.DIST(2,700,0)</f><v>11</v></c><c r="L1"><f>POISSON.DIST(2,5)</f><v>12</v></c><c r="M1"><f>POISSON.DIST(&quot;ab&quot;,5,0)</f><v>13</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>POISSON.DIST(A1,B1,0)</f><v>0.08422434</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>POISSON(A1,B1,1)</f><v>0.12465202</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>POISSON.DIST(2.9,5,0)</f><v>0.08422434</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>POISSON.DIST(0,0,0)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>POISSON.DIST(A1,0,1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>POISSON.DIST(-1,5,0)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>POISSON.DIST(2,-1,0)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>POISSON.DIST(171,1,0)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>POISSON.DIST(2,700,0)</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>POISSON.DIST(2,5)</f><v>12</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>POISSON.DIST(&quot;ab&quot;,5,0)</f><v>13</v>"#),
             "{sheet}"
         );
     }
