@@ -1904,6 +1904,26 @@ fn binom_inv_excel(trials: f64, probability: f64, alpha: f64) -> Option<f64> {
     None
 }
 
+fn chisq_dist_excel(x_value: f64, degrees: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite() || !degrees.is_finite() || x_value < 0.0 || degrees < 1.0 {
+        return None;
+    }
+    let degrees = degrees.trunc();
+    if degrees < 1.0 {
+        return None;
+    }
+    gamma_dist_excel(x_value, degrees / 2.0, 2.0, cumulative)
+}
+
+fn chisq_rt_excel(x_value: f64, degrees: f64) -> Option<f64> {
+    let value = 1.0 - chisq_dist_excel(x_value, degrees, true)?;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -3233,6 +3253,25 @@ impl<'a> CalcParser<'a> {
                 let alpha = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return binom_inv_excel(trials, probability, alpha).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CHISQ.DIST.RT") || word.eq_ignore_ascii_case("CHIDIST") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let degrees = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return chisq_rt_excel(x_value, degrees).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CHISQ.DIST") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let degrees = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let flag = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !flag.is_finite() {
+                    return None;
+                }
+                return chisq_dist_excel(x_value, degrees, flag != 0.0).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -8451,6 +8490,79 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>BINOM.INV(&quot;ab&quot;,0.5,0.5)</f><v>14</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_chisq_dist() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>2</v></c><c r="C1"><f>CHISQ.DIST(A1,B1,0)</f><v>0</v></c><c r="D1"><f>CHISQ.DIST(A1,B1,1)</f><v>0</v></c><c r="E1"><f>CHISQ.DIST.RT(A1,B1)</f><v>0</v></c><c r="F1"><f>CHIDIST(1,2)</f><v>0</v></c><c r="G1"><f>CHISQ.DIST(1,2.9,0)</f><v>0</v></c><c r="H1"><f>CHISQ.DIST(1,1,1)</f><v>0</v></c><c r="I1"><f>CHISQ.DIST(-1,2,0)</f><v>7</v></c><c r="J1"><f>CHISQ.DIST(1,0.9,0)</f><v>8</v></c><c r="K1"><f>CHISQ.DIST(1,344,1)</f><v>9</v></c><c r="L1"><f>CHISQ.DIST(1400,2,1)</f><v>10</v></c><c r="M1"><f>CHISQ.DIST(2000,1,1)</f><v>11</v></c><c r="N1"><f>CHISQ.DIST(1,2)</f><v>12</v></c><c r="O1"><f>CHISQ.DIST(&quot;ab&quot;,2,0)</f><v>13</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>CHISQ.DIST(A1,B1,0)</f><v>0.30326533</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.DIST(A1,B1,1)</f><v>0.39346934</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.DIST.RT(A1,B1)</f><v>0.60653066</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHIDIST(1,2)</f><v>0.60653066</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.DIST(1,2.9,0)</f><v>0.30326533</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.DIST(1,1,1)</f><v>0.68268949</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.DIST(-1,2,0)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.DIST(1,0.9,0)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.DIST(1,344,1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.DIST(1400,2,1)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.DIST(2000,1,1)</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.DIST(1,2)</f><v>12</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.DIST(&quot;ab&quot;,2,0)</f><v>13</v>"#),
             "{sheet}"
         );
     }
