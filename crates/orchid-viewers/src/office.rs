@@ -796,6 +796,34 @@ fn rank_excel(number: f64, values: &[f64], ascending: bool) -> Option<f64> {
     Some((ahead + 1) as f64)
 }
 
+fn rank_avg_excel(number: f64, values: &[f64], ascending: bool) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let mut ahead = 0.0;
+    let mut ties = 0.0;
+    for value in values {
+        if (value - number).abs() < 1e-9 {
+            ties += 1.0;
+        } else if ascending {
+            if *value + 1e-9 < number {
+                ahead += 1.0;
+            }
+        } else if *value > number + 1e-9 {
+            ahead += 1.0;
+        }
+    }
+    if ties == 0.0 {
+        return None;
+    }
+    let value: f64 = ahead + (ties + 1.0) / 2.0;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn format_calc(value: f64) -> String {
     if !value.is_finite() {
         return String::new();
@@ -2358,7 +2386,10 @@ impl<'a> CalcParser<'a> {
                 return covariance_excel(&pairs, sample).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("RANK") || word.eq_ignore_ascii_case("RANK.EQ") {
-                return self.rank_call(env).map(CalcValue::Num);
+                return self.rank_call(env, false).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("RANK.AVG") {
+                return self.rank_call(env, true).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("MINIFS") || word.eq_ignore_ascii_case("MAXIFS") {
                 let max = word.eq_ignore_ascii_case("MAXIFS");
@@ -3037,7 +3068,7 @@ impl<'a> CalcParser<'a> {
         cells_in_range(&start, &end)
     }
 
-    fn rank_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+    fn rank_call(&mut self, env: &mut CalcEnv<'_>, average: bool) -> Option<f64> {
         let number = calc_num(self.compare(env)?)?;
         self.require_comma()?;
         let cells = self.cell_range()?;
@@ -3066,7 +3097,11 @@ impl<'a> CalcParser<'a> {
                 }
             }
         }
-        rank_excel(number, &values, ascending)
+        if average {
+            rank_avg_excel(number, &values, ascending)
+        } else {
+            rank_excel(number, &values, ascending)
+        }
     }
 
     /// Y range then X range, same length. A pair is kept when both cells are finite numbers.
@@ -5833,6 +5868,55 @@ mod tests {
         assert!(sheet.contains(r#"<f>RANK(B1,A1)</f><v>8</v>"#), "{sheet}");
         assert!(
             sheet.contains(r#"<f>RANK(B1,A1:E1,1,2)</f><v>9</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_rank_avg() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>20</v></c><c r="C1"><v>20</v></c><c r="D1"><v>30</v></c><c r="E1" t="inlineStr"><is><t>xy</t></is></c><c r="F1"><f>RANK.AVG(B1,A1:E1)</f><v>0</v></c><c r="G1"><f>RANK.AVG(D1,A1:E1)</f><v>0</v></c><c r="H1"><f>RANK.AVG(A1,A1:E1)</f><v>0</v></c><c r="I1"><f>RANK.AVG(B1,A1:E1,1)</f><v>0</v></c><c r="J1"><f>RANK.AVG(15,A1:E1)</f><v>7</v></c><c r="K1"><f>RANK.AVG(B1,A1)</f><v>8</v></c><c r="L1"><f>RANK.AVG(B1,A1:E1,1,2)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "10").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>RANK.AVG(B1,A1:E1)</f><v>2.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RANK.AVG(D1,A1:E1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RANK.AVG(A1,A1:E1)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RANK.AVG(B1,A1:E1,1)</f><v>2.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RANK.AVG(15,A1:E1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RANK.AVG(B1,A1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>RANK.AVG(B1,A1:E1,1,2)</f><v>9</v>"#),
             "{sheet}"
         );
     }
