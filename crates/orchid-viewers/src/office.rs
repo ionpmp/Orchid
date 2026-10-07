@@ -2028,6 +2028,18 @@ impl<'a> CalcParser<'a> {
             if word.eq_ignore_ascii_case("SUMPRODUCT") {
                 return self.sum_product(env).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("MINIFS") || word.eq_ignore_ascii_case("MAXIFS") {
+                let max = word.eq_ignore_ascii_case("MAXIFS");
+                let matched = self.ifs_values(env)?;
+                let value = if matched.is_empty() {
+                    0.0
+                } else if max {
+                    matched.into_iter().fold(f64::MIN, f64::max)
+                } else {
+                    matched.into_iter().fold(f64::MAX, f64::min)
+                };
+                return Some(CalcValue::Num(value));
+            }
             if word.eq_ignore_ascii_case("CEILING.MATH") {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
@@ -2639,6 +2651,54 @@ impl<'a> CalcParser<'a> {
                 continue;
             };
             if number.is_finite() && number_matches(number, op, target) {
+                matched.push(number);
+            }
+        }
+        Some(matched)
+    }
+
+    fn cell_range(&mut self) -> Option<Vec<String>> {
+        self.skip();
+        let start = self.cell_token()?;
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b':') {
+            return None;
+        }
+        self.index += 1;
+        self.skip();
+        let end = self.cell_token()?;
+        cells_in_range(&start, &end)
+    }
+
+    /// One value range, one criteria range, and one criterion. The ranges must match in size.
+    fn ifs_values(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
+        let values = self.cell_range()?;
+        self.require_comma()?;
+        let criteria_cells = self.cell_range()?;
+        if values.len() != criteria_cells.len() {
+            return None;
+        }
+        self.require_comma()?;
+        let criteria = self.compare(env)?;
+        let (op, target) = compile_criterion(&criteria)?;
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b')') {
+            return None;
+        }
+        self.index += 1;
+        let mut matched = Vec::new();
+        for (value_address, criteria_address) in values.iter().zip(criteria_cells) {
+            let Some(CalcValue::Num(criterion_number)) = self.cell_value(&criteria_address, env)
+            else {
+                continue;
+            };
+            if !criterion_number.is_finite() || !number_matches(criterion_number, op, target) {
+                continue;
+            }
+            let Some(CalcValue::Num(number)) = self.cell_value(value_address, env) else {
+                continue;
+            };
+            if number.is_finite() {
                 matched.push(number);
             }
         }
@@ -5025,6 +5085,51 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>SUMPRODUCT()</f><v>8</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_minifs_and_maxifs() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>8</v></c><c r="C1"><v>3</v></c><c r="D1"><v>10</v></c><c r="E1"><v>20</v></c><c r="F1"><v>30</v></c><c r="G1"><f>MINIFS(D1:F1,A1:C1,"&gt;2")</f><v>0</v></c><c r="H1"><f>MAXIFS(D1:F1,A1:C1,"&gt;2")</f><v>0</v></c><c r="I1"><f>MINIFS(D1:F1,A1:C1,"&lt;0")</f><v>0</v></c><c r="J1"><f>MINIFS(D1:E1,A1:C1,"&gt;2")</f><v>7</v></c><c r="K1"><f>MINIFS(D1:F1,A1:C1,"ab")</f><v>8</v></c><c r="L1"><f>MINIFS(D1:F1,A1:C1,"&gt;2",A1:C1,1)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>MINIFS(D1:F1,A1:C1,"&gt;2")</f><v>20</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MAXIFS(D1:F1,A1:C1,"&gt;2")</f><v>30</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MINIFS(D1:F1,A1:C1,"&lt;0")</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MINIFS(D1:E1,A1:C1,"&gt;2")</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MINIFS(D1:F1,A1:C1,"ab")</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MINIFS(D1:F1,A1:C1,"&gt;2",A1:C1,1)</f><v>9</v>"#),
+            "{sheet}"
+        );
     }
 
     #[tokio::test]
