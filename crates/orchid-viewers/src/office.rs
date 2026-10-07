@@ -2510,6 +2510,9 @@ impl<'a> CalcParser<'a> {
             if word.eq_ignore_ascii_case("QUARTILE") || word.eq_ignore_ascii_case("QUARTILE.INC") {
                 return self.quartile_call(env).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("QUARTILE.EXC") {
+                return self.quartile_exc_call(env).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("MODE") || word.eq_ignore_ascii_case("MODE.SNGL") {
                 return self.mode_call(env).map(CalcValue::Num);
             }
@@ -3284,6 +3287,29 @@ impl<'a> CalcParser<'a> {
             }
         }
         percentile_inc_excel(&mut values, quart / 4.0)
+    }
+
+    fn quartile_exc_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let cells = self.cell_range()?;
+        self.require_comma()?;
+        let quart = calc_num(self.compare(env)?)?;
+        if !quart.is_finite() {
+            return None;
+        }
+        self.close_paren()?;
+        let quart = quart.trunc();
+        if !(1.0..=3.0).contains(&quart) {
+            return None;
+        }
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        percentile_exc_excel(&mut values, quart / 4.0)
     }
 
     fn mode_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
@@ -6374,6 +6400,59 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>PERCENTILE.EXC(A1,0.5)</f><v>11</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_quartile_exc() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>20</v></c><c r="C1"><v>30</v></c><c r="D1"><v>40</v></c><c r="E1" t="inlineStr"><is><t>xy</t></is></c><c r="F1"><f>QUARTILE.EXC(A1:E1,1)</f><v>0</v></c><c r="G1"><f>QUARTILE.EXC(A1:E1,1.9)</f><v>0</v></c><c r="H1"><f>QUARTILE.EXC(A1:E1,2)</f><v>0</v></c><c r="I1"><f>QUARTILE.EXC(A1:E1,3)</f><v>0</v></c><c r="J1"><f>QUARTILE.EXC(A1:E1,0)</f><v>7</v></c><c r="K1"><f>QUARTILE.EXC(A1:E1,4)</f><v>8</v></c><c r="L1"><f>QUARTILE.EXC(A1:E1,5)</f><v>9</v></c><c r="M1"><f>QUARTILE.EXC(A1,1)</f><v>11</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "10").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>QUARTILE.EXC(A1:E1,1)</f><v>12.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE.EXC(A1:E1,1.9)</f><v>12.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE.EXC(A1:E1,2)</f><v>25</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE.EXC(A1:E1,3)</f><v>37.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE.EXC(A1:E1,0)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE.EXC(A1:E1,4)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE.EXC(A1:E1,5)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE.EXC(A1,1)</f><v>11</v>"#),
             "{sheet}"
         );
     }
