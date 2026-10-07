@@ -100,8 +100,8 @@ release yet.
   `TAN`, `RADIANS`, `DEGREES`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`, `SINH`,
   `COSH`, `TANH`, `COMBIN`, `PERMUT`, `PERMUTATIONA`, `LARGE`, `SMALL`,
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
-  `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`, and
-  `IFS` on that sheet.
+  `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`,
+  `IFS`, `BITAND`, `BITOR`, and `BITXOR` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -184,6 +184,8 @@ release yet.
   condition and value pairs. The first nonzero number selects its value,
   and later pairs are left unread. A text condition, an odd argument count,
   no match, or a chosen value that cannot be calculated leaves the stored
+  value. `BITAND`, `BITOR`, and `BITXOR` drop the fraction toward zero. A
+  negative number, or a magnitude at or above 2^48, leaves the stored
   value. `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.

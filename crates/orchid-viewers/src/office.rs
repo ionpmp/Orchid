@@ -1031,6 +1031,26 @@ fn parity_excel(number: f64, odd: bool) -> Option<f64> {
     Some(if is_odd == odd { 1.0 } else { 0.0 })
 }
 
+fn bit_whole(number: f64) -> Option<u64> {
+    if !number.is_finite() || number < 0.0 || number >= 281_474_976_710_656.0 {
+        return None;
+    }
+    Some(number.trunc() as u64)
+}
+
+fn bit_excel(left: f64, right: f64, and: bool, xor: bool) -> Option<f64> {
+    let left = bit_whole(left)?;
+    let right = bit_whole(right)?;
+    let value = if and {
+        left & right
+    } else if xor {
+        left ^ right
+    } else {
+        left | right
+    };
+    Some(value as f64)
+}
+
 fn code_excel(text: &str) -> Option<f64> {
     text.chars().next().map(|ch| u32::from(ch) as f64)
 }
@@ -2033,6 +2053,16 @@ impl<'a> CalcParser<'a> {
                 let args = self.logic_args(env)?;
                 let odds = args.iter().filter(|number| **number != 0.0).count();
                 return Some(CalcValue::Num(if odds % 2 == 1 { 1.0 } else { 0.0 }));
+            }
+            if word.eq_ignore_ascii_case("BITAND")
+                || word.eq_ignore_ascii_case("BITOR")
+                || word.eq_ignore_ascii_case("BITXOR")
+            {
+                let and = word.eq_ignore_ascii_case("BITAND");
+                let xor = word.eq_ignore_ascii_case("BITXOR");
+                let left = calc_num(self.compare(env)?)?;
+                let right = self.comma_number(env)?;
+                return bit_excel(left, right, and, xor).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("LARGE") || word.eq_ignore_ascii_case("SMALL") {
                 let small = word.eq_ignore_ascii_case("SMALL");
@@ -4404,6 +4434,39 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>IFS("a",1)</f><v>6</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_bitwise() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>BITAND(13,25)</f><v>0</v></c><c r="C1"><f>BITOR(13,25)</f><v>0</v></c><c r="D1"><f>BITXOR(13,25)</f><v>0</v></c><c r="E1"><f>BITAND(1.9,1)</f><v>0</v></c><c r="F1"><f>BITAND(-1,1)</f><v>7</v></c><c r="G1"><f>BITAND(281474976710656,1)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>BITAND(13,25)</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>BITOR(13,25)</f><v>29</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>BITXOR(13,25)</f><v>20</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>BITAND(1.9,1)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>BITAND(-1,1)</f><v>7</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>BITAND(281474976710656,1)</f><v>8</v>"#),
+            "{sheet}"
+        );
     }
 
     #[tokio::test]
