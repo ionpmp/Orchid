@@ -2419,6 +2419,9 @@ impl<'a> CalcParser<'a> {
             {
                 return self.percentile_call(env).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("QUARTILE") || word.eq_ignore_ascii_case("QUARTILE.INC") {
+                return self.quartile_call(env).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("MINIFS") || word.eq_ignore_ascii_case("MAXIFS") {
                 let max = word.eq_ignore_ascii_case("MAXIFS");
                 let matched = self.ifs_values(env)?;
@@ -3146,6 +3149,29 @@ impl<'a> CalcParser<'a> {
             }
         }
         percentile_inc_excel(&mut values, k)
+    }
+
+    fn quartile_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let cells = self.cell_range()?;
+        self.require_comma()?;
+        let quart = calc_num(self.compare(env)?)?;
+        if !quart.is_finite() {
+            return None;
+        }
+        self.close_paren()?;
+        let quart = quart.trunc();
+        if !(0.0..=4.0).contains(&quart) {
+            return None;
+        }
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        percentile_inc_excel(&mut values, quart / 4.0)
     }
 
     /// Y range then X range, same length. A pair is kept when both cells are finite numbers.
@@ -6010,6 +6036,63 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>PERCENTILE(A1,0)</f><v>9</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_quartile() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>20</v></c><c r="C1"><v>30</v></c><c r="D1"><v>40</v></c><c r="E1" t="inlineStr"><is><t>xy</t></is></c><c r="F1"><f>QUARTILE(A1:E1,0)</f><v>0</v></c><c r="G1"><f>QUARTILE(A1:E1,1)</f><v>0</v></c><c r="H1"><f>QUARTILE.INC(A1:E1,1.9)</f><v>0</v></c><c r="I1"><f>QUARTILE(A1:E1,2)</f><v>0</v></c><c r="J1"><f>QUARTILE(A1:E1,3)</f><v>0</v></c><c r="K1"><f>QUARTILE(A1:E1,4)</f><v>0</v></c><c r="L1"><f>QUARTILE(A1:E1,5)</f><v>7</v></c><c r="M1"><f>QUARTILE(A1:E1,-1)</f><v>8</v></c><c r="N1"><f>QUARTILE(A1,0)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "10").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>QUARTILE(A1:E1,0)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE(A1:E1,1)</f><v>17.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE.INC(A1:E1,1.9)</f><v>17.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE(A1:E1,2)</f><v>25</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE(A1:E1,3)</f><v>32.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE(A1:E1,4)</f><v>40</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE(A1:E1,5)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE(A1:E1,-1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>QUARTILE(A1,0)</f><v>9</v>"#),
             "{sheet}"
         );
     }

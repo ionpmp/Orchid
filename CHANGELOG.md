@@ -102,7 +102,7 @@ release yet.
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
   `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`,
   `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`,
-  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, and `PERCENTILE.INC` on that sheet.
+  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `QUARTILE`, and `QUARTILE.INC` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -285,6 +285,10 @@ release yet.
   Text, blanks, and shared strings are skipped. An empty range, a k outside
   that span, or a call that does not start with a range leaves the stored
   value.
+  `QUARTILE` and `QUARTILE.INC` take that same range and a quartile number.
+  The number is truncated toward zero and must land on 0, 1, 2, 3, or 4.
+  Those steps are the smallest number, then 0.25, 0.5, 0.75, and the
+  largest. The same skips and failures leave the stored value.
   `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
