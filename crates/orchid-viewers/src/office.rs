@@ -1644,6 +1644,46 @@ fn hypgeom_dist_excel(
     }
 }
 
+fn weibull_dist_excel(x_value: f64, alpha: f64, beta: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite()
+        || !alpha.is_finite()
+        || !beta.is_finite()
+        || x_value < 0.0
+        || alpha <= 0.0
+        || beta <= 0.0
+    {
+        return None;
+    }
+    let ratio = x_value / beta;
+    if !ratio.is_finite() {
+        return None;
+    }
+    let shape = ratio.powf(alpha);
+    if !shape.is_finite() {
+        return None;
+    }
+    let decay = (-shape).exp();
+    if !decay.is_finite() {
+        return None;
+    }
+    let value = if cumulative {
+        1.0 - decay
+    } else if x_value == 0.0 && alpha < 1.0 {
+        return None;
+    } else {
+        let power = ratio.powf(alpha - 1.0);
+        if !power.is_finite() {
+            return None;
+        }
+        (alpha / beta) * power * decay
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -2926,6 +2966,20 @@ impl<'a> CalcParser<'a> {
                     cumulative,
                 )
                 .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("WEIBULL.DIST") || word.eq_ignore_ascii_case("WEIBULL") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let alpha = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let beta = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let flag = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !flag.is_finite() {
+                    return None;
+                }
+                return weibull_dist_excel(x_value, alpha, beta, flag != 0.0).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -7860,6 +7914,83 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>HYPGEOM.DIST(&quot;ab&quot;,5,4,10,0)</f><v>13</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_weibull_dist() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>2</v></c><c r="C1"><v>2</v></c><c r="D1"><f>WEIBULL.DIST(A1,B1,C1,0)</f><v>0</v></c><c r="E1"><f>WEIBULL.DIST(A1,B1,C1,1)</f><v>0</v></c><c r="F1"><f>WEIBULL(0.5,1,0.5,0)</f><v>0</v></c><c r="G1"><f>WEIBULL.DIST(0,2,1,0)</f><v>0</v></c><c r="H1"><f>WEIBULL.DIST(0,2,1,1)</f><v>0</v></c><c r="I1"><f>WEIBULL.DIST(0,1,2,0)</f><v>0</v></c><c r="J1"><f>WEIBULL.DIST(0,0.5,1,0)</f><v>7</v></c><c r="K1"><f>WEIBULL.DIST(0,0.5,1,1)</f><v>0</v></c><c r="L1"><f>WEIBULL.DIST(-1,2,1,0)</f><v>8</v></c><c r="M1"><f>WEIBULL.DIST(1,0,1,0)</f><v>9</v></c><c r="N1"><f>WEIBULL.DIST(1,2,0,1)</f><v>10</v></c><c r="O1"><f>WEIBULL.DIST(10000000000000000,20,1,0)</f><v>11</v></c><c r="P1"><f>WEIBULL.DIST(1,2,1)</f><v>12</v></c><c r="Q1"><f>WEIBULL.DIST(&quot;ab&quot;,2,1,0)</f><v>13</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>WEIBULL.DIST(A1,B1,C1,0)</f><v>0.36787944</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WEIBULL.DIST(A1,B1,C1,1)</f><v>0.63212056</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WEIBULL(0.5,1,0.5,0)</f><v>0.73575888</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WEIBULL.DIST(0,2,1,0)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WEIBULL.DIST(0,2,1,1)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WEIBULL.DIST(0,1,2,0)</f><v>0.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WEIBULL.DIST(0,0.5,1,0)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WEIBULL.DIST(0,0.5,1,1)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WEIBULL.DIST(-1,2,1,0)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WEIBULL.DIST(1,0,1,0)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WEIBULL.DIST(1,2,0,1)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WEIBULL.DIST(10000000000000000,20,1,0)</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WEIBULL.DIST(1,2,1)</f><v>12</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WEIBULL.DIST(&quot;ab&quot;,2,1,0)</f><v>13</v>"#),
             "{sheet}"
         );
     }
