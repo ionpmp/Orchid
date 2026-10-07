@@ -1881,6 +1881,29 @@ fn gamma_dist_excel(x_value: f64, alpha: f64, beta: f64, cumulative: bool) -> Op
     }
 }
 
+fn binom_inv_excel(trials: f64, probability: f64, alpha: f64) -> Option<f64> {
+    if !trials.is_finite()
+        || !probability.is_finite()
+        || !alpha.is_finite()
+        || trials < 0.0
+        || trials >= 171.0
+        || !(probability > 0.0 && probability < 1.0)
+        || !(alpha > 0.0 && alpha < 1.0)
+    {
+        return None;
+    }
+    let trials = trials.trunc() as u32;
+    let mut count = 0u32;
+    while count <= trials {
+        let cdf = binom_dist_excel(f64::from(count), f64::from(trials), probability, true)?;
+        if cdf >= alpha {
+            return Some(f64::from(count));
+        }
+        count += 1;
+    }
+    None
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -3201,6 +3224,15 @@ impl<'a> CalcParser<'a> {
                     return None;
                 }
                 return gamma_dist_excel(x_value, alpha, beta, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("BINOM.INV") || word.eq_ignore_ascii_case("CRITBINOM") {
+                let trials = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let alpha = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return binom_inv_excel(trials, probability, alpha).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -8346,6 +8378,79 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>GAMMA.DIST(&quot;ab&quot;,2,1,0)</f><v>14</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_binom_inv() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>0.5</v></c><c r="C1"><f>BINOM.INV(A1,B1,0.5)</f><v>0</v></c><c r="D1"><f>BINOM.INV(A1,B1,0.6875)</f><v>0</v></c><c r="E1"><f>BINOM.INV(A1,B1,0.3125)</f><v>0</v></c><c r="F1"><f>CRITBINOM(4,0.5,0.0625)</f><v>0</v></c><c r="G1"><f>BINOM.INV(4.9,0.5,0.5)</f><v>0</v></c><c r="H1"><f>BINOM.INV(-1,0.5,0.5)</f><v>7</v></c><c r="I1"><f>BINOM.INV(4,0,0.5)</f><v>8</v></c><c r="J1"><f>BINOM.INV(4,1,0.5)</f><v>9</v></c><c r="K1"><f>BINOM.INV(4,0.5,0)</f><v>10</v></c><c r="L1"><f>BINOM.INV(4,0.5,1)</f><v>11</v></c><c r="M1"><f>BINOM.INV(171,0.5,0.5)</f><v>12</v></c><c r="N1"><f>BINOM.INV(4,0.5)</f><v>13</v></c><c r="O1"><f>BINOM.INV(&quot;ab&quot;,0.5,0.5)</f><v>14</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "4").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>BINOM.INV(A1,B1,0.5)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.INV(A1,B1,0.6875)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.INV(A1,B1,0.3125)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CRITBINOM(4,0.5,0.0625)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.INV(4.9,0.5,0.5)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.INV(-1,0.5,0.5)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.INV(4,0,0.5)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.INV(4,1,0.5)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.INV(4,0.5,0)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.INV(4,0.5,1)</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.INV(171,0.5,0.5)</f><v>12</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.INV(4,0.5)</f><v>13</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.INV(&quot;ab&quot;,0.5,0.5)</f><v>14</v>"#),
             "{sheet}"
         );
     }
