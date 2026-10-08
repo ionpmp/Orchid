@@ -2050,6 +2050,36 @@ fn binom_range_excel(trials: f64, probability: f64, low: f64, high: f64) -> Opti
     Some(sum)
 }
 
+fn z_test_excel(values: &[f64], target: f64, sigma: Option<f64>) -> Option<f64> {
+    if values.is_empty() || values.iter().any(|value| !value.is_finite()) || !target.is_finite() {
+        return None;
+    }
+    let count = values.len() as f64;
+    let mean = values.iter().sum::<f64>() / count;
+    let scale = match sigma {
+        Some(sigma) => {
+            if !sigma.is_finite() || sigma <= 0.0 {
+                return None;
+            }
+            sigma
+        }
+        None => stdev_excel(values, true)?,
+    };
+    if scale == 0.0 {
+        return None;
+    }
+    let z = (mean - target) / (scale / count.sqrt());
+    if !z.is_finite() {
+        return None;
+    }
+    let value = 1.0 - norms_dist_excel(z, true)?;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -3511,6 +3541,30 @@ impl<'a> CalcParser<'a> {
                     high
                 };
                 return binom_range_excel(trials, probability, low, high).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("Z.TEST") || word.eq_ignore_ascii_case("ZTEST") {
+                let addresses = self.cell_range()?;
+                self.require_comma()?;
+                let target = calc_num(self.compare(env)?)?;
+                self.skip();
+                let sigma = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    None
+                } else {
+                    self.require_comma()?;
+                    let sigma = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    Some(sigma)
+                };
+                let mut values = Vec::new();
+                for address in addresses {
+                    if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                        if value.is_finite() {
+                            values.push(value);
+                        }
+                    }
+                }
+                return z_test_excel(&values, target, sigma).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -9096,6 +9150,51 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>BINOM.DIST.RANGE(&quot;ab&quot;,0.5,1,2)</f><v>12</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_z_test() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>1</v></c><c r="C1"><v>1</v></c><c r="D1"><v>1</v></c><c r="E1"><f>Z.TEST(A1:D1,0,2)</f><v>0</v></c><c r="F1"><f>Z.TEST(A1:D1,1)</f><v>7</v></c><c r="G1"><f>ZTEST(A2:C2,0)</f><v>0</v></c><c r="H1"><f>Z.TEST(A1,0,1)</f><v>8</v></c><c r="I1"><f>Z.TEST(A1:D1,0,0)</f><v>9</v></c><c r="J1"><f>Z.TEST(A1:D1,&quot;ab&quot;,1)</f><v>10</v></c></row><row r="2"><c r="A2"><v>1</v></c><c r="B2"><v>2</v></c><c r="C2"><v>3</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>Z.TEST(A1:D1,0,2)</f><v>0.15865525</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>Z.TEST(A1:D1,1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>ZTEST(A2:C2,0)</f><v>0.000266</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>Z.TEST(A1,0,1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>Z.TEST(A1:D1,0,0)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>Z.TEST(A1:D1,&quot;ab&quot;,1)</f><v>10</v>"#),
             "{sheet}"
         );
     }
