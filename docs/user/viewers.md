@@ -50,9 +50,11 @@ text are ignored. Thousands separators, exponents, and dates leave the
 stored value. `T` keeps text and writes an empty string for a number.
 `N` keeps a number and writes 0 for text. `ROUNDUP` rounds away from
 zero and `ROUNDDOWN` rounds toward zero. The digit count is truncated
-and must be from -10 through 10. `CEILING.MATH` and `FLOOR.MATH` take one
-number and move to an integer toward +infinity or -infinity. A
-significance argument leaves the stored value. `CEILING` and `FLOOR` take
+and must be from -10 through 10. `CEILING.MATH` and `FLOOR.MATH` move toward +infinity or -infinity, to a
+multiple of the significance. An omitted significance is 1. The sign of the
+significance is ignored, and a significance of 0 writes 0. A third number
+that is not 0 reverses the direction for a negative number. A non-finite
+result or text leaves the stored value. `CEILING` and `FLOOR` take
 a significance. The signs must match. A zero significance makes `CEILING`
 write 0 and makes `FLOOR` leave the stored value. `CEILING` moves away
 from zero and `FLOOR` moves toward zero, to a multiple of that

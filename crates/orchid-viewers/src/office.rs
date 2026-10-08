@@ -1340,6 +1340,35 @@ fn round_excel(value: f64, digits: f64) -> Option<f64> {
     Some(scaled.round() / scale)
 }
 
+fn math_step_excel(number: f64, significance: f64, mode: f64, floor: bool) -> Option<f64> {
+    if !number.is_finite() || !significance.is_finite() || !mode.is_finite() {
+        return None;
+    }
+    if significance == 0.0 {
+        return Some(0.0);
+    }
+    let step = significance.abs();
+    if !step.is_finite() {
+        return None;
+    }
+    let quotient = number / step;
+    if !quotient.is_finite() {
+        return None;
+    }
+    let away = mode != 0.0 && number < 0.0;
+    let scaled = if floor == away {
+        quotient.ceil()
+    } else {
+        quotient.floor()
+    };
+    let value = scaled * step;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn finite_positive_log(number: f64) -> Option<f64> {
     if number.is_finite() && number > 0.0 {
         let value = number.ln();
@@ -4438,21 +4467,26 @@ impl<'a> CalcParser<'a> {
                 }
                 return Some(CalcValue::Num(average));
             }
-            if word.eq_ignore_ascii_case("CEILING.MATH") {
+            if word.eq_ignore_ascii_case("CEILING.MATH") || word.eq_ignore_ascii_case("FLOOR.MATH")
+            {
+                let floor = word.eq_ignore_ascii_case("FLOOR.MATH");
                 let number = calc_num(self.compare(env)?)?;
-                self.close_paren()?;
-                if !number.is_finite() {
-                    return None;
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    return math_step_excel(number, 1.0, 0.0, floor).map(CalcValue::Num);
                 }
-                return Some(CalcValue::Num(number.ceil()));
-            }
-            if word.eq_ignore_ascii_case("FLOOR.MATH") {
-                let number = calc_num(self.compare(env)?)?;
-                self.close_paren()?;
-                if !number.is_finite() {
-                    return None;
+                self.require_comma()?;
+                let significance = calc_num(self.compare(env)?)?;
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    return math_step_excel(number, significance, 0.0, floor).map(CalcValue::Num);
                 }
-                return Some(CalcValue::Num(number.floor()));
+                self.require_comma()?;
+                let mode = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return math_step_excel(number, significance, mode, floor).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("CONCAT") || word.eq_ignore_ascii_case("CONCATENATE") {
                 return self.concat_args(env).map(CalcValue::Text);
@@ -6656,7 +6690,56 @@ mod tests {
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>CEILING.MATH(1.2,1)</f><v>8</v>"#),
+            sheet.contains(r#"<f>CEILING.MATH(1.2,1)</f><v>2</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_math_step() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>CEILING.MATH(-5.5,2)</f><v>0</v></c><c r="C1"><f>CEILING.MATH(-5.5,2,1)</f><v>0</v></c><c r="D1"><f>FLOOR.MATH(5.5,2)</f><v>0</v></c><c r="E1"><f>FLOOR.MATH(-5.5,1,1)</f><v>0</v></c><c r="F1"><f>CEILING.MATH(5,0)</f><v>0</v></c><c r="G1"><f>FLOOR.MATH(5,-2)</f><v>0</v></c><c r="H1"><f>CEILING.MATH(&quot;ab&quot;,1)</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>CEILING.MATH(-5.5,2)</f><v>-4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CEILING.MATH(-5.5,2,1)</f><v>-6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>FLOOR.MATH(5.5,2)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>FLOOR.MATH(-5.5,1,1)</f><v>-5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CEILING.MATH(5,0)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>FLOOR.MATH(5,-2)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CEILING.MATH(&quot;ab&quot;,1)</f><v>7</v>"#),
             "{sheet}"
         );
     }
