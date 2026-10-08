@@ -755,7 +755,10 @@ release yet.
   cell or one colon range on one sheet in this workbook. The name is ASCII
   case-insensitive, at most 255 characters, and uses letters, digits,
   underscores, and dots. It must not look like a cell address. A name with
-  `localSheetId` is ignored. A name on the sheet being edited reads those cells
+  `localSheetId` belongs to the sheet at that zero-based position in workbook
+  order. On that sheet it hides a workbook name with the same spelling. On
+  every other sheet it is not visible. A `localSheetId` that is not a sheet
+  index is ignored. A name on the sheet being edited reads those cells
   the same way a bare reference does, so a formula there is recalculated. A
   name on another sheet reads the stored snapshot and does not follow a
   formula. The name expands when it is a whole argument of `SUM`, `AVERAGE`,

@@ -261,12 +261,12 @@ pub(crate) fn set_sheet_cell(
     }
     let workbook = read_entry(&mut archive, "xl/workbook.xml").unwrap_or_default();
     let date1904 = workbook_date1904(&workbook);
-    let names = workbook_names(&workbook);
     let sheet_key = sheet_name.to_ascii_lowercase();
     let sheet_order: Vec<String> = sheets
         .iter()
         .map(|(name, _)| name.to_ascii_lowercase())
         .collect();
+    let names = workbook_names(&workbook, &sheet_order);
     let iteration = workbook_iteration(&workbook);
     let xml = recalculate_sheet(
         &xml,
@@ -489,7 +489,7 @@ fn recalculate_sheet(
     xml: &str,
     shared: &[String],
     foreign: &std::collections::HashMap<String, ForeignSheet>,
-    names: &std::collections::HashMap<String, DefinedRef>,
+    names: &NameBook,
     sheet_order: &[String],
     sheet: &str,
     date1904: bool,
@@ -1814,7 +1814,7 @@ fn eval_formula(
     literals: &std::collections::HashMap<String, f64>,
     texts: &std::collections::HashMap<String, String>,
     foreign: &std::collections::HashMap<String, ForeignSheet>,
-    names: &std::collections::HashMap<String, DefinedRef>,
+    names: &NameBook,
     sheet_order: &[String],
     sheet: &str,
     date1904: bool,
@@ -1929,7 +1929,7 @@ struct CalcEnv<'a> {
     literals: &'a std::collections::HashMap<String, f64>,
     texts: &'a std::collections::HashMap<String, String>,
     foreign: &'a std::collections::HashMap<String, ForeignSheet>,
-    names: &'a std::collections::HashMap<String, DefinedRef>,
+    names: &'a NameBook,
     sheet_order: &'a [String],
     sheet: &'a str,
     date1904: bool,
@@ -3046,8 +3046,24 @@ fn workbook_iteration(xml: &str) -> Option<(u32, f64)> {
     Some((count, delta))
 }
 
-fn workbook_names(xml: &str) -> std::collections::HashMap<String, DefinedRef> {
-    let mut names = std::collections::HashMap::new();
+struct NameBook {
+    global: std::collections::HashMap<String, DefinedRef>,
+    local: std::collections::HashMap<(String, String), DefinedRef>,
+}
+
+impl NameBook {
+    fn get(&self, sheet: &str, name: &str) -> Option<&DefinedRef> {
+        self.local
+            .get(&(sheet.to_string(), name.to_string()))
+            .or_else(|| self.global.get(name))
+    }
+}
+
+fn workbook_names(xml: &str, sheet_order: &[String]) -> NameBook {
+    let mut names = NameBook {
+        global: std::collections::HashMap::new(),
+        local: std::collections::HashMap::new(),
+    };
     let mut index = 0usize;
     while let Some(at) = xml[index..].find("<definedName ") {
         let start = index + at;
@@ -3057,14 +3073,8 @@ fn workbook_names(xml: &str) -> std::collections::HashMap<String, DefinedRef> {
         let tag = &xml[start..start + tag_rel];
         let empty = tag.ends_with('/');
         let body_start = start + tag_rel + 1;
-        if tag.contains("localSheetId=") || empty {
-            index = if empty {
-                body_start
-            } else if let Some(close) = xml[body_start..].find("</definedName>") {
-                body_start + close + "</definedName>".len()
-            } else {
-                break;
-            };
+        if empty {
+            index = body_start;
             continue;
         }
         let Some(name) = xml_attr(tag, "name") else {
@@ -3087,19 +3097,30 @@ fn workbook_names(xml: &str) -> std::collections::HashMap<String, DefinedRef> {
         {
             continue;
         }
-        if let Some(refer) = parse_defined_ref(&body) {
-            names.insert(name.to_ascii_lowercase(), refer);
+        let refer = if let Some(refer) = parse_defined_ref(&body) {
+            refer
         } else if let Some(formula) = absolute_sheet_formula(body) {
-            names.insert(
-                name.to_ascii_lowercase(),
-                DefinedRef {
-                    sheet: String::new(),
-                    cells: Vec::new(),
-                    rows: 0,
-                    cols: 0,
-                    formula: Some(formula),
-                },
-            );
+            DefinedRef {
+                sheet: String::new(),
+                cells: Vec::new(),
+                rows: 0,
+                cols: 0,
+                formula: Some(formula),
+            }
+        } else {
+            continue;
+        };
+        let key = name.to_ascii_lowercase();
+        if let Some(raw) = xml_attr(tag, "localSheetId") {
+            let Ok(id) = raw.parse::<usize>() else {
+                continue;
+            };
+            let Some(owner) = sheet_order.get(id) else {
+                continue;
+            };
+            names.local.insert((owner.clone(), key), refer);
+        } else {
+            names.global.insert(key, refer);
         }
     }
     names
@@ -3203,7 +3224,10 @@ fn absolute_sheet_formula(text: &str) -> Option<String> {
 }
 
 fn eval_name_formula(formula: &str, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
-    let names = std::collections::HashMap::new();
+    let names = NameBook {
+        global: std::collections::HashMap::new(),
+        local: std::collections::HashMap::new(),
+    };
     eval_formula(
         formula,
         env.formulas,
@@ -8433,7 +8457,7 @@ impl<'a> CalcParser<'a> {
             return self.foreign_cell(&word, env);
         }
         if !is_cell_address(&word) {
-            if let Some(defined) = env.names.get(&word.to_ascii_lowercase()) {
+            if let Some(defined) = env.names.get(env.sheet, &word.to_ascii_lowercase()) {
                 if let Some(formula) = &defined.formula {
                     return eval_name_formula(formula, env);
                 }
@@ -8983,7 +9007,10 @@ impl<'a> CalcParser<'a> {
             self.index = saved;
             return None;
         }
-        let defined = env.names.get(&word.to_ascii_lowercase()).cloned();
+        let defined = env
+            .names
+            .get(env.sheet, &word.to_ascii_lowercase())
+            .cloned();
         if defined.is_none() {
             self.index = saved;
         }
@@ -12230,13 +12257,49 @@ mod tests {
         assert!(sheet.contains(r#"<f>OtherTotal</f><v>9</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>SUM(Abroad)</f><v>13</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Quoted</f><v>4</v>"#), "{sheet}");
-        assert!(sheet.contains(r#"<f>Local</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Local</f><v>3</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Plus</f><v>11</v>"#), "{sheet}");
         assert!(
             sheet.contains(r#"<f>SUMIF(Sales,&quot;&gt;15&quot;)</f><v>20</v>"#),
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>COUNTA(Sales)</f><v>2</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_local_name() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/><sheet name="Other" sheetId="2" r:id="rId2"/></sheets><definedNames><definedName name="Rate">Budgets!$B$1</definedName><definedName name="Rate" localSheetId="0">Budgets!$A$1</definedName><definedName name="Only" localSheetId="1">Other!$A$1</definedName><definedName name="Plus" localSheetId="0">Budgets!$A$1+1</definedName><definedName name="Gone" localSheetId="5">Budgets!$A$1</definedName></definedNames></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>10</v></c><c r="B1"><v>3</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="D2"><f>Rate</f><v>0</v></c><c r="E2"><f>Rate*2</f><v>0</v></c><c r="F2"><f>Only</f><v>4</v></c><c r="G2"><f>Plus</f><v>0</v></c><c r="H2"><f>SUM(Rate)</f><v>0</v></c><c r="I2"><f>Gone</f><v>6</v></c></row></sheetData></worksheet>"#,
+            ),
+            (
+                "xl/worksheets/sheet2.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>7</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="B2"><f>Rate</f><v>0</v></c><c r="C2"><f>Only</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>Rate</f><v>10</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Rate*2</f><v>20</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Only</f><v>4</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Plus</f><v>11</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SUM(Rate)</f><v>10</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Gone</f><v>6</v>"#), "{sheet}");
+        let other = set_sheet_cell(&bytes, "Other", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(other)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet2.xml").unwrap();
+        assert!(sheet.contains(r#"<f>Rate</f><v>3</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Only</f><v>7</v>"#), "{sheet}");
     }
 
     #[test]
