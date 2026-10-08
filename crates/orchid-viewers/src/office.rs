@@ -2563,6 +2563,38 @@ fn decimal_excel(text: &str, radix: f64) -> Option<f64> {
     Some(value as f64)
 }
 
+fn bessel_excel(x: f64, order: f64, modified: bool) -> Option<f64> {
+    if !x.is_finite() || !order.is_finite() || order < 0.0 || order > 40.0 || x.abs() >= 40.0 {
+        return None;
+    }
+    let n = order.trunc() as u32;
+    if x == 0.0 {
+        return Some(if n == 0 { 1.0 } else { 0.0 });
+    }
+    let half = x / 2.0;
+    let mut term = 1.0;
+    for k in 1..=n {
+        term *= half / f64::from(k);
+        if !term.is_finite() {
+            return None;
+        }
+    }
+    let mut sum = 0.0;
+    let half_sq = half * half;
+    for k in 0..200 {
+        if !term.is_finite() {
+            return None;
+        }
+        sum += term;
+        let step = half_sq / (f64::from(k + 1) * f64::from(n + k + 1));
+        term *= if modified { step } else { -step };
+        if term.abs() <= 1e-16 * sum.abs().max(1.0) {
+            return if sum.is_finite() { Some(sum) } else { None };
+        }
+    }
+    None
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -4835,6 +4867,14 @@ impl<'a> CalcParser<'a> {
                 let radix = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return decimal_excel(&text, radix).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("BESSELJ") || word.eq_ignore_ascii_case("BESSELI") {
+                let modified = word.eq_ignore_ascii_case("BESSELI");
+                let x = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let order = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return bessel_excel(x, order, modified).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("TEXTJOIN") {
                 let delim = calc_text(&self.compare(env)?);
@@ -7368,6 +7408,51 @@ mod tests {
         );
         assert!(sheet.contains(r#"<f>DEC2BIN(-1,4)</f><v>8</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>BASE(1,2,0)</f><v>7</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_bessel() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>BESSELJ(1,0)</f><v>0</v></c><c r="C1"><f>BESSELJ(1,1)</f><v>0</v></c><c r="D1"><f>BESSELI(1,0)</f><v>0</v></c><c r="E1"><f>BESSELI(1,1)</f><v>0</v></c><c r="F1"><f>BESSELJ(0,0)</f><v>0</v></c><c r="G1"><f>BESSELJ(0,1)</f><v>0</v></c><c r="H1"><f>BESSELJ(1,1.9)</f><v>0</v></c><c r="I1"><f>BESSELJ(1,-1)</f><v>9</v></c><c r="J1"><f>BESSELJ(40,0)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>BESSELJ(1,0)</f><v>0.76519769</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BESSELJ(1,1)</f><v>0.44005059</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BESSELI(1,0)</f><v>1.26606588</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BESSELI(1,1)</f><v>0.5651591</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>BESSELJ(0,0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>BESSELJ(0,1)</f><v>0</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>BESSELJ(1,1.9)</f><v>0.44005059</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>BESSELJ(1,-1)</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>BESSELJ(40,0)</f><v>8</v>"#), "{sheet}");
     }
 
     #[test]
