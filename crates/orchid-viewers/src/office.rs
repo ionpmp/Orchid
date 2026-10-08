@@ -1996,6 +1996,31 @@ fn erf_excel(x_value: f64) -> Option<f64> {
     }
 }
 
+fn lognorm_dist_excel(x_value: f64, mean: f64, scale: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite()
+        || !mean.is_finite()
+        || !scale.is_finite()
+        || x_value <= 0.0
+        || scale <= 0.0
+    {
+        return None;
+    }
+    let z = (x_value.ln() - mean) / scale;
+    if !z.is_finite() {
+        return None;
+    }
+    let value = norms_dist_excel(z, cumulative)?;
+    if cumulative {
+        return Some(value);
+    }
+    let density = value / (x_value * scale);
+    if density.is_finite() {
+        Some(density)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -3417,6 +3442,28 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return norms_dist_excel(number, false).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("LOGNORM.DIST") || word.eq_ignore_ascii_case("LOGNORMDIST")
+            {
+                let legacy = word.eq_ignore_ascii_case("LOGNORMDIST");
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let mean = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let scale = calc_num(self.compare(env)?)?;
+                let cumulative = if legacy {
+                    self.close_paren()?;
+                    true
+                } else {
+                    self.require_comma()?;
+                    let flag = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    if !flag.is_finite() {
+                        return None;
+                    }
+                    flag != 0.0
+                };
+                return lognorm_dist_excel(x_value, mean, scale, cumulative).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -8884,6 +8931,67 @@ mod tests {
         assert!(sheet.contains(r#"<f>ERF(40)</f><v>7</v>"#), "{sheet}");
         assert!(
             sheet.contains(r#"<f>ERF(&quot;ab&quot;)</f><v>8</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_lognorm_dist() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>LOGNORM.DIST(A1,0,1,0)</f><v>0</v></c><c r="C1"><f>LOGNORM.DIST(A1,0,1,1)</f><v>0</v></c><c r="D1"><f>LOGNORMDIST(1,0,1)</f><v>0</v></c><c r="E1"><f>LOGNORM.DIST(1,0,1,0)</f><v>0</v></c><c r="F1"><f>LOGNORM.DIST(0,0,1,1)</f><v>7</v></c><c r="G1"><f>LOGNORM.DIST(-1,0,1,0)</f><v>8</v></c><c r="H1"><f>LOGNORM.DIST(2,0,0,1)</f><v>9</v></c><c r="I1"><f>LOGNORM.DIST(2,0,-1,1)</f><v>10</v></c><c r="J1"><f>LOGNORM.DIST(2,0,1)</f><v>11</v></c><c r="K1"><f>LOGNORM.DIST(&quot;ab&quot;,0,1,0)</f><v>12</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>LOGNORM.DIST(A1,0,1,0)</f><v>0.15687402</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGNORM.DIST(A1,0,1,1)</f><v>0.7558914</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGNORMDIST(1,0,1)</f><v>0.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGNORM.DIST(1,0,1,0)</f><v>0.39894228</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGNORM.DIST(0,0,1,1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGNORM.DIST(-1,0,1,0)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGNORM.DIST(2,0,0,1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGNORM.DIST(2,0,-1,1)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGNORM.DIST(2,0,1)</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGNORM.DIST(&quot;ab&quot;,0,1,0)</f><v>12</v>"#),
             "{sheet}"
         );
     }
