@@ -2194,6 +2194,33 @@ fn hyper_excel(number: f64, kind: &str) -> Option<f64> {
     }
 }
 
+fn inverse_hyper_excel(number: f64, kind: &str) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = match kind {
+        "ASINH" => number.asinh(),
+        "ACOSH" => {
+            if number < 1.0 {
+                return None;
+            }
+            number.acosh()
+        }
+        "ATANH" => {
+            if number <= -1.0 || number >= 1.0 {
+                return None;
+            }
+            number.atanh()
+        }
+        _ => return None,
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn combin_excel(n: f64, k: f64) -> Option<f64> {
     if !n.is_finite() || !k.is_finite() || n < 0.0 || k < 0.0 || n >= 1_000_000.0 {
         return None;
@@ -3668,6 +3695,15 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return hyper_excel(number, &kind).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ASINH")
+                || word.eq_ignore_ascii_case("ACOSH")
+                || word.eq_ignore_ascii_case("ATANH")
+            {
+                let kind = word.to_ascii_uppercase();
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return inverse_hyper_excel(number, &kind).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("COMBIN") {
                 let n = calc_num(self.compare(env)?)?;
@@ -9296,6 +9332,48 @@ mod tests {
         assert!(sheet.contains(r#"<f>PROB(A1,A2,1)</f><v>9</v>"#), "{sheet}");
         assert!(
             sheet.contains(r#"<f>PROB(A1:C1,A2:C2,&quot;ab&quot;)</f><v>10</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_inverse_hyperbolic() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>0.5</v></c><c r="C1"><v>-1</v></c><c r="D1"><f>ASINH(A1)</f><v>9</v></c><c r="E1"><f>ACOSH(A1)</f><v>8</v></c><c r="F1"><f>ATANH(B1)</f><v>7</v></c><c r="G1"><f>ASINH(C1)</f><v>6</v></c><c r="H1"><f>ACOSH(0.5)</f><v>5</v></c><c r="I1"><f>ATANH(1)</f><v>4</v></c><c r="J1"><f>ATANH(-1)</f><v>3</v></c><c r="K1"><f>ATANH(2)</f><v>2</v></c><c r="L1"><f>ASINH(&quot;ab&quot;)</f><v>1</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>ASINH(A1)</f><v>0.88137359</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>ACOSH(A1)</f><v>0</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>ATANH(B1)</f><v>0.54930614</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>ASINH(C1)</f><v>-0.88137359</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>ACOSH(0.5)</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ATANH(1)</f><v>4</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ATANH(-1)</f><v>3</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ATANH(2)</f><v>2</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>ASINH(&quot;ab&quot;)</f><v>1</v>"#),
             "{sheet}"
         );
     }
