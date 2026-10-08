@@ -4719,6 +4719,34 @@ impl<'a> CalcParser<'a> {
                 }
                 return trimmean_excel(&mut values, percent).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("AVERAGEA")
+                || word.eq_ignore_ascii_case("MINA")
+                || word.eq_ignore_ascii_case("MAXA")
+                || word.eq_ignore_ascii_case("STDEVA")
+                || word.eq_ignore_ascii_case("VARA")
+            {
+                let name = word.to_ascii_uppercase();
+                let args = self.a_list(env)?;
+                return match name.as_str() {
+                    "AVERAGEA" if !args.is_empty() => {
+                        let value = args.iter().sum::<f64>() / args.len() as f64;
+                        if value.is_finite() {
+                            Some(CalcValue::Num(value))
+                        } else {
+                            None
+                        }
+                    }
+                    "MINA" => Some(CalcValue::Num(
+                        args.into_iter().reduce(f64::min).unwrap_or(0.0),
+                    )),
+                    "MAXA" => Some(CalcValue::Num(
+                        args.into_iter().reduce(f64::max).unwrap_or(0.0),
+                    )),
+                    "STDEVA" => stdev_excel(&args, true).map(CalcValue::Num),
+                    "VARA" => var_excel(&args, true).map(CalcValue::Num),
+                    _ => None,
+                };
+            }
             let args = self.arg_list(env)?;
             return match word.to_ascii_uppercase().as_str() {
                 "SUM" => Some(CalcValue::Num(args.iter().sum())),
@@ -4916,6 +4944,76 @@ impl<'a> CalcParser<'a> {
             } else {
                 self.index = saved;
                 values.push(calc_num(self.expr(env)?)?);
+            }
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => self.index += 1,
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        if values.len() > 4096 {
+            None
+        } else {
+            Some(values)
+        }
+    }
+
+    fn a_scalar(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        match self.compare(env)? {
+            CalcValue::Num(value) if value.is_finite() => Some(value),
+            CalcValue::Num(_) => None,
+            CalcValue::Text(_) => Some(0.0),
+        }
+    }
+
+    fn a_list(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
+        let mut values = Vec::new();
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(values);
+        }
+        loop {
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                break;
+            }
+            let saved = self.index;
+            if let Some(start) = self.cell_token() {
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b':') {
+                    self.index += 1;
+                    self.skip();
+                    let Some(end) = self.cell_token() else {
+                        return None;
+                    };
+                    let Some(cells) = cells_in_range(&start, &end) else {
+                        return None;
+                    };
+                    for address in cells {
+                        match self.cell_value(&address, env) {
+                            Some(CalcValue::Num(value)) => {
+                                if !value.is_finite() {
+                                    return None;
+                                }
+                                values.push(value);
+                            }
+                            Some(CalcValue::Text(_)) => values.push(0.0),
+                            None => {}
+                        }
+                    }
+                } else {
+                    self.index = saved;
+                    values.push(self.a_scalar(env)?);
+                }
+            } else {
+                self.index = saved;
+                values.push(self.a_scalar(env)?);
             }
             self.skip();
             match self.bytes.get(self.index).copied() {
@@ -6742,6 +6840,45 @@ mod tests {
             sheet.contains(r#"<f>CEILING.MATH(&quot;ab&quot;,1)</f><v>7</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_average_a() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1" t="inlineStr"><is><t>xy</t></is></c><c r="D1"><f>AVERAGEA(A1:C1)</f><v>0</v></c><c r="E1"><f>MINA(A1:C1)</f><v>0</v></c><c r="F1"><f>MAXA(A1:C1)</f><v>0</v></c><c r="G1"><f>STDEVA(A1:B1)</f><v>0</v></c><c r="H1"><f>VARA(A1:B1)</f><v>0</v></c><c r="I1"><f>AVERAGEA()</f><v>7</v></c><c r="J1"><f>AVERAGEA(&quot;ab&quot;)</f><v>0</v></c><c r="K1"><f>STDEVA(A1)</f><v>8</v></c><c r="L1"><f>MINA()</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>AVERAGEA(A1:C1)</f><v>0.5</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>MINA(A1:C1)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MAXA(A1:C1)</f><v>1</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>STDEVA(A1:B1)</f><v>0.70710678</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>VARA(A1:B1)</f><v>0.5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>AVERAGEA()</f><v>7</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>AVERAGEA(&quot;ab&quot;)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>STDEVA(A1)</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MINA()</f><v>0</v>"#), "{sheet}");
     }
 
     #[test]
