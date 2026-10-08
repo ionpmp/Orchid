@@ -1924,6 +1924,24 @@ fn chisq_rt_excel(x_value: f64, degrees: f64) -> Option<f64> {
     }
 }
 
+fn chisq_test_stat(pairs: &[(f64, f64)]) -> Option<f64> {
+    if pairs.is_empty() {
+        return None;
+    }
+    let mut sum = 0.0;
+    for (actual, expected) in pairs {
+        if !actual.is_finite() || !expected.is_finite() || *expected <= 0.0 {
+            return None;
+        }
+        let delta = actual - expected;
+        sum += delta * delta / expected;
+        if !sum.is_finite() {
+            return None;
+        }
+    }
+    Some(sum)
+}
+
 fn invert_unit_cdf(probability: f64, mut cdf: impl FnMut(f64) -> Option<f64>) -> Option<f64> {
     if !probability.is_finite() || probability <= 0.0 || probability >= 1.0 {
         return None;
@@ -3814,6 +3832,40 @@ impl<'a> CalcParser<'a> {
                 self.close_paren()?;
                 return chisq_inv_excel(probability, degrees).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("CHISQ.TEST") || word.eq_ignore_ascii_case("CHITEST") {
+                let (actual, rows, cols) = self.cell_block()?;
+                self.require_comma()?;
+                let (expected, expected_rows, expected_cols) = self.cell_block()?;
+                self.close_paren()?;
+                if rows != expected_rows || cols != expected_cols {
+                    return None;
+                }
+                let degrees = if rows == 1 {
+                    cols.saturating_sub(1)
+                } else if cols == 1 {
+                    rows.saturating_sub(1)
+                } else {
+                    rows.saturating_sub(1)
+                        .saturating_mul(cols.saturating_sub(1))
+                };
+                if degrees < 1 {
+                    return None;
+                }
+                let mut pairs = Vec::new();
+                for (actual_address, expected_address) in actual.iter().zip(expected) {
+                    let Some(CalcValue::Num(actual_n)) = self.cell_value(actual_address, env)
+                    else {
+                        return None;
+                    };
+                    let Some(CalcValue::Num(expected_n)) = self.cell_value(&expected_address, env)
+                    else {
+                        return None;
+                    };
+                    pairs.push((actual_n, expected_n));
+                }
+                let stat = chisq_test_stat(&pairs)?;
+                return chisq_rt_excel(stat, f64::from(degrees)).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("NORM.S.DIST") || word.eq_ignore_ascii_case("NORMSDIST") {
                 let legacy = word.eq_ignore_ascii_case("NORMSDIST");
                 let x_value = calc_num(self.compare(env)?)?;
@@ -5067,6 +5119,24 @@ impl<'a> CalcParser<'a> {
         self.skip();
         let end = self.cell_token()?;
         cells_in_range(&start, &end)
+    }
+
+    fn cell_block(&mut self) -> Option<(Vec<String>, u32, u32)> {
+        self.skip();
+        let start = self.cell_token()?;
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b':') {
+            return None;
+        }
+        self.index += 1;
+        self.skip();
+        let end = self.cell_token()?;
+        let (c1, r1) = split_address(&start)?;
+        let (c2, r2) = split_address(&end)?;
+        let rows = r1.abs_diff(r2) + 1;
+        let cols = c1.abs_diff(c2) + 1;
+        let cells = cells_in_range(&start, &end)?;
+        Some((cells, rows, cols))
     }
 
     fn rank_call(&mut self, env: &mut CalcEnv<'_>, average: bool) -> Option<f64> {
@@ -10299,6 +10369,59 @@ mod tests {
         assert!(sheet.contains(r#"<f>ACOTH(0.5)</f><v>8</v>"#), "{sheet}");
         assert!(
             sheet.contains(r#"<f>ACOT(&quot;ab&quot;)</f><v>9</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_chisq_test() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>2</v></c><c r="C1"><v>2</v></c><c r="D1"><v>1</v></c><c r="E1"><f>CHISQ.TEST(A1:B1,C1:D1)</f><v>0</v></c><c r="F1"><f>CHITEST(A1:B1,A1:B1)</f><v>0</v></c><c r="G1"><f>CHISQ.TEST(A2:B3,C2:D3)</f><v>0</v></c><c r="H1"><f>CHISQ.TEST(A1:A1,C1:C1)</f><v>7</v></c><c r="I1"><f>CHISQ.TEST(A1:B1,A2:A3)</f><v>8</v></c><c r="J1"><f>CHISQ.TEST(A1:B1,E2:F2)</f><v>9</v></c><c r="K1"><f>CHISQ.TEST(A1:B1,G2:H2)</f><v>10</v></c><c r="L1"><f>CHISQ.TEST(1,2)</f><v>11</v></c></row><row r="2"><c r="A2"><v>1</v></c><c r="B2"><v>2</v></c><c r="C2"><v>1</v></c><c r="D2"><v>2</v></c><c r="E2"><v>0</v></c><c r="F2"><v>1</v></c><c r="G2" t="inlineStr"><is><t>xy</t></is></c><c r="H2"><v>1</v></c></row><row r="3"><c r="A3"><v>3</v></c><c r="B3"><v>4</v></c><c r="C3"><v>3</v></c><c r="D3"><v>4</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>CHISQ.TEST(A1:B1,C1:D1)</f><v>0.22067136</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHITEST(A1:B1,A1:B1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.TEST(A2:B3,C2:D3)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.TEST(A1:A1,C1:C1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.TEST(A1:B1,A2:A3)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.TEST(A1:B1,E2:F2)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.TEST(A1:B1,G2:H2)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.TEST(1,2)</f><v>11</v>"#),
             "{sheet}"
         );
     }
