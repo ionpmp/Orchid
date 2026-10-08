@@ -3202,6 +3202,182 @@ fn irr_excel(values: &[f64], guess: f64) -> Option<f64> {
     None
 }
 
+fn weekday_code(serial: i64, kind: i64) -> Option<f64> {
+    if !(0..=2_958_465).contains(&serial) {
+        return None;
+    }
+    let value = match kind {
+        1 => {
+            let day = (serial + 1) % 7;
+            if day == 0 {
+                7
+            } else {
+                day
+            }
+        }
+        2 => {
+            let day = serial % 7;
+            if day == 0 {
+                7
+            } else {
+                day
+            }
+        }
+        3 => (serial - 1).rem_euclid(7),
+        _ => return None,
+    };
+    Some(value as f64)
+}
+
+fn month_length(year: i32, month: i32) -> Option<i32> {
+    let serial = date_excel(f64::from(year), f64::from(month) + 1.0, 0.0)?;
+    let (_, _, day) = excel_parts(serial)?;
+    if day <= 0 {
+        None
+    } else {
+        Some(day)
+    }
+}
+
+fn shift_months(serial: f64, months: f64, end_of_month: bool) -> Option<f64> {
+    if !serial.is_finite() || !months.is_finite() || serial < 1.0 || serial > 2_958_465.0 {
+        return None;
+    }
+    if months.abs() > 120_000.0 {
+        return None;
+    }
+    let (year, month, day) = excel_parts(serial.trunc())?;
+    let (year, month) = excel_normalize_month(year, month + months.trunc() as i32)?;
+    let length = month_length(year, month)?;
+    let day = if end_of_month {
+        length
+    } else {
+        day.min(length)
+    };
+    date_excel(f64::from(year), f64::from(month), f64::from(day))
+}
+
+fn datedif_excel(start: f64, end: f64, unit: &str) -> Option<f64> {
+    if !start.is_finite() || !end.is_finite() || start < 1.0 || end < start || end > 2_958_465.0 {
+        return None;
+    }
+    let start = start.trunc();
+    let end = end.trunc();
+    let (sy, sm, sd) = excel_parts(start)?;
+    let (ey, em, ed) = excel_parts(end)?;
+    let unit = unit.to_ascii_uppercase();
+    let value = match unit.as_str() {
+        "D" => end - start,
+        "Y" => {
+            let mut years = ey - sy;
+            if (em, ed) < (sm, sd) {
+                years -= 1;
+            }
+            f64::from(years)
+        }
+        "M" => {
+            let mut months = (ey - sy) * 12 + (em - sm);
+            if ed < sd {
+                months -= 1;
+            }
+            f64::from(months)
+        }
+        "YM" => {
+            let mut months = em - sm;
+            if ed < sd {
+                months -= 1;
+            }
+            if months < 0 {
+                months += 12;
+            }
+            f64::from(months)
+        }
+        "MD" => {
+            if ed >= sd {
+                f64::from(ed - sd)
+            } else {
+                let previous = if em == 1 { 12 } else { em - 1 };
+                let year = if em == 1 { ey - 1 } else { ey };
+                let length = month_length(year, previous)?;
+                f64::from(length - sd + ed)
+            }
+        }
+        "YD" => {
+            let mut anchor = date_excel(f64::from(ey), f64::from(sm), f64::from(sd))?;
+            if anchor > end {
+                anchor = date_excel(f64::from(ey - 1), f64::from(sm), f64::from(sd))?;
+            }
+            end - anchor
+        }
+        _ => return None,
+    };
+    if value.is_finite() && value >= 0.0 {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn is_workday_serial(serial: i64) -> bool {
+    let day = serial.rem_euclid(7);
+    let day = if day == 0 { 7 } else { day };
+    (1..=5).contains(&day)
+}
+
+fn networkdays_excel(start: f64, end: f64, holidays: &[f64]) -> Option<f64> {
+    if !start.is_finite() || !end.is_finite() {
+        return None;
+    }
+    let mut start = start.trunc() as i64;
+    let mut end = end.trunc() as i64;
+    let sign = if start <= end { 1.0 } else { -1.0 };
+    if start > end {
+        std::mem::swap(&mut start, &mut end);
+    }
+    if start < 0 || end > 2_958_465 || end - start > 100_000 {
+        return None;
+    }
+    let mut count = 0.0;
+    for day in start..=end {
+        if is_workday_serial(day) && !holiday_hit(day, holidays) {
+            count += 1.0;
+        }
+    }
+    Some(sign * count)
+}
+
+fn holiday_hit(day: i64, holidays: &[f64]) -> bool {
+    holidays.iter().any(|holiday| holiday.trunc() as i64 == day)
+}
+
+fn workday_excel(start: f64, days: f64, holidays: &[f64]) -> Option<f64> {
+    if !start.is_finite() || !days.is_finite() || start < 0.0 || start > 2_958_465.0 {
+        return None;
+    }
+    let days = days.trunc();
+    if days.abs() > 10_000.0 {
+        return None;
+    }
+    if days == 0.0 {
+        return Some(start.trunc());
+    }
+    let step: i64 = if days > 0.0 { 1 } else { -1 };
+    let mut left = days.abs() as i64;
+    let mut day = start.trunc() as i64;
+    let mut guard = 0i64;
+    while left > 0 {
+        day += step;
+        guard += 1;
+        if guard > 20_000 || !(0..=2_958_465).contains(&day) {
+            return None;
+        }
+        if is_workday_serial(day) && !holiday_hit(day, holidays) {
+            left -= 1;
+        }
+    }
+    Some(day as f64)
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -5865,6 +6041,95 @@ impl<'a> CalcParser<'a> {
                     }
                 }
                 return irr_excel(&values, guess).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("WEEKDAY") {
+                let serial = calc_num(self.compare(env)?)?;
+                self.skip();
+                let kind = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    1.0
+                } else {
+                    self.require_comma()?;
+                    let kind = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    kind
+                };
+                if !serial.is_finite() || !kind.is_finite() {
+                    return None;
+                }
+                return weekday_code(serial.trunc() as i64, kind.trunc() as i64)
+                    .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("EDATE") || word.eq_ignore_ascii_case("EOMONTH") {
+                let end = word.eq_ignore_ascii_case("EOMONTH");
+                let serial = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let months = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return shift_months(serial, months, end).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("DATEDIF") {
+                let start = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let end = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let unit = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return datedif_excel(start, end, &unit).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NETWORKDAYS") {
+                let start = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let end = calc_num(self.compare(env)?)?;
+                self.skip();
+                let holidays = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    Vec::new()
+                } else {
+                    self.require_comma()?;
+                    let cells = self.cell_range()?;
+                    self.close_paren()?;
+                    if cells.len() > 512 {
+                        return None;
+                    }
+                    let mut holidays = Vec::new();
+                    for address in cells {
+                        if let Some(CalcValue::Num(number)) = self.cell_value(&address, env) {
+                            if number.is_finite() {
+                                holidays.push(number);
+                            }
+                        }
+                    }
+                    holidays
+                };
+                return networkdays_excel(start, end, &holidays).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("WORKDAY") {
+                let start = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let days = calc_num(self.compare(env)?)?;
+                self.skip();
+                let holidays = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    Vec::new()
+                } else {
+                    self.require_comma()?;
+                    let cells = self.cell_range()?;
+                    self.close_paren()?;
+                    if cells.len() > 512 {
+                        return None;
+                    }
+                    let mut holidays = Vec::new();
+                    for address in cells {
+                        if let Some(CalcValue::Num(number)) = self.cell_value(&address, env) {
+                            if number.is_finite() {
+                                holidays.push(number);
+                            }
+                        }
+                    }
+                    holidays
+                };
+                return workday_excel(start, days, &holidays).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("TEXTJOIN") {
                 let delim = calc_text(&self.compare(env)?);
@@ -8883,6 +9148,78 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>RATE(1,1,1)</f><v>9</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_calendar() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>WEEKDAY(1)</f><v>0</v></c><c r="C1"><f>WEEKDAY(1,2)</f><v>0</v></c><c r="D1"><f>WEEKDAY(1,3)</f><v>0</v></c><c r="E1"><f>WEEKDAY(61,1)</f><v>0</v></c><c r="F1"><f>WEEKDAY(1,11)</f><v>9</v></c><c r="G1"><f>EDATE(43861,1)</f><v>0</v></c><c r="H1"><f>EOMONTH(43831,0)</f><v>0</v></c><c r="I1"><f>EOMONTH(43831,1)</f><v>0</v></c><c r="J1"><f>NETWORKDAYS(1,7)</f><v>0</v></c><c r="K1"><f>NETWORKDAYS(1,7,B2:B2)</f><v>0</v></c><c r="L1"><f>WORKDAY(1,5)</f><v>0</v></c><c r="M1"><f>WORKDAY(6,1)</f><v>0</v></c><c r="N1"><f>DATEDIF(43831,44256,&quot;Y&quot;)</f><v>0</v></c><c r="O1"><f>DATEDIF(43831,44256,&quot;M&quot;)</f><v>0</v></c><c r="P1"><f>DATEDIF(43831,44256,&quot;D&quot;)</f><v>0</v></c><c r="Q1"><f>DATEDIF(43831,44256,&quot;YM&quot;)</f><v>0</v></c><c r="R1"><f>DATEDIF(43831,44256,&quot;YD&quot;)</f><v>0</v></c><c r="S1"><f>DATEDIF(43831,44256,&quot;MD&quot;)</f><v>0</v></c></row><row r="2"><c r="B2"><v>2</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>WEEKDAY(1)</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>WEEKDAY(1,2)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>WEEKDAY(1,3)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>WEEKDAY(61,1)</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>WEEKDAY(1,11)</f><v>9</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>EDATE(43861,1)</f><v>43890</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>EOMONTH(43831,0)</f><v>43861</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>EOMONTH(43831,1)</f><v>43890</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NETWORKDAYS(1,7)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NETWORKDAYS(1,7,B2:B2)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>WORKDAY(1,5)</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>WORKDAY(6,1)</f><v>8</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>DATEDIF(43831,44256,&quot;Y&quot;)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DATEDIF(43831,44256,&quot;M&quot;)</f><v>14</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DATEDIF(43831,44256,&quot;D&quot;)</f><v>425</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DATEDIF(43831,44256,&quot;YM&quot;)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DATEDIF(43831,44256,&quot;YD&quot;)</f><v>59</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DATEDIF(43831,44256,&quot;MD&quot;)</f><v>0</v>"#),
+            "{sheet}"
+        );
     }
 
     #[test]
