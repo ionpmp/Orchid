@@ -259,7 +259,9 @@ pub(crate) fn set_sheet_cell(
     for (name, body) in other_sheets {
         foreign.insert(name, stored_sheet(&body, &shared));
     }
-    let xml = recalculate_sheet(&xml, &shared, &foreign);
+    let date1904 =
+        workbook_date1904(&read_entry(&mut archive, "xl/workbook.xml").unwrap_or_default());
+    let xml = recalculate_sheet(&xml, &shared, &foreign, date1904);
     let mut cursor = Cursor::new(Vec::new());
     {
         let mut out = zip::ZipWriter::new(&mut cursor);
@@ -471,6 +473,7 @@ fn recalculate_sheet(
     xml: &str,
     shared: &[String],
     foreign: &std::collections::HashMap<String, ForeignSheet>,
+    date1904: bool,
 ) -> String {
     let cells = sheet_cells(xml, shared);
     let mut literals = std::collections::HashMap::<String, f64>::new();
@@ -503,6 +506,7 @@ fn recalculate_sheet(
                 literals: &literals,
                 texts: &texts,
                 foreign,
+                date1904,
                 visiting: &mut visiting,
             };
             if let Some(spill) = try_spill(formula, &mut spill_env) {
@@ -532,6 +536,7 @@ fn recalculate_sheet(
             &literals,
             &texts,
             foreign,
+            date1904,
             &mut visiting,
         ) else {
             continue;
@@ -1426,6 +1431,7 @@ fn eval_formula(
     literals: &std::collections::HashMap<String, f64>,
     texts: &std::collections::HashMap<String, String>,
     foreign: &std::collections::HashMap<String, ForeignSheet>,
+    date1904: bool,
     visiting: &mut std::collections::HashSet<String>,
 ) -> Option<CalcValue> {
     let mut parser = CalcParser {
@@ -1437,6 +1443,7 @@ fn eval_formula(
         literals,
         texts,
         foreign,
+        date1904,
         visiting,
     };
     let value = parser.compare(&mut env)?;
@@ -1529,6 +1536,7 @@ struct CalcEnv<'a> {
     literals: &'a std::collections::HashMap<String, f64>,
     texts: &'a std::collections::HashMap<String, String>,
     foreign: &'a std::collections::HashMap<String, ForeignSheet>,
+    date1904: bool,
     visiting: &'a mut std::collections::HashSet<String>,
 }
 
@@ -2599,6 +2607,50 @@ fn excel_normalize_month(mut year: i32, month: i32) -> Option<(i32, i32)> {
         return None;
     }
     Some((year as i32, month0 as i32 + 1))
+}
+
+fn workbook_date1904(xml: &str) -> bool {
+    xml.contains("date1904=\"1\"") || xml.contains("date1904=\"true\"")
+}
+
+fn as_1900(serial: f64, date1904: bool) -> Option<f64> {
+    shift_serial(serial, date1904, 1462.0)
+}
+
+fn as_weekday_serial(serial: f64, date1904: bool) -> Option<f64> {
+    shift_serial(serial, date1904, 1461.0)
+}
+
+fn from_1900(serial: f64, date1904: bool) -> Option<f64> {
+    unshift_serial(serial, date1904, 1462.0)
+}
+
+fn from_weekday_serial(serial: f64, date1904: bool) -> Option<f64> {
+    unshift_serial(serial, date1904, 1461.0)
+}
+
+fn shift_serial(serial: f64, date1904: bool, shift: f64) -> Option<f64> {
+    if !serial.is_finite() {
+        return None;
+    }
+    let shifted = if date1904 { serial + shift } else { serial };
+    if (0.0..=2_958_465.0).contains(&shifted) {
+        Some(shifted)
+    } else {
+        None
+    }
+}
+
+fn unshift_serial(serial: f64, date1904: bool, shift: f64) -> Option<f64> {
+    if !serial.is_finite() {
+        return None;
+    }
+    let shifted = if date1904 { serial - shift } else { serial };
+    if (0.0..=2_958_465.0).contains(&shifted) {
+        Some(shifted)
+    } else {
+        None
+    }
 }
 
 fn date_excel(year: f64, month: f64, day: f64) -> Option<f64> {
@@ -3789,7 +3841,7 @@ fn linear_unit(unit: &str) -> Option<(&'static str, f64)> {
     })
 }
 
-fn text_excel(value: CalcValue, format: &str) -> Option<CalcValue> {
+fn text_excel(value: CalcValue, format: &str, date1904: bool) -> Option<CalcValue> {
     if format.is_empty() || format.len() > 64 || format.contains(';') {
         return None;
     }
@@ -3814,7 +3866,8 @@ fn text_excel(value: CalcValue, format: &str) -> Option<CalcValue> {
         let CalcValue::Num(number) = value else {
             return None;
         };
-        return format_excel_date(number, format).and_then(limited_text);
+        let serial = as_1900(number, date1904)?;
+        return format_excel_date(serial, format).and_then(limited_text);
     }
     let CalcValue::Num(number) = value else {
         return None;
@@ -6431,7 +6484,9 @@ impl<'a> CalcParser<'a> {
                 self.require_comma()?;
                 let day = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
-                return date_excel(year, month, day).map(CalcValue::Num);
+                return date_excel(year, month, day)
+                    .and_then(|serial| from_1900(serial, env.date1904))
+                    .map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("YEAR")
                 || word.eq_ignore_ascii_case("MONTH")
@@ -6440,6 +6495,7 @@ impl<'a> CalcParser<'a> {
                 let part = word.to_ascii_uppercase();
                 let serial = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
+                let serial = as_1900(serial, env.date1904)?;
                 let (year, month, day) = excel_parts(serial)?;
                 let value = if part == "YEAR" {
                     year
@@ -7017,6 +7073,7 @@ impl<'a> CalcParser<'a> {
                 if !serial.is_finite() || !kind.is_finite() {
                     return None;
                 }
+                let serial = as_weekday_serial(serial, env.date1904)?;
                 return weekday_code(serial.trunc() as i64, kind.trunc() as i64)
                     .map(CalcValue::Num);
             }
@@ -7026,7 +7083,10 @@ impl<'a> CalcParser<'a> {
                 self.require_comma()?;
                 let months = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
-                return shift_months(serial, months, end).map(CalcValue::Num);
+                let serial = as_1900(serial, env.date1904)?;
+                return shift_months(serial, months, end)
+                    .and_then(|serial| from_1900(serial, env.date1904))
+                    .map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("DATEDIF") {
                 let start = calc_num(self.compare(env)?)?;
@@ -7035,6 +7095,8 @@ impl<'a> CalcParser<'a> {
                 self.require_comma()?;
                 let unit = calc_text(&self.compare(env)?);
                 self.close_paren()?;
+                let start = as_1900(start, env.date1904)?;
+                let end = as_1900(end, env.date1904)?;
                 return datedif_excel(start, end, &unit).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("NETWORKDAYS") {
@@ -7062,6 +7124,12 @@ impl<'a> CalcParser<'a> {
                     }
                     holidays
                 };
+                let start = as_weekday_serial(start, env.date1904)?;
+                let end = as_weekday_serial(end, env.date1904)?;
+                let holidays: Vec<f64> = holidays
+                    .iter()
+                    .filter_map(|number| as_weekday_serial(*number, env.date1904))
+                    .collect();
                 return networkdays_excel(start, end, &holidays).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("WORKDAY") {
@@ -7089,7 +7157,14 @@ impl<'a> CalcParser<'a> {
                     }
                     holidays
                 };
-                return workday_excel(start, days, &holidays).map(CalcValue::Num);
+                let start = as_weekday_serial(start, env.date1904)?;
+                let holidays: Vec<f64> = holidays
+                    .iter()
+                    .filter_map(|number| as_weekday_serial(*number, env.date1904))
+                    .collect();
+                return workday_excel(start, days, &holidays)
+                    .and_then(|serial| from_weekday_serial(serial, env.date1904))
+                    .map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("TEXTJOIN") {
                 let delim = calc_text(&self.compare(env)?);
@@ -7221,7 +7296,7 @@ impl<'a> CalcParser<'a> {
                 self.require_comma()?;
                 let format = calc_text(&self.compare(env)?);
                 self.close_paren()?;
-                return text_excel(value, &format);
+                return text_excel(value, &format, env.date1904);
             }
             if word.eq_ignore_ascii_case("T") {
                 let value = self.compare(env)?;
@@ -8469,6 +8544,7 @@ impl<'a> CalcParser<'a> {
                 env.literals,
                 env.texts,
                 env.foreign,
+                env.date1904,
                 env.visiting,
             )
         } else if let Some(number) = env.literals.get(&address) {
@@ -10800,6 +10876,49 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>CONVERT(-300,&quot;C&quot;,&quot;K&quot;)</f><v>5</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_date1904() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><workbookPr date1904="1"/><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c><c r="A1"><f>DATE(1904,1,1)</f><v>9</v></c><c r="B1"><f>YEAR(0)</f><v>0</v></c><c r="C1"><f>MONTH(0)</f><v>0</v></c><c r="D1"><f>DAY(0)</f><v>0</v></c><c r="E1"><f>WEEKDAY(0)</f><v>0</v></c><c r="F1"><f>WEEKDAY(0,2)</f><v>0</v></c><c r="G1"><f>EDATE(0,1)</f><v>0</v></c><c r="H1"><f>NETWORKDAYS(0,6)</f><v>0</v></c><c r="I1"><f>DATE(1900,1,1)</f><v>8</v></c><c r="J1"><f>TEXT(0,&quot;yyyy-mm-dd&quot;)</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>DATE(1904,1,1)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>YEAR(0)</f><v>1904</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MONTH(0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>DAY(0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>WEEKDAY(0)</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>WEEKDAY(0,2)</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>EDATE(0,1)</f><v>31</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>NETWORKDAYS(0,6)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DATE(1900,1,1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(0,&quot;yyyy-mm-dd&quot;)</f><is><t>1904-01-01</t></is>"#),
             "{sheet}"
         );
     }

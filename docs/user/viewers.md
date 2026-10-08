@@ -573,7 +573,7 @@ accepts `Y`, `M`, `D`, `MD`, `YM`, and `YD`. An end before the start leaves
 the stored value. `NETWORKDAYS` and `WORKDAY` count Monday through Friday. An
 optional holiday range may hold at most 512 numbers; text in that range is
 skipped. A weekend holiday is not counted twice. The inclusive span must be at
-most 100000 days, and `WORKDAY` moves at most 10000 working days. `IF` stays
+most 100000 days, and `WORKDAY` moves at most 10000 working days. When `workbookPr` has `date1904="1"` or `date1904="true"`, serial 0 is 1904-01-01. `DATE`, `YEAR`, `MONTH`, `DAY`, `EDATE`, `EOMONTH`, `DATEDIF`, and a `TEXT` date format shift that serial by 1462 onto the 1900 calendar. `WEEKDAY`, `NETWORKDAYS`, and `WORKDAY` shift by 1461, so the fictional 29 February 1900 does not move those weekdays. A date before 1904-01-01 leaves the stored value. A holiday before that day is skipped. Without the flag, the 1900 system is unchanged. `IF` stays
 numeric. A shared-string cell on the sheet being recalculated is read as its
 shared text. An index past the table is blank. A reference `Sheet!A1` or
 `'My Sheet'!A1` reads one stored cell. The sheet name ignores ASCII case, and
