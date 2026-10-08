@@ -2029,6 +2029,41 @@ fn norm_inv_excel(probability: f64, mean: f64, scale: f64) -> Option<f64> {
     }
 }
 
+fn lognorm_inv_excel(probability: f64, mean: f64, scale: f64) -> Option<f64> {
+    if !mean.is_finite() || !scale.is_finite() || scale <= 0.0 {
+        return None;
+    }
+    let value = (mean + scale * norms_inv_excel(probability)?).exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn confidence_norm_excel(alpha: f64, stdev: f64, size: f64) -> Option<f64> {
+    if !alpha.is_finite()
+        || alpha <= 0.0
+        || alpha >= 1.0
+        || !stdev.is_finite()
+        || stdev <= 0.0
+        || !size.is_finite()
+    {
+        return None;
+    }
+    let count = size.trunc();
+    if count < 1.0 {
+        return None;
+    }
+    let z = norms_inv_excel(1.0 - alpha / 2.0)?;
+    let value = z * stdev / count.sqrt();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn erf_excel(x_value: f64) -> Option<f64> {
     if !x_value.is_finite() {
         return None;
@@ -3634,6 +3669,26 @@ impl<'a> CalcParser<'a> {
                 let scale = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return norm_inv_excel(probability, mean, scale).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("LOGNORM.INV") || word.eq_ignore_ascii_case("LOGINV") {
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let mean = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let scale = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return lognorm_inv_excel(probability, mean, scale).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CONFIDENCE.NORM")
+                || word.eq_ignore_ascii_case("CONFIDENCE")
+            {
+                let alpha = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let stdev = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let size = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return confidence_norm_excel(alpha, stdev, size).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("ERF") {
                 let lower = calc_num(self.compare(env)?)?;
@@ -9728,6 +9783,79 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>NORMSINV(&quot;ab&quot;)</f><v>8</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_lognorm_inv() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>LOGNORM.INV(0.5,A1,1)</f><v>0</v></c><c r="C1"><f>LOGINV(0.5,0,1)</f><v>0</v></c><c r="D1"><f>LOGNORM.INV(0.975,0,1)</f><v>0</v></c><c r="E1"><f>CONFIDENCE(0.05,1,1)</f><v>0</v></c><c r="F1"><f>CONFIDENCE.NORM(0.05,2,4)</f><v>0</v></c><c r="G1"><f>CONFIDENCE(0.05,1,1.9)</f><v>0</v></c><c r="H1"><f>CONFIDENCE(0,1,1)</f><v>4</v></c><c r="I1"><f>CONFIDENCE(1,1,1)</f><v>5</v></c><c r="J1"><f>CONFIDENCE(0.05,0,1)</f><v>6</v></c><c r="K1"><f>CONFIDENCE(0.05,1,0.9)</f><v>7</v></c><c r="L1"><f>LOGNORM.INV(0,0,1)</f><v>8</v></c><c r="M1"><f>LOGNORM.INV(0.5,0,0)</f><v>9</v></c><c r="N1"><f>CONFIDENCE(&quot;ab&quot;,1,1)</f><v>10</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>LOGNORM.INV(0.5,A1,1)</f><v>2.71828183</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGINV(0.5,0,1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGNORM.INV(0.975,0,1)</f><v>7.09907138</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONFIDENCE(0.05,1,1)</f><v>1.95996398</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONFIDENCE.NORM(0.05,2,4)</f><v>1.95996398</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONFIDENCE(0.05,1,1.9)</f><v>1.95996398</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONFIDENCE(0,1,1)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONFIDENCE(1,1,1)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONFIDENCE(0.05,0,1)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONFIDENCE(0.05,1,0.9)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGNORM.INV(0,0,1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGNORM.INV(0.5,0,0)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONFIDENCE(&quot;ab&quot;,1,1)</f><v>10</v>"#),
             "{sheet}"
         );
     }
