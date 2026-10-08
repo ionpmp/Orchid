@@ -2783,6 +2783,56 @@ fn step_multiple(number: f64, significance: f64, away: bool) -> Option<f64> {
     }
 }
 
+fn roman_excel(number: f64) -> Option<String> {
+    if !number.is_finite() {
+        return None;
+    }
+    let number = number.trunc();
+    if number < 1.0 || number > 3999.0 {
+        return None;
+    }
+    let mut remaining = number as i32;
+    let glyphs = [
+        (1000, "M"),
+        (900, "CM"),
+        (500, "D"),
+        (400, "CD"),
+        (100, "C"),
+        (90, "XC"),
+        (50, "L"),
+        (40, "XL"),
+        (10, "X"),
+        (9, "IX"),
+        (5, "V"),
+        (4, "IV"),
+        (1, "I"),
+    ];
+    let mut out = String::new();
+    for (value, glyph) in glyphs {
+        while remaining >= value {
+            out.push_str(glyph);
+            remaining -= value;
+        }
+    }
+    Some(out)
+}
+
+fn arabic_excel(text: &str) -> Option<f64> {
+    if text.is_empty() || text.len() > 15 || !text.bytes().all(|byte| byte.is_ascii_alphabetic()) {
+        return None;
+    }
+    let upper = text.to_ascii_uppercase();
+    let mut number = 1i32;
+    while number <= 3999 {
+        let roman = roman_excel(f64::from(number))?;
+        if roman == upper {
+            return Some(f64::from(number));
+        }
+        number += 1;
+    }
+    None
+}
+
 fn code_excel(text: &str) -> Option<f64> {
     text.chars().next().map(|ch| u32::from(ch) as f64)
 }
@@ -4284,6 +4334,26 @@ impl<'a> CalcParser<'a> {
             }
             if word.eq_ignore_ascii_case("CONCAT") || word.eq_ignore_ascii_case("CONCATENATE") {
                 return self.concat_args(env).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("ROMAN") {
+                let number = calc_num(self.compare(env)?)?;
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    return roman_excel(number).map(CalcValue::Text);
+                }
+                self.require_comma()?;
+                let form = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !form.is_finite() || form != 0.0 {
+                    return None;
+                }
+                return roman_excel(number).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("ARABIC") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return arabic_excel(&text).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("TEXTJOIN") {
                 let delim = calc_text(&self.compare(env)?);
@@ -6052,7 +6122,10 @@ mod tests {
             sheet.contains(r#"<f>AVERAGE(A1,B1)</f><v>3.5</v>"#),
             "{sheet}"
         );
-        assert!(sheet.contains(r#"<f>ROMAN(A1)</f><v>9</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="F1" t="inlineStr"><f>ROMAN(A1)</f><is><t>IV</t></is></c>"#),
+            "{sheet}"
+        );
     }
 
     #[test]
@@ -6116,7 +6189,10 @@ mod tests {
             ),
             "{sheet}"
         );
-        assert!(sheet.contains(r#"<f>ROMAN(A1)</f><v>9</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="H1" t="inlineStr"><f>ROMAN(A1)</f><is><t>II</t></is></c>"#),
+            "{sheet}"
+        );
     }
 
     #[test]
@@ -10014,7 +10090,63 @@ mod tests {
     }
 
     #[test]
+    fn set_sheet_cell_roman() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>3</v></c><c r="B1"><f>ROMAN(A1)</f><v>0</v></c><c r="C1"><f>ROMAN(9)</f><v>0</v></c><c r="D1"><f>ROMAN(1990)</f><v>0</v></c><c r="E1"><f>ROMAN(3.9)</f><v>0</v></c><c r="F1"><f>ROMAN(0)</f><v>5</v></c><c r="G1"><f>ROMAN(4000)</f><v>6</v></c><c r="H1"><f>ROMAN(4,1)</f><v>7</v></c><c r="I1"><f>ROMAN(4,0)</f><v>0</v></c><c r="J1"><f>ARABIC("IV")</f><v>0</v></c><c r="K1"><f>ARABIC("ii")</f><v>0</v></c><c r="L1"><f>ARABIC("MCMXC")</f><v>0</v></c><c r="M1"><f>ARABIC("IIII")</f><v>8</v></c><c r="N1"><f>ARABIC("")</f><v>9</v></c><c r="O1"><f>ROMAN("ab")</f><v>10</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "4").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<c r="B1" t="inlineStr"><f>ROMAN(A1)</f><is><t>IV</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="C1" t="inlineStr"><f>ROMAN(9)</f><is><t>IX</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet
+                .contains(r#"<c r="D1" t="inlineStr"><f>ROMAN(1990)</f><is><t>MCMXC</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="E1" t="inlineStr"><f>ROMAN(3.9)</f><is><t>III</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>ROMAN(0)</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ROMAN(4000)</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ROMAN(4,1)</f><v>7</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="I1" t="inlineStr"><f>ROMAN(4,0)</f><is><t>IV</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>ARABIC("IV")</f><v>4</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ARABIC("ii")</f><v>2</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>ARABIC("MCMXC")</f><v>1990</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>ARABIC("IIII")</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>ARABIC("")</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>ROMAN("ab")</f><v>10</v>"#), "{sheet}");
+    }
 
+    #[test]
     fn set_sheet_cell_percentile_exc() {
         let bytes = zip_bytes(&[
             (
