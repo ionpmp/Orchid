@@ -504,16 +504,22 @@ at most 10 by 10 on the same sheet. A blank cell and a shared-string cell
 count as 0. Text, a range that is not square, a side longer than 10, or a
 non-finite determinant leaves the stored value. A pivot whose absolute value
 is at most 1e-12 makes the determinant 0. `INDEX`, `MATCH`, `VLOOKUP`, and
-`HLOOKUP` read one range on the same sheet and use an exact match. A number
-matches only a number, with `==`. Text matches text and ignores ASCII case.
-There are no wildcards. `MATCH` needs a match type of 0 and a single row or
-column; any other match type leaves the stored value. `VLOOKUP` and `HLOOKUP`
-need a range-lookup argument of 0. An omitted range lookup, or any other
-number, leaves the stored value. `INDEX` row and column numbers are 1-based
-and truncated toward zero. An omitted column is accepted only when the range
-has one column. A row or column of 0, a position past the range, or a value
-that is not found leaves the stored value. A blank cell and a shared-string
-cell write 0 when they are the returned cell. `MATCH` skips both, so neither
+`HLOOKUP` read one range on the same sheet. A number matches only a number,
+with `==`. Text ignores ASCII case. An exact match accepts `*`, `?`, and `~`
+in the lookup text. `*` and `?` count Unicode scalar values. A pattern longer
+than 64 scalars, or a cell longer than 256, leaves the stored value.
+Approximate match does not use wildcards. A range is read from its top-left cell. `MATCH` type 0 is exact. An omitted
+type, or type 1, walks an ascending row or column and keeps the last key that
+is less than or equal to the lookup, then stops at the first greater key.
+Type −1 does that for a descending range and a key greater than or equal to
+the lookup. `VLOOKUP` and `HLOOKUP` do the ascending walk when the range
+lookup is omitted or is any number other than 0. A range lookup of 0 is exact.
+A blank cell, a shared-string cell, or a number beside text stops an
+approximate walk. `INDEX` row and column numbers are 1-based and truncated
+toward zero. An omitted column is accepted only when the range has one column.
+A row or column of 0, a position past the range, or a value that is not found
+leaves the stored value. A blank cell and a shared-string cell write 0 when
+they are the returned cell. `MATCH` skips both on an exact match, so neither
 matches 0 or an empty string. `BETA.DIST` reads x, alpha, beta, and a
 cumulative flag on the unit interval. Alpha and beta must be greater than 0.
 A cumulative flag of 0 writes the density; any other finite number writes the
@@ -613,10 +619,17 @@ Signatures are shown but not filled.
 Tree-sitter highlighting, F3 view / F4 edit, HEX/binary, encodings,
 find/replace, save.
 
+## Archives
+
+The file viewer browses ZIP, 7z, TAR, TAR.GZ, TAR.XZ, and TAR.BZ2. Creating
+a password-protected archive, volumes, or an SFX needs 7-Zip. The file
+manager's archive menu is described in [file-manager.md](file-manager.md).
+
 ## Media (libmpv)
 
 In-app playback when the DLL is bundled; otherwise system-player handoff.
-Playlist, subs, SMTC, EQ, ReplayGain. Viewer volume is **not** the Audio
+Playlist, subs, SMTC, EQ (Flat, Bass, Treble, Vocal), ReplayGain (off,
+track, album). Viewer volume is **not** the Audio
 Player widget volume.
 
 ## HTML

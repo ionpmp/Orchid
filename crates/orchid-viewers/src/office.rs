@@ -2644,9 +2644,92 @@ fn exact_lookup(lookup: &CalcValue, cell: Option<&CalcValue>) -> bool {
         (CalcValue::Num(left), Some(CalcValue::Num(right))) => {
             left.is_finite() && right.is_finite() && left == right
         }
-        (CalcValue::Text(left), Some(CalcValue::Text(right))) => left.eq_ignore_ascii_case(right),
+        (CalcValue::Text(left), Some(CalcValue::Text(right))) => text_pattern(left, right),
         _ => false,
     }
+}
+
+fn text_pattern(pattern: &str, text: &str) -> bool {
+    if !pattern.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
+        return pattern.eq_ignore_ascii_case(text);
+    }
+    let pattern: Vec<char> = pattern.chars().collect();
+    let text: Vec<char> = text.chars().collect();
+    if pattern.len() > 64 || text.len() > 256 {
+        return false;
+    }
+    wildcard_match(&pattern, &text)
+}
+
+fn wildcard_match(pattern: &[char], text: &[char]) -> bool {
+    if pattern.is_empty() {
+        return text.is_empty();
+    }
+    if pattern[0] == '~' {
+        return pattern.len() > 1
+            && !text.is_empty()
+            && pattern[1].eq_ignore_ascii_case(&text[0])
+            && wildcard_match(&pattern[2..], &text[1..]);
+    }
+    if pattern[0] == '?' {
+        return !text.is_empty() && wildcard_match(&pattern[1..], &text[1..]);
+    }
+    if pattern[0] == '*' {
+        let mut rest = &pattern[1..];
+        while rest.first() == Some(&'*') {
+            rest = &rest[1..];
+        }
+        if rest.is_empty() {
+            return true;
+        }
+        for start in 0..=text.len() {
+            if wildcard_match(rest, &text[start..]) {
+                return true;
+            }
+        }
+        return false;
+    }
+    !text.is_empty()
+        && pattern[0].eq_ignore_ascii_case(&text[0])
+        && wildcard_match(&pattern[1..], &text[1..])
+}
+
+fn lookup_cmp(lookup: &CalcValue, cell: Option<&CalcValue>) -> Option<std::cmp::Ordering> {
+    match (lookup, cell) {
+        (CalcValue::Num(left), Some(CalcValue::Num(right)))
+            if left.is_finite() && right.is_finite() =>
+        {
+            Some(left.total_cmp(right))
+        }
+        (CalcValue::Text(left), Some(CalcValue::Text(right))) => {
+            Some(left.to_ascii_lowercase().cmp(&right.to_ascii_lowercase()))
+        }
+        _ => None,
+    }
+}
+
+fn approximate_index(
+    keys: &[Option<CalcValue>],
+    lookup: &CalcValue,
+    descending: bool,
+) -> Option<usize> {
+    let mut found = None;
+    for (index, cell) in keys.iter().enumerate() {
+        let Some(order) = lookup_cmp(lookup, cell.as_ref()) else {
+            break;
+        };
+        let keep = if descending {
+            order != std::cmp::Ordering::Greater
+        } else {
+            order != std::cmp::Ordering::Less
+        };
+        if keep {
+            found = Some(index);
+        } else {
+            break;
+        }
+    }
+    found
 }
 
 fn beta_fraction(a: f64, b: f64, x: f64) -> Option<f64> {
@@ -5716,19 +5799,40 @@ impl<'a> CalcParser<'a> {
                 let lookup = self.compare(env)?;
                 self.require_comma()?;
                 let (cells, rows, cols) = self.cell_block()?;
-                self.require_comma()?;
-                let kind = calc_num(self.compare(env)?)?;
-                self.close_paren()?;
-                if !kind.is_finite() || kind.trunc() != 0.0 || (rows != 1 && cols != 1) {
+                self.skip();
+                let kind = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    1.0
+                } else {
+                    self.require_comma()?;
+                    let kind = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    kind
+                };
+                if !kind.is_finite() || (rows != 1 && cols != 1) {
                     return None;
                 }
-                for (index, address) in cells.iter().enumerate() {
-                    let cell = self.cell_value(address, env);
-                    if exact_lookup(&lookup, cell.as_ref()) {
-                        return Some(CalcValue::Num((index + 1) as f64));
+                let kind = kind.trunc();
+                if kind == 0.0 {
+                    for (index, address) in cells.iter().enumerate() {
+                        let cell = self.cell_value(address, env);
+                        if exact_lookup(&lookup, cell.as_ref()) {
+                            return Some(CalcValue::Num((index + 1) as f64));
+                        }
                     }
+                    return None;
                 }
-                return None;
+                if kind != 1.0 && kind != -1.0 {
+                    return None;
+                }
+                let mut keys = Vec::new();
+                for address in &cells {
+                    keys.push(self.cell_value(address, env));
+                }
+                let Some(found) = approximate_index(&keys, &lookup, kind < 0.0) else {
+                    return None;
+                };
+                return Some(CalcValue::Num((found + 1) as f64));
             }
             if word.eq_ignore_ascii_case("VLOOKUP") || word.eq_ignore_ascii_case("HLOOKUP") {
                 let horizontal = word.eq_ignore_ascii_case("HLOOKUP");
@@ -5737,15 +5841,17 @@ impl<'a> CalcParser<'a> {
                 let (cells, rows, cols) = self.cell_block()?;
                 self.require_comma()?;
                 let index = calc_num(self.compare(env)?)?;
-                self.require_comma()?;
-                let range_lookup = calc_num(self.compare(env)?)?;
-                self.close_paren()?;
-                if !index.is_finite()
-                    || !range_lookup.is_finite()
-                    || range_lookup.trunc() != 0.0
-                    || rows == 0
-                    || cols == 0
-                {
+                self.skip();
+                let range_lookup = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    1.0
+                } else {
+                    self.require_comma()?;
+                    let range_lookup = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    range_lookup
+                };
+                if !index.is_finite() || !range_lookup.is_finite() || rows == 0 || cols == 0 {
                     return None;
                 }
                 let index = index.trunc();
@@ -5754,20 +5860,26 @@ impl<'a> CalcParser<'a> {
                     return None;
                 }
                 let index = index as u32;
-                let found = if horizontal {
-                    (0..cols).find(|col| {
-                        let cell = self.cell_value(&cells[*col as usize], env);
-                        exact_lookup(&lookup, cell.as_ref())
-                    })
+                let key_count = if horizontal { cols } else { rows };
+                let mut keys = Vec::new();
+                for key in 0..key_count {
+                    let at = if horizontal {
+                        key as usize
+                    } else {
+                        (key * cols) as usize
+                    };
+                    keys.push(self.cell_value(&cells[at], env));
+                }
+                let found = if range_lookup.trunc() == 0.0 {
+                    keys.iter()
+                        .position(|cell| exact_lookup(&lookup, cell.as_ref()))
                 } else {
-                    (0..rows).find(|row| {
-                        let cell = self.cell_value(&cells[(*row * cols) as usize], env);
-                        exact_lookup(&lookup, cell.as_ref())
-                    })
+                    approximate_index(&keys, &lookup, false)
                 };
                 let Some(found) = found else {
                     return None;
                 };
+                let found = found as u32;
                 let at = if horizontal {
                     ((index - 1) * cols + found) as usize
                 } else {
@@ -8840,7 +8952,7 @@ mod tests {
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>MATCH(40,A1:A2,1)</f><v>6</v>"#),
+            sheet.contains(r#"<f>MATCH(40,A1:A2,1)</f><v>2</v>"#),
             "{sheet}"
         );
         assert!(
@@ -8856,7 +8968,7 @@ mod tests {
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>VLOOKUP(40,A1:C2,3)</f><v>4</v>"#),
+            sheet.contains(r#"<f>VLOOKUP(40,A1:C2,3)</f><v>60</v>"#),
             "{sheet}"
         );
         assert!(
@@ -8864,7 +8976,7 @@ mod tests {
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>HLOOKUP(30,A1:C2,2,1)</f><v>3</v>"#),
+            sheet.contains(r#"<f>HLOOKUP(30,A1:C2,2,1)</f><v>60</v>"#),
             "{sheet}"
         );
         assert!(
@@ -8873,6 +8985,51 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>MATCH(&quot;1&quot;,E1:E1,0)</f><v>2</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_lookup_walk() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>10</v></c><c r="B1"><f>MATCH(15,A1:A2,1)</f><v>0</v></c><c r="C1"><f>MATCH(5,A1:A2,1)</f><v>8</v></c><c r="D1"><f>MATCH(30,E1:E2,-1)</f><v>0</v></c><c r="E1"><v>40</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>40</v></c><c r="E2"><v>10</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>Cat</t></is></c><c r="B3"><f>MATCH(&quot;c*&quot;,A3:A3,0)</f><v>0</v></c><c r="C3"><f>MATCH(&quot;c?&quot;,A3:A3,0)</f><v>7</v></c><c r="D3"><f>MATCH(&quot;c~*&quot;,A3:A3,0)</f><v>6</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>MATCH(15,A1:A2,1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MATCH(5,A1:A2,1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MATCH(30,E1:E2,-1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MATCH(&quot;c*&quot;,A3:A3,0)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MATCH(&quot;c?&quot;,A3:A3,0)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MATCH(&quot;c~*&quot;,A3:A3,0)</f><v>6</v>"#),
             "{sheet}"
         );
     }
