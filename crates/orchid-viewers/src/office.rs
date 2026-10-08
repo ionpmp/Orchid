@@ -1924,6 +1924,71 @@ fn chisq_rt_excel(x_value: f64, degrees: f64) -> Option<f64> {
     }
 }
 
+fn invert_unit_cdf(probability: f64, mut cdf: impl FnMut(f64) -> Option<f64>) -> Option<f64> {
+    if !probability.is_finite() || probability <= 0.0 || probability >= 1.0 {
+        return None;
+    }
+    let mut low = 0.0;
+    let mut high = 1.0;
+    loop {
+        let value = cdf(high)?;
+        if value >= probability {
+            break;
+        }
+        if high >= 1.0e6 {
+            return None;
+        }
+        high *= 2.0;
+    }
+    for _ in 0..80 {
+        let mid = (low + high) / 2.0;
+        let value = cdf(mid)?;
+        if value < probability {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    if format_calc(low) != format_calc(high) {
+        return None;
+    }
+    let value = (low + high) / 2.0;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn gamma_inv_excel(probability: f64, alpha: f64, beta: f64) -> Option<f64> {
+    if !alpha.is_finite() || !beta.is_finite() || alpha <= 0.0 || beta <= 0.0 {
+        return None;
+    }
+    invert_unit_cdf(probability, |x_value| {
+        gamma_dist_excel(x_value, alpha, beta, true)
+    })
+}
+
+fn chisq_inv_excel(probability: f64, degrees: f64) -> Option<f64> {
+    if !degrees.is_finite() || degrees < 1.0 {
+        return None;
+    }
+    let degrees = degrees.trunc();
+    if degrees < 1.0 {
+        return None;
+    }
+    invert_unit_cdf(probability, |x_value| {
+        chisq_dist_excel(x_value, degrees, true)
+    })
+}
+
+fn chisq_inv_rt_excel(probability: f64, degrees: f64) -> Option<f64> {
+    if !probability.is_finite() || probability <= 0.0 || probability >= 1.0 {
+        return None;
+    }
+    chisq_inv_excel(1.0 - probability, degrees)
+}
+
 fn norms_dist_excel(x_value: f64, cumulative: bool) -> Option<f64> {
     if !x_value.is_finite() {
         return None;
@@ -3597,6 +3662,15 @@ impl<'a> CalcParser<'a> {
                 }
                 return gamma_dist_excel(x_value, alpha, beta, flag != 0.0).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("GAMMA.INV") || word.eq_ignore_ascii_case("GAMMAINV") {
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let alpha = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let beta = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return gamma_inv_excel(probability, alpha, beta).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("BINOM.INV") || word.eq_ignore_ascii_case("CRITBINOM") {
                 let trials = calc_num(self.compare(env)?)?;
                 self.require_comma()?;
@@ -3624,6 +3698,20 @@ impl<'a> CalcParser<'a> {
                     return None;
                 }
                 return chisq_dist_excel(x_value, degrees, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CHISQ.INV.RT") || word.eq_ignore_ascii_case("CHIINV") {
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let degrees = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return chisq_inv_rt_excel(probability, degrees).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CHISQ.INV") {
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let degrees = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return chisq_inv_excel(probability, degrees).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("NORM.S.DIST") || word.eq_ignore_ascii_case("NORMSDIST") {
                 let legacy = word.eq_ignore_ascii_case("NORMSDIST");
@@ -9861,6 +9949,72 @@ mod tests {
     }
 
     #[test]
+    fn set_sheet_cell_gamma_inv() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>GAMMA.INV(A1,1,1)</f><v>0</v></c><c r="C1"><f>GAMMAINV(0.5,1,2)</f><v>0</v></c><c r="D1"><f>CHISQ.INV(A1,2)</f><v>0</v></c><c r="E1"><f>CHISQ.INV(0.5,2.9)</f><v>0</v></c><c r="F1"><f>CHISQ.INV.RT(0.5,2)</f><v>0</v></c><c r="G1"><f>CHIINV(0.05,2)</f><v>0</v></c><c r="H1"><f>GAMMA.INV(0,1,1)</f><v>4</v></c><c r="I1"><f>GAMMA.INV(1,1,1)</f><v>5</v></c><c r="J1"><f>GAMMA.INV(0.5,0,1)</f><v>6</v></c><c r="K1"><f>CHISQ.INV(0.5,0.9)</f><v>7</v></c><c r="L1"><f>CHISQ.INV(&quot;ab&quot;,2)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "0.5").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>GAMMA.INV(A1,1,1)</f><v>0.69314718</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMAINV(0.5,1,2)</f><v>1.38629436</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.INV(A1,2)</f><v>1.38629436</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.INV(0.5,2.9)</f><v>1.38629436</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.INV.RT(0.5,2)</f><v>1.38629436</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHIINV(0.05,2)</f><v>5.99146455</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.INV(0,1,1)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.INV(1,1,1)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAMMA.INV(0.5,0,1)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.INV(0.5,0.9)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHISQ.INV(&quot;ab&quot;,2)</f><v>8</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+
     fn set_sheet_cell_percentile_exc() {
         let bytes = zip_bytes(&[
             (
