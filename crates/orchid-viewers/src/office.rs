@@ -2435,6 +2435,27 @@ fn inverse_hyper_excel(number: f64, kind: &str) -> Option<f64> {
     }
 }
 
+fn reciprocal_hyper_excel(number: f64, kind: &str) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let base = match kind {
+        "SECH" => number.cosh(),
+        "CSCH" => number.sinh(),
+        "COTH" => number.tanh(),
+        _ => return None,
+    };
+    if base == 0.0 || !base.is_finite() {
+        return None;
+    }
+    let value = 1.0 / base;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn combin_excel(n: f64, k: f64) -> Option<f64> {
     if !n.is_finite() || !k.is_finite() || n < 0.0 || k < 0.0 || n >= 1_000_000.0 {
         return None;
@@ -4055,6 +4076,15 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return inverse_hyper_excel(number, &kind).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SECH")
+                || word.eq_ignore_ascii_case("CSCH")
+                || word.eq_ignore_ascii_case("COTH")
+            {
+                let kind = word.to_ascii_uppercase();
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return reciprocal_hyper_excel(number, &kind).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("COMBIN") {
                 let n = calc_num(self.compare(env)?)?;
@@ -10144,6 +10174,46 @@ mod tests {
         );
         assert!(sheet.contains(r#"<f>ARABIC("")</f><v>9</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>ROMAN("ab")</f><v>10</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_reciprocal_hyper() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>SECH(A1)</f><v>0</v></c><c r="C1"><f>CSCH(A1)</f><v>0</v></c><c r="D1"><f>COTH(A1)</f><v>0</v></c><c r="E1"><f>SECH(0)</f><v>0</v></c><c r="F1"><f>CSCH(0)</f><v>7</v></c><c r="G1"><f>COTH(0)</f><v>8</v></c><c r="H1"><f>SECH(&quot;ab&quot;)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SECH(A1)</f><v>0.64805427</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CSCH(A1)</f><v>0.85091813</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COTH(A1)</f><v>1.31303529</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>SECH(0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>CSCH(0)</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COTH(0)</f><v>8</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>SECH(&quot;ab&quot;)</f><v>9</v>"#),
+            "{sheet}"
+        );
     }
 
     #[test]
