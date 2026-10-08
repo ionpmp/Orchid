@@ -4230,6 +4230,195 @@ fn mirr_excel(values: &[f64], finance: f64, reinvest: f64) -> Option<f64> {
     }
 }
 
+struct CouponSpan {
+    accrued_days: f64,
+    next_days: f64,
+    period_days: f64,
+    coupons: u32,
+}
+
+fn days360_us(start: f64, end: f64) -> Option<f64> {
+    let (y1, m1, mut d1) = excel_parts(start)?;
+    let (y2, m2, mut d2) = excel_parts(end)?;
+    if d1 == 31 {
+        d1 = 30;
+    }
+    if d2 == 31 && d1 == 30 {
+        d2 = 30;
+    }
+    Some(f64::from((y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1)))
+}
+
+fn coupon_span(settlement: f64, maturity: f64, frequency: i32) -> Option<CouponSpan> {
+    if !(1.0..=2_958_465.0).contains(&settlement)
+        || !(1.0..=2_958_465.0).contains(&maturity)
+        || settlement >= maturity
+    {
+        return None;
+    }
+    let step = 12 / frequency;
+    let mut cursor = maturity;
+    let mut coupons = 0u32;
+    let (next, prev) = loop {
+        if coupons >= 4_800 {
+            return None;
+        }
+        coupons += 1;
+        let earlier = shift_months(cursor, -f64::from(step), false)?;
+        if earlier >= cursor {
+            return None;
+        }
+        if earlier <= settlement {
+            break (cursor, earlier);
+        }
+        cursor = earlier;
+    };
+    let period_days = 360.0 / f64::from(frequency);
+    let accrued_days = days360_us(prev, settlement)?;
+    let next_days = days360_us(settlement, next)?;
+    if accrued_days < 0.0 || next_days <= 0.0 {
+        return None;
+    }
+    Some(CouponSpan {
+        accrued_days,
+        next_days,
+        period_days,
+        coupons,
+    })
+}
+
+fn bond_frequency(frequency: f64) -> Option<i32> {
+    if !frequency.is_finite() {
+        return None;
+    }
+    match frequency.trunc() as i32 {
+        frequency @ (1 | 2) => Some(frequency),
+        _ => None,
+    }
+}
+
+fn bond_serial(serial: f64, date1904: bool) -> Option<f64> {
+    let serial = as_1900(serial, date1904)?;
+    if (1.0..=2_958_465.0).contains(&serial) {
+        Some(serial.trunc())
+    } else {
+        None
+    }
+}
+
+fn price_excel(
+    settlement: f64,
+    maturity: f64,
+    rate: f64,
+    yld: f64,
+    redemption: f64,
+    frequency: i32,
+) -> Option<f64> {
+    if !rate.is_finite()
+        || !yld.is_finite()
+        || !redemption.is_finite()
+        || rate < 0.0
+        || redemption < 0.0
+    {
+        return None;
+    }
+    let span = coupon_span(settlement, maturity, frequency)?;
+    let per_yield = yld / f64::from(frequency);
+    if per_yield <= -1.0 {
+        return None;
+    }
+    let coupon = 100.0 * rate / f64::from(frequency);
+    let frac = span.next_days / span.period_days;
+    let base = 1.0 + per_yield;
+    let mut present = 0.0;
+    for k in 1..=span.coupons {
+        let time = (k - 1) as f64 + frac;
+        present += coupon / base.powf(time);
+    }
+    let last = (span.coupons - 1) as f64 + frac;
+    present += redemption / base.powf(last);
+    let accrued = coupon * (span.accrued_days / span.period_days);
+    let value = present - accrued;
+    value.is_finite().then_some(value)
+}
+
+fn yield_excel(
+    settlement: f64,
+    maturity: f64,
+    rate: f64,
+    price: f64,
+    redemption: f64,
+    frequency: i32,
+) -> Option<f64> {
+    if !price.is_finite() || price <= 0.0 {
+        return None;
+    }
+    let mut yld = if rate > 0.0 { rate } else { 0.05 };
+    for _ in 0..40 {
+        let quote = price_excel(settlement, maturity, rate, yld, redemption, frequency)?;
+        let step = 1e-6 * yld.abs().max(1.0);
+        let above = price_excel(
+            settlement,
+            maturity,
+            rate,
+            yld + step,
+            redemption,
+            frequency,
+        )?;
+        let slope = (above - quote) / step;
+        if !slope.is_finite() || slope.abs() < 1e-12 {
+            return None;
+        }
+        let next = yld - (quote - price) / slope;
+        if !next.is_finite() || next <= f64::from(-frequency) {
+            return None;
+        }
+        if (next - yld).abs() <= 1e-8 * next.abs().max(1.0) {
+            return Some(next);
+        }
+        yld = next;
+    }
+    None
+}
+
+fn duration_excel(
+    settlement: f64,
+    maturity: f64,
+    rate: f64,
+    yld: f64,
+    frequency: i32,
+) -> Option<f64> {
+    if !rate.is_finite() || !yld.is_finite() || rate < 0.0 {
+        return None;
+    }
+    let span = coupon_span(settlement, maturity, frequency)?;
+    let per_yield = yld / f64::from(frequency);
+    if per_yield <= -1.0 {
+        return None;
+    }
+    let coupon = 100.0 * rate / f64::from(frequency);
+    let frac = span.next_days / span.period_days;
+    let base = 1.0 + per_yield;
+    let mut weighted = 0.0;
+    let mut present = 0.0;
+    for k in 1..=span.coupons {
+        let time = (k - 1) as f64 + frac;
+        let cash = if k == span.coupons {
+            coupon + 100.0
+        } else {
+            coupon
+        };
+        let value = cash / base.powf(time);
+        weighted += time * value;
+        present += value;
+    }
+    if present == 0.0 || !present.is_finite() || !weighted.is_finite() {
+        return None;
+    }
+    let years = (weighted / present) / f64::from(frequency);
+    years.is_finite().then_some(years)
+}
+
 fn convert_excel(number: f64, from: &str, to: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -7526,6 +7715,57 @@ impl<'a> CalcParser<'a> {
                 let reinvest = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return mirr_excel(&values, finance, reinvest).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PRICE")
+                || word.eq_ignore_ascii_case("YIELD")
+                || word.eq_ignore_ascii_case("DURATION")
+                || word.eq_ignore_ascii_case("MDURATION")
+            {
+                let kind = word.to_ascii_uppercase();
+                let settlement = bond_serial(calc_num(self.compare(env)?)?, env.date1904)?;
+                self.require_comma()?;
+                let maturity = bond_serial(calc_num(self.compare(env)?)?, env.date1904)?;
+                self.require_comma()?;
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let second = calc_num(self.compare(env)?)?;
+                let redemption = if kind == "DURATION" || kind == "MDURATION" {
+                    100.0
+                } else {
+                    self.require_comma()?;
+                    calc_num(self.compare(env)?)?
+                };
+                self.require_comma()?;
+                let frequency = bond_frequency(calc_num(self.compare(env)?)?)?;
+                self.skip();
+                let basis = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    0.0
+                } else {
+                    self.require_comma()?;
+                    let basis = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    basis
+                };
+                if !basis.is_finite() || basis.trunc() != 0.0 {
+                    return None;
+                }
+                let value = match kind.as_str() {
+                    "PRICE" => {
+                        price_excel(settlement, maturity, rate, second, redemption, frequency)
+                    }
+                    "YIELD" => {
+                        yield_excel(settlement, maturity, rate, second, redemption, frequency)
+                    }
+                    "DURATION" => duration_excel(settlement, maturity, rate, second, frequency),
+                    "MDURATION" => duration_excel(settlement, maturity, rate, second, frequency)
+                        .map(|years| years / (1.0 + second / f64::from(frequency))),
+                    _ => None,
+                }?;
+                if value.is_finite() {
+                    return Some(CalcValue::Num(value));
+                }
+                return None;
             }
             if word.eq_ignore_ascii_case("WEEKDAY") {
                 let serial = calc_num(self.compare(env)?)?;
@@ -11680,6 +11920,56 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f t="array" ref="G1">1+1</f><v>6</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_bond_price() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c><c r="A1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,0)</f><v>0</v></c><c r="B1"><f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.63436162,100,2)</f><v>0</v></c><c r="C1"><f>DURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2)</f><v>0</v></c><c r="D1"><f>MDURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2)</f><v>0</v></c><c r="E1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,4)</f><v>9</v></c><c r="F1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,1)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,0)</f><v>94.63436162</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.63436162,100,2)</f><v>0.065</v>"#) || sheet.contains("<v>0.065"), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>DURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2)</f><v>7.4164847</v>"#)
+                || sheet.contains(r#"<v>7.41648469</v>"#)
+                || sheet.contains(r#"<v>7.41648470</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>MDURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2)</f><v>7.183"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,4)</f><v>9</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,1)</f><v>8</v>"#
+            ),
             "{sheet}"
         );
     }
