@@ -2761,6 +2761,42 @@ fn beta_pdf(x: f64, alpha: f64, beta: f64) -> Option<f64> {
     }
 }
 
+fn t_cdf(x: f64, df: f64) -> Option<f64> {
+    if !x.is_finite() || !df.is_finite() || df <= 0.0 {
+        return None;
+    }
+    let z = df / (df + x * x);
+    if !z.is_finite() {
+        return None;
+    }
+    let tail = 0.5 * beta_cdf(z, df / 2.0, 0.5)?;
+    let value = if x >= 0.0 { 1.0 - tail } else { tail };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn t_pdf(x: f64, df: f64) -> Option<f64> {
+    if !x.is_finite() || !df.is_finite() || df <= 0.0 {
+        return None;
+    }
+    let ln = ln_gamma_excel((df + 1.0) / 2.0)?
+        - ln_gamma_excel(df / 2.0)?
+        - 0.5 * (df * std::f64::consts::PI).ln();
+    let base = 1.0 + (x * x) / df;
+    if base <= 0.0 || !ln.is_finite() {
+        return None;
+    }
+    let value = (ln - ((df + 1.0) / 2.0) * base.ln()).exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -5185,6 +5221,69 @@ impl<'a> CalcParser<'a> {
                 };
                 return value.map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("T.DIST.RT")
+                || word.eq_ignore_ascii_case("T.DIST.2T")
+                || word.eq_ignore_ascii_case("T.DIST")
+                || word.eq_ignore_ascii_case("TDIST")
+            {
+                let kind = word.to_ascii_uppercase();
+                let x = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let df = calc_num(self.compare(env)?)?;
+                let cumulative = if kind == "T.DIST" {
+                    self.require_comma()?;
+                    let cumulative = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    Some(cumulative)
+                } else if kind == "TDIST" {
+                    self.require_comma()?;
+                    let tails = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    Some(tails)
+                } else {
+                    self.close_paren()?;
+                    None
+                };
+                if kind == "T.DIST" {
+                    let cumulative = cumulative?;
+                    if !cumulative.is_finite() {
+                        return None;
+                    }
+                    let value = if cumulative == 0.0 {
+                        t_pdf(x, df)
+                    } else {
+                        t_cdf(x, df)
+                    };
+                    return value.map(CalcValue::Num);
+                }
+                if x < 0.0 {
+                    return None;
+                }
+                let cdf = t_cdf(x, df)?;
+                let value = if kind == "T.DIST.RT" {
+                    1.0 - cdf
+                } else if kind == "T.DIST.2T" {
+                    2.0 * (1.0 - cdf)
+                } else {
+                    let tails = cumulative?;
+                    if !tails.is_finite() {
+                        return None;
+                    }
+                    let tails = tails.trunc();
+                    if tails == 1.0 {
+                        1.0 - cdf
+                    } else if tails == 2.0 {
+                        2.0 * (1.0 - cdf)
+                    } else {
+                        return None;
+                    }
+                };
+                return if value.is_finite() {
+                    Some(CalcValue::Num(value))
+                } else {
+                    None
+                };
+            }
             if word.eq_ignore_ascii_case("TEXTJOIN") {
                 let delim = calc_text(&self.compare(env)?);
                 self.require_comma()?;
@@ -6262,7 +6361,7 @@ impl<'a> CalcParser<'a> {
                 && self
                     .bytes
                     .get(self.index + 1)
-                    .is_some_and(|next| next.is_ascii_alphabetic())
+                    .is_some_and(|next| next.is_ascii_alphanumeric())
             {
                 self.index += 1;
                 continue;
@@ -7955,6 +8054,65 @@ mod tests {
             sheet.contains(r#"<f>BETA.DIST(0.5,0,1,1)</f><v>7</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_t_dist() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>T.DIST(1,1,1)</f><v>0</v></c><c r="C1"><f>T.DIST(0,1,0)</f><v>0</v></c><c r="D1"><f>T.DIST(2,5,1)</f><v>0</v></c><c r="E1"><f>T.DIST(2,5,0)</f><v>0</v></c><c r="F1"><f>T.DIST.RT(2,5)</f><v>0</v></c><c r="G1"><f>T.DIST.2T(2,5)</f><v>0</v></c><c r="H1"><f>TDIST(2,5,1)</f><v>0</v></c><c r="I1"><f>TDIST(2,5,2)</f><v>0</v></c><c r="J1"><f>T.DIST.2T(-1,5)</f><v>9</v></c><c r="K1"><f>TDIST(1,5,3)</f><v>8</v></c><c r="L1"><f>T.DIST(1,0,1)</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>T.DIST(1,1,1)</f><v>0.75</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>T.DIST(0,1,0)</f><v>0.31830989</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>T.DIST(2,5,1)</f><v>0.94903026</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>T.DIST(2,5,0)</f><v>0.06509031</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>T.DIST.RT(2,5)</f><v>0.05096974</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>T.DIST.2T(2,5)</f><v>0.10193948</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TDIST(2,5,1)</f><v>0.05096974</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TDIST(2,5,2)</f><v>0.10193948</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>T.DIST.2T(-1,5)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>TDIST(1,5,3)</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>T.DIST(1,0,1)</f><v>7</v>"#), "{sheet}");
     }
 
     #[test]
