@@ -365,6 +365,108 @@ struct SheetCellRef {
     text_cell: bool,
 }
 
+struct Spill {
+    values: Vec<f64>,
+    right: bool,
+    all_or_nothing: bool,
+}
+
+fn try_spill(formula: &str, env: &mut CalcEnv<'_>) -> Option<Spill> {
+    let mut parser = CalcParser {
+        bytes: formula.as_bytes(),
+        index: 0,
+    };
+    parser.skip();
+    let word = parser.word()?;
+    parser.skip();
+    if parser.bytes.get(parser.index) != Some(&b'(') {
+        return None;
+    }
+    let name = word.to_ascii_uppercase();
+    if !matches!(
+        name.as_str(),
+        "FREQUENCY" | "LINEST" | "TREND" | "MODE.MULT"
+    ) {
+        return None;
+    }
+    parser.index += 1;
+    let spill = match name.as_str() {
+        "FREQUENCY" => parser.frequency_spill(env)?,
+        "MODE.MULT" => parser.mode_mult_spill(env)?,
+        "LINEST" => parser.linest_spill(env)?,
+        "TREND" => parser.trend_spill(env)?,
+        _ => return None,
+    };
+    parser.skip();
+    if parser.index == parser.bytes.len() {
+        Some(spill)
+    } else {
+        None
+    }
+}
+
+fn place_spill(
+    origin: &str,
+    spill: &Spill,
+    cells: &[SheetCellRef],
+    taken: &std::collections::HashSet<String>,
+) -> Option<Vec<(String, f64)>> {
+    let mut writes = Vec::new();
+    for (step, value) in spill.values.iter().enumerate() {
+        let address = if step == 0 {
+            origin.to_string()
+        } else {
+            let shifted = if spill.right {
+                shift_address(origin, 0, step as u32)
+            } else {
+                shift_address(origin, step as u32, 0)
+            };
+            let Some(shifted) = shifted else {
+                if spill.all_or_nothing {
+                    return None;
+                }
+                break;
+            };
+            shifted
+        };
+        if step > 0 {
+            let blocked = taken.contains(&address)
+                || cells
+                    .iter()
+                    .find(|cell| cell.address == address)
+                    .is_none_or(|cell| cell.formula.is_some() || cell.text_cell);
+            if blocked {
+                if spill.all_or_nothing {
+                    return None;
+                }
+                break;
+            }
+        }
+        writes.push((address, *value));
+    }
+    if spill.all_or_nothing && writes.len() != spill.values.len() {
+        None
+    } else if writes.is_empty() {
+        None
+    } else {
+        Some(writes)
+    }
+}
+
+fn shift_address(address: &str, down: u32, right: u32) -> Option<String> {
+    let (col, row) = split_address(address)?;
+    let col = col.checked_add(right)?;
+    let row = row.checked_add(down)?;
+    if row == 0 || row > 9_999_999 {
+        return None;
+    }
+    let name = column_name(col);
+    if name.len() > 3 || name.is_empty() {
+        return None;
+    }
+    Some(format!("{name}{row}"))
+}
+
 fn recalculate_sheet(
     xml: &str,
     shared: &[String],
@@ -386,6 +488,7 @@ fn recalculate_sheet(
         }
     }
     let mut edits = Vec::new();
+    let mut spilled = std::collections::HashSet::<String>::new();
     for cell in &cells {
         let Some(formula) = &cell.formula else {
             continue;
@@ -394,6 +497,35 @@ fn recalculate_sheet(
             continue;
         }
         let mut visiting = std::collections::HashSet::new();
+        {
+            let mut spill_env = CalcEnv {
+                formulas: &formulas,
+                literals: &literals,
+                texts: &texts,
+                foreign,
+                visiting: &mut visiting,
+            };
+            if let Some(spill) = try_spill(formula, &mut spill_env) {
+                if let Some(writes) = place_spill(&cell.address, &spill, &cells, &spilled) {
+                    for (address, number) in writes {
+                        spilled.insert(address.clone());
+                        let Some(target) = cells.iter().find(|item| item.address == address) else {
+                            continue;
+                        };
+                        let rendered = format_calc(number);
+                        if rendered.is_empty() {
+                            continue;
+                        }
+                        if let Some((start, end)) = target.value_span {
+                            edits.push((start, end, rendered));
+                        } else if let Some(at) = target.insert_at {
+                            edits.push((at, at, format!("<v>{rendered}</v>")));
+                        }
+                    }
+                }
+                continue;
+            }
+        }
         let Some(value) = eval_formula(
             formula,
             &formulas,
@@ -937,6 +1069,38 @@ fn percentile_exc_excel(values: &mut [f64], k: f64) -> Option<f64> {
         Some(value)
     } else {
         None
+    }
+}
+
+fn modes_excel(values: &[f64]) -> Option<Vec<f64>> {
+    if values.is_empty() || values.len() > 256 {
+        return None;
+    }
+    let mut best_count = 1usize;
+    let mut modes = Vec::new();
+    for (index, value) in values.iter().enumerate() {
+        if values[..index]
+            .iter()
+            .any(|earlier| (earlier - value).abs() < 1e-9)
+        {
+            continue;
+        }
+        let count = values
+            .iter()
+            .filter(|other| (*other - value).abs() < 1e-9)
+            .count();
+        if count > best_count {
+            best_count = count;
+            modes.clear();
+            modes.push(*value);
+        } else if count == best_count && count > 1 {
+            modes.push(*value);
+        }
+    }
+    if modes.is_empty() || modes.len() > 16 {
+        None
+    } else {
+        Some(modes)
     }
 }
 
@@ -7442,6 +7606,153 @@ impl<'a> CalcParser<'a> {
         }
     }
 
+    fn frequency_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let data_cells = self.cell_range()?;
+        if data_cells.len() > 256 {
+            return None;
+        }
+        self.require_comma()?;
+        let bin_cells = self.cell_range()?;
+        if bin_cells.is_empty() || bin_cells.len() > 16 {
+            return None;
+        }
+        self.close_paren()?;
+        let mut data = Vec::new();
+        for address in data_cells {
+            match self.cell_value(&address, env) {
+                None => {}
+                Some(CalcValue::Num(number)) if number.is_finite() => data.push(number),
+                _ => return None,
+            }
+        }
+        let mut bins = Vec::new();
+        for address in &bin_cells {
+            let Some(CalcValue::Num(number)) = self.cell_value(address, env) else {
+                return None;
+            };
+            if !number.is_finite() {
+                return None;
+            }
+            if bins.last().is_some_and(|prev| number < *prev) {
+                return None;
+            }
+            bins.push(number);
+        }
+        let mut counts = vec![0.0; bins.len() + 1];
+        for value in data {
+            let mut placed = false;
+            for (index, bin) in bins.iter().enumerate() {
+                if value <= *bin {
+                    counts[index] += 1.0;
+                    placed = true;
+                    break;
+                }
+            }
+            if !placed {
+                let last = counts.len() - 1;
+                counts[last] += 1.0;
+            }
+        }
+        Some(Spill {
+            values: counts,
+            right: false,
+            all_or_nothing: false,
+        })
+    }
+
+    fn mode_mult_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let cells = self.cell_range()?;
+        if cells.len() > 256 {
+            return None;
+        }
+        self.close_paren()?;
+        let mut values = Vec::new();
+        for address in cells {
+            match self.cell_value(&address, env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
+                None | Some(CalcValue::Text(_)) => {}
+                Some(CalcValue::Num(_)) => return None,
+            }
+        }
+        Some(Spill {
+            values: modes_excel(&values)?,
+            right: false,
+            all_or_nothing: false,
+        })
+    }
+
+    fn line_pairs(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<(f64, f64)>> {
+        let (ys, y_rows, y_cols) = self.cell_block()?;
+        if ys.len() > 256 || (y_rows != 1 && y_cols != 1) {
+            return None;
+        }
+        self.require_comma()?;
+        let (xs, x_rows, x_cols) = self.cell_block()?;
+        if xs.len() != ys.len() || (x_rows != 1 && x_cols != 1) {
+            return None;
+        }
+        let mut pairs = Vec::new();
+        for (y_address, x_address) in ys.iter().zip(xs.iter()) {
+            match (
+                self.cell_value(y_address, env),
+                self.cell_value(x_address, env),
+            ) {
+                (Some(CalcValue::Num(y)), Some(CalcValue::Num(x)))
+                    if y.is_finite() && x.is_finite() =>
+                {
+                    pairs.push((y, x));
+                }
+                (None, _)
+                | (_, None)
+                | (Some(CalcValue::Text(_)), _)
+                | (_, Some(CalcValue::Text(_))) => {}
+                _ => return None,
+            }
+        }
+        Some(pairs)
+    }
+
+    fn linest_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let pairs = self.line_pairs(env)?;
+        self.close_paren()?;
+        Some(Spill {
+            values: vec![slope_excel(&pairs)?, intercept_excel(&pairs)?],
+            right: true,
+            all_or_nothing: true,
+        })
+    }
+
+    fn trend_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let pairs = self.line_pairs(env)?;
+        self.require_comma()?;
+        let (news, rows, cols) = self.cell_block()?;
+        if news.is_empty() || news.len() > 16 || (rows != 1 && cols != 1) {
+            return None;
+        }
+        self.close_paren()?;
+        let slope = slope_excel(&pairs)?;
+        let intercept = intercept_excel(&pairs)?;
+        let mut values = Vec::new();
+        for address in news {
+            let Some(CalcValue::Num(x_value)) = self.cell_value(&address, env) else {
+                return None;
+            };
+            if !x_value.is_finite() {
+                return None;
+            }
+            let y_value = intercept + slope * x_value;
+            if !y_value.is_finite() {
+                return None;
+            }
+            values.push(y_value);
+        }
+        Some(Spill {
+            values,
+            right: false,
+            all_or_nothing: true,
+        })
+    }
+
     fn quoted_sheet(&mut self) -> Option<String> {
         if self.bytes.get(self.index) != Some(&b'\'') {
             return None;
@@ -9575,6 +9886,92 @@ mod tests {
         let other = read_entry(&mut archive, "xl/worksheets/sheet2.xml").unwrap();
         assert!(other.contains(r#"<f>1+1</f><v>9</v>"#), "{other}");
         assert!(other.contains(r#"<c r="C1"><f>1+1</f></c>"#), "{other}");
+    }
+
+    #[test]
+    fn set_sheet_cell_spills_a_short_result() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c><c r="G1"><v>1</v></c><c r="J1"><v>1</v></c><c r="K1"><v>1</v></c><c r="P1"><v>4</v></c><c r="S1" t="inlineStr"><is><t>Cat</t></is></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>2</v></c><c r="B2"><v>4</v></c><c r="G2"><v>2</v></c><c r="J2"><v>2</v></c><c r="K2"><v>2</v></c><c r="P2"><v>5</v></c></row><row r="3"><c r="A3"><v>3</v></c><c r="B3"><v>5</v></c><c r="G3"><v>2</v></c><c r="J3" t="inlineStr"><is><t>Cat</t></is></c><c r="K3"><v>9</v></c></row><row r="4"><c r="A4"><v>4</v></c><c r="B4"><v>1</v></c><c r="G4"><v>3</v></c><c r="J4"><v>3</v></c><c r="K4"><v>3</v></c></row><row r="5"><c r="G5"><v>3</v></c></row><row r="6"><c r="C6"><f>FREQUENCY(A1:A4,B1:B2)</f><v>9</v></c><c r="E6"><f>FREQUENCY(A1:A4,B1:B2)</f><v>9</v></c><c r="F6"><f>FREQUENCY(A1:A4,B1:B2)</f><v>9</v></c><c r="H6"><f>MODE.MULT(G1:G5)</f><v>0</v></c><c r="I6"><f>MODE.MULT(A1:A4)</f><v>6</v></c><c r="L6"><f>LINEST(J1:J4,K1:K4)</f><v>0</v></c><c r="M6"><v>9</v></c><c r="O6"><f>TREND(J1:J4,K1:K4,P1:P2)</f><v>0</v></c><c r="Q6"><f>TREND(J1:J4,K1:K4,P1:P2)</f><v>3</v></c><c r="R6"><f>FREQUENCY(S1:S1,B1:B1)</f><v>5</v></c><c r="T6"><f>FREQUENCY(A1:A4,B3:B4)</f><v>6</v></c><c r="U6"><f>FREQUENCY(A1:A4,B1:B2)+0</f><v>7</v></c><c r="X6"><f>LINEST(J1:J4,K1:K4)</f><v>4</v></c></row><row r="7"><c r="C7"><v>8</v></c><c r="E7"><v>8</v></c><c r="F7"><f>FOO()</f><v>4</v></c><c r="H7"><v>0</v></c><c r="O7"><v>8</v></c><c r="Q7"><f>FOO()</f><v>6</v></c></row><row r="8"><c r="C8"><v>7</v></c><c r="F8"><v>3</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<c r="C6"><f>FREQUENCY(A1:A4,B1:B2)</f><v>2</v></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="C7"><v>2</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="C8"><v>0</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="E6"><f>FREQUENCY(A1:A4,B1:B2)</f><v>2</v></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="E7"><v>2</v></c>"#), "{sheet}");
+        assert!(!sheet.contains(r#"r="E8""#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="F6"><f>FREQUENCY(A1:A4,B1:B2)</f><v>2</v></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="F7"><f>FOO()</f><v>4</v></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="F8"><v>3</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>MODE.MULT(G1:G5)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="H7"><v>3</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>MODE.MULT(A1:A4)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="L6"><f>LINEST(J1:J4,K1:K4)</f><v>1</v></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="M6"><v>0</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="X6"><f>LINEST(J1:J4,K1:K4)</f><v>4</v></c>"#),
+            "{sheet}"
+        );
+        assert!(!sheet.contains(r#"r="Y6""#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="O6"><f>TREND(J1:J4,K1:K4,P1:P2)</f><v>4</v></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="O7"><v>5</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="Q6"><f>TREND(J1:J4,K1:K4,P1:P2)</f><v>3</v></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="Q7"><f>FOO()</f><v>6</v></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>FREQUENCY(S1:S1,B1:B1)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>FREQUENCY(A1:A4,B3:B4)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>FREQUENCY(A1:A4,B1:B2)+0</f><v>7</v>"#),
+            "{sheet}"
+        );
     }
 
     #[test]

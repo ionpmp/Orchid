@@ -102,7 +102,7 @@ release yet.
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
   `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`,
   `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`,
-  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, `EXPONDIST`, `NEGBINOM.DIST`, `NEGBINOMDIST`, `HYPGEOM.DIST`, `HYPGEOMDIST`, `WEIBULL.DIST`, `WEIBULL`, `GAMMA`, `GAMMALN`, `GAMMA.DIST`, `GAMMADIST`, `BINOM.INV`, `CRITBINOM`, `CHISQ.DIST`, `CHISQ.DIST.RT`, `CHIDIST`, `NORM.S.DIST`, `NORMSDIST`, `NORM.DIST`, `NORMDIST`, `ERF`, `ERFC`, `GAUSS`, `PHI`, `LOGNORM.DIST`, `LOGNORMDIST`, `BINOM.DIST.RANGE`, `Z.TEST`, `ZTEST`, `PROB`, `ASINH`, `ACOSH`, `ATANH`, `SEC`, `CSC`, `COT`, `CONCATENATE`, `UNICHAR`, `UNICODE`, `SERIESSUM`, `NORM.S.INV`, `NORMSINV`, `NORM.INV`, `NORMINV`, `LOGNORM.INV`, `LOGINV`, `CONFIDENCE`, `CONFIDENCE.NORM`, `GAMMA.INV`, `GAMMAINV`, `CHISQ.INV`, `CHISQ.INV.RT`, `CHIINV`, `ROMAN`, `ARABIC`, `SECH`, `CSCH`, `COTH`, `ACOT`, `ACOTH`, `CHISQ.TEST`, `CHITEST`, `AVERAGEA`, `MINA`, `MAXA`, `STDEVA`, `VARA`, `DATE`, `YEAR`, `MONTH`, `DAY`, `DEC2BIN`, `BIN2DEC`, `DEC2HEX`, `HEX2DEC`, `DEC2OCT`, `OCT2DEC`, `BASE`, `DECIMAL`, `BESSELJ`, `BESSELI`, `MDETERM`, `INDEX`, `MATCH`, `VLOOKUP`, `HLOOKUP`, `BETA.DIST`, `T.DIST`, `T.DIST.RT`, `T.DIST.2T`, `TDIST`, `F.DIST`, `F.DIST.RT`, `FDIST`, `T.TEST`, `TTEST`, `F.TEST`, `FTEST`, `CONFIDENCE.T`, `PMT`, `FV`, `PV`, `NPER`, `RATE`, `NPV`, `IRR`, `EDATE`, `EOMONTH`, `WEEKDAY`, `WORKDAY`, `NETWORKDAYS`, and `DATEDIF` on that sheet.
+  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, `EXPONDIST`, `NEGBINOM.DIST`, `NEGBINOMDIST`, `HYPGEOM.DIST`, `HYPGEOMDIST`, `WEIBULL.DIST`, `WEIBULL`, `GAMMA`, `GAMMALN`, `GAMMA.DIST`, `GAMMADIST`, `BINOM.INV`, `CRITBINOM`, `CHISQ.DIST`, `CHISQ.DIST.RT`, `CHIDIST`, `NORM.S.DIST`, `NORMSDIST`, `NORM.DIST`, `NORMDIST`, `ERF`, `ERFC`, `GAUSS`, `PHI`, `LOGNORM.DIST`, `LOGNORMDIST`, `BINOM.DIST.RANGE`, `Z.TEST`, `ZTEST`, `PROB`, `ASINH`, `ACOSH`, `ATANH`, `SEC`, `CSC`, `COT`, `CONCATENATE`, `UNICHAR`, `UNICODE`, `SERIESSUM`, `NORM.S.INV`, `NORMSINV`, `NORM.INV`, `NORMINV`, `LOGNORM.INV`, `LOGINV`, `CONFIDENCE`, `CONFIDENCE.NORM`, `GAMMA.INV`, `GAMMAINV`, `CHISQ.INV`, `CHISQ.INV.RT`, `CHIINV`, `ROMAN`, `ARABIC`, `SECH`, `CSCH`, `COTH`, `ACOT`, `ACOTH`, `CHISQ.TEST`, `CHITEST`, `AVERAGEA`, `MINA`, `MAXA`, `STDEVA`, `VARA`, `DATE`, `YEAR`, `MONTH`, `DAY`, `DEC2BIN`, `BIN2DEC`, `DEC2HEX`, `HEX2DEC`, `DEC2OCT`, `OCT2DEC`, `BASE`, `DECIMAL`, `BESSELJ`, `BESSELI`, `MDETERM`, `INDEX`, `MATCH`, `VLOOKUP`, `HLOOKUP`, `BETA.DIST`, `T.DIST`, `T.DIST.RT`, `T.DIST.2T`, `TDIST`, `F.DIST`, `F.DIST.RT`, `FDIST`, `T.TEST`, `TTEST`, `F.TEST`, `FTEST`, `CONFIDENCE.T`, `PMT`, `FV`, `PV`, `NPER`, `RATE`, `NPV`, `IRR`, `EDATE`, `EOMONTH`, `WEEKDAY`, `WORKDAY`, `NETWORKDAYS`, `DATEDIF`, `FREQUENCY`, `LINEST`, `TREND`, and `MODE.MULT` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -697,8 +697,31 @@ release yet.
   recalculated: only a stored `<v>` number is used, and a formula cell with no
   stored number leaves the caller's stored value. The same rule applies to a
   qualified reference on the sheet being edited. A cross-sheet range, a 3D
-  reference, and another workbook are not read. Other formulas keep their
-  stored value. Drawings are copied through.
+  reference, and another workbook are not read. `FREQUENCY`, `LINEST`,
+  `TREND`, and `MODE.MULT` are recalculated only when the formula is that one
+  call. A larger expression keeps the stored value. `FREQUENCY` takes a data
+  range of at most 256 cells and a bin range of 1 through 16 numbers. Bins
+  must be non-decreasing. A blank in the data is skipped. Text, including a
+  shared string, leaves the stored value. A blank or text bin, or a bin that
+  falls, leaves the stored value. The first count is the formula cell. Later
+  counts go down into existing value cells. A missing cell, a formula, or a
+  text cell stops the rest, and those cells keep their previous values. The
+  last count is everything above the last bin. `MODE.MULT` uses one range of
+  at most 256 cells. Text, blanks, and shared strings are skipped. Numbers
+  match within 1e-9. Every value that ties for the highest count, when that
+  count is at least 2, is written downward in the order it first appears.
+  More than 16 modes, or no repeated number, leaves the stored value. The
+  same stop rule applies. `LINEST` takes one column or row of y values and one
+  column or row of x values, the same length, at most 256 cells. A blank or
+  text pair is skipped. At least two finite pairs are required. The slope is
+  written in the formula cell and the intercept in the cell to the right, when
+  that cell exists and is a value cell. Otherwise nothing is written. There is
+  no statistics block, no constant flag, and no second x variable. `TREND`
+  takes those same y and x ranges and a new-x range of 1 through 16 numbers in
+  one column or row. Each new x must be a finite number. Predictions are
+  intercept plus slope times x, first in the formula cell and the rest
+  downward. If any of those cells is missing, a formula, or text, nothing is
+  written. Other formulas keep their stored value. Drawings are copied through.
   PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label
   from the Form bar. Free text and signatures stay unchanged, and a
