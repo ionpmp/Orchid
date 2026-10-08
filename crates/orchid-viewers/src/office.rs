@@ -1976,6 +1976,59 @@ fn norm_dist_excel(x_value: f64, mean: f64, scale: f64, cumulative: bool) -> Opt
     }
 }
 
+fn norms_inv_excel(probability: f64) -> Option<f64> {
+    if !probability.is_finite() || probability <= 0.0 || probability >= 1.0 {
+        return None;
+    }
+    if (probability - 0.5).abs() < 1e-12 {
+        return Some(0.0);
+    }
+    let (target, sign) = if probability > 0.5 {
+        (probability, 1.0)
+    } else {
+        (1.0 - probability, -1.0)
+    };
+    let mut low = 0.0;
+    let mut high = 1.0;
+    loop {
+        let cdf = norms_dist_excel(high, true)?;
+        if cdf >= target {
+            break;
+        }
+        if high >= 8.0 {
+            return None;
+        }
+        high *= 2.0;
+    }
+    for _ in 0..60 {
+        let mid = (low + high) / 2.0;
+        let cdf = norms_dist_excel(mid, true)?;
+        if cdf < target {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    let value = sign * ((low + high) / 2.0);
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn norm_inv_excel(probability: f64, mean: f64, scale: f64) -> Option<f64> {
+    if !mean.is_finite() || !(scale > 0.0) || !scale.is_finite() {
+        return None;
+    }
+    let value = mean + scale * norms_inv_excel(probability)?;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn erf_excel(x_value: f64) -> Option<f64> {
     if !x_value.is_finite() {
         return None;
@@ -3567,6 +3620,20 @@ impl<'a> CalcParser<'a> {
                     return None;
                 }
                 return norm_dist_excel(x_value, mean, scale, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NORM.S.INV") || word.eq_ignore_ascii_case("NORMSINV") {
+                let probability = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return norms_inv_excel(probability).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NORM.INV") || word.eq_ignore_ascii_case("NORMINV") {
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let mean = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let scale = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return norm_inv_excel(probability, mean, scale).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("ERF") {
                 let lower = calc_num(self.compare(env)?)?;
@@ -9606,6 +9673,61 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>SERIESSUM(2,1,1,D2:F2)</f><v>10</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_norm_inv() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0.5</v></c><c r="B1"><f>NORMSINV(A1)</f><v>0</v></c><c r="C1"><f>NORM.S.INV(0.5)</f><v>9</v></c><c r="D1"><f>NORM.INV(A1,10,2)</f><v>0</v></c><c r="E1"><f>NORMINV(0.5,10,2)</f><v>0</v></c><c r="F1"><f>NORMSINV(0.025)</f><v>0</v></c><c r="G1"><f>NORMSINV(0)</f><v>4</v></c><c r="H1"><f>NORMSINV(1)</f><v>5</v></c><c r="I1"><f>NORM.INV(0.5,10,0)</f><v>6</v></c><c r="J1"><f>NORM.INV(0.5,10,-1)</f><v>7</v></c><c r="K1"><f>NORMSINV(&quot;ab&quot;)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "0.975").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>NORMSINV(A1)</f><v>1.95996398</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORM.S.INV(0.5)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORM.INV(A1,10,2)</f><v>13.91992797</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORMINV(0.5,10,2)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORMSINV(0.025)</f><v>-1.95996398</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>NORMSINV(0)</f><v>4</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>NORMSINV(1)</f><v>5</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>NORM.INV(0.5,10,0)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORM.INV(0.5,10,-1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>NORMSINV(&quot;ab&quot;)</f><v>8</v>"#),
             "{sheet}"
         );
     }
