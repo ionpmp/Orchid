@@ -763,8 +763,13 @@ release yet.
   wherever a colon range is accepted, including `SUMIF` and `SUMPRODUCT`.
   `CONCAT`, `CONCATENATE`, and `TEXTJOIN` do not expand a name. A multi-cell
   name used as a single value, or inside an expression, leaves the stored
-  value. A name that is a formula, a 3D reference, another workbook, or a
-  structured table reference is ignored. A shared formula on the sheet being
+  value. A name may also be one expression of at most 256 characters. Every cell
+  reference in it must be fully absolute and written after a sheet name, such
+  as `Budgets!$A$1`. Those cells are read from the stored snapshot, so a
+  formula there is not recalculated. The expression cannot use another name. A
+  relative reference, a 3D reference, another workbook, or a structured table
+  reference is ignored. A formula name is one value and does not expand as a
+  range. A shared formula on the sheet being
   edited is the cell whose `<f t="shared">` contains the formula. Each other
   cell with the same `si` and an empty shared formula uses that formula shifted
   by the row and column distance from the master. A `$` keeps that column or

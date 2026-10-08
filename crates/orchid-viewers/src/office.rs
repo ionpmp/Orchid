@@ -1944,6 +1944,7 @@ struct DefinedRef {
     cells: Vec<String>,
     rows: u32,
     cols: u32,
+    formula: Option<String>,
 }
 
 enum NameArg {
@@ -3088,6 +3089,17 @@ fn workbook_names(xml: &str) -> std::collections::HashMap<String, DefinedRef> {
         }
         if let Some(refer) = parse_defined_ref(&body) {
             names.insert(name.to_ascii_lowercase(), refer);
+        } else if let Some(formula) = absolute_sheet_formula(body) {
+            names.insert(
+                name.to_ascii_lowercase(),
+                DefinedRef {
+                    sheet: String::new(),
+                    cells: Vec::new(),
+                    rows: 0,
+                    cols: 0,
+                    formula: Some(formula),
+                },
+            );
         }
     }
     names
@@ -3149,7 +3161,63 @@ fn parse_defined_ref(text: &str) -> Option<DefinedRef> {
         cells,
         rows,
         cols,
+        formula: None,
     })
+}
+
+fn absolute_sheet_formula(text: &str) -> Option<String> {
+    let text = unescape_xml(text.trim());
+    let text = text.strip_prefix('=').unwrap_or(&text).trim();
+    if text.is_empty() || text.chars().count() > 256 || text.contains('[') {
+        return None;
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let mut index = 0usize;
+    while index < chars.len() {
+        if chars[index] == '"' || chars[index] == '\'' {
+            let quote = chars[index];
+            index += 1;
+            while index < chars.len() {
+                if chars[index] == quote {
+                    index += 1;
+                    if chars.get(index) == Some(&quote) {
+                        index += 1;
+                        continue;
+                    }
+                    break;
+                }
+                index += 1;
+            }
+            continue;
+        }
+        if let Some(refer) = parse_cell_ref(&chars, index) {
+            if !refer.col_abs || !refer.row_abs || index == 0 || chars[index - 1] != '!' {
+                return None;
+            }
+            index = refer.end;
+            continue;
+        }
+        index += 1;
+    }
+    Some(text.to_string())
+}
+
+fn eval_name_formula(formula: &str, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+    let names = std::collections::HashMap::new();
+    eval_formula(
+        formula,
+        env.formulas,
+        env.literals,
+        env.texts,
+        env.foreign,
+        &names,
+        env.sheet_order,
+        env.sheet,
+        env.date1904,
+        env.previous,
+        env.iterate,
+        env.visiting,
+    )
 }
 
 fn named_addresses(defined: &DefinedRef, env: &CalcEnv<'_>) -> Vec<String> {
@@ -8366,6 +8434,9 @@ impl<'a> CalcParser<'a> {
         }
         if !is_cell_address(&word) {
             if let Some(defined) = env.names.get(&word.to_ascii_lowercase()) {
+                if let Some(formula) = &defined.formula {
+                    return eval_name_formula(formula, env);
+                }
                 if defined.cells.len() != 1 {
                     return None;
                 }
@@ -8924,6 +8995,10 @@ impl<'a> CalcParser<'a> {
         let Some(defined) = self.take_name(env) else {
             return NameArg::Absent;
         };
+        if defined.formula.is_some() {
+            self.index = saved;
+            return NameArg::Absent;
+        }
         self.skip();
         match self.bytes.get(self.index).copied() {
             Some(b',' | b')') => NameArg::Cells(named_addresses(&defined, env)),
@@ -12156,7 +12231,7 @@ mod tests {
         assert!(sheet.contains(r#"<f>SUM(Abroad)</f><v>13</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Quoted</f><v>4</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Local</f><v>5</v>"#), "{sheet}");
-        assert!(sheet.contains(r#"<f>Plus</f><v>4</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Plus</f><v>11</v>"#), "{sheet}");
         assert!(
             sheet.contains(r#"<f>SUMIF(Sales,&quot;&gt;15&quot;)</f><v>20</v>"#),
             "{sheet}"
@@ -12417,6 +12492,33 @@ mod tests {
             iterated_sheet.contains(r#"<f>A1+1</f><v>2</v>"#),
             "{iterated_sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_formula_name() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="Plus">Budgets!$A$1+1</definedName><definedName name="Two">1+1</definedName><definedName name="Relative">Budgets!A1+1</definedName><definedName name="Nested">Plus+1</definedName></definedNames></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>1+1</f><v>8</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="D2"><f>Plus</f><v>0</v></c><c r="E2"><f>Plus*2</f><v>0</v></c><c r="F2"><f>SUM(Plus)</f><v>0</v></c><c r="G2"><f>Two</f><v>0</v></c><c r="H2"><f>Relative</f><v>4</v></c><c r="I2"><f>Nested</f><v>5</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>Plus</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Plus*2</f><v>18</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SUM(Plus)</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Two</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Relative</f><v>4</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Nested</f><v>5</v>"#), "{sheet}");
     }
 
     #[test]
