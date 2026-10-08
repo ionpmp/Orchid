@@ -2844,6 +2844,144 @@ fn f_pdf(x: f64, df1: f64, df2: f64) -> Option<f64> {
     }
 }
 
+fn student_tail(stat: f64, df: f64, tails: f64) -> Option<f64> {
+    if !stat.is_finite() || !df.is_finite() || df <= 0.0 || !tails.is_finite() {
+        return None;
+    }
+    let tails = tails.trunc();
+    if tails != 1.0 && tails != 2.0 {
+        return None;
+    }
+    let upper = 1.0 - t_cdf(stat.abs(), df)?;
+    let value = if tails == 1.0 {
+        upper
+    } else {
+        (2.0 * upper).min(1.0)
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn mean_sample_var(values: &[f64]) -> Option<(f64, f64, f64)> {
+    let variance = var_excel(values, true)?;
+    let count = values.len() as f64;
+    let mean = values.iter().sum::<f64>() / count;
+    if mean.is_finite() {
+        Some((mean, variance, count))
+    } else {
+        None
+    }
+}
+
+fn paired_t_test(diffs: &[f64], tails: f64) -> Option<f64> {
+    let (mean, variance, count) = mean_sample_var(diffs)?;
+    if variance <= 0.0 {
+        return None;
+    }
+    let stat = mean / (variance.sqrt() / count.sqrt());
+    student_tail(stat, count - 1.0, tails)
+}
+
+fn t_test_excel(left: &[f64], right: &[f64], tails: f64, kind: f64) -> Option<f64> {
+    if !kind.is_finite() {
+        return None;
+    }
+    let kind = kind.trunc();
+    let (mean_left, var_left, n_left) = mean_sample_var(left)?;
+    let (mean_right, var_right, n_right) = mean_sample_var(right)?;
+    if kind == 2.0 {
+        let df = n_left + n_right - 2.0;
+        if df <= 0.0 {
+            return None;
+        }
+        let pooled = ((n_left - 1.0) * var_left + (n_right - 1.0) * var_right) / df;
+        if pooled <= 0.0 {
+            return None;
+        }
+        let stat = (mean_left - mean_right) / (pooled * (1.0 / n_left + 1.0 / n_right)).sqrt();
+        return student_tail(stat, df, tails);
+    }
+    if kind == 3.0 {
+        let left_term = var_left / n_left;
+        let right_term = var_right / n_right;
+        let se2 = left_term + right_term;
+        if se2 <= 0.0 || n_left <= 1.0 || n_right <= 1.0 {
+            return None;
+        }
+        let df = (se2 * se2)
+            / (left_term.powi(2) / (n_left - 1.0) + right_term.powi(2) / (n_right - 1.0));
+        let stat = (mean_left - mean_right) / se2.sqrt();
+        return student_tail(stat, df, tails);
+    }
+    None
+}
+
+fn f_test_excel(left: &[f64], right: &[f64]) -> Option<f64> {
+    let (_, var_left, n_left) = mean_sample_var(left)?;
+    let (_, var_right, n_right) = mean_sample_var(right)?;
+    if var_left <= 0.0 || var_right <= 0.0 {
+        return None;
+    }
+    let cdf = f_cdf(var_left / var_right, n_left - 1.0, n_right - 1.0)?;
+    let value = (2.0 * cdf.min(1.0 - cdf)).min(1.0);
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn t_quantile(probability: f64, df: f64) -> Option<f64> {
+    if !(probability > 0.5 && probability < 1.0) || !df.is_finite() || df <= 0.0 {
+        return None;
+    }
+    let mut high = 1.0;
+    while t_cdf(high, df)? < probability {
+        high *= 2.0;
+        if high > 1.0e8 {
+            return None;
+        }
+    }
+    let mut low = 0.0;
+    for _ in 0..80 {
+        let mid = (low + high) / 2.0;
+        if t_cdf(mid, df)? < probability {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    let value = (low + high) / 2.0;
+    if value.is_finite() && high - low <= 1e-10 * value.abs().max(1.0) {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn confidence_t_excel(alpha: f64, stdev: f64, size: f64) -> Option<f64> {
+    if !alpha.is_finite() || !stdev.is_finite() || !size.is_finite() {
+        return None;
+    }
+    if !(alpha > 0.0 && alpha < 1.0) || stdev <= 0.0 {
+        return None;
+    }
+    let size = size.trunc();
+    if !(2.0..=1.0e6).contains(&size) {
+        return None;
+    }
+    let critical = t_quantile(1.0 - alpha / 2.0, size - 1.0)?;
+    let value = critical * stdev / size.sqrt();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -5370,6 +5508,60 @@ impl<'a> CalcParser<'a> {
                     None
                 };
             }
+            if word.eq_ignore_ascii_case("T.TEST") || word.eq_ignore_ascii_case("TTEST") {
+                let left_cells = self.cell_range()?;
+                self.require_comma()?;
+                let right_cells = self.cell_range()?;
+                self.require_comma()?;
+                let tails = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let kind = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !kind.is_finite() {
+                    return None;
+                }
+                let value = if kind.trunc() == 1.0 {
+                    if left_cells.len() != right_cells.len() {
+                        return None;
+                    }
+                    let mut diffs = Vec::new();
+                    for (left, right) in left_cells.iter().zip(&right_cells) {
+                        let Some(CalcValue::Num(left)) = self.cell_value(left, env) else {
+                            continue;
+                        };
+                        let Some(CalcValue::Num(right)) = self.cell_value(right, env) else {
+                            continue;
+                        };
+                        if left.is_finite() && right.is_finite() {
+                            diffs.push(left - right);
+                        }
+                    }
+                    paired_t_test(&diffs, tails)
+                } else {
+                    let left = self.range_numbers(&left_cells, env);
+                    let right = self.range_numbers(&right_cells, env);
+                    t_test_excel(&left, &right, tails, kind)
+                };
+                return value.map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("F.TEST") || word.eq_ignore_ascii_case("FTEST") {
+                let left_cells = self.cell_range()?;
+                self.require_comma()?;
+                let right_cells = self.cell_range()?;
+                self.close_paren()?;
+                let left = self.range_numbers(&left_cells, env);
+                let right = self.range_numbers(&right_cells, env);
+                return f_test_excel(&left, &right).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CONFIDENCE.T") {
+                let alpha = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let stdev = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let size = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return confidence_t_excel(alpha, stdev, size).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("TEXTJOIN") {
                 let delim = calc_text(&self.compare(env)?);
                 self.require_comma()?;
@@ -6291,6 +6483,18 @@ impl<'a> CalcParser<'a> {
     }
 
     /// Y range then X range, same length. A pair is kept when both cells are finite numbers.
+    fn range_numbers(&mut self, cells: &[String], env: &mut CalcEnv<'_>) -> Vec<f64> {
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(number)) = self.cell_value(address, env) {
+                if number.is_finite() {
+                    values.push(number);
+                }
+            }
+        }
+        values
+    }
+
     fn paired_ranges(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<(f64, f64)>> {
         let ys = self.cell_range()?;
         self.require_comma()?;
@@ -8245,6 +8449,59 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>FDIST(2,5)</f><v>7</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_t_test() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c><c r="C1"><f>T.TEST(A1:A3,B1:B3,2,1)</f><v>0</v></c><c r="D1"><f>T.TEST(A1:A3,B1:B3,1,1)</f><v>0</v></c><c r="E1"><f>TTEST(A1:A3,B1:B3,2,2)</f><v>0</v></c><c r="F1"><f>T.TEST(A1:A3,B1:B3,2,3)</f><v>0</v></c><c r="G1"><f>F.TEST(A1:A3,B1:B3)</f><v>0</v></c><c r="H1"><f>CONFIDENCE.T(0.05,1,10)</f><v>0</v></c><c r="I1"><f>T.TEST(A1:A3,B1:B3,2,4)</f><v>9</v></c><c r="J1"><f>CONFIDENCE.T(0,1,10)</f><v>8</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>2</v></c><c r="B2"><v>3</v></c></row><row r="3"><c r="A3"><v>3</v></c><c r="B3"><v>5</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>T.TEST(A1:A3,B1:B3,2,1)</f><v>0.05719096</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>T.TEST(A1:A3,B1:B3,1,1)</f><v>0.02859548</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TTEST(A1:A3,B1:B3,2,2)</f><v>0.27457663</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>T.TEST(A1:A3,B1:B3,2,3)</f><v>0.28462718</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>F.TEST(A1:A3,B1:B3)</f><v>0.6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONFIDENCE.T(0.05,1,10)</f><v>0.71535691</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>T.TEST(A1:A3,B1:B3,2,4)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONFIDENCE.T(0,1,10)</f><v>8</v>"#),
+            "{sheet}"
+        );
     }
 
     #[test]
