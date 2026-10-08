@@ -608,6 +608,7 @@ fn stored_sheet(xml: &str, shared: &[String]) -> ForeignSheet {
 fn sheet_cells(xml: &str, shared: &[String]) -> Vec<SheetCellRef> {
     let bytes = xml.as_bytes();
     let mut cells = Vec::new();
+    let mut slots = Vec::new();
     let mut index = 0usize;
     while index + 2 < bytes.len() {
         if bytes[index] == b'<' && bytes[index + 1] == b'c' {
@@ -629,7 +630,13 @@ fn sheet_cells(xml: &str, shared: &[String]) -> Vec<SheetCellRef> {
                 let end = open_end + close + 4;
                 if let Some(address) = address {
                     let body = &xml[open_end..open_end + close];
-                    let formula = formula_text(body);
+                    let slot = formula_slot(body);
+                    let formula = match &slot {
+                        FormulaSlot::Plain(text) | FormulaSlot::Master { text, .. } => {
+                            Some(text.clone())
+                        }
+                        FormulaSlot::None | FormulaSlot::Follower(_) => None,
+                    };
                     let value_span = value_span(xml, open_end, open_end + close);
                     let text_cell = open.contains("t=\"s\"")
                         || open.contains("t=\"str\"")
@@ -659,6 +666,7 @@ fn sheet_cells(xml: &str, shared: &[String]) -> Vec<SheetCellRef> {
                         open_span: (index, open_end),
                         text_cell,
                     });
+                    slots.push(slot);
                 }
                 index = end;
                 continue;
@@ -666,7 +674,276 @@ fn sheet_cells(xml: &str, shared: &[String]) -> Vec<SheetCellRef> {
         }
         index += 1;
     }
+    expand_shared_formulas(&mut cells, &slots);
     cells
+}
+
+enum FormulaSlot {
+    None,
+    Plain(String),
+    Master { si: u32, text: String },
+    Follower(u32),
+}
+
+fn formula_slot(body: &str) -> FormulaSlot {
+    let Some(start) = body.find("<f") else {
+        return FormulaSlot::None;
+    };
+    let Some(boundary) = body.as_bytes().get(start + 2).copied() else {
+        return FormulaSlot::None;
+    };
+    if !matches!(boundary, b'>' | b' ' | b'/') {
+        return FormulaSlot::None;
+    }
+    let Some(rel) = body[start..].find('>') else {
+        return FormulaSlot::None;
+    };
+    let tag = &body[start..start + rel + 1];
+    let shared = tag.contains("t=\"shared\"") || tag.contains("t='shared'");
+    if tag.ends_with("/>") {
+        let Some(si) = formula_si(tag) else {
+            return FormulaSlot::None;
+        };
+        if shared {
+            return FormulaSlot::Follower(si);
+        }
+        return FormulaSlot::None;
+    }
+    if tag.contains("t=") && !shared {
+        return FormulaSlot::None;
+    }
+    let inner = start + rel + 1;
+    let Some(close) = body[inner..].find("</f>") else {
+        return FormulaSlot::None;
+    };
+    let text = unescape_xml(body[inner..inner + close].trim());
+    let text = text.strip_prefix('=').unwrap_or(&text).trim();
+    if text.is_empty() {
+        return FormulaSlot::None;
+    }
+    if shared {
+        let Some(si) = formula_si(tag) else {
+            return FormulaSlot::None;
+        };
+        return FormulaSlot::Master {
+            si,
+            text: text.to_string(),
+        };
+    }
+    FormulaSlot::Plain(text.to_string())
+}
+
+fn formula_si(tag: &str) -> Option<u32> {
+    xml_attr(tag, "si")?.parse().ok()
+}
+
+fn expand_shared_formulas(cells: &mut [SheetCellRef], slots: &[FormulaSlot]) {
+    let mut masters = std::collections::HashMap::<u32, (String, String)>::new();
+    for (cell, slot) in cells.iter().zip(slots.iter()) {
+        if let FormulaSlot::Master { si, text } = slot {
+            masters
+                .entry(*si)
+                .or_insert_with(|| (cell.address.clone(), text.clone()));
+        }
+    }
+    for (cell, slot) in cells.iter_mut().zip(slots.iter()) {
+        let FormulaSlot::Follower(si) = slot else {
+            continue;
+        };
+        let Some((origin, text)) = masters.get(si) else {
+            continue;
+        };
+        if let Some(shifted) = shift_formula_between(origin, &cell.address, text) {
+            cell.formula = Some(shifted);
+        }
+    }
+}
+
+fn shift_formula_between(origin: &str, target: &str, formula: &str) -> Option<String> {
+    let (origin_col, origin_row) = split_address(origin)?;
+    let (target_col, target_row) = split_address(target)?;
+    let dcol = target_col as i32 - origin_col as i32;
+    let drow = target_row as i32 - origin_row as i32;
+    shift_formula(formula, dcol, drow)
+}
+
+fn shift_formula(formula: &str, dcol: i32, drow: i32) -> Option<String> {
+    if dcol == 0 && drow == 0 {
+        return Some(formula.to_string());
+    }
+    let chars: Vec<char> = formula.chars().collect();
+    let mut index = 0usize;
+    let mut out = String::new();
+    while index < chars.len() {
+        if chars[index] == '"' {
+            out.push('"');
+            index += 1;
+            while index < chars.len() {
+                out.push(chars[index]);
+                if chars[index] == '"' {
+                    index += 1;
+                    if chars.get(index) == Some(&'"') {
+                        out.push('"');
+                        index += 1;
+                        continue;
+                    }
+                    break;
+                }
+                index += 1;
+            }
+            continue;
+        }
+        if chars[index] == '\'' {
+            out.push('\'');
+            index += 1;
+            while index < chars.len() {
+                out.push(chars[index]);
+                if chars[index] == '\'' {
+                    index += 1;
+                    if chars.get(index) == Some(&'\'') {
+                        out.push('\'');
+                        index += 1;
+                        continue;
+                    }
+                    break;
+                }
+                index += 1;
+            }
+            continue;
+        }
+        if let Some((end, shifted)) = shift_ref_at(&chars, index, dcol, drow) {
+            let shifted = shifted?;
+            out.push_str(&shifted);
+            index = end;
+            continue;
+        }
+        out.push(chars[index]);
+        index += 1;
+    }
+    Some(out)
+}
+
+fn shift_ref_at(
+    chars: &[char],
+    index: usize,
+    dcol: i32,
+    drow: i32,
+) -> Option<(usize, Option<String>)> {
+    let mut cursor = index;
+    let mut prefix = String::new();
+    if chars
+        .get(cursor)
+        .is_some_and(|ch| ch.is_ascii_alphabetic() || *ch == '_')
+    {
+        let start = cursor;
+        while cursor < chars.len()
+            && (chars[cursor].is_ascii_alphanumeric()
+                || chars[cursor] == '_'
+                || chars[cursor] == '.')
+        {
+            cursor += 1;
+        }
+        if chars.get(cursor) == Some(&'!') {
+            prefix.extend(chars[start..=cursor].iter());
+            cursor += 1;
+        } else {
+            cursor = index;
+        }
+    }
+    let Some(refer) = parse_cell_ref(chars, cursor) else {
+        return None;
+    };
+    let shifted = shift_cell_ref(&refer, dcol, drow);
+    Some((refer.end, shifted.map(|cell| format!("{prefix}{cell}"))))
+}
+
+struct CellRefParts {
+    end: usize,
+    col_abs: bool,
+    col: u32,
+    row_abs: bool,
+    row: u32,
+}
+
+fn parse_cell_ref(chars: &[char], index: usize) -> Option<CellRefParts> {
+    let mut cursor = index;
+    let col_abs = if chars.get(cursor) == Some(&'$') {
+        cursor += 1;
+        true
+    } else {
+        false
+    };
+    let col_start = cursor;
+    while cursor < chars.len() && chars[cursor].is_ascii_alphabetic() && cursor - col_start < 3 {
+        cursor += 1;
+    }
+    if cursor == col_start || chars.get(cursor).is_some_and(|ch| ch.is_ascii_alphabetic()) {
+        return None;
+    }
+    let letters: String = chars[col_start..cursor].iter().collect();
+    let row_abs = if chars.get(cursor) == Some(&'$') {
+        cursor += 1;
+        true
+    } else {
+        false
+    };
+    let row_start = cursor;
+    while cursor < chars.len() && chars[cursor].is_ascii_digit() && cursor - row_start < 7 {
+        cursor += 1;
+    }
+    if cursor == row_start
+        || chars
+            .get(cursor)
+            .is_some_and(|ch| ch.is_ascii_alphanumeric())
+    {
+        return None;
+    }
+    let row = chars[row_start..cursor]
+        .iter()
+        .collect::<String>()
+        .parse::<u32>()
+        .ok()?;
+    if row == 0 {
+        return None;
+    }
+    Some(CellRefParts {
+        end: cursor,
+        col_abs,
+        col: column_index(&letters)?,
+        row_abs,
+        row,
+    })
+}
+
+fn shift_cell_ref(refer: &CellRefParts, dcol: i32, drow: i32) -> Option<String> {
+    let col = if refer.col_abs {
+        refer.col
+    } else {
+        let next = refer.col as i32 + dcol;
+        if !(1..=16_384).contains(&next) {
+            return None;
+        }
+        next as u32
+    };
+    let row = if refer.row_abs {
+        refer.row
+    } else {
+        let next = refer.row as i32 + drow;
+        if !(1..=9_999_999).contains(&next) {
+            return None;
+        }
+        next as u32
+    };
+    let mut out = String::new();
+    if refer.col_abs {
+        out.push('$');
+    }
+    out.push_str(&column_name(col));
+    if refer.row_abs {
+        out.push('$');
+    }
+    out.push_str(&row.to_string());
+    Some(out)
 }
 
 fn cell_address_from_tag(open: &str) -> Option<String> {
@@ -682,19 +959,6 @@ fn cell_address_from_tag(open: &str) -> Option<String> {
         }
     }
     None
-}
-
-fn formula_text(body: &str) -> Option<String> {
-    let start = body.find("<f>")?;
-    let rest = &body[start + 3..];
-    let end = rest.find("</f>")?;
-    let text = rest[..end].trim();
-    let text = text.strip_prefix('=').unwrap_or(text).trim();
-    if text.is_empty() {
-        None
-    } else {
-        Some(unescape_xml(text))
-    }
 }
 
 fn value_span(xml: &str, from: usize, to: usize) -> Option<(usize, usize)> {
@@ -11359,6 +11623,65 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>COUNTA(Sales)</f><v>2</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_shared_formula() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="B1"><v>2</v></c><c r="A1"><f t="shared" ref="A1:A3" si="0">B1*2</f><v>0</v></c><c r="C1"><f t="shared" ref="C1:C2" si="1">$B1+B$1</f><v>0</v></c><c r="D1"><f>B1+1</f><v>0</v></c><c r="H1"><f t="shared" ref="H1:H2" si="2">LEN(&quot;A1&quot;)</f><v>0</v></c><c r="F1"><f t="shared" si="3"/><v>8</v></c><c r="G1"><f t="array" ref="G1">1+1</f><v>6</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="B2"><v>3</v></c><c r="A2"><f t="shared" si="0"/><v>0</v></c><c r="C2"><f t="shared" si="1"/><v>0</v></c><c r="H2"><f t="shared" si="2"/><v>0</v></c><c r="F2"><f t="shared" ref="F2:F1" si="3">A1</f><v>0</v></c></row><row r="3"><c r="B3"><v>4</v></c><c r="A3"><f t="shared" si="0"/><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f t="shared" ref="A1:A3" si="0">B1*2</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f t="shared" si="0"/><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"si="0"/><v>8</v>"#)
+                || sheet.contains(r#"<c r="A3"><f t="shared" si="0"/><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f t="shared" ref="C1:C2" si="1">$B1+B$1</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f t="shared" si="1"/><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>B1+1</f><v>3</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f t="shared" ref="H1:H2" si="2">LEN(&quot;A1&quot;)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f t="shared" si="2"/><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f t="shared" si="3"/><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f t="array" ref="G1">1+1</f><v>6</v>"#),
+            "{sheet}"
+        );
     }
 
     #[test]

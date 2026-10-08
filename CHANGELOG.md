@@ -744,7 +744,14 @@ release yet.
   `CONCAT`, `CONCATENATE`, and `TEXTJOIN` do not expand a name. A multi-cell
   name used as a single value, or inside an expression, leaves the stored
   value. A name that is a formula, a 3D reference, another workbook, or a
-  structured table reference is ignored. `FREQUENCY`, `LINEST`,
+  structured table reference is ignored. A shared formula on the sheet being
+  edited is the cell whose `<f t="shared">` contains the formula. Each other
+  cell with the same `si` and an empty shared formula uses that formula shifted
+  by the row and column distance from the master. A `$` keeps that column or
+  row fixed. Text inside quotes is not shifted. A shift that would leave the
+  sheet, a missing master, or a formula type other than shared, including an
+  array formula, leaves the stored value. Shared formulas on other sheets are
+  not expanded. `FREQUENCY`, `LINEST`,
   `TREND`, and `MODE.MULT` are recalculated only when the formula is that one
   call. A larger expression keeps the stored value. `FREQUENCY` takes a data
   range of at most 256 cells and a bin range of 1 through 16 numbers. Bins
