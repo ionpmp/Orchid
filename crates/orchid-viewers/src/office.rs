@@ -2021,6 +2021,35 @@ fn lognorm_dist_excel(x_value: f64, mean: f64, scale: f64, cumulative: bool) -> 
     }
 }
 
+fn binom_range_excel(trials: f64, probability: f64, low: f64, high: f64) -> Option<f64> {
+    if !trials.is_finite()
+        || !low.is_finite()
+        || !high.is_finite()
+        || trials < 0.0
+        || trials >= 171.0
+        || low < 0.0
+        || high < 0.0
+    {
+        return None;
+    }
+    let limit = trials.trunc();
+    let low = low.trunc();
+    let high = high.trunc();
+    if low > limit || high > limit || high < low {
+        return None;
+    }
+    let mut sum = 0.0;
+    let mut count = low;
+    while count <= high {
+        sum += binom_dist_excel(count, trials, probability, false)?;
+        if !sum.is_finite() {
+            return None;
+        }
+        count += 1.0;
+    }
+    Some(sum)
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -3464,6 +3493,24 @@ impl<'a> CalcParser<'a> {
                     flag != 0.0
                 };
                 return lognorm_dist_excel(x_value, mean, scale, cumulative).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("BINOM.DIST.RANGE") {
+                let trials = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let low = calc_num(self.compare(env)?)?;
+                self.skip();
+                let high = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    low
+                } else {
+                    self.require_comma()?;
+                    let high = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    high
+                };
+                return binom_range_excel(trials, probability, low, high).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -8992,6 +9039,63 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>LOGNORM.DIST(&quot;ab&quot;,0,1,0)</f><v>12</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_binom_range() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>BINOM.DIST.RANGE(4,0.5,A1,2)</f><v>0</v></c><c r="C1"><f>BINOM.DIST.RANGE(4,0.5,2)</f><v>0</v></c><c r="D1"><f>BINOM.DIST.RANGE(4.9,0.5,1.9,2.2)</f><v>0</v></c><c r="E1"><f>BINOM.DIST.RANGE(4,0.5,3,1)</f><v>7</v></c><c r="F1"><f>BINOM.DIST.RANGE(4,0.5,5,5)</f><v>8</v></c><c r="G1"><f>BINOM.DIST.RANGE(4,1.5,1,2)</f><v>9</v></c><c r="H1"><f>BINOM.DIST.RANGE(171,0.5,0,1)</f><v>10</v></c><c r="I1"><f>BINOM.DIST.RANGE(4,0.5)</f><v>11</v></c><c r="J1"><f>BINOM.DIST.RANGE(&quot;ab&quot;,0.5,1,2)</f><v>12</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST.RANGE(4,0.5,A1,2)</f><v>0.625</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST.RANGE(4,0.5,2)</f><v>0.375</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST.RANGE(4.9,0.5,1.9,2.2)</f><v>0.625</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST.RANGE(4,0.5,3,1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST.RANGE(4,0.5,5,5)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST.RANGE(4,1.5,1,2)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST.RANGE(171,0.5,0,1)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST.RANGE(4,0.5)</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BINOM.DIST.RANGE(&quot;ab&quot;,0.5,1,2)</f><v>12</v>"#),
             "{sheet}"
         );
     }
