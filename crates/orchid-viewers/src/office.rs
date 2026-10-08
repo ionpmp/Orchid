@@ -4500,17 +4500,51 @@ fn linear_unit(unit: &str) -> Option<(&'static str, f64)> {
 }
 
 fn text_excel(value: CalcValue, format: &str, date1904: bool) -> Option<CalcValue> {
-    if format.is_empty() || format.len() > 64 || format.contains(';') {
+    if format.is_empty() || format.len() > 64 {
         return None;
     }
-    if format == "@" {
+    let sections = split_format_sections(format)?;
+    let (section, value) = match value {
+        CalcValue::Text(_) => {
+            if sections.len() != 1 {
+                return None;
+            }
+            (sections[0], value)
+        }
+        CalcValue::Num(number) => {
+            if !number.is_finite() {
+                return None;
+            }
+            if sections.len() == 1 {
+                (sections[0], CalcValue::Num(number))
+            } else if number > 0.0 {
+                (sections[0], CalcValue::Num(number))
+            } else if number < 0.0 {
+                (
+                    sections.get(1).copied().unwrap_or(sections[0]),
+                    CalcValue::Num(number.abs()),
+                )
+            } else if sections.len() >= 3 {
+                (sections[2], CalcValue::Num(number))
+            } else {
+                (sections[0], CalcValue::Num(number))
+            }
+        }
+    };
+    if section.is_empty() {
+        return limited_text(String::new());
+    }
+    if section == "@" {
         let text = match value {
             CalcValue::Text(text) => text,
             CalcValue::Num(number) => format_calc(number),
         };
         return limited_text(text);
     }
-    let unquoted = unquoted_format(format)?;
+    let unquoted = unquoted_format(section)?;
+    if unquoted.is_empty() {
+        return quoted_literals(section).and_then(limited_text);
+    }
     let date = unquoted
         .chars()
         .any(|ch| matches!(ch, 'y' | 'Y' | 'd' | 'D' | 'm' | 'M'));
@@ -4525,12 +4559,65 @@ fn text_excel(value: CalcValue, format: &str, date1904: bool) -> Option<CalcValu
             return None;
         };
         let serial = as_1900(number, date1904)?;
-        return format_excel_date(serial, format).and_then(limited_text);
+        return format_excel_date(serial, section).and_then(limited_text);
     }
     let CalcValue::Num(number) = value else {
         return None;
     };
-    format_excel_number(number, format).and_then(limited_text)
+    format_excel_number(number, section).and_then(limited_text)
+}
+
+fn split_format_sections(format: &str) -> Option<Vec<&str>> {
+    let mut sections = Vec::new();
+    let mut start = 0usize;
+    let mut quoted = false;
+    for (index, ch) in format.char_indices() {
+        if ch == '"' {
+            quoted = !quoted;
+            continue;
+        }
+        if ch == ';' && !quoted {
+            sections.push(&format[start..index]);
+            start = index + ch.len_utf8();
+        }
+    }
+    if quoted || sections.len() >= 3 {
+        return None;
+    }
+    sections.push(&format[start..]);
+    if sections.is_empty()
+        || sections.len() > 3
+        || sections
+            .iter()
+            .any(|section| section.contains('[') || section.contains(']'))
+    {
+        return None;
+    }
+    Some(sections)
+}
+
+fn quoted_literals(format: &str) -> Option<String> {
+    let chars: Vec<char> = format.chars().collect();
+    let mut index = 0usize;
+    let mut out = String::new();
+    let mut saw = false;
+    while index < chars.len() {
+        if chars[index] != '"' {
+            return None;
+        }
+        index += 1;
+        let start = index;
+        while index < chars.len() && chars[index] != '"' {
+            index += 1;
+        }
+        if index >= chars.len() {
+            return None;
+        }
+        out.extend(chars[start..index].iter());
+        saw = true;
+        index += 1;
+    }
+    saw.then_some(out)
 }
 
 fn unquoted_format(format: &str) -> Option<String> {
@@ -11969,6 +12056,57 @@ mod tests {
         assert!(
             sheet.contains(
                 r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,1)</f><v>8</v>"#
+            ),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_text_sections() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c><c r="A1"><f>TEXT(12.5,&quot;0.00;&quot;&quot;neg&quot;&quot;;0&quot;)</f><v>0</v></c><c r="B1"><f>TEXT(-2,&quot;0.00;&quot;&quot;neg&quot;&quot;;0&quot;)</f><v>0</v></c><c r="C1"><f>TEXT(0,&quot;0.00;&quot;&quot;neg&quot;&quot;;0&quot;)</f><v>0</v></c><c r="D1"><f>TEXT(-3,&quot;0.00;0.00&quot;)</f><v>0</v></c><c r="E1"><f>TEXT(0,&quot;0.00;0.00&quot;)</f><v>0</v></c><c r="F1"><f>TEXT(-4,&quot;0.00;;0&quot;)</f><v>0</v></c><c r="G1"><f>TEXT(1,&quot;0;[Red]0&quot;)</f><v>5</v></c><c r="H1"><f>TEXT(3,&quot;&quot;&quot;a;b&quot;&quot;0&quot;)</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>TEXT(12.5,&quot;0.00;&quot;&quot;neg&quot;&quot;;0&quot;)</f><is><t>12.50</t></is>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>TEXT(-2,&quot;0.00;&quot;&quot;neg&quot;&quot;;0&quot;)</f><is><t>neg</t></is>"#), "{sheet}");
+        assert!(
+            sheet.contains(
+                r#"<f>TEXT(0,&quot;0.00;&quot;&quot;neg&quot;&quot;;0&quot;)</f><is><t>0</t></is>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(-3,&quot;0.00;0.00&quot;)</f><is><t>3.00</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(0,&quot;0.00;0.00&quot;)</f><is><t>0.00</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(-4,&quot;0.00;;0&quot;)</f><is><t></t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1,&quot;0;[Red]0&quot;)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>TEXT(3,&quot;&quot;&quot;a;b&quot;&quot;0&quot;)</f><is><t>a;b3</t></is>"#
             ),
             "{sheet}"
         );

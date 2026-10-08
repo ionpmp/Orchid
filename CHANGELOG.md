@@ -687,7 +687,12 @@ release yet.
   range of 2 through 128 numbers, a finance rate, and a reinvest rate. A zero
   is neither a deposit nor a return. A range that is all deposits or all
   returns leaves the stored value. `TEXT` reads a value and a format of at most
-  64 characters. One section only: a semicolon leaves the stored value. `@`
+  64 characters. Up to three sections, split on a semicolon that is not inside quotes: positive,
+  negative, and zero. A fourth section, a `[` condition, or a color code leaves
+  the stored value. An empty section writes an empty string. The negative
+  section is applied to the absolute value, so a minus sign has to be quoted
+  text in that section. With two sections, zero uses the first. A text value is
+  accepted only by a single `@` section. `@`
   writes the value as text, and a number is shown the same way a calculated
   number is shown. A number format uses `0`, `#`, one dot, a comma that turns
   on thousands separators, and one `%` that multiplies by 100. Extra integer
