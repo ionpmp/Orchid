@@ -2649,6 +2649,118 @@ fn exact_lookup(lookup: &CalcValue, cell: Option<&CalcValue>) -> bool {
     }
 }
 
+fn beta_fraction(a: f64, b: f64, x: f64) -> Option<f64> {
+    const STEPS: i32 = 200;
+    let tiny = 1e-30;
+    let qab = a + b;
+    let qap = a + 1.0;
+    let qam = a - 1.0;
+    let mut c = 1.0;
+    let mut d = 1.0 - qab * x / qap;
+    if d.abs() < tiny {
+        d = tiny;
+    }
+    d = 1.0 / d;
+    let mut h = d;
+    for m in 1..=STEPS {
+        let m = f64::from(m);
+        let twice = 2.0 * m;
+        let mut aa = m * (b - m) * x / ((qam + twice) * (a + twice));
+        d = 1.0 + aa * d;
+        if d.abs() < tiny {
+            d = tiny;
+        }
+        c = 1.0 + aa / c;
+        if c.abs() < tiny {
+            c = tiny;
+        }
+        d = 1.0 / d;
+        h *= d * c;
+        aa = -(a + m) * (qab + m) * x / ((a + twice) * (qap + twice));
+        d = 1.0 + aa * d;
+        if d.abs() < tiny {
+            d = tiny;
+        }
+        c = 1.0 + aa / c;
+        if c.abs() < tiny {
+            c = tiny;
+        }
+        d = 1.0 / d;
+        let delta = d * c;
+        h *= delta;
+        if !h.is_finite() {
+            return None;
+        }
+        if (delta - 1.0).abs() < 1e-12 {
+            return Some(h);
+        }
+    }
+    None
+}
+
+fn beta_cdf(x: f64, alpha: f64, beta: f64) -> Option<f64> {
+    if !x.is_finite() || !alpha.is_finite() || !beta.is_finite() || alpha <= 0.0 || beta <= 0.0 {
+        return None;
+    }
+    if !(0.0..=1.0).contains(&x) {
+        return None;
+    }
+    if x == 0.0 || x == 1.0 {
+        return Some(x);
+    }
+    let ln_beta = ln_gamma_excel(alpha)? + ln_gamma_excel(beta)? - ln_gamma_excel(alpha + beta)?;
+    let front = (-ln_beta + alpha * x.ln() + beta * (1.0 - x).ln()).exp();
+    if !front.is_finite() {
+        return None;
+    }
+    let value = if x < (alpha + 1.0) / (alpha + beta + 2.0) {
+        front * beta_fraction(alpha, beta, x)? / alpha
+    } else {
+        1.0 - front * beta_fraction(beta, alpha, 1.0 - x)? / beta
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn beta_pdf(x: f64, alpha: f64, beta: f64) -> Option<f64> {
+    if !x.is_finite() || !alpha.is_finite() || !beta.is_finite() || alpha <= 0.0 || beta <= 0.0 {
+        return None;
+    }
+    if !(0.0..=1.0).contains(&x) {
+        return None;
+    }
+    let ln_beta = ln_gamma_excel(alpha)? + ln_gamma_excel(beta)? - ln_gamma_excel(alpha + beta)?;
+    if x == 0.0 {
+        if alpha > 1.0 {
+            return Some(0.0);
+        }
+        if alpha == 1.0 {
+            let value = (-ln_beta).exp();
+            return if value.is_finite() { Some(value) } else { None };
+        }
+        return None;
+    }
+    if x == 1.0 {
+        if beta > 1.0 {
+            return Some(0.0);
+        }
+        if beta == 1.0 {
+            let value = (-ln_beta).exp();
+            return if value.is_finite() { Some(value) } else { None };
+        }
+        return None;
+    }
+    let value = ((alpha - 1.0) * x.ln() + (beta - 1.0) * (1.0 - x).ln() - ln_beta).exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -5053,6 +5165,25 @@ impl<'a> CalcParser<'a> {
                     Some(CalcValue::Text(text)) => Some(CalcValue::Text(text)),
                     _ => None,
                 };
+            }
+            if word.eq_ignore_ascii_case("BETA.DIST") {
+                let x = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let alpha = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let beta = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let cumulative = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !cumulative.is_finite() {
+                    return None;
+                }
+                let value = if cumulative == 0.0 {
+                    beta_pdf(x, alpha, beta)
+                } else {
+                    beta_cdf(x, alpha, beta)
+                };
+                return value.map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("TEXTJOIN") {
                 let delim = calc_text(&self.compare(env)?);
@@ -7769,6 +7900,59 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>MATCH(&quot;1&quot;,E1:E1,0)</f><v>2</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_beta_dist() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>BETA.DIST(0.5,2,3,1)</f><v>0</v></c><c r="C1"><f>BETA.DIST(0.5,2,3,0)</f><v>0</v></c><c r="D1"><f>BETA.DIST(0.3,5,2,1)</f><v>0</v></c><c r="E1"><f>BETA.DIST(0.2,0.5,0.5,1)</f><v>0</v></c><c r="F1"><f>BETA.DIST(0.2,1,1,1)</f><v>0</v></c><c r="G1"><f>BETA.DIST(2,1,1,1)</f><v>9</v></c><c r="H1"><f>BETA.DIST(0.5,2,3)</f><v>8</v></c><c r="I1"><f>BETA.DIST(0.5,0,1,1)</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>BETA.DIST(0.5,2,3,1)</f><v>0.6875</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BETA.DIST(0.5,2,3,0)</f><v>1.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BETA.DIST(0.3,5,2,1)</f><v>0.010935</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BETA.DIST(0.2,0.5,0.5,1)</f><v>0.29516724</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BETA.DIST(0.2,1,1,1)</f><v>0.2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BETA.DIST(2,1,1,1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BETA.DIST(0.5,2,3)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BETA.DIST(0.5,0,1,1)</f><v>7</v>"#),
             "{sheet}"
         );
     }
