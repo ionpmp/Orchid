@@ -259,9 +259,11 @@ pub(crate) fn set_sheet_cell(
     for (name, body) in other_sheets {
         foreign.insert(name, stored_sheet(&body, &shared));
     }
-    let date1904 =
-        workbook_date1904(&read_entry(&mut archive, "xl/workbook.xml").unwrap_or_default());
-    let xml = recalculate_sheet(&xml, &shared, &foreign, date1904);
+    let workbook = read_entry(&mut archive, "xl/workbook.xml").unwrap_or_default();
+    let date1904 = workbook_date1904(&workbook);
+    let names = workbook_names(&workbook);
+    let sheet_key = sheet_name.to_ascii_lowercase();
+    let xml = recalculate_sheet(&xml, &shared, &foreign, &names, &sheet_key, date1904);
     let mut cursor = Cursor::new(Vec::new());
     {
         let mut out = zip::ZipWriter::new(&mut cursor);
@@ -473,6 +475,8 @@ fn recalculate_sheet(
     xml: &str,
     shared: &[String],
     foreign: &std::collections::HashMap<String, ForeignSheet>,
+    names: &std::collections::HashMap<String, DefinedRef>,
+    sheet: &str,
     date1904: bool,
 ) -> String {
     let cells = sheet_cells(xml, shared);
@@ -506,6 +510,8 @@ fn recalculate_sheet(
                 literals: &literals,
                 texts: &texts,
                 foreign,
+                names,
+                sheet,
                 date1904,
                 visiting: &mut visiting,
             };
@@ -536,6 +542,8 @@ fn recalculate_sheet(
             &literals,
             &texts,
             foreign,
+            names,
+            sheet,
             date1904,
             &mut visiting,
         ) else {
@@ -1489,6 +1497,8 @@ fn eval_formula(
     literals: &std::collections::HashMap<String, f64>,
     texts: &std::collections::HashMap<String, String>,
     foreign: &std::collections::HashMap<String, ForeignSheet>,
+    names: &std::collections::HashMap<String, DefinedRef>,
+    sheet: &str,
     date1904: bool,
     visiting: &mut std::collections::HashSet<String>,
 ) -> Option<CalcValue> {
@@ -1501,6 +1511,8 @@ fn eval_formula(
         literals,
         texts,
         foreign,
+        names,
+        sheet,
         date1904,
         visiting,
     };
@@ -1594,8 +1606,24 @@ struct CalcEnv<'a> {
     literals: &'a std::collections::HashMap<String, f64>,
     texts: &'a std::collections::HashMap<String, String>,
     foreign: &'a std::collections::HashMap<String, ForeignSheet>,
+    names: &'a std::collections::HashMap<String, DefinedRef>,
+    sheet: &'a str,
     date1904: bool,
     visiting: &'a mut std::collections::HashSet<String>,
+}
+
+#[derive(Clone)]
+struct DefinedRef {
+    sheet: String,
+    cells: Vec<String>,
+    rows: u32,
+    cols: u32,
+}
+
+enum NameArg {
+    Absent,
+    Cells(Vec<String>),
+    Invalid,
 }
 
 struct ForeignSheet {
@@ -2669,6 +2697,125 @@ fn excel_normalize_month(mut year: i32, month: i32) -> Option<(i32, i32)> {
 
 fn workbook_date1904(xml: &str) -> bool {
     xml.contains("date1904=\"1\"") || xml.contains("date1904=\"true\"")
+}
+
+fn workbook_names(xml: &str) -> std::collections::HashMap<String, DefinedRef> {
+    let mut names = std::collections::HashMap::new();
+    let mut index = 0usize;
+    while let Some(at) = xml[index..].find("<definedName ") {
+        let start = index + at;
+        let Some(tag_rel) = xml[start..].find('>') else {
+            break;
+        };
+        let tag = &xml[start..start + tag_rel];
+        let empty = tag.ends_with('/');
+        let body_start = start + tag_rel + 1;
+        if tag.contains("localSheetId=") || empty {
+            index = if empty {
+                body_start
+            } else if let Some(close) = xml[body_start..].find("</definedName>") {
+                body_start + close + "</definedName>".len()
+            } else {
+                break;
+            };
+            continue;
+        }
+        let Some(name) = xml_attr(tag, "name") else {
+            index = body_start;
+            continue;
+        };
+        let Some(close) = xml[body_start..].find("</definedName>") else {
+            break;
+        };
+        let body = &xml[body_start..body_start + close];
+        index = body_start + close + "</definedName>".len();
+        let name = unescape_xml(&name);
+        let count = name.chars().count();
+        if count == 0
+            || count > 255
+            || is_cell_address(&name)
+            || name
+                .chars()
+                .any(|ch| !(ch.is_ascii_alphanumeric() || ch == '_' || ch == '.'))
+        {
+            continue;
+        }
+        if let Some(refer) = parse_defined_ref(&body) {
+            names.insert(name.to_ascii_lowercase(), refer);
+        }
+    }
+    names
+}
+
+fn xml_attr(tag: &str, key: &str) -> Option<String> {
+    let needle = format!("{key}=\"");
+    let start = tag.find(&needle)? + needle.len();
+    let rest = &tag[start..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+fn parse_defined_ref(text: &str) -> Option<DefinedRef> {
+    let text = unescape_xml(text.trim());
+    if text.contains('[') || text.contains(',') {
+        return None;
+    }
+    let mut parser = CalcParser {
+        bytes: text.as_bytes(),
+        index: 0,
+    };
+    parser.skip();
+    if parser.bytes.get(parser.index) == Some(&b'=') {
+        parser.index += 1;
+        parser.skip();
+    }
+    let sheet = if parser.bytes.get(parser.index) == Some(&b'\'') {
+        parser.quoted_sheet()?
+    } else {
+        parser.word()?
+    };
+    if sheet.is_empty() || sheet.chars().count() > 31 {
+        return None;
+    }
+    parser.skip();
+    if parser.bytes.get(parser.index) != Some(&b'!') {
+        return None;
+    }
+    parser.index += 1;
+    let start = parser.cell_token()?;
+    parser.skip();
+    let (cells, rows, cols) = if parser.bytes.get(parser.index) == Some(&b':') {
+        parser.index += 1;
+        let end = parser.cell_token()?;
+        let (c1, r1) = split_address(&start)?;
+        let (c2, r2) = split_address(&end)?;
+        let cells = cells_in_range(&start, &end)?;
+        (cells, r1.abs_diff(r2) + 1, c1.abs_diff(c2) + 1)
+    } else {
+        (vec![start.to_ascii_uppercase()], 1, 1)
+    };
+    parser.skip();
+    if parser.index != parser.bytes.len() || cells.is_empty() {
+        return None;
+    }
+    Some(DefinedRef {
+        sheet: sheet.to_ascii_lowercase(),
+        cells,
+        rows,
+        cols,
+    })
+}
+
+fn named_addresses(defined: &DefinedRef, env: &CalcEnv<'_>) -> Vec<String> {
+    if defined.sheet == env.sheet {
+        defined.cells.clone()
+    } else {
+        defined
+            .cells
+            .iter()
+            .map(|cell| format!("{}!{cell}", defined.sheet))
+            .collect()
+    }
 }
 
 fn as_1900(serial: f64, date1904: bool) -> Option<f64> {
@@ -5886,9 +6033,9 @@ impl<'a> CalcParser<'a> {
                 return chisq_inv_excel(probability, degrees).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("CHISQ.TEST") || word.eq_ignore_ascii_case("CHITEST") {
-                let (actual, rows, cols) = self.cell_block()?;
+                let (actual, rows, cols) = self.cell_block(env)?;
                 self.require_comma()?;
-                let (expected, expected_rows, expected_cols) = self.cell_block()?;
+                let (expected, expected_rows, expected_cols) = self.cell_block(env)?;
                 self.close_paren()?;
                 if rows != expected_rows || cols != expected_cols {
                     return None;
@@ -6067,7 +6214,7 @@ impl<'a> CalcParser<'a> {
                 return binom_range_excel(trials, probability, low, high).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("Z.TEST") || word.eq_ignore_ascii_case("ZTEST") {
-                let addresses = self.cell_range()?;
+                let addresses = self.cell_range(env)?;
                 self.require_comma()?;
                 let target = calc_num(self.compare(env)?)?;
                 self.skip();
@@ -6091,9 +6238,9 @@ impl<'a> CalcParser<'a> {
                 return z_test_excel(&values, target, sigma).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("PROB") {
-                let xs = self.cell_range()?;
+                let xs = self.cell_range(env)?;
                 self.require_comma()?;
-                let probabilities = self.cell_range()?;
+                let probabilities = self.cell_range(env)?;
                 if xs.len() != probabilities.len() {
                     return None;
                 }
@@ -6132,7 +6279,7 @@ impl<'a> CalcParser<'a> {
                 self.require_comma()?;
                 let step = calc_num(self.compare(env)?)?;
                 self.require_comma()?;
-                let addresses = self.cell_range()?;
+                let addresses = self.cell_range(env)?;
                 self.close_paren()?;
                 let mut coefficients = Vec::new();
                 for address in addresses {
@@ -6635,7 +6782,7 @@ impl<'a> CalcParser<'a> {
                 return bessel_excel(x, order, modified).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("MDETERM") {
-                let (cells, rows, cols) = self.cell_block()?;
+                let (cells, rows, cols) = self.cell_block(env)?;
                 self.close_paren()?;
                 if rows != cols || rows == 0 || rows > 10 {
                     return None;
@@ -6652,7 +6799,7 @@ impl<'a> CalcParser<'a> {
                 return mdeterm_excel(&values, n).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("INDEX") {
-                let (cells, rows, cols) = self.cell_block()?;
+                let (cells, rows, cols) = self.cell_block(env)?;
                 self.require_comma()?;
                 let row = calc_num(self.compare(env)?)?;
                 self.skip();
@@ -6690,7 +6837,7 @@ impl<'a> CalcParser<'a> {
             if word.eq_ignore_ascii_case("MATCH") {
                 let lookup = self.compare(env)?;
                 self.require_comma()?;
-                let (cells, rows, cols) = self.cell_block()?;
+                let (cells, rows, cols) = self.cell_block(env)?;
                 self.skip();
                 let kind = if self.bytes.get(self.index) == Some(&b')') {
                     self.index += 1;
@@ -6730,7 +6877,7 @@ impl<'a> CalcParser<'a> {
                 let horizontal = word.eq_ignore_ascii_case("HLOOKUP");
                 let lookup = self.compare(env)?;
                 self.require_comma()?;
-                let (cells, rows, cols) = self.cell_block()?;
+                let (cells, rows, cols) = self.cell_block(env)?;
                 self.require_comma()?;
                 let index = calc_num(self.compare(env)?)?;
                 self.skip();
@@ -6909,9 +7056,9 @@ impl<'a> CalcParser<'a> {
                 };
             }
             if word.eq_ignore_ascii_case("T.TEST") || word.eq_ignore_ascii_case("TTEST") {
-                let left_cells = self.cell_range()?;
+                let left_cells = self.cell_range(env)?;
                 self.require_comma()?;
-                let right_cells = self.cell_range()?;
+                let right_cells = self.cell_range(env)?;
                 self.require_comma()?;
                 let tails = calc_num(self.compare(env)?)?;
                 self.require_comma()?;
@@ -6945,9 +7092,9 @@ impl<'a> CalcParser<'a> {
                 return value.map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("F.TEST") || word.eq_ignore_ascii_case("FTEST") {
-                let left_cells = self.cell_range()?;
+                let left_cells = self.cell_range(env)?;
                 self.require_comma()?;
-                let right_cells = self.cell_range()?;
+                let right_cells = self.cell_range(env)?;
                 self.close_paren()?;
                 let left = self.range_numbers(&left_cells, env);
                 let right = self.range_numbers(&right_cells, env);
@@ -7025,7 +7172,7 @@ impl<'a> CalcParser<'a> {
                 return npv_excel(rate, &values).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("IRR") {
-                let cells = self.cell_range()?;
+                let cells = self.cell_range(env)?;
                 self.skip();
                 let guess = if self.bytes.get(self.index) == Some(&b')') {
                     self.index += 1;
@@ -7167,7 +7314,7 @@ impl<'a> CalcParser<'a> {
                     Vec::new()
                 } else {
                     self.require_comma()?;
-                    let cells = self.cell_range()?;
+                    let cells = self.cell_range(env)?;
                     self.close_paren()?;
                     if cells.len() > 512 {
                         return None;
@@ -7200,7 +7347,7 @@ impl<'a> CalcParser<'a> {
                     Vec::new()
                 } else {
                     self.require_comma()?;
-                    let cells = self.cell_range()?;
+                    let cells = self.cell_range(env)?;
                     self.close_paren()?;
                     if cells.len() > 512 {
                         return None;
@@ -7436,7 +7583,7 @@ impl<'a> CalcParser<'a> {
                 return Some(CalcValue::Num(if blanks { blank } else { present }));
             }
             if word.eq_ignore_ascii_case("TRIMMEAN") {
-                let cells = self.cell_range()?;
+                let cells = self.cell_range(env)?;
                 self.require_comma()?;
                 let percent = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
@@ -7543,6 +7690,15 @@ impl<'a> CalcParser<'a> {
         }
         if self.bytes.get(self.index) == Some(&b'!') {
             return self.foreign_cell(&word, env);
+        }
+        if !is_cell_address(&word) {
+            if let Some(defined) = env.names.get(&word.to_ascii_lowercase()) {
+                if defined.cells.len() != 1 {
+                    return None;
+                }
+                let address = named_addresses(defined, env);
+                return self.cell_value(&address[0], env);
+            }
         }
         self.cell_value(&word, env)
     }
@@ -7668,29 +7824,42 @@ impl<'a> CalcParser<'a> {
                 break;
             }
             let saved = self.index;
-            if let Some(start) = self.cell_token() {
-                self.skip();
-                if self.bytes.get(self.index) == Some(&b':') {
-                    self.index += 1;
-                    self.skip();
-                    let Some(end) = self.cell_token() else {
-                        return None;
-                    };
-                    let Some(cells) = cells_in_range(&start, &end) else {
-                        return None;
-                    };
+            match self.name_arg(env) {
+                NameArg::Invalid => return None,
+                NameArg::Cells(cells) => {
                     for address in cells {
                         if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
                             values.push(value);
                         }
                     }
-                } else {
-                    self.index = saved;
-                    values.push(calc_num(self.expr(env)?)?);
                 }
-            } else {
-                self.index = saved;
-                values.push(calc_num(self.expr(env)?)?);
+                NameArg::Absent => {
+                    if let Some(start) = self.cell_token() {
+                        self.skip();
+                        if self.bytes.get(self.index) == Some(&b':') {
+                            self.index += 1;
+                            self.skip();
+                            let Some(end) = self.cell_token() else {
+                                return None;
+                            };
+                            let Some(cells) = cells_in_range(&start, &end) else {
+                                return None;
+                            };
+                            for address in cells {
+                                if let Some(CalcValue::Num(value)) = self.cell_value(&address, env)
+                                {
+                                    values.push(value);
+                                }
+                            }
+                        } else {
+                            self.index = saved;
+                            values.push(calc_num(self.expr(env)?)?);
+                        }
+                    } else {
+                        self.index = saved;
+                        values.push(calc_num(self.expr(env)?)?);
+                    }
+                }
             }
             self.skip();
             match self.bytes.get(self.index).copied() {
@@ -7731,17 +7900,9 @@ impl<'a> CalcParser<'a> {
                 break;
             }
             let saved = self.index;
-            if let Some(start) = self.cell_token() {
-                self.skip();
-                if self.bytes.get(self.index) == Some(&b':') {
-                    self.index += 1;
-                    self.skip();
-                    let Some(end) = self.cell_token() else {
-                        return None;
-                    };
-                    let Some(cells) = cells_in_range(&start, &end) else {
-                        return None;
-                    };
+            match self.name_arg(env) {
+                NameArg::Invalid => return None,
+                NameArg::Cells(cells) => {
                     for address in cells {
                         match self.cell_value(&address, env) {
                             Some(CalcValue::Num(value)) => {
@@ -7754,13 +7915,40 @@ impl<'a> CalcParser<'a> {
                             None => {}
                         }
                     }
-                } else {
-                    self.index = saved;
-                    values.push(self.a_scalar(env)?);
                 }
-            } else {
-                self.index = saved;
-                values.push(self.a_scalar(env)?);
+                NameArg::Absent => {
+                    if let Some(start) = self.cell_token() {
+                        self.skip();
+                        if self.bytes.get(self.index) == Some(&b':') {
+                            self.index += 1;
+                            self.skip();
+                            let Some(end) = self.cell_token() else {
+                                return None;
+                            };
+                            let Some(cells) = cells_in_range(&start, &end) else {
+                                return None;
+                            };
+                            for address in cells {
+                                match self.cell_value(&address, env) {
+                                    Some(CalcValue::Num(value)) => {
+                                        if !value.is_finite() {
+                                            return None;
+                                        }
+                                        values.push(value);
+                                    }
+                                    Some(CalcValue::Text(_)) => values.push(0.0),
+                                    None => {}
+                                }
+                            }
+                        } else {
+                            self.index = saved;
+                            values.push(self.a_scalar(env)?);
+                        }
+                    } else {
+                        self.index = saved;
+                        values.push(self.a_scalar(env)?);
+                    }
+                }
             }
             self.skip();
             match self.bytes.get(self.index).copied() {
@@ -7795,17 +7983,9 @@ impl<'a> CalcParser<'a> {
                 break;
             }
             let saved = self.index;
-            if let Some(start) = self.cell_token() {
-                self.skip();
-                if self.bytes.get(self.index) == Some(&b':') {
-                    self.index += 1;
-                    self.skip();
-                    let Some(end) = self.cell_token() else {
-                        return None;
-                    };
-                    let Some(cells) = cells_in_range(&start, &end) else {
-                        return None;
-                    };
+            match self.name_arg(env) {
+                NameArg::Invalid => return None,
+                NameArg::Cells(cells) => {
                     for address in cells {
                         seen += 1;
                         if seen > 4096 {
@@ -7816,15 +7996,40 @@ impl<'a> CalcParser<'a> {
                             None => blank += 1.0,
                         }
                     }
-                } else {
-                    self.index = saved;
-                    seen += 1;
-                    note_presence(&self.expr(env)?, &mut present, &mut blank)?;
                 }
-            } else {
-                self.index = saved;
-                seen += 1;
-                note_presence(&self.expr(env)?, &mut present, &mut blank)?;
+                NameArg::Absent => {
+                    if let Some(start) = self.cell_token() {
+                        self.skip();
+                        if self.bytes.get(self.index) == Some(&b':') {
+                            self.index += 1;
+                            self.skip();
+                            let Some(end) = self.cell_token() else {
+                                return None;
+                            };
+                            let Some(cells) = cells_in_range(&start, &end) else {
+                                return None;
+                            };
+                            for address in cells {
+                                seen += 1;
+                                if seen > 4096 {
+                                    return None;
+                                }
+                                match self.cell_value(&address, env) {
+                                    Some(value) => note_presence(&value, &mut present, &mut blank)?,
+                                    None => blank += 1.0,
+                                }
+                            }
+                        } else {
+                            self.index = saved;
+                            seen += 1;
+                            note_presence(&self.expr(env)?, &mut present, &mut blank)?;
+                        }
+                    } else {
+                        self.index = saved;
+                        seen += 1;
+                        note_presence(&self.expr(env)?, &mut present, &mut blank)?;
+                    }
+                }
             }
             if seen > 4096 {
                 return None;
@@ -7958,14 +8163,7 @@ impl<'a> CalcParser<'a> {
 
     fn matched_numbers(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
         self.skip();
-        let start = self.cell_token()?;
-        self.skip();
-        if self.bytes.get(self.index) != Some(&b':') {
-            return None;
-        }
-        self.index += 1;
-        self.skip();
-        let end = self.cell_token()?;
+        let cells = self.cell_range(env)?;
         self.require_comma()?;
         let criteria = self.compare(env)?;
         let (op, target) = compile_criterion(&criteria)?;
@@ -7974,7 +8172,6 @@ impl<'a> CalcParser<'a> {
             return None;
         }
         self.index += 1;
-        let cells = cells_in_range(&start, &end)?;
         let mut matched = Vec::new();
         for address in cells {
             let Some(CalcValue::Num(number)) = self.cell_value(&address, env) else {
@@ -7987,7 +8184,53 @@ impl<'a> CalcParser<'a> {
         Some(matched)
     }
 
-    fn cell_range(&mut self) -> Option<Vec<String>> {
+    fn take_name(&mut self, env: &CalcEnv<'_>) -> Option<DefinedRef> {
+        let saved = self.index;
+        self.skip();
+        let Some(word) = self.word() else {
+            self.index = saved;
+            return None;
+        };
+        if is_cell_address(&word) {
+            self.index = saved;
+            return None;
+        }
+        self.skip();
+        if matches!(self.bytes.get(self.index), Some(b'(' | b'!')) {
+            self.index = saved;
+            return None;
+        }
+        let defined = env.names.get(&word.to_ascii_lowercase()).cloned();
+        if defined.is_none() {
+            self.index = saved;
+        }
+        defined
+    }
+
+    fn name_arg(&mut self, env: &CalcEnv<'_>) -> NameArg {
+        let saved = self.index;
+        let Some(defined) = self.take_name(env) else {
+            return NameArg::Absent;
+        };
+        self.skip();
+        match self.bytes.get(self.index).copied() {
+            Some(b',' | b')') => NameArg::Cells(named_addresses(&defined, env)),
+            _ if defined.cells.len() == 1 => {
+                self.index = saved;
+                NameArg::Absent
+            }
+            _ => NameArg::Invalid,
+        }
+    }
+
+    fn cell_range(&mut self, env: &CalcEnv<'_>) -> Option<Vec<String>> {
+        if let Some(defined) = self.take_name(env) {
+            let cells = named_addresses(&defined, env);
+            if cells.is_empty() || cells.len() > 4096 {
+                return None;
+            }
+            return Some(cells);
+        }
         self.skip();
         let start = self.cell_token()?;
         self.skip();
@@ -8001,7 +8244,7 @@ impl<'a> CalcParser<'a> {
     }
 
     fn finite_range(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
-        let cells = self.cell_range()?;
+        let cells = self.cell_range(env)?;
         if cells.len() > 128 {
             return None;
         }
@@ -8018,7 +8261,14 @@ impl<'a> CalcParser<'a> {
         Some(values)
     }
 
-    fn cell_block(&mut self) -> Option<(Vec<String>, u32, u32)> {
+    fn cell_block(&mut self, env: &CalcEnv<'_>) -> Option<(Vec<String>, u32, u32)> {
+        if let Some(defined) = self.take_name(env) {
+            let cells = named_addresses(&defined, env);
+            if cells.is_empty() {
+                return None;
+            }
+            return Some((cells, defined.rows, defined.cols));
+        }
         self.skip();
         let start = self.cell_token()?;
         self.skip();
@@ -8039,7 +8289,7 @@ impl<'a> CalcParser<'a> {
     fn rank_call(&mut self, env: &mut CalcEnv<'_>, average: bool) -> Option<f64> {
         let number = calc_num(self.compare(env)?)?;
         self.require_comma()?;
-        let cells = self.cell_range()?;
+        let cells = self.cell_range(env)?;
         self.skip();
         let ascending = match self.bytes.get(self.index) {
             Some(&b')') => {
@@ -8073,7 +8323,7 @@ impl<'a> CalcParser<'a> {
     }
 
     fn percentile_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
-        let cells = self.cell_range()?;
+        let cells = self.cell_range(env)?;
         self.require_comma()?;
         let k = calc_num(self.compare(env)?)?;
         self.close_paren()?;
@@ -8089,7 +8339,7 @@ impl<'a> CalcParser<'a> {
     }
 
     fn percentile_exc_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
-        let cells = self.cell_range()?;
+        let cells = self.cell_range(env)?;
         self.require_comma()?;
         let k = calc_num(self.compare(env)?)?;
         self.close_paren()?;
@@ -8105,7 +8355,7 @@ impl<'a> CalcParser<'a> {
     }
 
     fn quartile_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
-        let cells = self.cell_range()?;
+        let cells = self.cell_range(env)?;
         self.require_comma()?;
         let quart = calc_num(self.compare(env)?)?;
         if !quart.is_finite() {
@@ -8128,7 +8378,7 @@ impl<'a> CalcParser<'a> {
     }
 
     fn quartile_exc_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
-        let cells = self.cell_range()?;
+        let cells = self.cell_range(env)?;
         self.require_comma()?;
         let quart = calc_num(self.compare(env)?)?;
         if !quart.is_finite() {
@@ -8151,7 +8401,7 @@ impl<'a> CalcParser<'a> {
     }
 
     fn mode_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
-        let cells = self.cell_range()?;
+        let cells = self.cell_range(env)?;
         self.close_paren()?;
         let mut values = Vec::new();
         for address in cells {
@@ -8165,7 +8415,7 @@ impl<'a> CalcParser<'a> {
     }
 
     fn percent_rank_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
-        let cells = self.cell_range()?;
+        let cells = self.cell_range(env)?;
         self.require_comma()?;
         let x_value = calc_num(self.compare(env)?)?;
         self.close_paren()?;
@@ -8181,7 +8431,7 @@ impl<'a> CalcParser<'a> {
     }
 
     fn percent_rank_exc_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
-        let cells = self.cell_range()?;
+        let cells = self.cell_range(env)?;
         self.require_comma()?;
         let x_value = calc_num(self.compare(env)?)?;
         self.close_paren()?;
@@ -8210,9 +8460,9 @@ impl<'a> CalcParser<'a> {
     }
 
     fn paired_ranges(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<(f64, f64)>> {
-        let ys = self.cell_range()?;
+        let ys = self.cell_range(env)?;
         self.require_comma()?;
-        let xs = self.cell_range()?;
+        let xs = self.cell_range(env)?;
         if ys.len() != xs.len() {
             return None;
         }
@@ -8238,9 +8488,9 @@ impl<'a> CalcParser<'a> {
 
     /// One value range, one criteria range, and one criterion. The ranges must match in size.
     fn ifs_values(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
-        let values = self.cell_range()?;
+        let values = self.cell_range(env)?;
         self.require_comma()?;
-        let criteria_cells = self.cell_range()?;
+        let criteria_cells = self.cell_range(env)?;
         if values.len() != criteria_cells.len() {
             return None;
         }
@@ -8282,15 +8532,7 @@ impl<'a> CalcParser<'a> {
                 self.index += 1;
                 break;
             }
-            let start = self.cell_token()?;
-            self.skip();
-            if self.bytes.get(self.index) != Some(&b':') {
-                return None;
-            }
-            self.index += 1;
-            self.skip();
-            let end = self.cell_token()?;
-            let cells = cells_in_range(&start, &end)?;
+            let cells = self.cell_range(env)?;
             if ranges.len() == 8 {
                 return None;
             }
@@ -8388,12 +8630,12 @@ impl<'a> CalcParser<'a> {
     }
 
     fn frequency_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
-        let data_cells = self.cell_range()?;
+        let data_cells = self.cell_range(env)?;
         if data_cells.len() > 256 {
             return None;
         }
         self.require_comma()?;
-        let bin_cells = self.cell_range()?;
+        let bin_cells = self.cell_range(env)?;
         if bin_cells.is_empty() || bin_cells.len() > 16 {
             return None;
         }
@@ -8442,7 +8684,7 @@ impl<'a> CalcParser<'a> {
     }
 
     fn mode_mult_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
-        let cells = self.cell_range()?;
+        let cells = self.cell_range(env)?;
         if cells.len() > 256 {
             return None;
         }
@@ -8463,12 +8705,12 @@ impl<'a> CalcParser<'a> {
     }
 
     fn line_pairs(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<(f64, f64)>> {
-        let (ys, y_rows, y_cols) = self.cell_block()?;
+        let (ys, y_rows, y_cols) = self.cell_block(env)?;
         if ys.len() > 256 || (y_rows != 1 && y_cols != 1) {
             return None;
         }
         self.require_comma()?;
-        let (xs, x_rows, x_cols) = self.cell_block()?;
+        let (xs, x_rows, x_cols) = self.cell_block(env)?;
         if xs.len() != ys.len() || (x_rows != 1 && x_cols != 1) {
             return None;
         }
@@ -8541,7 +8783,7 @@ impl<'a> CalcParser<'a> {
     fn trend_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
         let pairs = self.line_pairs(env)?;
         self.require_comma()?;
-        let (news, rows, cols) = self.cell_block()?;
+        let (news, rows, cols) = self.cell_block(env)?;
         if news.is_empty() || news.len() > 16 || (rows != 1 && cols != 1) {
             return None;
         }
@@ -8626,6 +8868,17 @@ impl<'a> CalcParser<'a> {
     }
 
     fn cell_value(&self, address: &str, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+        if let Some((sheet, cell)) = address.split_once('!') {
+            let book = env.foreign.get(&sheet.to_ascii_lowercase())?;
+            let cell = cell.to_ascii_uppercase();
+            if let Some(number) = book.literals.get(&cell) {
+                return number.is_finite().then_some(CalcValue::Num(*number));
+            }
+            return book
+                .texts
+                .get(&cell)
+                .map(|text| CalcValue::Text(text.clone()));
+        }
         let address = address.to_ascii_uppercase();
         if !env.visiting.insert(address.clone()) {
             return None;
@@ -8637,6 +8890,8 @@ impl<'a> CalcParser<'a> {
                 env.literals,
                 env.texts,
                 env.foreign,
+                env.names,
+                env.sheet,
                 env.date1904,
                 env.visiting,
             )
@@ -11062,6 +11317,48 @@ mod tests {
             sheet.contains(r#"<f>LINEST(A1:A2,B1:B2,1,1)</f><v>4</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_defined_names() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/><sheet name="Other" sheetId="2" r:id="rId2"/><sheet name="My Sheet" sheetId="3" r:id="rId3"/></sheets><definedNames><definedName name="Sales">Budgets!$A$1:$A$2</definedName><definedName name="Rate">Budgets!$B$1</definedName><definedName name="Live">Budgets!$C$1</definedName><definedName name="Abroad">Other!$A$1:$A$2</definedName><definedName name="OtherTotal">Other!$A$1</definedName><definedName name="Quoted">'My Sheet'!$A$1</definedName><definedName name="Local" localSheetId="0">Budgets!$B$1</definedName><definedName name="Plus">Budgets!$A$1+1</definedName></definedNames></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Target="worksheets/sheet3.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>10</v></c><c r="A2"><v>20</v></c><c r="B1"><v>3</v></c><c r="C1"><f>1+1</f><v>8</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="D2"><f>SUM(sales)</f><v>0</v></c><c r="E2"><f>Rate*2</f><v>0</v></c><c r="F2"><f>Live</f><v>0</v></c><c r="G2"><f>OtherTotal</f><v>0</v></c><c r="H2"><f>SUM(Abroad)</f><v>0</v></c><c r="I2"><f>Quoted</f><v>0</v></c><c r="J2"><f>Local</f><v>5</v></c><c r="K2"><f>Plus</f><v>4</v></c><c r="L2"><f>SUMIF(Sales,&quot;&gt;15&quot;)</f><v>0</v></c><c r="M2"><f>COUNTA(Sales)</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+            (
+                "xl/worksheets/sheet2.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>1+1</f><v>9</v></c></row><row r="2"><c r="A2"><v>4</v></c></row></sheetData></worksheet>"#,
+            ),
+            (
+                "xl/worksheets/sheet3.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>4</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>SUM(sales)</f><v>30</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Rate*2</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Live</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>OtherTotal</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SUM(Abroad)</f><v>13</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Quoted</f><v>4</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Local</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Plus</f><v>4</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>SUMIF(Sales,&quot;&gt;15&quot;)</f><v>20</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>COUNTA(Sales)</f><v>2</v>"#), "{sheet}");
     }
 
     #[test]

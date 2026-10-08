@@ -731,7 +731,20 @@ release yet.
   recalculated: only a stored `<v>` number is used, and a formula cell with no
   stored number leaves the caller's stored value. The same rule applies to a
   qualified reference on the sheet being edited. A cross-sheet range, a 3D
-  reference, and another workbook are not read. `FREQUENCY`, `LINEST`,
+  reference, and another workbook are not read. A workbook defined name is one
+  cell or one colon range on one sheet in this workbook. The name is ASCII
+  case-insensitive, at most 255 characters, and uses letters, digits,
+  underscores, and dots. It must not look like a cell address. A name with
+  `localSheetId` is ignored. A name on the sheet being edited reads those cells
+  the same way a bare reference does, so a formula there is recalculated. A
+  name on another sheet reads the stored snapshot and does not follow a
+  formula. The name expands when it is a whole argument of `SUM`, `AVERAGE`,
+  `MIN`, `MAX`, `COUNT`, `PRODUCT`, `AVERAGEA`, `COUNTA`, or `COUNTBLANK`, and
+  wherever a colon range is accepted, including `SUMIF` and `SUMPRODUCT`.
+  `CONCAT`, `CONCATENATE`, and `TEXTJOIN` do not expand a name. A multi-cell
+  name used as a single value, or inside an expression, leaves the stored
+  value. A name that is a formula, a 3D reference, another workbook, or a
+  structured table reference is ignored. `FREQUENCY`, `LINEST`,
   `TREND`, and `MODE.MULT` are recalculated only when the formula is that one
   call. A larger expression keeps the stored value. `FREQUENCY` takes a data
   range of at most 256 cells and a bin range of 1 through 16 numbers. Bins
