@@ -3709,6 +3709,86 @@ fn mirr_excel(values: &[f64], finance: f64, reinvest: f64) -> Option<f64> {
     }
 }
 
+fn convert_excel(number: f64, from: &str, to: &str) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    if is_temperature(from) && is_temperature(to) {
+        let kelvin = to_kelvin(from, number)?;
+        if kelvin < 0.0 {
+            return None;
+        }
+        return from_kelvin(to, kelvin);
+    }
+    let (left_kind, left_factor) = linear_unit(from)?;
+    let (right_kind, right_factor) = linear_unit(to)?;
+    if left_kind != right_kind || right_factor == 0.0 {
+        return None;
+    }
+    let value = number * left_factor / right_factor;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn is_temperature(unit: &str) -> bool {
+    matches!(unit, "C" | "F" | "K")
+}
+
+fn to_kelvin(unit: &str, number: f64) -> Option<f64> {
+    let value = match unit {
+        "C" => number + 273.15,
+        "F" => (number - 32.0) * 5.0 / 9.0 + 273.15,
+        "K" => number,
+        _ => return None,
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn from_kelvin(unit: &str, kelvin: f64) -> Option<f64> {
+    let value = match unit {
+        "C" => kelvin - 273.15,
+        "F" => (kelvin - 273.15) * 9.0 / 5.0 + 32.0,
+        "K" => kelvin,
+        _ => return None,
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn linear_unit(unit: &str) -> Option<(&'static str, f64)> {
+    Some(match unit {
+        "m" => ("length", 1.0),
+        "cm" => ("length", 0.01),
+        "mm" => ("length", 0.001),
+        "km" => ("length", 1000.0),
+        "in" => ("length", 0.0254),
+        "ft" => ("length", 0.3048),
+        "yd" => ("length", 0.9144),
+        "mi" => ("length", 1609.344),
+        "g" => ("mass", 1.0),
+        "kg" => ("mass", 1000.0),
+        "mg" => ("mass", 0.001),
+        "lbm" => ("mass", 453.59237),
+        "ozm" => ("mass", 28.349523125),
+        "sec" => ("time", 1.0),
+        "mn" => ("time", 60.0),
+        "hr" => ("time", 3600.0),
+        "day" => ("time", 86_400.0),
+        "yr" => ("time", 365.25 * 86_400.0),
+        _ => return None,
+    })
+}
+
 fn text_excel(value: CalcValue, format: &str) -> Option<CalcValue> {
     if format.is_empty() || format.len() > 64 || format.contains(';') {
         return None;
@@ -7126,6 +7206,15 @@ impl<'a> CalcParser<'a> {
                 let text = calc_text(&self.compare(env)?);
                 self.close_paren()?;
                 return value_excel(&text).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CONVERT") {
+                let number = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let from = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let to = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return convert_excel(number, &from, &to).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("TEXT") {
                 let value = self.compare(env)?;
@@ -10654,6 +10743,63 @@ mod tests {
             sheet.contains(
                 r#"<f>TEXT(12,&quot;&quot;&quot;id &quot;&quot;0&quot;)</f><is><t>id 12</t></is>"#
             ),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_convert_units() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c><c r="A1"><f>CONVERT(1,&quot;ft&quot;,&quot;in&quot;)</f><v>0</v></c><c r="B1"><f>CONVERT(1,&quot;kg&quot;,&quot;g&quot;)</f><v>0</v></c><c r="C1"><f>CONVERT(1,&quot;hr&quot;,&quot;mn&quot;)</f><v>0</v></c><c r="D1"><f>CONVERT(0,&quot;C&quot;,&quot;F&quot;)</f><v>0</v></c><c r="E1"><f>CONVERT(100,&quot;C&quot;,&quot;K&quot;)</f><v>0</v></c><c r="F1"><f>CONVERT(1,&quot;yr&quot;,&quot;day&quot;)</f><v>0</v></c><c r="G1"><f>CONVERT(1,&quot;mi&quot;,&quot;km&quot;)</f><v>0</v></c><c r="H1"><f>CONVERT(1,&quot;m&quot;,&quot;kg&quot;)</f><v>4</v></c><c r="I1"><f>CONVERT(-300,&quot;C&quot;,&quot;K&quot;)</f><v>5</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>CONVERT(1,&quot;ft&quot;,&quot;in&quot;)</f><v>12</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONVERT(1,&quot;kg&quot;,&quot;g&quot;)</f><v>1000</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONVERT(1,&quot;hr&quot;,&quot;mn&quot;)</f><v>60</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONVERT(0,&quot;C&quot;,&quot;F&quot;)</f><v>32</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONVERT(100,&quot;C&quot;,&quot;K&quot;)</f><v>373.15</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONVERT(1,&quot;yr&quot;,&quot;day&quot;)</f><v>365.25</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONVERT(1,&quot;mi&quot;,&quot;km&quot;)</f><v>1.609344</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONVERT(1,&quot;m&quot;,&quot;kg&quot;)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CONVERT(-300,&quot;C&quot;,&quot;K&quot;)</f><v>5</v>"#),
             "{sheet}"
         );
     }
