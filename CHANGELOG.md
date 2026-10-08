@@ -102,7 +102,7 @@ release yet.
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
   `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`,
   `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`,
-  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, `EXPONDIST`, `NEGBINOM.DIST`, `NEGBINOMDIST`, `HYPGEOM.DIST`, `HYPGEOMDIST`, `WEIBULL.DIST`, `WEIBULL`, `GAMMA`, `GAMMALN`, `GAMMA.DIST`, `GAMMADIST`, `BINOM.INV`, `CRITBINOM`, `CHISQ.DIST`, `CHISQ.DIST.RT`, `CHIDIST`, `NORM.S.DIST`, `NORMSDIST`, `NORM.DIST`, `NORMDIST`, `ERF`, `ERFC`, `GAUSS`, `PHI`, `LOGNORM.DIST`, `LOGNORMDIST`, `BINOM.DIST.RANGE`, `Z.TEST`, `ZTEST`, `PROB`, `ASINH`, `ACOSH`, `ATANH`, `SEC`, `CSC`, `COT`, `CONCATENATE`, `UNICHAR`, `UNICODE`, `SERIESSUM`, `NORM.S.INV`, `NORMSINV`, `NORM.INV`, `NORMINV`, `LOGNORM.INV`, `LOGINV`, `CONFIDENCE`, `CONFIDENCE.NORM`, `GAMMA.INV`, `GAMMAINV`, `CHISQ.INV`, `CHISQ.INV.RT`, `CHIINV`, `ROMAN`, `ARABIC`, `SECH`, `CSCH`, `COTH`, `ACOT`, `ACOTH`, `CHISQ.TEST`, `CHITEST`, `AVERAGEA`, `MINA`, `MAXA`, `STDEVA`, `VARA`, `DATE`, `YEAR`, `MONTH`, `DAY`, `DEC2BIN`, `BIN2DEC`, `DEC2HEX`, `HEX2DEC`, `DEC2OCT`, `OCT2DEC`, `BASE`, `DECIMAL`, `BESSELJ`, `BESSELI`, and `MDETERM` on that sheet.
+  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, `EXPONDIST`, `NEGBINOM.DIST`, `NEGBINOMDIST`, `HYPGEOM.DIST`, `HYPGEOMDIST`, `WEIBULL.DIST`, `WEIBULL`, `GAMMA`, `GAMMALN`, `GAMMA.DIST`, `GAMMADIST`, `BINOM.INV`, `CRITBINOM`, `CHISQ.DIST`, `CHISQ.DIST.RT`, `CHIDIST`, `NORM.S.DIST`, `NORMSDIST`, `NORM.DIST`, `NORMDIST`, `ERF`, `ERFC`, `GAUSS`, `PHI`, `LOGNORM.DIST`, `LOGNORMDIST`, `BINOM.DIST.RANGE`, `Z.TEST`, `ZTEST`, `PROB`, `ASINH`, `ACOSH`, `ATANH`, `SEC`, `CSC`, `COT`, `CONCATENATE`, `UNICHAR`, `UNICODE`, `SERIESSUM`, `NORM.S.INV`, `NORMSINV`, `NORM.INV`, `NORMINV`, `LOGNORM.INV`, `LOGINV`, `CONFIDENCE`, `CONFIDENCE.NORM`, `GAMMA.INV`, `GAMMAINV`, `CHISQ.INV`, `CHISQ.INV.RT`, `CHIINV`, `ROMAN`, `ARABIC`, `SECH`, `CSCH`, `COTH`, `ACOT`, `ACOTH`, `CHISQ.TEST`, `CHITEST`, `AVERAGEA`, `MINA`, `MAXA`, `STDEVA`, `VARA`, `DATE`, `YEAR`, `MONTH`, `DAY`, `DEC2BIN`, `BIN2DEC`, `DEC2HEX`, `HEX2DEC`, `DEC2OCT`, `OCT2DEC`, `BASE`, `DECIMAL`, `BESSELJ`, `BESSELI`, `MDETERM`, `INDEX`, `MATCH`, `VLOOKUP`, and `HLOOKUP` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -611,6 +611,17 @@ release yet.
   blank cell and a shared-string cell count as 0. Text, a range that is not
   square, a side longer than 10, or a non-finite determinant leaves the stored
   value. A pivot whose absolute value is at most 1e-12 makes the determinant 0.
+  `INDEX`, `MATCH`, `VLOOKUP`, and `HLOOKUP` read one range on the same sheet
+  and use an exact match. A number matches only a number, with `==`. Text
+  matches text and ignores ASCII case. There are no wildcards. `MATCH` needs a
+  match type of 0 and a single row or column; any other match type leaves the
+  stored value. `VLOOKUP` and `HLOOKUP` need a range-lookup argument of 0. An
+  omitted range lookup, or any other number, leaves the stored value. `INDEX`
+  row and column numbers are 1-based and truncated toward zero. An omitted
+  column is accepted only when the range has one column. A row or column of 0,
+  a position past the range, or a value that is not found leaves the stored
+  value. A blank cell and a shared-string cell write 0 when they are the
+  returned cell. `MATCH` skips both, so neither matches 0 or an empty string.
   `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.
