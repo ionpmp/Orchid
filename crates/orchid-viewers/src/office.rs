@@ -3837,12 +3837,12 @@ impl<'a> CalcParser<'a> {
                 self.close_paren()?;
                 return parity_excel(number, odd).map(CalcValue::Num);
             }
-            if word.eq_ignore_ascii_case("CODE") {
+            if word.eq_ignore_ascii_case("CODE") || word.eq_ignore_ascii_case("UNICODE") {
                 let text = calc_text(&self.compare(env)?);
                 self.close_paren()?;
                 return code_excel(&text).map(CalcValue::Num);
             }
-            if word.eq_ignore_ascii_case("CHAR") {
+            if word.eq_ignore_ascii_case("CHAR") || word.eq_ignore_ascii_case("UNICHAR") {
                 let code = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return char_excel(code).map(CalcValue::Text);
@@ -4025,7 +4025,7 @@ impl<'a> CalcParser<'a> {
                 }
                 return Some(CalcValue::Num(number.floor()));
             }
-            if word.eq_ignore_ascii_case("CONCAT") {
+            if word.eq_ignore_ascii_case("CONCAT") || word.eq_ignore_ascii_case("CONCATENATE") {
                 return self.concat_args(env).map(CalcValue::Text);
             }
             if word.eq_ignore_ascii_case("TEXTJOIN") {
@@ -9458,6 +9458,60 @@ mod tests {
         assert!(sheet.contains(r#"<f>COT(0)</f><v>4</v>"#), "{sheet}");
         assert!(
             sheet.contains(r#"<f>SEC(&quot;ab&quot;)</f><v>3</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_unichar() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>64</v></c><c r="B1"><f>CONCATENATE("a","b")</f><v>0</v></c><c r="C1"><f>UNICHAR(A1)</f><v>0</v></c><c r="D1"><f>UNICODE("AB")</f><v>0</v></c><c r="E1"><f>CONCATENATE(A1,"x")</f><v>0</v></c><c r="F1"><f>UNICHAR(0)</f><v>4</v></c><c r="G1"><f>UNICHAR(55296)</f><v>5</v></c><c r="H1"><f>UNICODE("")</f><v>6</v></c><c r="I1"><f>UNICHAR("ab")</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "65").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(
+                r#"<c r="B1" t="inlineStr"><f>CONCATENATE("a","b")</f><is><t>ab</t></is></c>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="C1" t="inlineStr"><f>UNICHAR(A1)</f><is><t>A</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>UNICODE("AB")</f><v>65</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<c r="E1" t="inlineStr"><f>CONCATENATE(A1,"x")</f><is><t>65x</t></is></c>"#
+            ),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>UNICHAR(0)</f><v>4</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>UNICHAR(55296)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>UNICODE("")</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>UNICHAR("ab")</f><v>7</v>"#),
             "{sheet}"
         );
     }
