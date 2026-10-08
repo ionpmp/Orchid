@@ -2797,6 +2797,53 @@ fn t_pdf(x: f64, df: f64) -> Option<f64> {
     }
 }
 
+fn f_cdf(x: f64, df1: f64, df2: f64) -> Option<f64> {
+    if !x.is_finite() || !df1.is_finite() || !df2.is_finite() || x < 0.0 || df1 <= 0.0 || df2 <= 0.0
+    {
+        return None;
+    }
+    if x == 0.0 {
+        return Some(0.0);
+    }
+    let z = (df1 * x) / (df1 * x + df2);
+    if !z.is_finite() {
+        return None;
+    }
+    beta_cdf(z, df1 / 2.0, df2 / 2.0)
+}
+
+fn f_pdf(x: f64, df1: f64, df2: f64) -> Option<f64> {
+    if !x.is_finite() || !df1.is_finite() || !df2.is_finite() || x < 0.0 || df1 <= 0.0 || df2 <= 0.0
+    {
+        return None;
+    }
+    if x == 0.0 {
+        if df1 > 2.0 {
+            return Some(0.0);
+        }
+        if df1 != 2.0 {
+            return None;
+        }
+    }
+    let ln = ln_gamma_excel((df1 + df2) / 2.0)?
+        - ln_gamma_excel(df1 / 2.0)?
+        - ln_gamma_excel(df2 / 2.0)?
+        + (df1 / 2.0) * df1.ln()
+        + (df2 / 2.0) * df2.ln()
+        + if x == 0.0 {
+            0.0
+        } else {
+            (df1 / 2.0 - 1.0) * x.ln()
+        }
+        - ((df1 + df2) / 2.0) * (df2 + df1 * x).ln();
+    let value = ln.exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -5278,6 +5325,45 @@ impl<'a> CalcParser<'a> {
                         return None;
                     }
                 };
+                return if value.is_finite() {
+                    Some(CalcValue::Num(value))
+                } else {
+                    None
+                };
+            }
+            if word.eq_ignore_ascii_case("F.DIST.RT")
+                || word.eq_ignore_ascii_case("F.DIST")
+                || word.eq_ignore_ascii_case("FDIST")
+            {
+                let kind = word.to_ascii_uppercase();
+                let x = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let df1 = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let df2 = calc_num(self.compare(env)?)?;
+                let cumulative = if kind == "F.DIST" {
+                    self.require_comma()?;
+                    let cumulative = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    Some(cumulative)
+                } else {
+                    self.close_paren()?;
+                    None
+                };
+                if kind == "F.DIST" {
+                    let cumulative = cumulative?;
+                    if !cumulative.is_finite() {
+                        return None;
+                    }
+                    let value = if cumulative == 0.0 {
+                        f_pdf(x, df1, df2)
+                    } else {
+                        f_cdf(x, df1, df2)
+                    };
+                    return value.map(CalcValue::Num);
+                }
+                let cdf = f_cdf(x, df1, df2)?;
+                let value = 1.0 - cdf;
                 return if value.is_finite() {
                     Some(CalcValue::Num(value))
                 } else {
@@ -8113,6 +8199,52 @@ mod tests {
         );
         assert!(sheet.contains(r#"<f>TDIST(1,5,3)</f><v>8</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>T.DIST(1,0,1)</f><v>7</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_f_dist() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>F.DIST(2,5,10,1)</f><v>0</v></c><c r="C1"><f>F.DIST(2,5,10,0)</f><v>0</v></c><c r="D1"><f>F.DIST.RT(2,5,10)</f><v>0</v></c><c r="E1"><f>FDIST(2,5,10)</f><v>0</v></c><c r="F1"><f>F.DIST(-1,5,10,1)</f><v>9</v></c><c r="G1"><f>F.DIST(2,0,10,1)</f><v>8</v></c><c r="H1"><f>FDIST(2,5)</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>F.DIST(2,5,10,1)</f><v>0.83580505</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>F.DIST(2,5,10,0)</f><v>0.16200574</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>F.DIST.RT(2,5,10)</f><v>0.16419495</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>FDIST(2,5,10)</f><v>0.16419495</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>F.DIST(-1,5,10,1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>F.DIST(2,0,10,1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>FDIST(2,5)</f><v>7</v>"#), "{sheet}");
     }
 
     #[test]
