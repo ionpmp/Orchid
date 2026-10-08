@@ -750,7 +750,15 @@ release yet.
   text pair is skipped. At least two finite pairs are required. The slope is
   written in the formula cell and the intercept in the cell to the right, when
   that cell exists and is a value cell. Otherwise nothing is written. There is
-  no statistics block, no constant flag, and no second x variable. `TREND`
+  A constant of 0, which would force the line through the origin, leaves the
+  stored value. Any other finite constant keeps the intercept. A statistics
+  argument of 0, or no statistics argument, keeps the two-cell result. Any
+  other finite statistics argument writes a 5 by 2 grid: slope and intercept,
+  their standard errors, r² and the standard error of y, F and degrees of
+  freedom, then the regression and residual sums of squares. That grid needs
+  at least three finite pairs. A perfect fit, where the residual sum of squares
+  is 0, leaves the stored value. Every cell in the grid must already exist and
+  be a value cell, or nothing is written. There is still one x variable. `TREND`
   takes those same y and x ranges and a new-x range of 1 through 16 numbers in
   one column or row. Each new x must be a finite number. Predictions are
   intercept plus slope times x, first in the formula cell and the rest

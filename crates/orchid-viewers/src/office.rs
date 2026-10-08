@@ -369,7 +369,7 @@ struct SheetCellRef {
 
 struct Spill {
     values: Vec<f64>,
-    right: bool,
+    columns: u32,
     all_or_nothing: bool,
 }
 
@@ -413,17 +413,17 @@ fn place_spill(
     cells: &[SheetCellRef],
     taken: &std::collections::HashSet<String>,
 ) -> Option<Vec<(String, f64)>> {
+    if spill.columns == 0 {
+        return None;
+    }
     let mut writes = Vec::new();
     for (step, value) in spill.values.iter().enumerate() {
-        let address = if step == 0 {
+        let row = step as u32 / spill.columns;
+        let col = step as u32 % spill.columns;
+        let address = if row == 0 && col == 0 {
             origin.to_string()
         } else {
-            let shifted = if spill.right {
-                shift_address(origin, 0, step as u32)
-            } else {
-                shift_address(origin, step as u32, 0)
-            };
-            let Some(shifted) = shifted else {
+            let Some(shifted) = shift_address(origin, row, col) else {
                 if spill.all_or_nothing {
                     return None;
                 }
@@ -431,7 +431,7 @@ fn place_spill(
             };
             shifted
         };
-        if step > 0 {
+        if row > 0 || col > 0 {
             let blocked = taken.contains(&address)
                 || cells
                     .iter()
@@ -866,6 +866,64 @@ fn intercept_excel(pairs: &[(f64, f64)]) -> Option<f64> {
     let value = mean_y - slope * mean_x;
     if value.is_finite() {
         Some(value)
+    } else {
+        None
+    }
+}
+
+fn linest_stats(pairs: &[(f64, f64)]) -> Option<Vec<f64>> {
+    if pairs.len() < 3 || pairs.len() > 256 {
+        return None;
+    }
+    let slope = slope_excel(pairs)?;
+    let intercept = intercept_excel(pairs)?;
+    let count = pairs.len() as f64;
+    let mean_y = pairs.iter().map(|(y, _)| *y).sum::<f64>() / count;
+    let mean_x = pairs.iter().map(|(_, x)| *x).sum::<f64>() / count;
+    let mut ssx = 0.0;
+    let mut ssresid = 0.0;
+    let mut sstotal = 0.0;
+    for (y, x) in pairs {
+        let dx = x - mean_x;
+        ssx += dx * dx;
+        let error = y - (intercept + slope * x);
+        ssresid += error * error;
+        let dy = y - mean_y;
+        sstotal += dy * dy;
+    }
+    let df = count - 2.0;
+    if !ssx.is_finite() || !ssresid.is_finite() || !sstotal.is_finite() || ssx == 0.0 || df <= 0.0 {
+        return None;
+    }
+    if ssresid.abs() <= 1e-9 * sstotal.max(1.0) || sstotal == 0.0 {
+        return None;
+    }
+    let mut ssreg = sstotal - ssresid;
+    if ssreg.abs() <= 1e-9 * sstotal.max(1.0) {
+        ssreg = 0.0;
+    }
+    if ssreg < 0.0 {
+        return None;
+    }
+    let sey = (ssresid / df).sqrt();
+    let se_slope = sey / ssx.sqrt();
+    let se_intercept = sey * (1.0 / count + mean_x * mean_x / ssx).sqrt();
+    let r2 = 1.0 - ssresid / sstotal;
+    let f_stat = ssreg * df / ssresid;
+    let values = vec![
+        slope,
+        intercept,
+        se_slope,
+        se_intercept,
+        r2,
+        sey,
+        f_stat,
+        df,
+        ssreg,
+        ssresid,
+    ];
+    if values.iter().all(|value| value.is_finite()) {
+        Some(values)
     } else {
         None
     }
@@ -8378,7 +8436,7 @@ impl<'a> CalcParser<'a> {
         }
         Some(Spill {
             values: counts,
-            right: false,
+            columns: 1,
             all_or_nothing: false,
         })
     }
@@ -8399,7 +8457,7 @@ impl<'a> CalcParser<'a> {
         }
         Some(Spill {
             values: modes_excel(&values)?,
-            right: false,
+            columns: 1,
             all_or_nothing: false,
         })
     }
@@ -8437,10 +8495,45 @@ impl<'a> CalcParser<'a> {
 
     fn linest_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
         let pairs = self.line_pairs(env)?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(Spill {
+                values: vec![slope_excel(&pairs)?, intercept_excel(&pairs)?],
+                columns: 2,
+                all_or_nothing: true,
+            });
+        }
+        self.require_comma()?;
+        let constant = calc_num(self.compare(env)?)?;
+        if !constant.is_finite() || constant.trunc() == 0.0 {
+            return None;
+        }
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(Spill {
+                values: vec![slope_excel(&pairs)?, intercept_excel(&pairs)?],
+                columns: 2,
+                all_or_nothing: true,
+            });
+        }
+        self.require_comma()?;
+        let stats = calc_num(self.compare(env)?)?;
         self.close_paren()?;
+        if !stats.is_finite() {
+            return None;
+        }
+        if stats.trunc() == 0.0 {
+            return Some(Spill {
+                values: vec![slope_excel(&pairs)?, intercept_excel(&pairs)?],
+                columns: 2,
+                all_or_nothing: true,
+            });
+        }
         Some(Spill {
-            values: vec![slope_excel(&pairs)?, intercept_excel(&pairs)?],
-            right: true,
+            values: linest_stats(&pairs)?,
+            columns: 2,
             all_or_nothing: true,
         })
     }
@@ -8471,7 +8564,7 @@ impl<'a> CalcParser<'a> {
         }
         Some(Spill {
             values,
-            right: false,
+            columns: 1,
             all_or_nothing: true,
         })
     }
@@ -10919,6 +11012,54 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>TEXT(0,&quot;yyyy-mm-dd&quot;)</f><is><t>1904-01-01</t></is>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_linest_stats() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>2</v></c><c r="B1"><v>1</v></c><c r="C1"><f>LINEST(A1:A4,B1:B4,1,1)</f><v>0</v></c><c r="D1"><v>0</v></c><c r="E1"><f>LINEST(A1:A4,B1:B4,0)</f><v>7</v></c><c r="H1"><f>LINEST(A1:A4,B1:B4,1,0)</f><v>0</v></c><c r="I1"><v>0</v></c><c r="K1"><f>LINEST(A1:A2,B1:B2,1,1)</f><v>4</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>3</v></c><c r="B2"><v>2</v></c><c r="C2"><v>0</v></c><c r="D2"><v>0</v></c><c r="H2"><v>9</v></c></row><row r="3"><c r="A3"><v>5</v></c><c r="B3"><v>3</v></c><c r="C3"><v>0</v></c><c r="D3"><v>0</v></c></row><row r="4"><c r="A4"><v>4</v></c><c r="B4"><v>4</v></c><c r="C4"><v>0</v></c><c r="D4"><v>0</v></c></row><row r="5"><c r="C5"><v>0</v></c><c r="D5"><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<c r="C1"><f>LINEST(A1:A4,B1:B4,1,1)</f><v>0.8</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="D1"><v>1.5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="C2"><v>0.42426407</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="D2"><v>1.161895</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="C3"><v>0.64</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="D3"><v>0.9486833</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="C4"><v>3.55555556</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="D4"><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="C5"><v>3.2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="D5"><v>1.8</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>LINEST(A1:A4,B1:B4,0)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LINEST(A1:A4,B1:B4,1,0)</f><v>0.8</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="I1"><v>1.5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="H2"><v>9</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>LINEST(A1:A2,B1:B2,1,1)</f><v>4</v>"#),
             "{sheet}"
         );
     }
