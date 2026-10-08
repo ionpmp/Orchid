@@ -2080,6 +2080,26 @@ fn z_test_excel(values: &[f64], target: f64, sigma: Option<f64>) -> Option<f64> 
     }
 }
 
+fn prob_excel(pairs: &[(f64, f64)], lower: f64, upper: f64) -> Option<f64> {
+    if pairs.is_empty() || !lower.is_finite() || !upper.is_finite() || upper < lower {
+        return None;
+    }
+    let mut sum = 0.0;
+    for (x_value, probability) in pairs {
+        if !x_value.is_finite() || !probability.is_finite() || *probability < 0.0 {
+            return None;
+        }
+        if *x_value >= lower && *x_value <= upper {
+            sum += *probability;
+        }
+    }
+    if sum.is_finite() {
+        Some(sum)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -3565,6 +3585,41 @@ impl<'a> CalcParser<'a> {
                     }
                 }
                 return z_test_excel(&values, target, sigma).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PROB") {
+                let xs = self.cell_range()?;
+                self.require_comma()?;
+                let probabilities = self.cell_range()?;
+                if xs.len() != probabilities.len() {
+                    return None;
+                }
+                self.require_comma()?;
+                let lower = calc_num(self.compare(env)?)?;
+                self.skip();
+                let upper = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    lower
+                } else {
+                    self.require_comma()?;
+                    let upper = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    upper
+                };
+                let mut pairs = Vec::new();
+                for (x_address, probability_address) in xs.iter().zip(probabilities) {
+                    let Some(CalcValue::Num(x_value)) = self.cell_value(x_address, env) else {
+                        continue;
+                    };
+                    let Some(CalcValue::Num(probability)) =
+                        self.cell_value(&probability_address, env)
+                    else {
+                        continue;
+                    };
+                    if x_value.is_finite() && probability.is_finite() {
+                        pairs.push((x_value, probability));
+                    }
+                }
+                return prob_excel(&pairs, lower, upper).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -9195,6 +9250,52 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>Z.TEST(A1:D1,&quot;ab&quot;,1)</f><v>10</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_prob() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c><c r="C1"><v>3</v></c><c r="D1"><f>PROB(A1:C1,A2:C2,2)</f><v>0</v></c><c r="E1"><f>PROB(A1:C1,A2:C2,1,2)</f><v>0</v></c><c r="F1"><f>PROB(A1:C1,A2:C2,4)</f><v>0</v></c><c r="G1"><f>PROB(A1:C1,A2:C2,2,1)</f><v>7</v></c><c r="H1"><f>PROB(A1:C1,D2:F2,1)</f><v>8</v></c><c r="I1"><f>PROB(A1,A2,1)</f><v>9</v></c><c r="J1"><f>PROB(A1:C1,A2:C2,&quot;ab&quot;)</f><v>10</v></c></row><row r="2"><c r="A2"><v>0.2</v></c><c r="B2"><v>0</v></c><c r="C2"><v>0.3</v></c><c r="D2"><v>-0.1</v></c><c r="E2"><v>0.2</v></c><c r="F2"><v>0.3</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "B2", "0.5").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>PROB(A1:C1,A2:C2,2)</f><v>0.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PROB(A1:C1,A2:C2,1,2)</f><v>0.7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PROB(A1:C1,A2:C2,4)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PROB(A1:C1,A2:C2,2,1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PROB(A1:C1,D2:F2,1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>PROB(A1,A2,1)</f><v>9</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>PROB(A1:C1,A2:C2,&quot;ab&quot;)</f><v>10</v>"#),
             "{sheet}"
         );
     }
