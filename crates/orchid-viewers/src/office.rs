@@ -2117,6 +2117,41 @@ fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     }
 }
 
+fn reciprocal_trig_excel(number: f64, kind: &str) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = match kind {
+        "SEC" => {
+            let denominator = number.cos();
+            if denominator == 0.0 {
+                return None;
+            }
+            1.0 / denominator
+        }
+        "CSC" => {
+            let denominator = number.sin();
+            if denominator == 0.0 {
+                return None;
+            }
+            1.0 / denominator
+        }
+        "COT" => {
+            let denominator = number.sin();
+            if denominator == 0.0 {
+                return None;
+            }
+            number.cos() / denominator
+        }
+        _ => return None,
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn radians_excel(number: f64) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -3656,6 +3691,15 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return trig_excel(number, &kind).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SEC")
+                || word.eq_ignore_ascii_case("CSC")
+                || word.eq_ignore_ascii_case("COT")
+            {
+                let kind = word.to_ascii_uppercase();
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return reciprocal_trig_excel(number, &kind).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("RADIANS") {
                 let number = calc_num(self.compare(env)?)?;
@@ -9374,6 +9418,46 @@ mod tests {
         assert!(sheet.contains(r#"<f>ATANH(2)</f><v>2</v>"#), "{sheet}");
         assert!(
             sheet.contains(r#"<f>ASINH(&quot;ab&quot;)</f><v>1</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_reciprocal_trig() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>SEC(A1)</f><v>9</v></c><c r="C1"><f>CSC(A1)</f><v>8</v></c><c r="D1"><f>COT(A1)</f><v>7</v></c><c r="E1"><f>SEC(0)</f><v>6</v></c><c r="F1"><f>CSC(0)</f><v>5</v></c><c r="G1"><f>COT(0)</f><v>4</v></c><c r="H1"><f>SEC(&quot;ab&quot;)</f><v>3</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SEC(A1)</f><v>1.85081572</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CSC(A1)</f><v>1.18839511</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COT(A1)</f><v>0.64209262</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>SEC(0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>CSC(0)</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>COT(0)</f><v>4</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>SEC(&quot;ab&quot;)</f><v>3</v>"#),
             "{sheet}"
         );
     }
