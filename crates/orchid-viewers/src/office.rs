@@ -267,6 +267,7 @@ pub(crate) fn set_sheet_cell(
         .iter()
         .map(|(name, _)| name.to_ascii_lowercase())
         .collect();
+    let iteration = workbook_iteration(&workbook);
     let xml = recalculate_sheet(
         &xml,
         &shared,
@@ -275,6 +276,7 @@ pub(crate) fn set_sheet_cell(
         &sheet_order,
         &sheet_key,
         date1904,
+        iteration,
     );
     let mut cursor = Cursor::new(Vec::new());
     {
@@ -491,6 +493,7 @@ fn recalculate_sheet(
     sheet_order: &[String],
     sheet: &str,
     date1904: bool,
+    iteration: Option<(u32, f64)>,
 ) -> String {
     let cells = sheet_cells(xml, shared);
     let mut literals = std::collections::HashMap::<String, f64>::new();
@@ -507,89 +510,124 @@ fn recalculate_sheet(
             literals.insert(cell.address.clone(), value);
         }
     }
-    let mut edits = Vec::new();
-    let mut spilled = std::collections::HashSet::<String>::new();
-    for cell in &cells {
-        let Some(formula) = &cell.formula else {
-            continue;
-        };
-        if cell.text_cell {
-            continue;
+    let pass_count = iteration.map(|(count, _)| count).unwrap_or(1);
+    let delta = iteration.map(|(_, delta)| delta).unwrap_or(0.0);
+    let iterate = iteration.is_some();
+    let mut previous = std::collections::HashMap::<String, f64>::new();
+    if iterate {
+        for cell in &cells {
+            if cell.formula.is_some() {
+                if let Some(value) = cell.value.filter(|value| value.is_finite()) {
+                    previous.insert(cell.address.clone(), value);
+                }
+            }
         }
-        let mut visiting = std::collections::HashSet::new();
-        {
-            let mut spill_env = CalcEnv {
-                formulas: &formulas,
-                literals: &literals,
-                texts: &texts,
+    }
+    let mut edits = Vec::new();
+    for _pass in 0..pass_count {
+        edits.clear();
+        let mut spilled = std::collections::HashSet::<String>::new();
+        let mut next = std::collections::HashMap::<String, f64>::new();
+        let mut settled = true;
+        for cell in &cells {
+            let Some(formula) = &cell.formula else {
+                continue;
+            };
+            if cell.text_cell {
+                continue;
+            }
+            let mut visiting = std::collections::HashSet::new();
+            visiting.insert(cell.address.clone());
+            {
+                let mut spill_env = CalcEnv {
+                    formulas: &formulas,
+                    literals: &literals,
+                    texts: &texts,
+                    foreign,
+                    names,
+                    sheet_order,
+                    sheet,
+                    date1904,
+                    previous: &previous,
+                    iterate,
+                    visiting: &mut visiting,
+                };
+                if let Some(spill) = try_spill(formula, &mut spill_env) {
+                    if let Some(writes) = place_spill(&cell.address, &spill, &cells, &spilled) {
+                        for (address, number) in writes {
+                            spilled.insert(address.clone());
+                            let Some(target) = cells.iter().find(|item| item.address == address)
+                            else {
+                                continue;
+                            };
+                            let rendered = format_calc(number);
+                            if rendered.is_empty() {
+                                continue;
+                            }
+                            if let Some((start, end)) = target.value_span {
+                                edits.push((start, end, rendered));
+                            } else if let Some(at) = target.insert_at {
+                                edits.push((at, at, format!("<v>{rendered}</v>")));
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
+            let Some(value) = eval_formula(
+                formula,
+                &formulas,
+                &literals,
+                &texts,
                 foreign,
                 names,
                 sheet_order,
                 sheet,
                 date1904,
-                visiting: &mut visiting,
+                &previous,
+                iterate,
+                &mut visiting,
+            ) else {
+                continue;
             };
-            if let Some(spill) = try_spill(formula, &mut spill_env) {
-                if let Some(writes) = place_spill(&cell.address, &spill, &cells, &spilled) {
-                    for (address, number) in writes {
-                        spilled.insert(address.clone());
-                        let Some(target) = cells.iter().find(|item| item.address == address) else {
-                            continue;
-                        };
-                        let rendered = format_calc(number);
-                        if rendered.is_empty() {
-                            continue;
+            match value {
+                CalcValue::Num(number) => {
+                    if iterate && number.is_finite() {
+                        let old = previous.get(&cell.address).copied().unwrap_or(0.0);
+                        if (number - old).abs() > delta {
+                            settled = false;
                         }
-                        if let Some((start, end)) = target.value_span {
-                            edits.push((start, end, rendered));
-                        } else if let Some(at) = target.insert_at {
-                            edits.push((at, at, format!("<v>{rendered}</v>")));
-                        }
+                        next.insert(cell.address.clone(), number);
+                    }
+                    let rendered = format_calc(number);
+                    if rendered.is_empty() {
+                        continue;
+                    }
+                    if let Some((start, end)) = cell.value_span {
+                        edits.push((start, end, rendered));
+                    } else if let Some(at) = cell.insert_at {
+                        edits.push((at, at, format!("<v>{rendered}</v>")));
                     }
                 }
-                continue;
-            }
-        }
-        let Some(value) = eval_formula(
-            formula,
-            &formulas,
-            &literals,
-            &texts,
-            foreign,
-            names,
-            sheet_order,
-            sheet,
-            date1904,
-            &mut visiting,
-        ) else {
-            continue;
-        };
-        match value {
-            CalcValue::Num(number) => {
-                let rendered = format_calc(number);
-                if rendered.is_empty() {
-                    continue;
-                }
-                if let Some((start, end)) = cell.value_span {
-                    edits.push((start, end, rendered));
-                } else if let Some(at) = cell.insert_at {
-                    edits.push((at, at, format!("<v>{rendered}</v>")));
-                }
-            }
-            CalcValue::Text(text) => {
-                let inline = format!("<is><t>{}</t></is>", escape(&text));
-                let (open_start, open_end) = cell.open_span;
-                let Some(open) = open_tag_inline(&xml[open_start..open_end]) else {
-                    continue;
-                };
-                edits.push((open_start, open_end, open));
-                if let Some((start, end)) = cell.value_span {
-                    edits.push((start.saturating_sub(3), end + 4, inline));
-                } else if let Some(at) = cell.insert_at {
-                    edits.push((at, at, inline));
+                CalcValue::Text(text) => {
+                    let inline = format!("<is><t>{}</t></is>", escape(&text));
+                    let (open_start, open_end) = cell.open_span;
+                    let Some(open) = open_tag_inline(&xml[open_start..open_end]) else {
+                        continue;
+                    };
+                    edits.push((open_start, open_end, open));
+                    if let Some((start, end)) = cell.value_span {
+                        edits.push((start.saturating_sub(3), end + 4, inline));
+                    } else if let Some(at) = cell.insert_at {
+                        edits.push((at, at, inline));
+                    }
                 }
             }
         }
+        if !iterate || settled {
+            break;
+        }
+        previous = next;
     }
     edits.sort_by(|a, b| b.0.cmp(&a.0));
     let mut out = xml.to_string();
@@ -1780,6 +1818,8 @@ fn eval_formula(
     sheet_order: &[String],
     sheet: &str,
     date1904: bool,
+    previous: &std::collections::HashMap<String, f64>,
+    iterate: bool,
     visiting: &mut std::collections::HashSet<String>,
 ) -> Option<CalcValue> {
     let mut parser = CalcParser {
@@ -1795,6 +1835,8 @@ fn eval_formula(
         sheet_order,
         sheet,
         date1904,
+        previous,
+        iterate,
         visiting,
     };
     let value = parser.compare(&mut env)?;
@@ -1891,6 +1933,8 @@ struct CalcEnv<'a> {
     sheet_order: &'a [String],
     sheet: &'a str,
     date1904: bool,
+    previous: &'a std::collections::HashMap<String, f64>,
+    iterate: bool,
     visiting: &'a mut std::collections::HashSet<String>,
 }
 
@@ -2979,6 +3023,26 @@ fn excel_normalize_month(mut year: i32, month: i32) -> Option<(i32, i32)> {
 
 fn workbook_date1904(xml: &str) -> bool {
     xml.contains("date1904=\"1\"") || xml.contains("date1904=\"true\"")
+}
+
+fn workbook_iteration(xml: &str) -> Option<(u32, f64)> {
+    let start = xml.find("<calcPr ")?;
+    let end = start + xml[start..].find('>')?;
+    let tag = &xml[start..=end];
+    let flag = xml_attr(tag, "iterate")?;
+    if flag != "1" && !flag.eq_ignore_ascii_case("true") {
+        return None;
+    }
+    let count = xml_attr(tag, "iterateCount")
+        .and_then(|text| text.parse::<u32>().ok())
+        .unwrap_or(100)
+        .clamp(1, 100);
+    let delta = xml_attr(tag, "iterateDelta")
+        .and_then(|text| text.parse::<f64>().ok())
+        .filter(|delta| delta.is_finite() && *delta >= 0.0)
+        .unwrap_or(0.001)
+        .min(1.0);
+    Some((count, delta))
 }
 
 fn workbook_names(xml: &str) -> std::collections::HashMap<String, DefinedRef> {
@@ -9611,6 +9675,12 @@ impl<'a> CalcParser<'a> {
         }
         let address = address.to_ascii_uppercase();
         if !env.visiting.insert(address.clone()) {
+            if env.iterate {
+                let number = env.previous.get(&address).copied().unwrap_or(0.0);
+                if number.is_finite() {
+                    return Some(CalcValue::Num(number));
+                }
+            }
             return None;
         }
         let value = if let Some(formula) = env.formulas.get(&address) {
@@ -9624,6 +9694,8 @@ impl<'a> CalcParser<'a> {
                 env.sheet_order,
                 env.sheet,
                 env.date1904,
+                env.previous,
+                env.iterate,
                 env.visiting,
             )
         } else if let Some(number) = env.literals.get(&address) {
@@ -12295,6 +12367,55 @@ mod tests {
         assert!(
             sheet.contains(r#"<f>SUM(Nope:Other!A1)</f><v>6</v>"#),
             "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_iterates_a_cycle() {
+        let sheet = r#"<worksheet><sheetData><row r="1"><c r="A1"><f>B1+1</f><v>0</v></c><c r="B1"><f>A1+1</f><v>0</v></c><c r="Z1"><v>0</v></c></row></sheetData></worksheet>"#;
+        let plain = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            ("xl/worksheets/sheet1.xml", sheet),
+        ]);
+        let iterated = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><calcPr iterate="1" iterateCount="1" iterateDelta="0.001"/><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            ("xl/worksheets/sheet1.xml", sheet),
+        ]);
+        let plain = set_sheet_cell(&plain, "Budgets", "Z1", "1").unwrap();
+        let iterated = set_sheet_cell(&iterated, "Budgets", "Z1", "1").unwrap();
+        let mut plain_zip = ZipArchive::new(Cursor::new(plain)).unwrap();
+        let mut iterated_zip = ZipArchive::new(Cursor::new(iterated)).unwrap();
+        let plain_sheet = read_entry(&mut plain_zip, "xl/worksheets/sheet1.xml").unwrap();
+        let iterated_sheet = read_entry(&mut iterated_zip, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            plain_sheet.contains(r#"<f>B1+1</f><v>0</v>"#),
+            "{plain_sheet}"
+        );
+        assert!(
+            plain_sheet.contains(r#"<f>A1+1</f><v>0</v>"#),
+            "{plain_sheet}"
+        );
+        assert!(
+            iterated_sheet.contains(r#"<f>B1+1</f><v>2</v>"#),
+            "{iterated_sheet}"
+        );
+        assert!(
+            iterated_sheet.contains(r#"<f>A1+1</f><v>2</v>"#),
+            "{iterated_sheet}"
         );
     }
 

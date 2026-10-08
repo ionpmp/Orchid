@@ -743,7 +743,15 @@ release yet.
   recalculated. A missing sheet name leaves the stored value. The reference
   expands in `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `PRODUCT`, `AVERAGEA`,
   `COUNTA`, `COUNTBLANK`, and wherever a colon range is accepted. `CONCAT`,
-  `CONCATENATE`, and `TEXTJOIN` do not expand it. A workbook defined name is one
+  `CONCATENATE`, and `TEXTJOIN` do not expand it. A circular reference is
+  recalculated only when `calcPr` has `iterate="1"` or `iterate="true"`.
+  `iterateCount` is clamped to 1 through 100 and defaults to 100.
+  `iterateDelta` defaults to 0.001. A negative or non-finite delta becomes
+  0.001, and a larger delta is cut to 1. A reference that is already being
+  calculated reads the previous pass, or the stored number on the first pass,
+  or 0 when that cell has no stored number. The last pass is written even when
+  the change is still larger than the delta. Without the flag, a cycle leaves
+  the stored value. A workbook defined name is one
   cell or one colon range on one sheet in this workbook. The name is ASCII
   case-insensitive, at most 255 characters, and uses letters, digits,
   underscores, and dots. It must not look like a cell address. A name with
