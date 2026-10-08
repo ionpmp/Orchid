@@ -735,8 +735,15 @@ release yet.
   token as a function name. A formula on the referenced cell is not
   recalculated: only a stored `<v>` number is used, and a formula cell with no
   stored number leaves the caller's stored value. The same rule applies to a
-  qualified reference on the sheet being edited. A cross-sheet range, a 3D
-  reference, and another workbook are not read. A workbook defined name is one
+  qualified reference on the sheet being edited. A cross-sheet range and another
+  workbook are not read. A formula can read `Sheet1:Sheet2!A1` or
+  `Sheet1:Sheet2!A1:B2`. The sheets are the inclusive span in workbook order,
+  at most 32 sheets and 4096 cells. Every sheet in the span is read from its
+  stored snapshot, including the sheet being edited, so a formula there is not
+  recalculated. A missing sheet name leaves the stored value. The reference
+  expands in `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `PRODUCT`, `AVERAGEA`,
+  `COUNTA`, `COUNTBLANK`, and wherever a colon range is accepted. `CONCAT`,
+  `CONCATENATE`, and `TEXTJOIN` do not expand it. A workbook defined name is one
   cell or one colon range on one sheet in this workbook. The name is ASCII
   case-insensitive, at most 255 characters, and uses letters, digits,
   underscores, and dots. It must not look like a cell address. A name with
