@@ -2326,6 +2326,98 @@ fn series_sum_excel(x_value: f64, first: f64, step: f64, coefficients: &[f64]) -
     }
 }
 
+fn civil_to_unix(year: i32, month: i32, day: i32) -> i64 {
+    let y = year as i64 - if month <= 2 { 1 } else { 0 };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = (y - era * 400) as u64;
+    let mp = if month > 2 { month - 3 } else { month + 9 };
+    let doy = (153 * mp as u64 + 2) / 5 + day as u64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe as i64 - 719468
+}
+
+fn unix_to_civil(days: i64) -> (i32, i32, i32) {
+    let z = days + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if month <= 2 { y + 1 } else { y };
+    (year as i32, month as i32, day as i32)
+}
+
+fn excel_normalize_month(mut year: i32, month: i32) -> Option<(i32, i32)> {
+    if year < 0 || year > 9999 {
+        return None;
+    }
+    if year < 1900 {
+        year += 1900;
+    }
+    let zero = month as i64 - 1;
+    let year_delta = if zero >= 0 {
+        zero / 12
+    } else {
+        (zero - 11) / 12
+    };
+    let month0 = zero - year_delta * 12;
+    let year = year as i64 + year_delta;
+    if !(1900..=9999).contains(&year) {
+        return None;
+    }
+    Some((year as i32, month0 as i32 + 1))
+}
+
+fn date_excel(year: f64, month: f64, day: f64) -> Option<f64> {
+    if !year.is_finite() || !month.is_finite() || !day.is_finite() {
+        return None;
+    }
+    if !(year >= 0.0 && year <= 9999.0) || month.abs() >= 1.0e9 || day.abs() >= 1.0e9 {
+        return None;
+    }
+    let (year, month) = excel_normalize_month(year.trunc() as i32, month.trunc() as i32)?;
+    let day = day.trunc() as i64;
+    let serial = if year == 1900 && month == 2 && day >= 29 {
+        60 + (day - 29)
+    } else {
+        let unix = civil_to_unix(year, month, 1) + (day - 1);
+        let epoch = civil_to_unix(1899, 12, 30);
+        let mut serial = unix - epoch;
+        if unix < civil_to_unix(1900, 3, 1) {
+            serial -= 1;
+        }
+        serial
+    };
+    if (0..=2_958_465).contains(&serial) {
+        Some(serial as f64)
+    } else {
+        None
+    }
+}
+
+fn excel_parts(serial: f64) -> Option<(i32, i32, i32)> {
+    if !serial.is_finite() || serial < 0.0 || serial > 2_958_465.0 {
+        return None;
+    }
+    let serial = serial.trunc() as i64;
+    if serial == 0 {
+        return Some((1900, 1, 0));
+    }
+    if serial == 60 {
+        return Some((1900, 2, 29));
+    }
+    let epoch = civil_to_unix(1899, 12, 30);
+    let unix = if serial < 60 {
+        epoch + serial + 1
+    } else {
+        epoch + serial
+    };
+    Some(unix_to_civil(unix))
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -4510,6 +4602,32 @@ impl<'a> CalcParser<'a> {
                 let text = calc_text(&self.compare(env)?);
                 self.close_paren()?;
                 return arabic_excel(&text).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("DATE") {
+                let year = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let month = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let day = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return date_excel(year, month, day).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("YEAR")
+                || word.eq_ignore_ascii_case("MONTH")
+                || word.eq_ignore_ascii_case("DAY")
+            {
+                let part = word.to_ascii_uppercase();
+                let serial = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                let (year, month, day) = excel_parts(serial)?;
+                let value = if part == "YEAR" {
+                    year
+                } else if part == "MONTH" {
+                    month
+                } else {
+                    day
+                };
+                return Some(CalcValue::Num(f64::from(value)));
             }
             if word.eq_ignore_ascii_case("TEXTJOIN") {
                 let delim = calc_text(&self.compare(env)?);
@@ -6879,6 +6997,69 @@ mod tests {
         );
         assert!(sheet.contains(r#"<f>STDEVA(A1)</f><v>8</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>MINA()</f><v>0</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_date_serial() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>DATE(1900,1,1)</f><v>0</v></c><c r="C1"><f>DATE(1900,2,28)</f><v>0</v></c><c r="D1"><f>DATE(1900,2,29)</f><v>0</v></c><c r="E1"><f>DATE(1900,3,1)</f><v>0</v></c><c r="F1"><f>DATE(108,1,2)</f><v>0</v></c><c r="G1"><f>DATE(2020,1,1)</f><v>0</v></c><c r="H1"><f>DATE(1900,1,0)</f><v>0</v></c><c r="I1"><f>YEAR(60)</f><v>0</v></c><c r="J1"><f>MONTH(60)</f><v>0</v></c><c r="K1"><f>DAY(60)</f><v>0</v></c><c r="L1"><f>YEAR(43831)</f><v>0</v></c><c r="M1"><f>MONTH(43831)</f><v>0</v></c><c r="N1"><f>DAY(43831)</f><v>0</v></c><c r="O1"><f>YEAR(0)</f><v>0</v></c><c r="P1"><f>MONTH(0)</f><v>0</v></c><c r="Q1"><f>DAY(0)</f><v>0</v></c><c r="R1"><f>DATE(-1,1,1)</f><v>9</v></c><c r="S1"><f>YEAR(-1)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>DATE(1900,1,1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DATE(1900,2,28)</f><v>59</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DATE(1900,2,29)</f><v>60</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DATE(1900,3,1)</f><v>61</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DATE(108,1,2)</f><v>39449</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DATE(2020,1,1)</f><v>43831</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DATE(1900,1,0)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>YEAR(60)</f><v>1900</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MONTH(60)</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>DAY(60)</f><v>29</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>YEAR(43831)</f><v>2020</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>MONTH(43831)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>DAY(43831)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>YEAR(0)</f><v>1900</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>MONTH(0)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>DAY(0)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>DATE(-1,1,1)</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>YEAR(-1)</f><v>8</v>"#), "{sheet}");
     }
 
     #[test]
