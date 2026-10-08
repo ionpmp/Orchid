@@ -1976,6 +1976,26 @@ fn norm_dist_excel(x_value: f64, mean: f64, scale: f64, cumulative: bool) -> Opt
     }
 }
 
+fn erf_excel(x_value: f64) -> Option<f64> {
+    if !x_value.is_finite() {
+        return None;
+    }
+    if x_value == 0.0 {
+        return Some(0.0);
+    }
+    let square = x_value * x_value;
+    if !square.is_finite() {
+        return None;
+    }
+    let magnitude = gamma_cdf_series(0.5, square)?;
+    let value = if x_value > 0.0 { magnitude } else { -magnitude };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -3355,6 +3375,48 @@ impl<'a> CalcParser<'a> {
                     return None;
                 }
                 return norm_dist_excel(x_value, mean, scale, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ERF") {
+                let lower = calc_num(self.compare(env)?)?;
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    return erf_excel(lower).map(CalcValue::Num);
+                }
+                self.require_comma()?;
+                let upper = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                let value = erf_excel(upper)? - erf_excel(lower)?;
+                return if value.is_finite() {
+                    Some(CalcValue::Num(value))
+                } else {
+                    None
+                };
+            }
+            if word.eq_ignore_ascii_case("ERFC") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                let value = 1.0 - erf_excel(number)?;
+                return if value.is_finite() {
+                    Some(CalcValue::Num(value))
+                } else {
+                    None
+                };
+            }
+            if word.eq_ignore_ascii_case("GAUSS") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                let value = norms_dist_excel(number, true)? - 0.5;
+                return if value.is_finite() {
+                    Some(CalcValue::Num(value))
+                } else {
+                    None
+                };
+            }
+            if word.eq_ignore_ascii_case("PHI") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return norms_dist_excel(number, false).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -8768,6 +8830,60 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>NORM.DIST(&quot;ab&quot;,0,1,0)</f><v>12</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_erf() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>ERF(A1)</f><v>0</v></c><c r="C1"><f>ERF(0,A1)</f><v>0</v></c><c r="D1"><f>ERF(-1,1)</f><v>0</v></c><c r="E1"><f>ERFC(A1)</f><v>0</v></c><c r="F1"><f>GAUSS(A1)</f><v>0</v></c><c r="G1"><f>PHI(0)</f><v>0</v></c><c r="H1"><f>PHI(A1)</f><v>0</v></c><c r="I1"><f>ERF(40)</f><v>7</v></c><c r="J1"><f>ERF(&quot;ab&quot;)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>ERF(A1)</f><v>0.84270079</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>ERF(0,A1)</f><v>0.84270079</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>ERF(-1,1)</f><v>1.68540159</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>ERFC(A1)</f><v>0.15729921</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GAUSS(A1)</f><v>0.34134475</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PHI(0)</f><v>0.39894228</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PHI(A1)</f><v>0.24197072</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>ERF(40)</f><v>7</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>ERF(&quot;ab&quot;)</f><v>8</v>"#),
             "{sheet}"
         );
     }
