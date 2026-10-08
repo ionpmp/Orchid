@@ -2595,6 +2595,50 @@ fn bessel_excel(x: f64, order: f64, modified: bool) -> Option<f64> {
     None
 }
 
+fn mdeterm_excel(values: &[f64], n: usize) -> Option<f64> {
+    if n == 0 || n > 10 || values.len() != n * n {
+        return None;
+    }
+    let mut matrix = values.to_vec();
+    let mut det = 1.0;
+    for col in 0..n {
+        let mut pivot = col;
+        let mut best = matrix[col * n + col].abs();
+        for row in (col + 1)..n {
+            let value = matrix[row * n + col].abs();
+            if value > best {
+                best = value;
+                pivot = row;
+            }
+        }
+        if best <= 1e-12 {
+            return Some(0.0);
+        }
+        if pivot != col {
+            for index in 0..n {
+                matrix.swap(col * n + index, pivot * n + index);
+            }
+            det = -det;
+        }
+        let pivot_value = matrix[col * n + col];
+        det *= pivot_value;
+        if !det.is_finite() {
+            return None;
+        }
+        for row in (col + 1)..n {
+            let factor = matrix[row * n + col] / pivot_value;
+            for index in col..n {
+                matrix[row * n + index] -= factor * matrix[col * n + index];
+            }
+        }
+    }
+    if det.is_finite() {
+        Some(det)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -4875,6 +4919,23 @@ impl<'a> CalcParser<'a> {
                 let order = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return bessel_excel(x, order, modified).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("MDETERM") {
+                let (cells, rows, cols) = self.cell_block()?;
+                self.close_paren()?;
+                if rows != cols || rows == 0 || rows > 10 {
+                    return None;
+                }
+                let n = rows as usize;
+                let mut values = Vec::with_capacity(n * n);
+                for address in cells {
+                    match self.cell_value(&address, env) {
+                        None => values.push(0.0),
+                        Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
+                        _ => return None,
+                    }
+                }
+                return mdeterm_excel(&values, n).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("TEXTJOIN") {
                 let delim = calc_text(&self.compare(env)?);
@@ -7453,6 +7514,55 @@ mod tests {
         );
         assert!(sheet.contains(r#"<f>BESSELJ(1,-1)</f><v>9</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>BESSELJ(40,0)</f><v>8</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_mdeterm() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c><c r="C1"><v>3</v></c><c r="D1"><f>MDETERM(A1:C3)</f><v>0</v></c><c r="E1"><v>1</v></c><c r="F1"><v>2</v></c><c r="G1"><f>MDETERM(E1:F2)</f><v>0</v></c><c r="H1"><v>5</v></c><c r="I1"><f>MDETERM(H1:H1)</f><v>0</v></c><c r="J1"><v>1</v></c><c r="L1"><f>MDETERM(J1:K2)</f><v>0</v></c><c r="M1" t="inlineStr"><is><t>xy</t></is></c><c r="N1"><v>1</v></c><c r="O1"><f>MDETERM(M1:N2)</f><v>9</v></c><c r="P1"><f>MDETERM(A1:B3)</f><v>8</v></c><c r="Q1"><v>1</v></c><c r="R1"><v>2</v></c><c r="S1"><f>MDETERM(Q1:R2)</f><v>0</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>0</v></c><c r="B2"><v>1</v></c><c r="C2"><v>4</v></c><c r="E2"><v>3</v></c><c r="F2"><v>4</v></c><c r="K2"><v>1</v></c><c r="M2"><v>0</v></c><c r="N2"><v>1</v></c><c r="Q2"><v>2</v></c><c r="R2"><v>4</v></c></row><row r="3"><c r="A3"><v>5</v></c><c r="B3"><v>6</v></c><c r="C3"><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>MDETERM(A1:C3)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MDETERM(E1:F2)</f><v>-2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MDETERM(H1:H1)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MDETERM(J1:K2)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MDETERM(M1:N2)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MDETERM(A1:B3)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MDETERM(Q1:R2)</f><v>0</v>"#),
+            "{sheet}"
+        );
     }
 
     #[test]
