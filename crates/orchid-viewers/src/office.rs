@@ -3709,6 +3709,276 @@ fn mirr_excel(values: &[f64], finance: f64, reinvest: f64) -> Option<f64> {
     }
 }
 
+fn text_excel(value: CalcValue, format: &str) -> Option<CalcValue> {
+    if format.is_empty() || format.len() > 64 || format.contains(';') {
+        return None;
+    }
+    if format == "@" {
+        let text = match value {
+            CalcValue::Text(text) => text,
+            CalcValue::Num(number) => format_calc(number),
+        };
+        return limited_text(text);
+    }
+    let unquoted = unquoted_format(format)?;
+    let date = unquoted
+        .chars()
+        .any(|ch| matches!(ch, 'y' | 'Y' | 'd' | 'D' | 'm' | 'M'));
+    let number_code = unquoted
+        .chars()
+        .any(|ch| matches!(ch, '0' | '#' | '%' | '.'));
+    if date && number_code {
+        return None;
+    }
+    if date {
+        let CalcValue::Num(number) = value else {
+            return None;
+        };
+        return format_excel_date(number, format).and_then(limited_text);
+    }
+    let CalcValue::Num(number) = value else {
+        return None;
+    };
+    format_excel_number(number, format).and_then(limited_text)
+}
+
+fn unquoted_format(format: &str) -> Option<String> {
+    let chars: Vec<char> = format.chars().collect();
+    let mut index = 0usize;
+    let mut out = String::new();
+    while index < chars.len() {
+        if chars[index] == '"' {
+            index += 1;
+            while index < chars.len() && chars[index] != '"' {
+                index += 1;
+            }
+            if index >= chars.len() {
+                return None;
+            }
+            index += 1;
+            continue;
+        }
+        out.push(chars[index]);
+        index += 1;
+    }
+    Some(out)
+}
+
+fn limited_text(text: String) -> Option<CalcValue> {
+    if text.chars().count() > 32_767 {
+        None
+    } else {
+        Some(CalcValue::Text(text))
+    }
+}
+
+fn format_excel_date(serial: f64, format: &str) -> Option<String> {
+    let (year, month, day) = excel_parts(serial)?;
+    let chars: Vec<char> = format.chars().collect();
+    let mut index = 0usize;
+    let mut out = String::new();
+    let mut saw_token = false;
+    while index < chars.len() {
+        if chars[index] == '"' {
+            index += 1;
+            let start = index;
+            while index < chars.len() && chars[index] != '"' {
+                index += 1;
+            }
+            if index >= chars.len() {
+                return None;
+            }
+            out.extend(chars[start..index].iter());
+            index += 1;
+            continue;
+        }
+        let rest: String = chars[index..]
+            .iter()
+            .collect::<String>()
+            .to_ascii_lowercase();
+        let (token, text) = if rest.starts_with("yyyy") {
+            ("yyyy", format!("{year:04}"))
+        } else if rest.starts_with("yy") {
+            ("yy", format!("{:02}", year.rem_euclid(100)))
+        } else if rest.starts_with("mm") {
+            ("mm", format!("{month:02}"))
+        } else if rest.starts_with('m') {
+            ("m", month.to_string())
+        } else if rest.starts_with("dd") {
+            ("dd", format!("{day:02}"))
+        } else if rest.starts_with('d') {
+            ("d", day.to_string())
+        } else if matches!(chars[index], '-' | '/' | '.' | ' ' | ':') {
+            out.push(chars[index]);
+            index += 1;
+            continue;
+        } else {
+            return None;
+        };
+        saw_token = true;
+        index += token.len();
+        out.push_str(&text);
+    }
+    if saw_token {
+        Some(out)
+    } else {
+        None
+    }
+}
+
+fn format_excel_number(number: f64, format: &str) -> Option<String> {
+    if !number.is_finite() || number.abs() >= 1e15 {
+        return None;
+    }
+    let chars: Vec<char> = format.chars().collect();
+    let mut index = 0usize;
+    let mut prefix = String::new();
+    let mut suffix = String::new();
+    let mut pattern = false;
+    let mut after = false;
+    let mut int_zeros = 0usize;
+    let mut frac_zeros = 0usize;
+    let mut frac_places = 0usize;
+    let mut thousands = false;
+    let mut percent = false;
+    let mut dotted = false;
+    let mut saw_placeholder = false;
+    while index < chars.len() {
+        let ch = chars[index];
+        if ch == '"' {
+            index += 1;
+            let start = index;
+            while index < chars.len() && chars[index] != '"' {
+                index += 1;
+            }
+            if index >= chars.len() {
+                return None;
+            }
+            let literal: String = chars[start..index].iter().collect();
+            index += 1;
+            if pattern || after {
+                after = true;
+                suffix.push_str(&literal);
+            } else {
+                prefix.push_str(&literal);
+            }
+            continue;
+        }
+        if after {
+            if ch == '%' && !percent {
+                percent = true;
+                suffix.push('%');
+                index += 1;
+                continue;
+            }
+            return None;
+        }
+        match ch {
+            '#' | '0' => {
+                pattern = true;
+                saw_placeholder = true;
+                if dotted {
+                    frac_places += 1;
+                    if ch == '0' {
+                        frac_zeros += 1;
+                    }
+                } else if ch == '0' {
+                    int_zeros += 1;
+                }
+            }
+            ',' => {
+                if !pattern || dotted {
+                    return None;
+                }
+                thousands = true;
+            }
+            '.' => {
+                if dotted {
+                    return None;
+                }
+                pattern = true;
+                dotted = true;
+            }
+            '%' => {
+                if percent {
+                    return None;
+                }
+                percent = true;
+                after = true;
+                suffix.push('%');
+            }
+            _ => return None,
+        }
+        index += 1;
+    }
+    if !saw_placeholder || int_zeros > 16 || frac_places > 8 {
+        return None;
+    }
+    let scaled_number = if percent { number * 100.0 } else { number };
+    if !scaled_number.is_finite() || scaled_number.abs() >= 1e15 {
+        return None;
+    }
+    let scale = 10f64.powi(frac_places as i32);
+    let scaled = (scaled_number.abs() * scale).round();
+    if !scaled.is_finite() {
+        return None;
+    }
+    let mut frac = if frac_places == 0 {
+        0.0
+    } else {
+        scaled % scale
+    };
+    let mut int_part = if frac_places == 0 {
+        scaled
+    } else {
+        (scaled / scale).floor()
+    };
+    if frac_places > 0 && (frac - scale).abs() < 1e-6 {
+        int_part += 1.0;
+        frac = 0.0;
+    }
+    if int_part >= 1e15 {
+        return None;
+    }
+    let mut int_text = format!("{}", int_part as i64);
+    if int_text.len() < int_zeros {
+        int_text = format!("{int_text:0>int_zeros$}");
+    }
+    if thousands {
+        int_text = group_thousands(&int_text);
+    }
+    let mut out = String::new();
+    if scaled_number < 0.0 && (int_part > 0.0 || frac > 0.0 || frac_places > 0) {
+        out.push('-');
+    }
+    out.push_str(&prefix);
+    out.push_str(&int_text);
+    if frac_places > 0 {
+        let frac_text = format!("{frac_digits:0>frac_places$}", frac_digits = frac as i64);
+        let mut keep = frac_places;
+        while keep > frac_zeros && frac_text.as_bytes()[keep - 1] == b'0' {
+            keep -= 1;
+        }
+        if keep > 0 {
+            out.push('.');
+            out.push_str(&frac_text[..keep]);
+        }
+    }
+    out.push_str(&suffix);
+    Some(out)
+}
+
+fn group_thousands(digits: &str) -> String {
+    let mut out = String::new();
+    for (index, ch) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    out
+}
+
 fn weekday_code(serial: i64, kind: i64) -> Option<f64> {
     if !(0..=2_958_465).contains(&serial) {
         return None;
@@ -6856,6 +7126,13 @@ impl<'a> CalcParser<'a> {
                 let text = calc_text(&self.compare(env)?);
                 self.close_paren()?;
                 return value_excel(&text).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("TEXT") {
+                let value = self.compare(env)?;
+                self.require_comma()?;
+                let format = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return text_excel(value, &format);
             }
             if word.eq_ignore_ascii_case("T") {
                 let value = self.compare(env)?;
@@ -10313,6 +10590,70 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>XIRR(A2:A2,B2:B2)</f><v>8</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_text_format() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Cat</t></is></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><f>TEXT(1234.5,&quot;0.00&quot;)</f><v>0</v></c><c r="B2"><f>TEXT(1234.5,&quot;#,##0.00&quot;)</f><v>0</v></c><c r="C2"><f>TEXT(0.25,&quot;0%&quot;)</f><v>0</v></c><c r="D2"><f>TEXT(1234.5,&quot;0.##&quot;)</f><v>0</v></c><c r="E2"><f>TEXT(43831,&quot;yyyy-mm-dd&quot;)</f><v>0</v></c><c r="F2"><f>TEXT(43831,&quot;d/m/yy&quot;)</f><v>0</v></c><c r="G2"><f>TEXT(A1,&quot;@&quot;)</f><v>0</v></c><c r="H2"><f>TEXT(1,&quot;0.00E+00&quot;)</f><v>9</v></c><c r="I2"><f>TEXT(-0.004,&quot;0.00&quot;)</f><v>0</v></c><c r="J2"><f>TEXT(12,&quot;&quot;&quot;id &quot;&quot;0&quot;)</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>TEXT(1234.5,&quot;0.00&quot;)</f><is><t>1234.50</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1234.5,&quot;#,##0.00&quot;)</f><is><t>1,234.50</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(0.25,&quot;0%&quot;)</f><is><t>25%</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1234.5,&quot;0.##&quot;)</f><is><t>1234.5</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet
+                .contains(r#"<f>TEXT(43831,&quot;yyyy-mm-dd&quot;)</f><is><t>2020-01-01</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(43831,&quot;d/m/yy&quot;)</f><is><t>1/1/20</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(A1,&quot;@&quot;)</f><is><t>Cat</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1,&quot;0.00E+00&quot;)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(-0.004,&quot;0.00&quot;)</f><is><t>-0.00</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>TEXT(12,&quot;&quot;&quot;id &quot;&quot;0&quot;)</f><is><t>id 12</t></is>"#
+            ),
             "{sheet}"
         );
     }
