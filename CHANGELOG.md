@@ -102,7 +102,7 @@ release yet.
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
   `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`,
   `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`,
-  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, `EXPONDIST`, `NEGBINOM.DIST`, `NEGBINOMDIST`, `HYPGEOM.DIST`, `HYPGEOMDIST`, `WEIBULL.DIST`, `WEIBULL`, `GAMMA`, `GAMMALN`, `GAMMA.DIST`, `GAMMADIST`, `BINOM.INV`, `CRITBINOM`, `CHISQ.DIST`, `CHISQ.DIST.RT`, `CHIDIST`, `NORM.S.DIST`, `NORMSDIST`, `NORM.DIST`, `NORMDIST`, `ERF`, `ERFC`, `GAUSS`, `PHI`, `LOGNORM.DIST`, `LOGNORMDIST`, `BINOM.DIST.RANGE`, `Z.TEST`, `ZTEST`, `PROB`, `ASINH`, `ACOSH`, `ATANH`, `SEC`, `CSC`, `COT`, `CONCATENATE`, `UNICHAR`, `UNICODE`, `SERIESSUM`, `NORM.S.INV`, `NORMSINV`, `NORM.INV`, `NORMINV`, `LOGNORM.INV`, `LOGINV`, `CONFIDENCE`, `CONFIDENCE.NORM`, `GAMMA.INV`, `GAMMAINV`, `CHISQ.INV`, `CHISQ.INV.RT`, `CHIINV`, `ROMAN`, `ARABIC`, `SECH`, `CSCH`, `COTH`, `ACOT`, `ACOTH`, `CHISQ.TEST`, `CHITEST`, `AVERAGEA`, `MINA`, `MAXA`, `STDEVA`, `VARA`, `DATE`, `YEAR`, `MONTH`, and `DAY` on that sheet.
+  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, `EXPONDIST`, `NEGBINOM.DIST`, `NEGBINOMDIST`, `HYPGEOM.DIST`, `HYPGEOMDIST`, `WEIBULL.DIST`, `WEIBULL`, `GAMMA`, `GAMMALN`, `GAMMA.DIST`, `GAMMADIST`, `BINOM.INV`, `CRITBINOM`, `CHISQ.DIST`, `CHISQ.DIST.RT`, `CHIDIST`, `NORM.S.DIST`, `NORMSDIST`, `NORM.DIST`, `NORMDIST`, `ERF`, `ERFC`, `GAUSS`, `PHI`, `LOGNORM.DIST`, `LOGNORMDIST`, `BINOM.DIST.RANGE`, `Z.TEST`, `ZTEST`, `PROB`, `ASINH`, `ACOSH`, `ATANH`, `SEC`, `CSC`, `COT`, `CONCATENATE`, `UNICHAR`, `UNICODE`, `SERIESSUM`, `NORM.S.INV`, `NORMSINV`, `NORM.INV`, `NORMINV`, `LOGNORM.INV`, `LOGINV`, `CONFIDENCE`, `CONFIDENCE.NORM`, `GAMMA.INV`, `GAMMAINV`, `CHISQ.INV`, `CHISQ.INV.RT`, `CHIINV`, `ROMAN`, `ARABIC`, `SECH`, `CSCH`, `COTH`, `ACOT`, `ACOTH`, `CHISQ.TEST`, `CHITEST`, `AVERAGEA`, `MINA`, `MAXA`, `STDEVA`, `VARA`, `DATE`, `YEAR`, `MONTH`, `DAY`, `DEC2BIN`, `BIN2DEC`, `DEC2HEX`, `HEX2DEC`, `DEC2OCT`, `OCT2DEC`, `BASE`, and `DECIMAL` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -587,6 +587,22 @@ release yet.
   `MONTH`, and `DAY` read a serial from 0 through 2958465. Serial 0 is
   1900-01-00. A negative serial, a year outside 0 through 9999, a month or day
   whose magnitude reaches 1e9, or text leaves the stored value.
+  `DEC2BIN`, `DEC2HEX`, and `DEC2OCT` truncate toward zero and write
+  two's-complement text of at most 10 characters. `DEC2BIN` accepts −512
+  through 511, `DEC2HEX` accepts −2^39 through 2^39−1, and `DEC2OCT` accepts
+  −2^29 through 2^29−1. A negative number always uses 10 characters. An
+  optional places argument is an integer from 1 through 10 and pads a
+  non-negative result with zeros; a places value other than 10 on a negative
+  number, or a places value shorter than the digits, leaves the stored value.
+  `BIN2DEC`, `HEX2DEC`, and `OCT2DEC` read at most 10 characters. Hex letters
+  ignore ASCII case. A full 10-character string whose high bit is set is
+  negative. `BASE` writes an uppercase digit string for a number from 0 up to,
+  but not including, 2^53 and a radix from 2 through 36. An optional minimum
+  length from 0 through 255 pads with zeros and leaves the stored value when
+  it is shorter than the digits. `DECIMAL` reads that same text back when the
+  result stays below 2^53 and the text is at most 255 characters. An empty
+  string, an invalid digit, or text where a number is required leaves the
+  stored value.
   `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.

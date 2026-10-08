@@ -2418,6 +2418,151 @@ fn excel_parts(serial: f64) -> Option<(i32, i32, i32)> {
     Some(unix_to_civil(unix))
 }
 
+fn base_digit(byte: u8) -> Option<u32> {
+    match byte {
+        b'0'..=b'9' => Some(u32::from(byte - b'0')),
+        b'A'..=b'Z' => Some(u32::from(byte - b'A') + 10),
+        b'a'..=b'z' => Some(u32::from(byte - b'a') + 10),
+        _ => None,
+    }
+}
+
+fn format_base(mut number: u64, radix: u32, width: Option<usize>) -> Option<String> {
+    if !(2..=36).contains(&radix) {
+        return None;
+    }
+    let alphabet = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let mut chars = Vec::new();
+    if number == 0 {
+        chars.push(b'0');
+    } else {
+        while number > 0 {
+            let rem = (number % u64::from(radix)) as usize;
+            chars.push(alphabet[rem]);
+            number /= u64::from(radix);
+        }
+        chars.reverse();
+    }
+    if let Some(width) = width {
+        if chars.len() > width {
+            return None;
+        }
+        let pad = width - chars.len();
+        let mut padded = vec![b'0'; pad];
+        padded.append(&mut chars);
+        chars = padded;
+    }
+    String::from_utf8(chars).ok()
+}
+
+fn complement_text(number: f64, radix: u32, bits: u32, places: Option<f64>) -> Option<String> {
+    if !number.is_finite() || bits == 0 || bits >= 64 {
+        return None;
+    }
+    let number = number.trunc();
+    let sign = 1u64 << (bits - 1);
+    let min = -(sign as f64);
+    let max = (sign - 1) as f64;
+    if number < min || number > max {
+        return None;
+    }
+    let width = match places {
+        None => None,
+        Some(places) => {
+            if !places.is_finite() {
+                return None;
+            }
+            let places = places.trunc();
+            if !(1.0..=10.0).contains(&places) {
+                return None;
+            }
+            Some(places as usize)
+        }
+    };
+    if number < 0.0 {
+        if width.is_some_and(|width| width != 10) {
+            return None;
+        }
+        let unsigned = (number as i128) + (1i128 << bits);
+        return format_base(unsigned as u64, radix, Some(10));
+    }
+    format_base(number as u64, radix, width)
+}
+
+fn from_complement(text: &str, radix: u32, bits: u32) -> Option<f64> {
+    if text.is_empty() || text.len() > 10 || bits == 0 || bits >= 64 || !(2..=36).contains(&radix) {
+        return None;
+    }
+    let mut value: u64 = 0;
+    for byte in text.bytes() {
+        let digit = base_digit(byte)?;
+        if digit >= radix {
+            return None;
+        }
+        value = value
+            .checked_mul(u64::from(radix))?
+            .checked_add(u64::from(digit))?;
+    }
+    let full = 1u64 << bits;
+    let sign = 1u64 << (bits - 1);
+    if text.len() == 10 && value >= sign {
+        Some((value as i128 - full as i128) as f64)
+    } else if value < full {
+        Some(value as f64)
+    } else {
+        None
+    }
+}
+
+fn base_excel(number: f64, radix: f64, min_length: Option<f64>) -> Option<String> {
+    if !number.is_finite() || !radix.is_finite() || number < 0.0 || number >= (1u64 << 53) as f64 {
+        return None;
+    }
+    let radix = radix.trunc();
+    if !(2.0..=36.0).contains(&radix) {
+        return None;
+    }
+    let width = match min_length {
+        None => None,
+        Some(length) => {
+            if !length.is_finite() {
+                return None;
+            }
+            let length = length.trunc();
+            if !(0.0..=255.0).contains(&length) {
+                return None;
+            }
+            Some(length as usize)
+        }
+    };
+    format_base(number.trunc() as u64, radix as u32, width)
+}
+
+fn decimal_excel(text: &str, radix: f64) -> Option<f64> {
+    if !radix.is_finite() || text.is_empty() || text.len() > 255 {
+        return None;
+    }
+    let radix = radix.trunc();
+    if !(2.0..=36.0).contains(&radix) {
+        return None;
+    }
+    let mut value: u64 = 0;
+    let limit = 1u64 << 53;
+    for byte in text.bytes() {
+        let digit = base_digit(byte)?;
+        if (digit as f64) >= radix {
+            return None;
+        }
+        value = value
+            .checked_mul(radix as u64)?
+            .checked_add(u64::from(digit))?;
+        if value >= limit {
+            return None;
+        }
+    }
+    Some(value as f64)
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -4628,6 +4773,68 @@ impl<'a> CalcParser<'a> {
                     day
                 };
                 return Some(CalcValue::Num(f64::from(value)));
+            }
+            if word.eq_ignore_ascii_case("DEC2BIN")
+                || word.eq_ignore_ascii_case("DEC2HEX")
+                || word.eq_ignore_ascii_case("DEC2OCT")
+            {
+                let kind = word.to_ascii_uppercase();
+                let number = calc_num(self.compare(env)?)?;
+                self.skip();
+                let places = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    None
+                } else {
+                    self.require_comma()?;
+                    let places = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    Some(places)
+                };
+                let (radix, bits) = if kind == "DEC2BIN" {
+                    (2, 10)
+                } else if kind == "DEC2HEX" {
+                    (16, 40)
+                } else {
+                    (8, 30)
+                };
+                return complement_text(number, radix, bits, places).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("BIN2DEC")
+                || word.eq_ignore_ascii_case("HEX2DEC")
+                || word.eq_ignore_ascii_case("OCT2DEC")
+            {
+                let kind = word.to_ascii_uppercase();
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                let (radix, bits) = if kind == "BIN2DEC" {
+                    (2, 10)
+                } else if kind == "HEX2DEC" {
+                    (16, 40)
+                } else {
+                    (8, 30)
+                };
+                return from_complement(&text, radix, bits).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("BASE") {
+                let number = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let radix = calc_num(self.compare(env)?)?;
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    return base_excel(number, radix, None).map(CalcValue::Text);
+                }
+                self.require_comma()?;
+                let length = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return base_excel(number, radix, Some(length)).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("DECIMAL") {
+                let text = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let radix = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return decimal_excel(&text, radix).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("TEXTJOIN") {
                 let delim = calc_text(&self.compare(env)?);
@@ -7060,6 +7267,107 @@ mod tests {
         assert!(sheet.contains(r#"<f>DAY(0)</f><v>0</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>DATE(-1,1,1)</f><v>9</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>YEAR(-1)</f><v>8</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_base_conversion() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><f>DEC2BIN(5)</f><v>0</v></c><c r="C1"><f>DEC2BIN(5,4)</f><v>0</v></c><c r="D1"><f>DEC2BIN(-1)</f><v>0</v></c><c r="E1"><f>DEC2BIN(512)</f><v>9</v></c><c r="F1"><f>BIN2DEC(&quot;101&quot;)</f><v>0</v></c><c r="G1"><f>BIN2DEC(&quot;1111111111&quot;)</f><v>0</v></c><c r="H1"><f>DEC2HEX(255)</f><v>0</v></c><c r="I1"><f>DEC2HEX(-1)</f><v>0</v></c><c r="J1"><f>HEX2DEC(&quot;ff&quot;)</f><v>0</v></c><c r="K1"><f>HEX2DEC(&quot;FFFFFFFFFF&quot;)</f><v>0</v></c><c r="L1"><f>DEC2OCT(8)</f><v>0</v></c><c r="M1"><f>DEC2OCT(-1)</f><v>0</v></c><c r="N1"><f>OCT2DEC(&quot;10&quot;)</f><v>0</v></c><c r="O1"><f>OCT2DEC(&quot;7777777777&quot;)</f><v>0</v></c><c r="P1"><f>BASE(13,2,8)</f><v>0</v></c><c r="Q1"><f>BASE(255,16)</f><v>0</v></c><c r="R1"><f>DECIMAL(&quot;FF&quot;,16)</f><v>0</v></c><c r="S1"><f>DECIMAL(&quot;101&quot;,2)</f><v>0</v></c><c r="T1"><f>DEC2BIN(-1,4)</f><v>8</v></c><c r="U1"><f>BASE(1,2,0)</f><v>7</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<c r="B1" t="inlineStr"><f>DEC2BIN(5)</f><is><t>101</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet
+                .contains(r#"<c r="C1" t="inlineStr"><f>DEC2BIN(5,4)</f><is><t>0101</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<c r="D1" t="inlineStr"><f>DEC2BIN(-1)</f><is><t>1111111111</t></is></c>"#
+            ),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>DEC2BIN(512)</f><v>9</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>BIN2DEC(&quot;101&quot;)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>BIN2DEC(&quot;1111111111&quot;)</f><v>-1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="H1" t="inlineStr"><f>DEC2HEX(255)</f><is><t>FF</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<c r="I1" t="inlineStr"><f>DEC2HEX(-1)</f><is><t>FFFFFFFFFF</t></is></c>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HEX2DEC(&quot;ff&quot;)</f><v>255</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HEX2DEC(&quot;FFFFFFFFFF&quot;)</f><v>-1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="L1" t="inlineStr"><f>DEC2OCT(8)</f><is><t>10</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<c r="M1" t="inlineStr"><f>DEC2OCT(-1)</f><is><t>7777777777</t></is></c>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>OCT2DEC(&quot;10&quot;)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>OCT2DEC(&quot;7777777777&quot;)</f><v>-1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<c r="P1" t="inlineStr"><f>BASE(13,2,8)</f><is><t>00001101</t></is></c>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="Q1" t="inlineStr"><f>BASE(255,16)</f><is><t>FF</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DECIMAL(&quot;FF&quot;,16)</f><v>255</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DECIMAL(&quot;101&quot;,2)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>DEC2BIN(-1,4)</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>BASE(1,2,0)</f><v>7</v>"#), "{sheet}");
     }
 
     #[test]
