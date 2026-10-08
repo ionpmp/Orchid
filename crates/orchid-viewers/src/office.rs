@@ -3515,6 +3515,200 @@ fn irr_excel(values: &[f64], guess: f64) -> Option<f64> {
     None
 }
 
+fn ipmt_excel(rate: f64, per: f64, nper: f64, pv: f64, fv: f64, typ: f64) -> Option<f64> {
+    if !per.is_finite() {
+        return None;
+    }
+    let per = per.trunc();
+    if per < 1.0 || per > nper {
+        return None;
+    }
+    let payment = pmt_excel(rate, nper, pv, fv, typ)?;
+    let typ = period_type(typ)?;
+    if rate == 0.0 || (typ == 1.0 && per == 1.0) {
+        return Some(0.0);
+    }
+    let balance = if per == 1.0 {
+        -pv
+    } else {
+        fv_excel(rate, per - 1.0, payment, pv, typ)?
+    };
+    let value = balance * rate;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn ppmt_excel(rate: f64, per: f64, nper: f64, pv: f64, fv: f64, typ: f64) -> Option<f64> {
+    let interest = ipmt_excel(rate, per, nper, pv, fv, typ)?;
+    let payment = pmt_excel(rate, nper, pv, fv, typ)?;
+    let value = payment - interest;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn cumulative_payment(
+    rate: f64,
+    nper: f64,
+    pv: f64,
+    start: f64,
+    end: f64,
+    typ: f64,
+    principal: bool,
+) -> Option<f64> {
+    if !start.is_finite() || !end.is_finite() {
+        return None;
+    }
+    let start = start.trunc();
+    let end = end.trunc();
+    if start < 1.0 || end < start || end > nper || end - start > 10_000.0 {
+        return None;
+    }
+    let mut total = 0.0;
+    let mut period = start;
+    while period <= end {
+        let part = if principal {
+            ppmt_excel(rate, period, nper, pv, 0.0, typ)?
+        } else {
+            ipmt_excel(rate, period, nper, pv, 0.0, typ)?
+        };
+        total += part;
+        if !total.is_finite() {
+            return None;
+        }
+        period += 1.0;
+    }
+    Some(total)
+}
+
+fn xnpv_excel(rate: f64, values: &[f64], dates: &[f64]) -> Option<f64> {
+    if !rate.is_finite()
+        || rate <= -1.0
+        || values.is_empty()
+        || values.len() > 128
+        || values.len() != dates.len()
+    {
+        return None;
+    }
+    let base = dates[0];
+    if dates.iter().any(|date| *date < base) {
+        return None;
+    }
+    let mut total = 0.0;
+    for (value, date) in values.iter().zip(dates) {
+        let years = (date - base) / 365.0;
+        let discount = (1.0 + rate).powf(years);
+        if !discount.is_finite() || discount == 0.0 {
+            return None;
+        }
+        total += value / discount;
+    }
+    if total.is_finite() {
+        Some(total)
+    } else {
+        None
+    }
+}
+
+fn xirr_excel(values: &[f64], dates: &[f64], guess: f64) -> Option<f64> {
+    if !guess.is_finite()
+        || guess <= -1.0
+        || values.len() < 2
+        || values.len() > 128
+        || values.len() != dates.len()
+        || !values.iter().any(|value| *value > 0.0)
+        || !values.iter().any(|value| *value < 0.0)
+    {
+        return None;
+    }
+    let base = dates[0];
+    let mut previous = base;
+    for date in &dates[1..] {
+        if *date < previous {
+            return None;
+        }
+        previous = *date;
+    }
+    if (dates[dates.len() - 1] - base).abs() < 1e-9 {
+        return None;
+    }
+    let times: Vec<f64> = dates.iter().map(|date| (date - base) / 365.0).collect();
+    let mut rate = guess;
+    for _ in 0..40 {
+        let mut total = 0.0;
+        let mut slope = 0.0;
+        for (value, time) in values.iter().zip(&times) {
+            let discount = (1.0 + rate).powf(*time);
+            let next = (1.0 + rate).powf(time + 1.0);
+            if !discount.is_finite() || !next.is_finite() || discount == 0.0 || next == 0.0 {
+                return None;
+            }
+            total += value / discount;
+            slope += value * (-time) / next;
+        }
+        if slope.abs() < 1e-14 || !total.is_finite() {
+            return None;
+        }
+        let next = rate - total / slope;
+        if !next.is_finite() || next <= -1.0 {
+            return None;
+        }
+        if (next - rate).abs() <= 1e-8 * next.abs().max(1.0) {
+            return Some(next);
+        }
+        rate = next;
+    }
+    None
+}
+
+fn mirr_excel(values: &[f64], finance: f64, reinvest: f64) -> Option<f64> {
+    if !finance.is_finite()
+        || !reinvest.is_finite()
+        || finance <= -1.0
+        || reinvest <= -1.0
+        || values.len() < 2
+        || values.len() > 128
+    {
+        return None;
+    }
+    let mut positive = 0.0;
+    let mut negative = 0.0;
+    let mut has_positive = false;
+    let mut has_negative = false;
+    for (index, value) in values.iter().enumerate() {
+        if *value > 0.0 {
+            has_positive = true;
+            let discount = (1.0 + reinvest).powf(index as f64);
+            if !discount.is_finite() || discount == 0.0 {
+                return None;
+            }
+            positive += value / discount;
+        } else if *value < 0.0 {
+            has_negative = true;
+            let discount = (1.0 + finance).powf(index as f64);
+            if !discount.is_finite() || discount == 0.0 {
+                return None;
+            }
+            negative += value / discount;
+        }
+    }
+    if !has_positive || !has_negative || !positive.is_finite() || !negative.is_finite() {
+        return None;
+    }
+    let ratio = positive.abs() / negative.abs();
+    let value = ratio.powf(1.0 / (values.len() as f64 - 1.0)) * (1.0 + reinvest) - 1.0;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn weekday_code(serial: i64, kind: i64) -> Option<f64> {
     if !(0..=2_958_465).contains(&serial) {
         return None;
@@ -6388,6 +6582,76 @@ impl<'a> CalcParser<'a> {
                 }
                 return irr_excel(&values, guess).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("IPMT") || word.eq_ignore_ascii_case("PPMT") {
+                let principal = word.eq_ignore_ascii_case("PPMT");
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let per = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let nper = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let pv = calc_num(self.compare(env)?)?;
+                let extra = self.rest_numbers(env, 2)?;
+                let fv = extra.first().copied().unwrap_or(0.0);
+                let typ = extra.get(1).copied().unwrap_or(0.0);
+                let value = if principal {
+                    ppmt_excel(rate, per, nper, pv, fv, typ)
+                } else {
+                    ipmt_excel(rate, per, nper, pv, fv, typ)
+                };
+                return value.map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CUMIPMT") || word.eq_ignore_ascii_case("CUMPRINC") {
+                let principal = word.eq_ignore_ascii_case("CUMPRINC");
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let nper = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let pv = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let start = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let end = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let typ = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return cumulative_payment(rate, nper, pv, start, end, typ, principal)
+                    .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("XNPV") {
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let values = self.finite_range(env)?;
+                self.require_comma()?;
+                let dates = self.finite_range(env)?;
+                self.close_paren()?;
+                return xnpv_excel(rate, &values, &dates).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("XIRR") {
+                let values = self.finite_range(env)?;
+                self.require_comma()?;
+                let dates = self.finite_range(env)?;
+                self.skip();
+                let guess = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    0.1
+                } else {
+                    self.require_comma()?;
+                    let guess = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    guess
+                };
+                return xirr_excel(&values, &dates, guess).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("MIRR") {
+                let values = self.finite_range(env)?;
+                self.require_comma()?;
+                let finance = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let reinvest = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return mirr_excel(&values, finance, reinvest).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("WEEKDAY") {
                 let serial = calc_num(self.compare(env)?)?;
                 self.skip();
@@ -7235,6 +7499,24 @@ impl<'a> CalcParser<'a> {
         self.skip();
         let end = self.cell_token()?;
         cells_in_range(&start, &end)
+    }
+
+    fn finite_range(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
+        let cells = self.cell_range()?;
+        if cells.len() > 128 {
+            return None;
+        }
+        let mut values = Vec::with_capacity(cells.len());
+        for address in cells {
+            let Some(CalcValue::Num(number)) = self.cell_value(&address, env) else {
+                return None;
+            };
+            if !number.is_finite() {
+                return None;
+            }
+            values.push(number);
+        }
+        Some(values)
     }
 
     fn cell_block(&mut self) -> Option<(Vec<String>, u32, u32)> {
@@ -9970,6 +10252,67 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>FREQUENCY(A1:A4,B1:B2)+0</f><v>7</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_interest_and_dated_cash() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>-10000</v></c><c r="B2"><v>39448</v></c><c r="C2"><v>-120000</v></c></row><row r="3"><c r="A3"><v>2750</v></c><c r="B3"><v>39508</v></c><c r="C3"><v>39000</v></c></row><row r="4"><c r="A4"><v>4250</v></c><c r="B4"><v>39751</v></c><c r="C4"><v>30000</v></c></row><row r="5"><c r="A5"><v>3250</v></c><c r="B5"><v>39859</v></c><c r="C5"><v>21000</v></c></row><row r="6"><c r="A6"><v>2750</v></c><c r="B6"><v>39904</v></c><c r="C6"><v>37000</v></c></row><row r="7"><c r="C7"><v>46000</v></c></row><row r="8"><c r="A8"><f>IPMT(0.1/12,1,36,20000)</f><v>0</v></c><c r="B8"><f>PPMT(0.1/12,1,36,20000)</f><v>0</v></c><c r="C8"><f>IPMT(0.1,1,3,8000,0,1)</f><v>0</v></c><c r="D8"><f>CUMIPMT(0.09/12,360,125000,13,24,0)</f><v>0</v></c><c r="E8"><f>CUMPRINC(0.09/12,360,125000,13,24,0)</f><v>0</v></c><c r="F8"><f>IPMT(0.1,0,3,8000)</f><v>9</v></c><c r="G8"><f>XNPV(0.09,A2:A6,B2:B6)</f><v>0</v></c><c r="H8"><f>XIRR(A2:A6,B2:B6)</f><v>0</v></c><c r="I8"><f>MIRR(C2:C7,0.1,0.12)</f><v>0</v></c><c r="J8"><f>XIRR(A2:A2,B2:B2)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>IPMT(0.1/12,1,36,20000)</f><v>-166.66666667</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>PPMT(0.1/12,1,36,20000)</f><v>-478.67707721</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>IPMT(0.1,1,3,8000,0,1)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CUMIPMT(0.09/12,360,125000,13,24,0)</f><v>-11135.23213075</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CUMPRINC(0.09/12,360,125000,13,24,0)</f><v>-934.10712342</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>IPMT(0.1,0,3,8000)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XNPV(0.09,A2:A6,B2:B6)</f><v>2086.64760203</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XIRR(A2:A6,B2:B6)</f><v>0.37336253</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>MIRR(C2:C7,0.1,0.12)</f><v>0.12609413</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XIRR(A2:A2,B2:B2)</f><v>8</v>"#),
             "{sheet}"
         );
     }
