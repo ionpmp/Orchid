@@ -112,7 +112,7 @@ release yet.
   writes 1 when an odd count of them is not zero. `TEXTJOIN` takes a
   delimiter, a number, and the same text arguments as `CONCAT`, including
   a cell range. A nonzero number skips empty text. A missing cell inside
-  a range is empty text, and a shared-string cell is empty. A missing cell
+  a range is empty text. A shared-string cell contributes its text. A missing cell
   named on its own leaves the stored value. The joined text stops at
   32,767 scalar values. An empty value list writes an empty string. `NOT` turns zero into 1 and any
   other number into 0. `SQRT` of a negative number leaves the stored
@@ -141,8 +141,8 @@ release yet.
   stored value. `MEDIAN` uses the same numeric arguments as
   `SUM`, including a cell range. An even count averages the two middle
   numbers. An empty call leaves the stored value. `ISNUMBER` and `ISTEXT`
-  write 1 or 0. A missing cell leaves the stored value, and a shared-string
-  cell is not classified. `GCD` and `LCM` use those same numeric arguments.
+  write 1 or 0. A missing cell leaves the stored value. A shared-string cell
+  is text, so `ISTEXT` writes 1 and `ISNUMBER` writes 0. `GCD` and `LCM` use those same numeric arguments.
   A fraction is dropped toward zero. A negative number, a magnitude at or
   above 1e15, or an empty call leaves the stored value. `LCM` of a zero
   writes 0. `LN` and `LOG10` need a positive number. `LOG` uses base 10
@@ -171,10 +171,10 @@ release yet.
   first, and an empty text leaves the stored value. `CHAR` drops the
   fraction toward zero. Code 0, a surrogate, or a value above 1114111
   leaves the stored value. `COUNTA` counts stored numbers and non-empty
-  inline text. `COUNTBLANK` counts the rest, including an empty inline
+  text, including a shared string. `COUNTBLANK` counts the rest, including an empty inline
   string. A missing cell inside a range counts as blank, and a missing
-  cell named on its own leaves the stored value. A shared-string cell
-  counts as blank. An empty call writes 0. `IFERROR` takes two arguments.
+  cell named on its own leaves the stored value. An index past the
+  shared-string table counts as blank. An empty call writes 0. `IFERROR` takes two arguments.
   When the first cannot be calculated, or is not a finite number, the
   second is written. The second is left unread when the first succeeds.
   A third argument, or a second that also fails, leaves the stored value.
@@ -576,7 +576,8 @@ release yet.
   greater than 0, a blank or text cell, a call that is not two colon ranges,
   or a right tail the chi-square helper refuses leaves the stored value.
   `AVERAGEA`, `MINA`, `MAXA`, `STDEVA`, and `VARA` read numbers and count text
-  as 0. A blank cell and a shared-string cell are skipped. `STDEVA` and `VARA`
+  as 0. A blank cell is skipped. A shared string counts as text, so it is 0.
+  `STDEVA` and `VARA`
   are the sample standard deviation and variance and need at least two counted
   values. `MINA` and `MAXA` write 0 when nothing is counted. An empty
   `AVERAGEA`, `STDEVA`, or `VARA` call, a non-finite number, or a direct call
@@ -608,7 +609,7 @@ release yet.
   stay below 40. The series stops within 200 terms; if it does not settle, the
   stored value stays.
   `MDETERM` reads one square range of at most 10 by 10 on the same sheet. A
-  blank cell and a shared-string cell count as 0. Text, a range that is not
+  blank cell counts as 0. Text, including a shared string, a range that is not
   square, a side longer than 10, or a non-finite determinant leaves the stored
   value. A pivot whose absolute value is at most 1e-12 makes the determinant 0.
   `INDEX`, `MATCH`, `VLOOKUP`, and `HLOOKUP` read one range on the same sheet.
@@ -622,13 +623,14 @@ release yet.
   at the first greater key. Type −1 does that for a descending range and a key
   greater than or equal to the lookup. `VLOOKUP` and `HLOOKUP` do the ascending
   walk when the range lookup is omitted or is any number other than 0. A range
-  lookup of 0 is exact. A blank cell, a shared-string cell, or a number beside
-  text stops an approximate walk. `INDEX` row and column numbers are 1-based
+  lookup of 0 is exact. A blank cell, or a number beside text, stops an
+  approximate walk. A shared string is text. `INDEX` row and column numbers are 1-based
   and truncated toward zero. An omitted column is accepted only when the range
   has one column. A row or column of 0, a position past the range, or a value
-  that is not found leaves the stored value. A blank cell and a shared-string
-  cell write 0 when they are the returned cell. `MATCH` skips both on an exact
-  match, so neither matches 0 or an empty string.
+  that is not found leaves the stored value. A blank cell writes 0 when it is
+  the returned cell. A shared string is returned as its text. `MATCH` skips a
+  blank on an exact match, so a blank matches neither 0 nor an empty string.
+  A shared string can match text.
   `BETA.DIST` reads x, alpha, beta, and a cumulative flag on the unit interval.
   Alpha and beta must be greater than 0. A cumulative flag of 0 writes the
   density; any other finite number writes the regularized incomplete beta. The
@@ -668,7 +670,8 @@ release yet.
   any other finite type is a payment at the beginning. `RATE` starts at guess
   0.1 when the guess is omitted and takes at most 40 Newton steps. `IRR` does
   the same on a colon range of 2 through 128 numbers. The first `IRR` value is
-  time 0. A blank cell counts as 0, and text leaves the stored value. `NPV`
+  time 0. A blank cell counts as 0. Text, including a shared string, leaves the
+  stored value. `NPV`
   discounts the following numbers from period 1, so it does not include a
   time-0 payment. A rate that does not settle, or a non-finite result, leaves
   the stored value.
@@ -685,8 +688,18 @@ release yet.
   holiday is not counted twice. The inclusive span must be at most 100000 days,
   and `WORKDAY` moves at most 10000 working days.
   `IF` stays numeric.
-  Shared-string cells and formulas on another sheet keep their stored
-  value, and drawings are copied through. PowerPoint stays an HTML card preview.
+  A shared-string cell on the sheet being recalculated is read as its shared
+  text. An index past the table is blank. A reference `Sheet!A1` or
+  `'My Sheet'!A1` reads one stored cell. The sheet name ignores ASCII case, and
+  a quoted name is at most 31 Unicode scalar values. A doubled apostrophe
+  inside a quoted name is one apostrophe. An unquoted name is the same kind of
+  token as a function name. A formula on the referenced cell is not
+  recalculated: only a stored `<v>` number is used, and a formula cell with no
+  stored number leaves the caller's stored value. The same rule applies to a
+  qualified reference on the sheet being edited. A cross-sheet range, a 3D
+  reference, and another workbook are not read. Other formulas keep their
+  stored value. Drawings are copied through.
+  PowerPoint stays an HTML card preview.
 - **PDF forms:** combo boxes and list boxes accept a listed option label
   from the Form bar. Free text and signatures stay unchanged, and a
   compressed choice field is left as it was.

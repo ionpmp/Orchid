@@ -242,8 +242,24 @@ pub(crate) fn set_sheet_cell(
         .ok_or_else(|| "viewer-sheet-missing-sheet".to_string())?;
     let xml =
         read_entry(&mut archive, &path).ok_or_else(|| "viewer-sheet-unreadable".to_string())?;
+    let shared =
+        shared_strings(&read_entry(&mut archive, "xl/sharedStrings.xml").unwrap_or_default());
+    let mut other_sheets = Vec::new();
+    for (name, sheet_path) in &sheets {
+        if sheet_path == &path {
+            continue;
+        }
+        if let Some(body) = read_entry(&mut archive, sheet_path) {
+            other_sheets.push((name.to_ascii_lowercase(), body));
+        }
+    }
     let xml = replace_cell_xml(&xml, &address, text)?;
-    let xml = recalculate_sheet(&xml);
+    let mut foreign = std::collections::HashMap::new();
+    foreign.insert(sheet_name.to_ascii_lowercase(), stored_sheet(&xml, &shared));
+    for (name, body) in other_sheets {
+        foreign.insert(name, stored_sheet(&body, &shared));
+    }
+    let xml = recalculate_sheet(&xml, &shared, &foreign);
     let mut cursor = Cursor::new(Vec::new());
     {
         let mut out = zip::ZipWriter::new(&mut cursor);
@@ -349,8 +365,12 @@ struct SheetCellRef {
     text_cell: bool,
 }
 
-fn recalculate_sheet(xml: &str) -> String {
-    let cells = sheet_cells(xml);
+fn recalculate_sheet(
+    xml: &str,
+    shared: &[String],
+    foreign: &std::collections::HashMap<String, ForeignSheet>,
+) -> String {
+    let cells = sheet_cells(xml, shared);
     let mut literals = std::collections::HashMap::<String, f64>::new();
     let mut texts = std::collections::HashMap::<String, String>::new();
     let mut formulas = std::collections::HashMap::<String, String>::new();
@@ -374,7 +394,14 @@ fn recalculate_sheet(xml: &str) -> String {
             continue;
         }
         let mut visiting = std::collections::HashSet::new();
-        let Some(value) = eval_formula(formula, &formulas, &literals, &texts, &mut visiting) else {
+        let Some(value) = eval_formula(
+            formula,
+            &formulas,
+            &literals,
+            &texts,
+            foreign,
+            &mut visiting,
+        ) else {
             continue;
         };
         match value {
@@ -412,7 +439,28 @@ fn recalculate_sheet(xml: &str) -> String {
     out
 }
 
-fn sheet_cells(xml: &str) -> Vec<SheetCellRef> {
+fn stored_sheet(xml: &str, shared: &[String]) -> ForeignSheet {
+    let mut literals = std::collections::HashMap::new();
+    let mut texts = std::collections::HashMap::new();
+    for cell in sheet_cells(xml, shared) {
+        if cell.formula.is_some() {
+            if let Some(value) = cell.value {
+                literals.insert(cell.address, value);
+            }
+            continue;
+        }
+        if cell.text_cell {
+            if let Some(text) = cell.text {
+                texts.insert(cell.address, text);
+            }
+        } else if let Some(value) = cell.value {
+            literals.insert(cell.address, value);
+        }
+    }
+    ForeignSheet { literals, texts }
+}
+
+fn sheet_cells(xml: &str, shared: &[String]) -> Vec<SheetCellRef> {
     let bytes = xml.as_bytes();
     let mut cells = Vec::new();
     let mut index = 0usize;
@@ -446,11 +494,21 @@ fn sheet_cells(xml: &str) -> Vec<SheetCellRef> {
                     } else {
                         value_span.and_then(|(start, end)| xml[start..end].parse::<f64>().ok())
                     };
+                    let text = if open.contains("t=\"s\"") {
+                        value_span.and_then(|(start, end)| {
+                            let index = xml[start..end].trim().parse::<usize>().ok()?;
+                            shared.get(index).cloned()
+                        })
+                    } else if text_cell {
+                        inline_text(body)
+                    } else {
+                        None
+                    };
                     cells.push(SheetCellRef {
                         address,
                         formula,
                         value,
-                        text: if text_cell { inline_text(body) } else { None },
+                        text,
                         value_span,
                         insert_at: Some(open_end + close),
                         open_span: (index, open_end),
@@ -1203,6 +1261,7 @@ fn eval_formula(
     formulas: &std::collections::HashMap<String, String>,
     literals: &std::collections::HashMap<String, f64>,
     texts: &std::collections::HashMap<String, String>,
+    foreign: &std::collections::HashMap<String, ForeignSheet>,
     visiting: &mut std::collections::HashSet<String>,
 ) -> Option<CalcValue> {
     let mut parser = CalcParser {
@@ -1213,6 +1272,7 @@ fn eval_formula(
         formulas,
         literals,
         texts,
+        foreign,
         visiting,
     };
     let value = parser.compare(&mut env)?;
@@ -1304,7 +1364,13 @@ struct CalcEnv<'a> {
     formulas: &'a std::collections::HashMap<String, String>,
     literals: &'a std::collections::HashMap<String, f64>,
     texts: &'a std::collections::HashMap<String, String>,
+    foreign: &'a std::collections::HashMap<String, ForeignSheet>,
     visiting: &'a mut std::collections::HashSet<String>,
+}
+
+struct ForeignSheet {
+    literals: std::collections::HashMap<String, f64>,
+    texts: std::collections::HashMap<String, String>,
 }
 
 fn calc_num(value: CalcValue) -> Option<f64> {
@@ -4633,6 +4699,10 @@ impl<'a> CalcParser<'a> {
         {
             return self.number().map(CalcValue::Num);
         }
+        if self.bytes.get(self.index) == Some(&b'\'') {
+            let name = self.quoted_sheet()?;
+            return self.foreign_cell(&name, env);
+        }
         let word = self.word()?;
         self.skip();
         if self.bytes.get(self.index) == Some(&b'(') {
@@ -6544,6 +6614,9 @@ impl<'a> CalcParser<'a> {
                 _ => None,
             };
         }
+        if self.bytes.get(self.index) == Some(&b'!') {
+            return self.foreign_cell(&word, env);
+        }
         self.cell_value(&word, env)
     }
 
@@ -7369,13 +7442,76 @@ impl<'a> CalcParser<'a> {
         }
     }
 
+    fn quoted_sheet(&mut self) -> Option<String> {
+        if self.bytes.get(self.index) != Some(&b'\'') {
+            return None;
+        }
+        self.index += 1;
+        let mut raw = Vec::new();
+        let mut closed = false;
+        while let Some(&byte) = self.bytes.get(self.index) {
+            if byte == b'\'' {
+                if self.bytes.get(self.index + 1) == Some(&b'\'') {
+                    raw.push(b'\'');
+                    self.index += 2;
+                    continue;
+                }
+                self.index += 1;
+                closed = true;
+                break;
+            }
+            raw.push(byte);
+            self.index += 1;
+            if raw.len() > 128 {
+                return None;
+            }
+        }
+        if !closed {
+            return None;
+        }
+        let name = String::from_utf8(raw).ok()?;
+        let count = name.chars().count();
+        if count == 0 || count > 31 {
+            return None;
+        }
+        Some(name)
+    }
+
+    fn foreign_cell(&mut self, sheet: &str, env: &CalcEnv<'_>) -> Option<CalcValue> {
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b'!') {
+            return None;
+        }
+        self.index += 1;
+        let address = self.cell_token()?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b':') {
+            return None;
+        }
+        let book = env.foreign.get(&sheet.to_ascii_lowercase())?;
+        let address = address.to_ascii_uppercase();
+        if let Some(number) = book.literals.get(&address) {
+            return number.is_finite().then_some(CalcValue::Num(*number));
+        }
+        book.texts
+            .get(&address)
+            .map(|text| CalcValue::Text(text.clone()))
+    }
+
     fn cell_value(&self, address: &str, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
         let address = address.to_ascii_uppercase();
         if !env.visiting.insert(address.clone()) {
             return None;
         }
         let value = if let Some(formula) = env.formulas.get(&address) {
-            eval_formula(formula, env.formulas, env.literals, env.texts, env.visiting)
+            eval_formula(
+                formula,
+                env.formulas,
+                env.literals,
+                env.texts,
+                env.foreign,
+                env.visiting,
+            )
         } else if let Some(number) = env.literals.get(&address) {
             Some(CalcValue::Num(*number))
         } else {
@@ -9377,6 +9513,68 @@ mod tests {
             sheet.contains(r#"<f>DATEDIF(43831,44256,&quot;MD&quot;)</f><v>0</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_shared_and_other_sheet() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/><sheet name="Other" sheetId="2" r:id="rId2"/><sheet name="My Sheet" sheetId="3" r:id="rId3"/><sheet name="Bob's" sheetId="4" r:id="rId4"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Target="worksheets/sheet3.xml"/><Relationship Id="rId4" Target="worksheets/sheet4.xml"/></Relationships>"#,
+            ),
+            ("xl/sharedStrings.xml", r#"<sst><si><t>Cat</t></si></sst>"#),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="M1"><f>1+1</f><v>9</v></c><c r="P1"><v>2</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="B2"><f>LEN(A1)</f><v>0</v></c><c r="C2"><f>MATCH(&quot;c*&quot;,A1:A1,0)</f><v>0</v></c><c r="D2"><f>Other!A1</f><v>0</v></c><c r="E2"><f>'My Sheet'!A1</f><v>0</v></c><c r="F2"><f>'Bob''s'!A1</f><v>0</v></c><c r="G2"><f>Other!B1</f><v>0</v></c><c r="H2"><f>Other!C1</f><v>5</v></c><c r="I2"><f>Other!A1:A2</f><v>6</v></c><c r="J2"><f>Missing!A1</f><v>3</v></c><c r="K2"><f>Budgets!M1</f><v>0</v></c><c r="L2"><f>M1</f><v>0</v></c><c r="N2"><f>IRR(A1:P1)</f><v>11</v></c><c r="O2"><f>INDEX(A1:A1,1)</f><v>0</v></c><c r="Q2"><f>AVERAGEA(A1,P1)</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+            (
+                "xl/worksheets/sheet2.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>7</v></c><c r="B1"><f>1+1</f><v>9</v></c><c r="C1"><f>1+1</f></c></row></sheetData></worksheet>"#,
+            ),
+            (
+                "xl/worksheets/sheet3.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>4</v></c></row></sheetData></worksheet>"#,
+            ),
+            (
+                "xl/worksheets/sheet4.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>LEN(A1)</f><v>3</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>MATCH(&quot;c*&quot;,A1:A1,0)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>Other!A1</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>'My Sheet'!A1</f><v>4</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>'Bob''s'!A1</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Other!B1</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Other!C1</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Other!A1:A2</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Missing!A1</f><v>3</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Budgets!M1</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>M1</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>IRR(A1:P1)</f><v>11</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(
+                r#"<c r="O2" t="inlineStr"><f>INDEX(A1:A1,1)</f><is><t>Cat</t></is></c>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>AVERAGEA(A1,P1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        let other = read_entry(&mut archive, "xl/worksheets/sheet2.xml").unwrap();
+        assert!(other.contains(r#"<f>1+1</f><v>9</v>"#), "{other}");
+        assert!(other.contains(r#"<c r="C1"><f>1+1</f></c>"#), "{other}");
     }
 
     #[test]
