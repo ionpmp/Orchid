@@ -102,7 +102,7 @@ release yet.
   `TRUNC`, `ISEVEN`, `ISODD`, `CODE`, `CHAR`, `COUNTA`, `COUNTBLANK`,
   `IFERROR`, `CLEAN`, `PROPER`, `CHOOSE`, `SWITCH`, `XOR`, `TEXTJOIN`,
   `IFS`, `BITAND`, `BITOR`, `BITXOR`, `CEILING`, `FLOOR`, `BITLSHIFT`,
-  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, `EXPONDIST`, `NEGBINOM.DIST`, `NEGBINOMDIST`, `HYPGEOM.DIST`, `HYPGEOMDIST`, `WEIBULL.DIST`, `WEIBULL`, `GAMMA`, `GAMMALN`, `GAMMA.DIST`, `GAMMADIST`, `BINOM.INV`, `CRITBINOM`, `CHISQ.DIST`, `CHISQ.DIST.RT`, `CHIDIST`, `NORM.S.DIST`, `NORMSDIST`, `NORM.DIST`, `NORMDIST`, `ERF`, `ERFC`, `GAUSS`, `PHI`, `LOGNORM.DIST`, `LOGNORMDIST`, `BINOM.DIST.RANGE`, `Z.TEST`, `ZTEST`, `PROB`, `ASINH`, `ACOSH`, `ATANH`, `SEC`, `CSC`, `COT`, `CONCATENATE`, `UNICHAR`, and `UNICODE` on that sheet.
+  `BITRSHIFT`, `MROUND`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMPRODUCT`, `MINIFS`, `MAXIFS`, `SUMIFS`, `AVERAGEIFS`, `SUMSQ`, `STDEV`, `STDEV.S`, `STDEVP`, `STDEV.P`, `VAR`, `VAR.S`, `VARP`, `VAR.P`, `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `COUNTIFS`, `SLOPE`, `INTERCEPT`, `CORREL`, `PEARSON`, `RSQ`, `FORECAST`, `FORECAST.LINEAR`, `STEYX`, `COVARIANCE.P`, `COVAR`, `COVARIANCE.S`, `RANK`, `RANK.EQ`, `RANK.AVG`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE`, `MODE.SNGL`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `STANDARDIZE`, `SKEW`, `SKEW.P`, `KURT`, `TRIMMEAN`, `FISHER`, `FISHERINV`, `SQRTPI`, `COMBINA`, `SUMX2MY2`, `SUMX2PY2`, `SUMXMY2`, `GESTEP`, `DELTA`, `MULTINOMIAL`, `FACTDOUBLE`, `POISSON`, `POISSON.DIST`, `BINOM.DIST`, `BINOMDIST`, `EXPON.DIST`, `EXPONDIST`, `NEGBINOM.DIST`, `NEGBINOMDIST`, `HYPGEOM.DIST`, `HYPGEOMDIST`, `WEIBULL.DIST`, `WEIBULL`, `GAMMA`, `GAMMALN`, `GAMMA.DIST`, `GAMMADIST`, `BINOM.INV`, `CRITBINOM`, `CHISQ.DIST`, `CHISQ.DIST.RT`, `CHIDIST`, `NORM.S.DIST`, `NORMSDIST`, `NORM.DIST`, `NORMDIST`, `ERF`, `ERFC`, `GAUSS`, `PHI`, `LOGNORM.DIST`, `LOGNORMDIST`, `BINOM.DIST.RANGE`, `Z.TEST`, `ZTEST`, `PROB`, `ASINH`, `ACOSH`, `ATANH`, `SEC`, `CSC`, `COT`, `CONCATENATE`, `UNICHAR`, `UNICODE`, and `SERIESSUM` on that sheet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
@@ -519,6 +519,12 @@ release yet.
   code page. `UNICODE` reads the first scalar. An empty text, code 0, a
   surrogate, a value above 1114111, or text where a number is required
   leaves the stored value.
+  `SERIESSUM` takes a value, a first exponent, a step, and one colon range of
+  coefficients. Term i, starting at 0, is that coefficient times the value
+  raised to the first exponent plus i times the step. A blank cell counts as
+  0, so later powers stay in place. A zero base with a zero exponent writes
+  1. Text in the range, a power or term that is not finite, a call that is
+  not a colon range, or text leaves the stored value.
   `IF` stays numeric.
   Shared-string cells and formulas on another sheet keep their stored
   value, and drawings are copied through. PowerPoint stays an HTML card preview.

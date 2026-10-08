@@ -2100,6 +2100,32 @@ fn prob_excel(pairs: &[(f64, f64)], lower: f64, upper: f64) -> Option<f64> {
     }
 }
 
+fn series_sum_excel(x_value: f64, first: f64, step: f64, coefficients: &[f64]) -> Option<f64> {
+    if !x_value.is_finite() || !first.is_finite() || !step.is_finite() {
+        return None;
+    }
+    let mut sum = 0.0;
+    for (index, coefficient) in coefficients.iter().enumerate() {
+        if !coefficient.is_finite() {
+            return None;
+        }
+        let power = first + (index as f64) * step;
+        if !power.is_finite() {
+            return None;
+        }
+        let term = coefficient * x_value.powf(power);
+        if !term.is_finite() {
+            return None;
+        }
+        sum += term;
+    }
+    if sum.is_finite() {
+        Some(sum)
+    } else {
+        None
+    }
+}
+
 fn trig_excel(number: f64, kind: &str) -> Option<f64> {
     if !number.is_finite() {
         return None;
@@ -3682,6 +3708,27 @@ impl<'a> CalcParser<'a> {
                     }
                 }
                 return prob_excel(&pairs, lower, upper).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SERIESSUM") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let first = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let step = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let addresses = self.cell_range()?;
+                self.close_paren()?;
+                let mut coefficients = Vec::new();
+                for address in addresses {
+                    match self.cell_value(&address, env) {
+                        None => coefficients.push(0.0),
+                        Some(CalcValue::Num(value)) if value.is_finite() => {
+                            coefficients.push(value);
+                        }
+                        _ => return None,
+                    }
+                }
+                return series_sum_excel(x_value, first, step, &coefficients).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SIN")
                 || word.eq_ignore_ascii_case("COS")
@@ -9506,12 +9553,59 @@ mod tests {
             sheet.contains(r#"<f>UNICHAR(55296)</f><v>5</v>"#),
             "{sheet}"
         );
+        assert!(sheet.contains(r#"<f>UNICODE("")</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>UNICHAR("ab")</f><v>7</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_series_sum() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>0</v></c><c r="C1"><v>3</v></c><c r="D1"><f>SERIESSUM(2,1,1,A1:C1)</f><v>0</v></c><c r="E1"><f>SERIESSUM(2,1,1,A2:C2)</f><v>0</v></c><c r="F1"><f>SERIESSUM(-2,0.5,1,A1:A1)</f><v>7</v></c><c r="G1"><f>SERIESSUM(0,0,1,A1:A1)</f><v>0</v></c><c r="H1"><f>SERIESSUM(2,-1,1,A1:A1)</f><v>0</v></c><c r="I1"><f>SERIESSUM(2,1,1,A1)</f><v>8</v></c><c r="J1"><f>SERIESSUM("ab",1,1,A1:C1)</f><v>9</v></c><c r="K1"><f>SERIESSUM(2,1,1,D2:F2)</f><v>10</v></c></row><row r="2"><c r="A2"><v>1</v></c><c r="C2"><v>3</v></c><c r="D2"><v>1</v></c><c r="E2" t="inlineStr"><is><t>xy</t></is></c><c r="F2"><v>3</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "B1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
         assert!(
-            sheet.contains(r#"<f>UNICODE("")</f><v>6</v>"#),
+            sheet.contains(r#"<f>SERIESSUM(2,1,1,A1:C1)</f><v>34</v>"#),
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>UNICHAR("ab")</f><v>7</v>"#),
+            sheet.contains(r#"<f>SERIESSUM(2,1,1,A2:C2)</f><v>26</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SERIESSUM(-2,0.5,1,A1:A1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SERIESSUM(0,0,1,A1:A1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SERIESSUM(2,-1,1,A1:A1)</f><v>0.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SERIESSUM(2,1,1,A1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SERIESSUM("ab",1,1,A1:C1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SERIESSUM(2,1,1,D2:F2)</f><v>10</v>"#),
             "{sheet}"
         );
     }
