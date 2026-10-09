@@ -11999,13 +11999,16 @@ fn render_sheets<R: Read + Seek>(
     let shared = read_entry(archive, "xl/sharedStrings.xml")
         .map(|xml| shared_strings(&xml))
         .unwrap_or_default();
+    let formats = read_entry(archive, "xl/styles.xml")
+        .map(|xml| preview_formats(&xml))
+        .unwrap_or_default();
     let sheets = sheet_entries(archive);
     let mut pages = Vec::new();
     for (name, path) in &sheets {
         let Some(xml) = read_entry(archive, path) else {
             continue;
         };
-        let (mut rows, truncated) = parse_sheet(&xml, &shared);
+        let (mut rows, truncated) = parse_sheet(&xml, &shared, &formats);
         apply_highlights(&mut rows, &conditional_rules(&xml));
         apply_notes(&mut rows, &load_sheet_notes(archive, path));
         if rows.is_empty() {
@@ -12471,13 +12474,92 @@ fn apply_highlights(rows: &mut [Vec<SheetCell>], rules: &[CfRule]) {
     }
 }
 
-fn parse_sheet(xml: &str, shared: &[String]) -> (Vec<Vec<SheetCell>>, bool) {
+#[derive(Clone, Copy)]
+enum PreviewFmt {
+    General,
+    Percent,
+    Thousands,
+    Date,
+}
+
+fn code_preview_fmt(code: &str) -> PreviewFmt {
+    match code.trim() {
+        "0%" | "0.00%" => PreviewFmt::Percent,
+        "#,##0" => PreviewFmt::Thousands,
+        "yyyy-mm-dd" => PreviewFmt::Date,
+        _ => PreviewFmt::General,
+    }
+}
+
+fn builtin_preview_fmt(id: u32) -> PreviewFmt {
+    match id {
+        3 => PreviewFmt::Thousands,
+        9 | 10 => PreviewFmt::Percent,
+        14 => PreviewFmt::Date,
+        _ => PreviewFmt::General,
+    }
+}
+
+fn preview_formats(xml: &str) -> Vec<PreviewFmt> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+    let mut custom = std::collections::HashMap::<u32, PreviewFmt>::new();
+    let mut formats = Vec::new();
+    let mut in_xfs = false;
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event) | Event::Empty(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "numFmt" && custom.len() < 64 {
+                    if let Ok(id) = attr(&event, "numFmtId").parse::<u32>() {
+                        custom.insert(id, code_preview_fmt(&attr(&event, "formatCode")));
+                    }
+                } else if name == "cellXfs" {
+                    in_xfs = true;
+                } else if name == "xf" && in_xfs && formats.len() < 64 {
+                    let id = attr(&event, "numFmtId").parse::<u32>().unwrap_or(0);
+                    formats.push(
+                        custom
+                            .get(&id)
+                            .copied()
+                            .unwrap_or_else(|| builtin_preview_fmt(id)),
+                    );
+                }
+            }
+            Ok(Event::End(event)) => {
+                if local_name(event.name().as_ref()) == "cellXfs" {
+                    in_xfs = false;
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    formats
+}
+
+fn style_preview_fmt(style: &str, formats: &[PreviewFmt]) -> PreviewFmt {
+    style
+        .parse::<usize>()
+        .ok()
+        .and_then(|index| formats.get(index).copied())
+        .unwrap_or(PreviewFmt::General)
+}
+
+fn parse_sheet(
+    xml: &str,
+    shared: &[String],
+    formats: &[PreviewFmt],
+) -> (Vec<Vec<SheetCell>>, bool) {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
     let mut rows = Vec::new();
     let mut row = Vec::new();
     let mut kind = String::new();
+    let mut style = String::new();
     let mut cell_ref = String::new();
     let mut value = String::new();
     let mut in_v = false;
@@ -12493,6 +12575,7 @@ fn parse_sheet(xml: &str, shared: &[String]) -> (Vec<Vec<SheetCell>>, bool) {
                 let name = local_name(event.name().as_ref());
                 if name == "c" {
                     kind = attr(&event, "t");
+                    style = attr(&event, "s");
                     cell_ref = attr(&event, "r");
                     value.clear();
                 } else if name == "v" || name == "t" {
@@ -12520,7 +12603,9 @@ fn parse_sheet(xml: &str, shared: &[String]) -> (Vec<Vec<SheetCell>>, bool) {
                     in_v = false;
                     in_t = false;
                 } else if name == "c" {
-                    if let Some(text) = cell_text(&kind, &value, shared) {
+                    if let Some(text) =
+                        cell_text(&kind, &value, shared, style_preview_fmt(&style, formats))
+                    {
                         let col = col_index(&cell_ref);
                         if col >= MAX_COLS {
                             truncated = true;
@@ -12547,7 +12632,58 @@ fn parse_sheet(xml: &str, shared: &[String]) -> (Vec<Vec<SheetCell>>, bool) {
     (rows, truncated)
 }
 
-fn cell_text(kind: &str, value: &str, shared: &[String]) -> Option<String> {
+fn format_thousands(number: f64) -> Option<String> {
+    if !number.is_finite() || number.abs() >= 1e15 {
+        return None;
+    }
+    let rounded = number.round();
+    if (number - rounded).abs() > 1e-9 {
+        return None;
+    }
+    let negative = rounded < 0.0;
+    let digits = format!("{}", rounded.abs() as u64);
+    let mut out = String::new();
+    for (index, ch) in digits.chars().rev().enumerate() {
+        if index > 0 && index.is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    let mut out: String = out.chars().rev().collect();
+    if negative {
+        out.insert(0, '-');
+    }
+    Some(out)
+}
+
+fn format_preview_date(number: f64) -> Option<String> {
+    let (year, month, day) = excel_parts(number.trunc())?;
+    Some(format!("{year:04}-{month:02}-{day:02}"))
+}
+
+fn preview_number(raw: &str, fmt: PreviewFmt) -> String {
+    let Ok(number) = raw.parse::<f64>() else {
+        return raw.to_string();
+    };
+    if !number.is_finite() {
+        return raw.to_string();
+    }
+    match fmt {
+        PreviewFmt::General => raw.to_string(),
+        PreviewFmt::Percent => {
+            let shown = format_calc(number * 100.0);
+            if shown.is_empty() {
+                raw.to_string()
+            } else {
+                format!("{shown}%")
+            }
+        }
+        PreviewFmt::Thousands => format_thousands(number).unwrap_or_else(|| raw.to_string()),
+        PreviewFmt::Date => format_preview_date(number).unwrap_or_else(|| raw.to_string()),
+    }
+}
+
+fn cell_text(kind: &str, value: &str, shared: &[String], fmt: PreviewFmt) -> Option<String> {
     let value = value.trim();
     if value.is_empty() {
         return None;
@@ -12566,6 +12702,9 @@ fn cell_text(kind: &str, value: &str, shared: &[String]) -> Option<String> {
         } else {
             "FALSE".to_string()
         });
+    }
+    if kind.is_empty() {
+        return Some(preview_number(value, fmt));
     }
     Some(value.to_string())
 }
@@ -12980,6 +13119,48 @@ mod tests {
     }
 
     #[test]
+    fn sheet_preview_number_formats() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/styles.xml",
+                r#"<styleSheet><numFmts><numFmt numFmtId="164" formatCode="yyyy-mm-dd"/><numFmt numFmtId="165" formatCode="0.00"/></numFmts><cellXfs><xf numFmtId="9"/><xf numFmtId="3"/><xf numFmtId="14"/><xf numFmtId="164"/><xf numFmtId="165"/><xf numFmtId="10"/></cellXfs></styleSheet>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1" s="0"><v>0.25</v></c><c r="B1" s="1"><v>12345</v></c><c r="C1" s="2"><v>1</v></c><c r="D1" s="3"><v>61</v></c><c r="E1" s="4"><v>7</v></c><c r="F1" s="0" t="inlineStr"><is><t>ab</t></is></c><c r="G1" s="1"><v>12.5</v></c><c r="H1" s="5"><v>0.2</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let cell = |address: &str| {
+            book.sheets[0]
+                .rows
+                .iter()
+                .flatten()
+                .find(|cell| cell.address == address)
+                .unwrap_or_else(|| panic!("missing {address}"))
+        };
+        assert_eq!(cell("A1").text, "25%");
+        assert_eq!(cell("B1").text, "12,345");
+        assert_eq!(cell("C1").text, "1900-01-01");
+        assert_eq!(cell("D1").text, "1900-03-01");
+        assert_eq!(cell("E1").text, "7");
+        assert_eq!(cell("F1").text, "ab");
+        assert_eq!(cell("G1").text, "12.5");
+        assert_eq!(cell("H1").text, "20%");
+    }
+
+    #[test]
     fn set_sheet_cell_rewrites_a_value_and_leaves_a_formula_and_drawing() {
         let drawing = "<drawing>keep-me</drawing>";
         let bytes = zip_bytes(&[
@@ -13022,7 +13203,7 @@ mod tests {
         };
         let mut renamed_zip = ZipArchive::new(Cursor::new(renamed)).unwrap();
         let sheet = read_entry(&mut renamed_zip, "xl/worksheets/sheet1.xml").unwrap();
-        let (rows, _) = parse_sheet(&sheet, &[]);
+        let (rows, _) = parse_sheet(&sheet, &[], &[]);
         assert_eq!(rows[0][0].text, "Lily & Rose");
         assert_eq!(book.sheets[0].rows[0][0].text, "Lily & Rose");
         assert_eq!(book.sheets[0].rows[0][1].text, "42");

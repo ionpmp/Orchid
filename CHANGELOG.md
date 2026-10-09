@@ -100,7 +100,18 @@ release yet.
   use it. A selected cell can show a legacy comment from the worksheet
   comments part. At most 32 comments are read, each note is at most 256
   characters, and the author is ignored. Threaded comments are not read.
-  The note is not editable and is not written back. Enter or Save writes
+  The note is not editable and is not written back. The preview can show a
+  short list of number formats without changing the stored number. Percent
+  is built-in format 9 or 10, or a custom format that is exactly `0%` or
+  `0.00%`: the number times 100, trimmed the same way other calculated
+  numbers are trimmed, then `%`. Thousands is built-in format 3 or exactly
+  `#,##0`, and only when the value is a whole number smaller than 1e15 in
+  absolute value. A date is built-in format 14 or exactly `yyyy-mm-dd`,
+  shown as `yyyy-mm-dd` from the 1900 serial, including the fake 29 February
+  1900. A time fraction is dropped. A 1904 workbook is not shifted. Any
+  other format, and any cell that is not a number, stays the stored text.
+  At most 64 cell formats are read. `TEXT` is still the formula that writes
+  a formatted value. Enter or Save writes
   the current cell back into the workbook. A formula
   cell is left unchanged. A value edit recalculates arithmetic, comparisons,
   cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `IF`, `ROUND`,
