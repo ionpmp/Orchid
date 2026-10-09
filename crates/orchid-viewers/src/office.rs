@@ -7282,24 +7282,20 @@ impl<'a> CalcParser<'a> {
             }
             if word.eq_ignore_ascii_case("IF") {
                 let cond = calc_num(self.compare(env)?)?;
-                self.skip();
-                if self.bytes.get(self.index) != Some(&b',') {
+                if !cond.is_finite() {
                     return None;
                 }
-                self.index += 1;
-                let yes = calc_num(self.compare(env)?)?;
-                self.skip();
-                if self.bytes.get(self.index) != Some(&b',') {
-                    return None;
-                }
-                self.index += 1;
-                let no = calc_num(self.compare(env)?)?;
-                self.skip();
-                if self.bytes.get(self.index) != Some(&b')') {
-                    return None;
-                }
-                self.index += 1;
-                return Some(CalcValue::Num(if cond != 0.0 { yes } else { no }));
+                self.require_comma()?;
+                let yes = self.compare(env)?;
+                self.require_comma()?;
+                let no = self.compare(env)?;
+                self.close_paren()?;
+                let chosen = if cond != 0.0 { yes } else { no };
+                return match chosen {
+                    CalcValue::Num(number) if number.is_finite() => Some(CalcValue::Num(number)),
+                    CalcValue::Num(_) => None,
+                    CalcValue::Text(text) => limited_text(text),
+                };
             }
             if word.eq_ignore_ascii_case("IFERROR") {
                 let (args, end) = split_top_args(self.bytes, self.index)?;
@@ -17375,6 +17371,53 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>IFS("a",1)</f><v>6</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_if_text() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>IF(1,&quot;cat&quot;,2)</f><v>0</v></c><c r="C1"><f>IF(0,&quot;cat&quot;,9)</f><v>0</v></c><c r="D1"><f>IFS(1,&quot;pear&quot;,0,2)</f><v>0</v></c><c r="E1"><f>IF(1,SQRT(-1),&quot;no&quot;)</f><v>4</v></c><c r="F1"><f>IF(0,&quot;no&quot;,SQRT(-1))</f><v>5</v></c><c r="G1"><f>IFS(0,&quot;no&quot;,1,&quot;yes&quot;)</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(
+                r#"<c r="B1" t="inlineStr"><f>IF(1,&quot;cat&quot;,2)</f><is><t>cat</t></is></c>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>IF(0,&quot;cat&quot;,9)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="D1" t="inlineStr"><f>IFS(1,&quot;pear&quot;,0,2)</f><is><t>pear</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>IF(1,SQRT(-1),&quot;no&quot;)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>IF(0,&quot;no&quot;,SQRT(-1))</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="G1" t="inlineStr"><f>IFS(0,&quot;no&quot;,1,&quot;yes&quot;)</f><is><t>yes</t></is></c>"#),
+            "{sheet}"
+        );
     }
 
     #[test]

@@ -767,7 +767,12 @@ release yet.
   `WORKDAY` shift by 1461, so the fictional 29 February 1900 does not move
   those weekdays. A date before 1904-01-01 leaves the stored value. A holiday
   before that day is skipped. Without the flag, the 1900 system is unchanged.
-  `IF` stays numeric.
+  `IF` can return one number or one text value. Both branches are calculated,
+  and a failed branch leaves the stored value even when it is not chosen.
+  The chosen text is written as an inline string. More than 32,767 scalar
+  values leaves the stored value. `IFS` returns the text of the first true
+  pair and does not calculate later pairs. A text condition leaves the stored
+  value.
   A shared-string cell on the sheet being recalculated is read as its shared
   text. An index past the table is blank.   A reference `Sheet!A1` or
   `'My Sheet'!A1` reads one cell from a single pass. Before the edited sheet is
