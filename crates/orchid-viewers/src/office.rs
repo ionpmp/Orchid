@@ -6685,6 +6685,41 @@ fn header_label(value: Option<&CalcValue>) -> Option<String> {
     }
 }
 
+struct IfHits {
+    numbers: Vec<f64>,
+    count: f64,
+}
+
+fn criterion_is_wildcard(criteria: &CalcValue) -> bool {
+    let CalcValue::Text(text) = criteria else {
+        return false;
+    };
+    let text = text.trim_matches(' ');
+    if let Some((op, rest)) = criterion_op(text) {
+        if value_excel(rest).is_some() || !matches!(op, CriterionOp::Eq | CriterionOp::Ne) {
+            return false;
+        }
+        return rest.chars().any(|ch| matches!(ch, '*' | '?' | '~'));
+    }
+    text.chars().any(|ch| matches!(ch, '*' | '?' | '~'))
+}
+
+fn wildcard_holds(cell: Option<&CalcValue>, pattern: &str, want_match: bool) -> Option<bool> {
+    if pattern.chars().count() > 64 {
+        return None;
+    }
+    match cell {
+        Some(CalcValue::Text(value)) => {
+            if value.chars().count() > 256 {
+                return None;
+            }
+            let same = text_pattern(pattern, value);
+            Some(if want_match { same } else { !same })
+        }
+        _ => Some(!want_match),
+    }
+}
+
 fn criterion_holds(cell: Option<&CalcValue>, criteria: &CalcValue) -> Option<bool> {
     match criteria {
         CalcValue::Num(target) if target.is_finite() => {
@@ -6695,9 +6730,7 @@ fn criterion_holds(cell: Option<&CalcValue>, criteria: &CalcValue) -> Option<boo
         }
         CalcValue::Num(_) => None,
         CalcValue::Text(text) => {
-            if text.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
-                return None;
-            }
+            let text = text.trim_matches(' ');
             if let Some((op, rest)) = criterion_op(text) {
                 if let Some(target) = value_excel(rest) {
                     let Some(CalcValue::Num(number)) = cell else {
@@ -6708,6 +6741,13 @@ fn criterion_holds(cell: Option<&CalcValue>, criteria: &CalcValue) -> Option<boo
                 if !matches!(op, CriterionOp::Eq | CriterionOp::Ne) {
                     return None;
                 }
+                if rest.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
+                    return wildcard_holds(
+                        cell,
+                        rest.trim_matches(' '),
+                        matches!(op, CriterionOp::Eq),
+                    );
+                }
                 let rest = rest.trim_matches(' ');
                 let same = matches!(cell, Some(CalcValue::Text(value)) if value.eq_ignore_ascii_case(rest));
                 return Some(if matches!(op, CriterionOp::Eq) {
@@ -6716,8 +6756,10 @@ fn criterion_holds(cell: Option<&CalcValue>, criteria: &CalcValue) -> Option<boo
                     !same
                 });
             }
-            let want = text.trim_matches(' ');
-            Some(matches!(cell, Some(CalcValue::Text(value)) if value.eq_ignore_ascii_case(want)))
+            if text.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
+                return wildcard_holds(cell, text, true);
+            }
+            Some(matches!(cell, Some(CalcValue::Text(value)) if value.eq_ignore_ascii_case(text)))
         }
     }
 }
@@ -7823,15 +7865,15 @@ impl<'a> CalcParser<'a> {
                 return self.sum_if(env).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("COUNTIF") || word.eq_ignore_ascii_case("COUNTIFS") {
-                let matched = self.matched_numbers(env)?;
-                return Some(CalcValue::Num(matched.len() as f64));
+                let matched = self.if_hits(env)?;
+                return Some(CalcValue::Num(matched.count));
             }
             if word.eq_ignore_ascii_case("AVERAGEIF") {
-                let matched = self.matched_numbers(env)?;
-                if matched.is_empty() {
+                let matched = self.if_hits(env)?;
+                if matched.numbers.is_empty() {
                     return None;
                 }
-                let average = matched.iter().sum::<f64>() / matched.len() as f64;
+                let average = matched.numbers.iter().sum::<f64>() / matched.numbers.len() as f64;
                 if !average.is_finite() {
                     return None;
                 }
@@ -9851,11 +9893,6 @@ impl<'a> CalcParser<'a> {
                 continue;
             }
             let value = value?;
-            if let CalcValue::Text(text) = &value {
-                if text.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
-                    return None;
-                }
-            }
             let Some(db_col) = headers
                 .iter()
                 .position(|item| item.as_deref() == Some(name.as_str()))
@@ -9917,7 +9954,7 @@ impl<'a> CalcParser<'a> {
     }
 
     fn sum_if(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
-        let total: f64 = self.matched_numbers(env)?.iter().sum();
+        let total: f64 = self.if_hits(env)?.numbers.iter().sum();
         if total.is_finite() {
             Some(total)
         } else {
@@ -9925,27 +9962,46 @@ impl<'a> CalcParser<'a> {
         }
     }
 
-    fn matched_numbers(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
+    fn if_hits(&mut self, env: &mut CalcEnv<'_>) -> Option<IfHits> {
         self.skip();
         let cells = self.cell_range(env)?;
         self.require_comma()?;
         let criteria = self.compare(env)?;
-        let (op, target) = compile_criterion(&criteria)?;
         self.skip();
         if self.bytes.get(self.index) != Some(&b')') {
             return None;
         }
         self.index += 1;
-        let mut matched = Vec::new();
+        let numeric = compile_criterion(&criteria);
+        let wildcard = numeric.is_none() && criterion_is_wildcard(&criteria);
+        if numeric.is_none() && !wildcard {
+            return None;
+        }
+        let mut numbers = Vec::new();
+        let mut count = 0.0;
         for address in cells {
-            let Some(CalcValue::Num(number)) = self.cell_value(&address, env) else {
-                continue;
+            let value = self.cell_value(&address, env);
+            let holds = if let Some((op, target)) = numeric {
+                match &value {
+                    Some(CalcValue::Num(number)) if number.is_finite() => {
+                        number_matches(*number, op, target)
+                    }
+                    _ => false,
+                }
+            } else {
+                criterion_holds(value.as_ref(), &criteria)?
             };
-            if number.is_finite() && number_matches(number, op, target) {
-                matched.push(number);
+            if !holds {
+                continue;
+            }
+            count += 1.0;
+            if let Some(CalcValue::Num(number)) = value {
+                if number.is_finite() {
+                    numbers.push(number);
+                }
             }
         }
-        Some(matched)
+        Some(IfHits { numbers, count })
     }
 
     fn take_table(&mut self, env: &CalcEnv<'_>) -> Option<DefinedRef> {
@@ -10680,7 +10736,11 @@ impl<'a> CalcParser<'a> {
         }
         self.require_comma()?;
         let criteria = self.compare(env)?;
-        let (op, target) = compile_criterion(&criteria)?;
+        let numeric = compile_criterion(&criteria);
+        let wildcard = numeric.is_none() && criterion_is_wildcard(&criteria);
+        if numeric.is_none() && !wildcard {
+            return None;
+        }
         self.skip();
         if self.bytes.get(self.index) != Some(&b')') {
             return None;
@@ -10688,11 +10748,18 @@ impl<'a> CalcParser<'a> {
         self.index += 1;
         let mut matched = Vec::new();
         for (value_address, criteria_address) in values.iter().zip(criteria_cells) {
-            let Some(CalcValue::Num(criterion_number)) = self.cell_value(&criteria_address, env)
-            else {
-                continue;
+            let criterion_cell = self.cell_value(&criteria_address, env);
+            let holds = if let Some((op, target)) = numeric {
+                match &criterion_cell {
+                    Some(CalcValue::Num(number)) if number.is_finite() => {
+                        number_matches(*number, op, target)
+                    }
+                    _ => false,
+                }
+            } else {
+                criterion_holds(criterion_cell.as_ref(), &criteria)?
             };
-            if !criterion_number.is_finite() || !number_matches(criterion_number, op, target) {
+            if !holds {
                 continue;
             }
             let Some(CalcValue::Num(number)) = self.cell_value(value_address, env) else {
@@ -13577,6 +13644,73 @@ mod tests {
     }
 
     #[test]
+    fn set_sheet_cell_wildcards() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>cat</t></is></c><c r="B1"><v>10</v></c><c r="C1"><f>COUNTIF(A1:A3,&quot;c*&quot;)</f><v>0</v></c><c r="D1"><f>SUMIF(A1:A3,&quot;c*&quot;)</f><v>1</v></c><c r="E1"><f>AVERAGEIF(A1:A3,&quot;c*&quot;)</f><v>4</v></c><c r="F1"><f>SUMIFS(B1:B3,A1:A3,&quot;c*&quot;)</f><v>0</v></c><c r="G1"><f>COUNTIF(A4:A4,&quot;c~*&quot;)</f><v>5</v></c><c r="H1"><f>COUNTIF(A4:A4,&quot;c~**&quot;)</f><v>0</v></c><c r="I1"><f>COUNTIF(A1:A3,&quot;&lt;&gt;d*&quot;)</f><v>0</v></c><c r="J1"><f>COUNTIF(A1:A3,&quot;&gt;apple&quot;)</f><v>6</v></c><c r="K1"><f>SUMIF(A1:A3,&quot;ab&quot;)</f><v>7</v></c><c r="L1"><f>SUMIFS(B1:B3,A1:A3,&quot;c*&quot;,B1:B3,&quot;&gt;0&quot;)</f><v>8</v></c><c r="M1"><f>COUNTIF(A1:A3,&quot;C*&quot;)</f><v>0</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>dog</t></is></c><c r="B2"><v>20</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>car</t></is></c><c r="B3"><v>30</v></c></row><row r="4"><c r="A4" t="inlineStr"><is><t>c*at</t></is></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>COUNTIF(A1:A3,&quot;c*&quot;)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUMIF(A1:A3,&quot;c*&quot;)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>AVERAGEIF(A1:A3,&quot;c*&quot;)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUMIFS(B1:B3,A1:A3,&quot;c*&quot;)</f><v>40</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTIF(A4:A4,&quot;c~*&quot;)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTIF(A4:A4,&quot;c~**&quot;)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTIF(A1:A3,&quot;&lt;&gt;d*&quot;)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTIF(A1:A3,&quot;&gt;apple&quot;)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUMIF(A1:A3,&quot;ab&quot;)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>SUMIFS(B1:B3,A1:A3,&quot;c*&quot;,B1:B3,&quot;&gt;0&quot;)</f><v>8</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTIF(A1:A3,&quot;C*&quot;)</f><v>2</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
     fn set_sheet_cell_growth() {
         let bytes = zip_bytes(&[
             (
@@ -15012,7 +15146,7 @@ mod tests {
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>DSUM(A1:C4,&quot;Price&quot;,I1:I2)</f><v>9</v>"#),
+            sheet.contains(r#"<f>DSUM(A1:C4,&quot;Price&quot;,I1:I2)</f><v>3</v>"#),
             "{sheet}"
         );
         assert!(

@@ -203,23 +203,34 @@ release yet.
   value. `SUMIF` takes one cell range and a criterion. The criterion is a
   number, or text that starts with `=`, `<>`, `>=`, `<=`, `>`, or `<` and
   then a number. Numbers match within 1e-9. Only stored numbers are added.
-  No match writes 0. Other text, a third argument, or a call that does not
-  start with a range leaves the stored value. `COUNTIF` uses that same
-  range and criterion and writes how many stored numbers match. No match
-  writes 0. `AVERAGEIF` uses that same range and criterion and writes the
-  average. No match leaves the stored value. `SUMPRODUCT` multiplies
+  No match writes 0. Other text without `*`, `?`, or `~`, a third argument,
+  or a call that does not start with a range leaves the stored value. A
+  criterion containing `*`, `?`, or `~` matches text. The match ignores
+  ASCII case. `~` escapes the next character. `*` and `?` count Unicode
+  scalar values. A pattern longer than 64 scalar values, or a cell longer
+  than 256, leaves the stored value. A wildcard does not match a number.
+  `SUMIF` still adds only numbers, so that criterion writes 0. `COUNTIF`
+  counts the text cells that match. `AVERAGEIF` with no matching number
+  leaves the stored value. `=c*` and `<>c*` use the same pattern. `>apple`
+  still leaves the stored value. `SUMIFS`, `AVERAGEIFS`, `MINIFS`, and
+  `MAXIFS` accept that same one wildcard on their criteria range and still
+  read numbers from the value range. There is no second criteria pair.
+  `COUNTIF` uses that same range and criterion and writes how many stored
+  numbers match. A wildcard counts text cells instead. No match writes 0.
+  `AVERAGEIF` uses that same range and criterion and writes the average.
+  No match leaves the stored value. `SUMPRODUCT` multiplies
   equal-sized cell ranges and adds the products. One range is a sum. A
   blank cell, a text cell, or a shared-string cell counts as 0. Up to 8
   ranges are read. A different size, a ninth range, or an argument that is
   not a range leaves the stored value. `MINIFS` and `MAXIFS` take a value
   range, one criteria range of the same size, and one criterion of the same
   kind. Only stored numbers are considered. No match writes 0. A different
-  size, other text, or a second criterion leaves the stored value.
-  `SUMIFS` adds those same matching numbers. No match writes 0. A different
-  size, other text, or a second criterion leaves the stored value.
-  `AVERAGEIFS` writes the average of those same matching numbers. No match
-  leaves the stored value. A different size, other text, or a second
-  criterion leaves the stored value.
+  size, other text without a wildcard, or a second criterion leaves the stored
+  value. `SUMIFS` adds those same matching numbers. No match writes 0. A
+  different size, other text without a wildcard, or a second criterion leaves
+  the stored value. `AVERAGEIFS` writes the average of those same matching
+  numbers. No match leaves the stored value. A different size, other text
+  without a wildcard, or a second criterion leaves the stored value.
   `SUMSQ` adds the squares of the numbers `SUM` would read. Text inside a
   range is skipped. An empty call writes 0. Other text, or a result that is
   not finite, leaves the stored value.
@@ -250,9 +261,9 @@ release yet.
   An empty call, a zero, a negative, other text, or a result that is not
   finite leaves the stored value. Text inside a range is skipped.
   `COUNTIFS` counts stored numbers in one range with one criterion, the
-  same way `COUNTIF` does. No match writes 0. Other text, a second
-  criterion, or a call that does not start with a range leaves the stored
-  value.
+  same way `COUNTIF` does, including a wildcard. No match writes 0. Other
+  text without a wildcard, a second criterion, or a call that does not
+  start with a range leaves the stored value.
   `SLOPE` takes a y range and an x range of the same size. A pair is used
   when both cells hold finite stored numbers. Text, blanks, and shared
   strings are skipped. Fewer than two pairs, a zero spread in x, a different
@@ -840,9 +851,13 @@ release yet.
   header is blank, matches every row. A number matches that number. Text is an
   exact ASCII case-insensitive match, or a numeric comparison when it begins
   with `=`, `<>`, `<`, `>`, `<=`, or `>=`. A numeric comparison matches only
-  numbers. `=` and `<>` with text that is not a number compare text. A
-  criterion that contains `*`, `?`, or `~`, a text ordering such as `>apple`,
-  or more than one criteria row leaves the stored value. `DSUM` of no numbers
+  numbers. `=` and `<>` with text that is not a number compare text. A text
+  criterion may contain `*`, `?`, and `~`. `*` and `?` match text, ignoring
+  ASCII case, and count Unicode scalar values. `~` escapes the next
+  character. A pattern longer than 64 scalar values, or a cell longer than
+  256, leaves the stored value. A wildcard does not match a number. `=` and
+  `<>` may carry the same pattern. A text ordering such as `>apple`, or more
+  than one criteria row, leaves the stored value. `DSUM` of no numbers
   is 0. `DAVERAGE`, `DMIN`, and `DMAX` with no numbers leave the stored value.
   Text in the field column is skipped by the numeric functions and counted by
   `DCOUNTA`. `FREQUENCY`, `LINEST`,
