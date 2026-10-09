@@ -440,6 +440,7 @@ fn try_spill(formula: &str, env: &mut CalcEnv<'_>) -> Option<Spill> {
             | "TAKE"
             | "DROP"
             | "CHOOSECOLS"
+            | "WHATIF"
     ) {
         return None;
     }
@@ -457,6 +458,7 @@ fn try_spill(formula: &str, env: &mut CalcEnv<'_>) -> Option<Spill> {
         "TAKE" => parser.take_spill(env)?,
         "DROP" => parser.drop_spill(env)?,
         "CHOOSECOLS" => parser.choosecols_spill(env)?,
+        "WHATIF" => parser.whatif_spill(env)?,
         _ => return None,
     };
     parser.skip();
@@ -11065,6 +11067,60 @@ impl<'a> CalcParser<'a> {
         })
     }
 
+    fn whatif_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        self.skip();
+        let formula_cell = self.cell_token()?.to_ascii_uppercase();
+        self.require_comma()?;
+        let input_cell = self.cell_token()?.to_ascii_uppercase();
+        if formula_cell == input_cell {
+            return None;
+        }
+        self.require_comma()?;
+        let (cells, rows, cols) = self.cell_block(env)?;
+        self.close_paren()?;
+        if cols != 1 || rows == 0 || rows > 16 || cells.len() != rows as usize {
+            return None;
+        }
+        let formula = env.formulas.get(&formula_cell)?.clone();
+        let mut values = Vec::with_capacity(cells.len());
+        for address in cells {
+            let number = match self.cell_value(&address, env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => number,
+                _ => return None,
+            };
+            let mut formulas = env.formulas.clone();
+            formulas.remove(&input_cell);
+            let mut literals = env.literals.clone();
+            literals.insert(input_cell.clone(), number);
+            let mut texts = env.texts.clone();
+            texts.remove(&input_cell);
+            let mut visiting = env.visiting.clone();
+            let value = eval_formula(
+                &formula,
+                &formulas,
+                &literals,
+                &texts,
+                env.foreign,
+                env.names,
+                env.sheet_order,
+                env.sheet,
+                env.date1904,
+                env.previous,
+                false,
+                &mut visiting,
+            )?;
+            match value {
+                CalcValue::Num(number) if number.is_finite() => values.push(number),
+                _ => return None,
+            }
+        }
+        Some(Spill {
+            values,
+            columns: 1,
+            all_or_nothing: true,
+        })
+    }
+
     fn choosecols_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
         let (values, rows, cols) = self.block_numbers(env)?;
         self.require_comma()?;
@@ -14291,6 +14347,53 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>COUNTIF(A1:A3,&quot;C*&quot;)</f><v>2</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_whatif() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>B1*2</f><v>0</v></c><c r="B1"><v>1</v></c><c r="C1"><v>3</v></c><c r="D1"><f>WHATIF(A1,B1,C1:C3)</f><v>0</v></c><c r="E1"><f>WHATIF(A1,B1,C1:C3)+1</f><v>9</v></c><c r="F1"><f>WHATIF(A1,A1,C1)</f><v>8</v></c><c r="G1"><f>WHATIF(A1,B1,G2:G3)</f><v>7</v></c><c r="H1"><f>WHATIF(H1,B1,C1)</f><v>4</v></c><c r="I1"><f>T(&quot;ab&quot;)</f><v>0</v></c><c r="J1"><f>WHATIF(I1,B1,C1)</f><v>6</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="C2"><v>4</v></c><c r="D2"><v>0</v></c><c r="G2"><v>1</v></c></row><row r="3"><c r="C3"><v>5</v></c><c r="D3"><v>0</v></c><c r="G3" t="inlineStr"><is><t>x</t></is></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>WHATIF(A1,B1,C1:C3)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="D2"><v>8</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="D3"><v>10</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>WHATIF(A1,B1,C1:C3)+1</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WHATIF(A1,A1,C1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WHATIF(A1,B1,G2:G3)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WHATIF(H1,B1,C1)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WHATIF(I1,B1,C1)</f><v>6</v>"#),
             "{sheet}"
         );
     }
