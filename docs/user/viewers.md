@@ -38,8 +38,7 @@ does not expand a range. `SUBTOTAL` takes a function number from 1 through
 `VARP`. Each range is at most 1024 cells and the call stops at 4096 cells.
 A blank is skipped. Text is skipped by the numeric functions and counted by
 `COUNTA`. A cell on the sheet being edited whose formula is `SUBTOTAL` is
-skipped. Numbers 101 through 111 leave the stored value, because hidden
-rows are not read. An empty `SUM`, `PRODUCT`, `COUNT`, or `COUNTA` writes
+skipped. Numbers 101 through 111 are those same functions and skip hidden rows. A row is hidden when its `hidden` attribute is 1 or `true`, or when a single autofilter column does not match it. The header row stays. The filter has at most 8 exact values, ignores ASCII case, and covers at most 400 rows. A second column, a custom filter, or a wildcard is ignored. The preview omits hidden rows. Nothing is written back. An empty `SUM`, `PRODUCT`, `COUNT`, or `COUNTA` writes
 0. `TEXTJOIN` takes a delimiter, a number, and the same text
 arguments as `CONCAT`, including a cell range. A nonzero number skips
 empty text. A missing cell inside a range is empty text. A shared-string

@@ -746,6 +746,7 @@ fn whatif_number(env: &mut CalcEnv<'_>, formula: &str, pairs: &[(&str, f64)]) ->
         env.previous,
         false,
         &mut visiting,
+        env.hidden_rows,
     )? {
         CalcValue::Num(number) if number.is_finite() => Some(number),
         _ => None,
@@ -847,6 +848,7 @@ fn recalculate_sheet(
     iteration: Option<(u32, f64)>,
 ) -> String {
     let cells = sheet_cells(xml, shared);
+    let hidden = sheet_hidden_rows(xml, &cells);
     let mut literals = std::collections::HashMap::<String, f64>::new();
     let mut texts = std::collections::HashMap::<String, String>::new();
     let mut formulas = std::collections::HashMap::<String, String>::new();
@@ -904,6 +906,7 @@ fn recalculate_sheet(
                     visiting: &mut visiting,
                     let_names: std::collections::HashMap::new(),
                     hide_book_names: false,
+                    hidden_rows: &hidden,
                 };
                 match text_spill_call(formula, &mut spill_env) {
                     TextSpill::Invalid => continue,
@@ -971,6 +974,7 @@ fn recalculate_sheet(
                 &previous,
                 iterate,
                 &mut visiting,
+                &hidden,
             ) else {
                 continue;
             };
@@ -1078,6 +1082,7 @@ fn pass_sheet_once(
     date1904: bool,
 ) -> ForeignSheet {
     let cells = sheet_cells(xml, shared);
+    let hidden = sheet_hidden_rows(xml, &cells);
     let mut book = stored_sheet(xml, shared);
     let formulas = std::collections::HashMap::new();
     let literals = book.literals.clone();
@@ -1109,6 +1114,7 @@ fn pass_sheet_once(
             &previous,
             false,
             &mut visiting,
+            &hidden,
         ) else {
             continue;
         };
@@ -2326,6 +2332,7 @@ fn eval_formula(
     previous: &std::collections::HashMap<String, f64>,
     iterate: bool,
     visiting: &mut std::collections::HashSet<String>,
+    hidden_rows: &std::collections::HashSet<u32>,
 ) -> Option<CalcValue> {
     let mut parser = CalcParser {
         bytes: formula.as_bytes(),
@@ -2345,6 +2352,7 @@ fn eval_formula(
         visiting,
         let_names: std::collections::HashMap::new(),
         hide_book_names: false,
+        hidden_rows,
     };
     let value = parser.compare(&mut env)?;
     parser.skip();
@@ -2446,6 +2454,7 @@ struct CalcEnv<'a> {
     visiting: &'a mut std::collections::HashSet<String>,
     let_names: std::collections::HashMap<String, CalcValue>,
     hide_book_names: bool,
+    hidden_rows: &'a std::collections::HashSet<u32>,
 }
 
 #[derive(Clone)]
@@ -3958,6 +3967,7 @@ fn eval_name_formula(formula: &str, env: &mut CalcEnv<'_>) -> Option<CalcValue> 
         env.previous,
         env.iterate,
         env.visiting,
+        env.hidden_rows,
     )
 }
 
@@ -10020,10 +10030,14 @@ impl<'a> CalcParser<'a> {
             return None;
         }
         let kind = kind.trunc();
-        if !(1.0..=11.0).contains(&kind) {
+        let skip_hidden = if (1.0..=11.0).contains(&kind) {
+            false
+        } else if (101.0..=111.0).contains(&kind) {
+            true
+        } else {
             return None;
-        }
-        let kind = kind as i32;
+        };
+        let kind = if skip_hidden { kind - 100.0 } else { kind } as i32;
         self.require_comma()?;
         let mut numbers = Vec::new();
         let mut counted = 0.0;
@@ -10034,7 +10048,7 @@ impl<'a> CalcParser<'a> {
             if args > 16 {
                 return None;
             }
-            self.subtotal_arg(&mut numbers, &mut counted, &mut seen, env)?;
+            self.subtotal_arg(&mut numbers, &mut counted, &mut seen, skip_hidden, env)?;
             self.skip();
             match self.bytes.get(self.index).copied() {
                 Some(b',') => self.index += 1,
@@ -10076,13 +10090,14 @@ impl<'a> CalcParser<'a> {
         numbers: &mut Vec<f64>,
         counted: &mut f64,
         seen: &mut usize,
+        skip_hidden: bool,
         env: &mut CalcEnv<'_>,
     ) -> Option<()> {
         let saved = self.index;
         if let Some((cells, rows, cols)) = self.cell_block(env) {
             self.skip();
             if matches!(self.bytes.get(self.index).copied(), Some(b',') | Some(b')')) {
-                self.subtotal_cells(&cells, rows, cols, numbers, counted, seen, env)?;
+                self.subtotal_cells(&cells, rows, cols, numbers, counted, seen, skip_hidden, env)?;
                 return Some(());
             }
         }
@@ -10091,7 +10106,7 @@ impl<'a> CalcParser<'a> {
         if let Some(address) = self.cell_token() {
             self.skip();
             if matches!(self.bytes.get(self.index).copied(), Some(b',') | Some(b')')) {
-                self.subtotal_cells(&[address], 1, 1, numbers, counted, seen, env)?;
+                self.subtotal_cells(&[address], 1, 1, numbers, counted, seen, skip_hidden, env)?;
                 return Some(());
             }
         }
@@ -10113,6 +10128,7 @@ impl<'a> CalcParser<'a> {
         numbers: &mut Vec<f64>,
         counted: &mut f64,
         seen: &mut usize,
+        skip_hidden: bool,
         env: &mut CalcEnv<'_>,
     ) -> Option<()> {
         if rows == 0
@@ -10132,6 +10148,11 @@ impl<'a> CalcParser<'a> {
                 .formulas
                 .get(&address)
                 .is_some_and(|formula| is_subtotal_formula(formula))
+            {
+                continue;
+            }
+            if skip_hidden
+                && split_address(&address).is_some_and(|(_, row)| env.hidden_rows.contains(&row))
             {
                 continue;
             }
@@ -12792,6 +12813,7 @@ impl<'a> CalcParser<'a> {
                 env.previous,
                 env.iterate,
                 env.visiting,
+                env.hidden_rows,
             )
         } else if let Some(number) = env.literals.get(&address) {
             Some(CalcValue::Num(*number))
@@ -13123,6 +13145,10 @@ fn render_sheets<R: Read + Seek>(
             continue;
         };
         let (mut rows, truncated) = parse_sheet(&xml, &shared, &formats);
+        drop_hidden_rows(
+            &mut rows,
+            &sheet_hidden_rows(&xml, &sheet_cells(&xml, &shared)),
+        );
         apply_highlights(&mut rows, &conditional_rules(&xml));
         apply_notes(&mut rows, &load_sheet_notes(archive, path));
         apply_sheet_layout(&mut rows, &xml);
@@ -13816,6 +13842,186 @@ fn style_preview_fmt(style: &str, formats: &[PreviewFmt]) -> PreviewFmt {
         .unwrap_or(PreviewFmt::General)
 }
 
+struct AutoFilter {
+    start_row: u32,
+    end_row: u32,
+    column: u32,
+    values: Vec<String>,
+}
+
+fn sheet_hidden_rows(xml: &str, cells: &[SheetCellRef]) -> std::collections::HashSet<u32> {
+    let mut hidden = explicit_hidden_rows(xml);
+    if let Some(filter) = auto_filter(xml) {
+        let mut texts = std::collections::HashMap::<u32, String>::new();
+        for cell in cells {
+            let Some((column, row)) = split_address(&cell.address) else {
+                continue;
+            };
+            if column == filter.column && (filter.start_row..=filter.end_row).contains(&row) {
+                texts.insert(row, filter_cell_text(cell));
+            }
+        }
+        for row in filter.start_row + 1..=filter.end_row {
+            let text = texts.get(&row).map(String::as_str).unwrap_or("");
+            let matched = filter
+                .values
+                .iter()
+                .any(|value| value.eq_ignore_ascii_case(text));
+            if !matched {
+                hidden.insert(row);
+            }
+        }
+    }
+    hidden
+}
+
+fn filter_cell_text(cell: &SheetCellRef) -> String {
+    if let Some(text) = &cell.text {
+        if !text.is_empty() {
+            return text.clone();
+        }
+    }
+    cell.value.map(format_calc).unwrap_or_default()
+}
+
+fn explicit_hidden_rows(xml: &str) -> std::collections::HashSet<u32> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut rows = std::collections::HashSet::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event)) | Ok(Event::Empty(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "row" {
+                    let flag = attr(&event, "hidden");
+                    if flag == "1" || flag.eq_ignore_ascii_case("true") {
+                        if let Ok(row) = attr(&event, "r").parse::<u32>() {
+                            rows.insert(row);
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    rows
+}
+
+fn auto_filter(xml: &str) -> Option<AutoFilter> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut reference = String::new();
+    let mut columns = 0u32;
+    let mut column_id: Option<u32> = None;
+    let mut values = Vec::new();
+    let mut in_filters = false;
+    let mut rejected = false;
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event)) => {
+                note_filter_tag(
+                    &local_name(event.name().as_ref()),
+                    &attr(&event, "ref"),
+                    &attr(&event, "colId"),
+                    &attr(&event, "val"),
+                    false,
+                    &mut reference,
+                    &mut columns,
+                    &mut column_id,
+                    &mut values,
+                    &mut in_filters,
+                    &mut rejected,
+                );
+            }
+            Ok(Event::Empty(event)) => {
+                note_filter_tag(
+                    &local_name(event.name().as_ref()),
+                    &attr(&event, "ref"),
+                    &attr(&event, "colId"),
+                    &attr(&event, "val"),
+                    true,
+                    &mut reference,
+                    &mut columns,
+                    &mut column_id,
+                    &mut values,
+                    &mut in_filters,
+                    &mut rejected,
+                );
+            }
+            Ok(Event::End(event)) => {
+                if local_name(event.name().as_ref()) == "filters" {
+                    in_filters = false;
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    if rejected || columns != 1 || values.is_empty() || values.len() > 8 {
+        return None;
+    }
+    let column_id = column_id?;
+    let range = reference.split_whitespace().next()?.replace('$', "");
+    let (start, end) = range.split_once(':')?;
+    let (left, top) = split_address(&start.to_ascii_uppercase())?;
+    let (right, bottom) = split_address(&end.to_ascii_uppercase())?;
+    let (left, right) = (left.min(right), left.max(right));
+    let (top, bottom) = (top.min(bottom), top.max(bottom));
+    if bottom - top + 1 > 400 || column_id > right - left {
+        return None;
+    }
+    Some(AutoFilter {
+        start_row: top,
+        end_row: bottom,
+        column: left + column_id,
+        values,
+    })
+}
+
+fn note_filter_tag(
+    name: &str,
+    reference: &str,
+    column_id: &str,
+    value: &str,
+    empty: bool,
+    stored_ref: &mut String,
+    columns: &mut u32,
+    stored_column: &mut Option<u32>,
+    values: &mut Vec<String>,
+    in_filters: &mut bool,
+    rejected: &mut bool,
+) {
+    if name == "autoFilter" && !reference.is_empty() {
+        *stored_ref = reference.to_string();
+    } else if name == "filterColumn" {
+        *columns += 1;
+        if *columns == 1 {
+            *stored_column = column_id.parse().ok();
+        }
+    } else if name == "filters" && !empty {
+        *in_filters = true;
+    } else if name == "filter" && *in_filters && values.len() < 8 {
+        values.push(value.to_string());
+    } else if matches!(name, "customFilters" | "top10" | "dynamicFilter") {
+        *rejected = true;
+    }
+}
+
+fn drop_hidden_rows(rows: &mut Vec<Vec<SheetCell>>, hidden: &std::collections::HashSet<u32>) {
+    rows.retain(|row| {
+        row.iter()
+            .find(|cell| !cell.address.is_empty())
+            .is_none_or(|cell| {
+                split_address(&cell.address).is_none_or(|(_, number)| !hidden.contains(&number))
+            })
+    });
+}
+
 fn parse_sheet(
     xml: &str,
     shared: &[String],
@@ -14456,6 +14662,47 @@ mod tests {
         assert_eq!(row[1].address, "B1");
         assert!(book.info.contains("1 sheets"), "{}", book.info);
         assert!(!row[0].highlight);
+    }
+
+    #[test]
+    fn sheet_preview_hides_filtered_rows() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="D1" t="inlineStr"><is><t>Item</t></is></c></row><row r="2" hidden="1"><c r="A2"><v>9</v></c></row><row r="3"><c r="A3"><v>3</v></c><c r="D3" t="inlineStr"><is><t>apple</t></is></c></row><row r="4"><c r="A4"><v>4</v></c><c r="D4" t="inlineStr"><is><t>pear</t></is></c></row></sheetData><autoFilter ref="D1:D4"><filterColumn colId="0"><filters><filter val="apple"/></filters></filterColumn></autoFilter></worksheet>"#,
+            ),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let addresses: Vec<&str> = book.sheets[0]
+            .rows
+            .iter()
+            .flatten()
+            .map(|cell| cell.address.as_str())
+            .collect();
+        assert!(addresses.contains(&"A1"), "{addresses:?}");
+        assert!(addresses.contains(&"D1"), "{addresses:?}");
+        assert!(
+            !addresses.contains(&"A2"),
+            "a hidden row is omitted {addresses:?}"
+        );
+        assert!(addresses.contains(&"A3"), "{addresses:?}");
+        assert!(addresses.contains(&"D3"), "{addresses:?}");
+        assert!(
+            !addresses.contains(&"A4"),
+            "pear does not match the filter {addresses:?}"
+        );
+        assert!(!addresses.contains(&"D4"), "{addresses:?}");
     }
 
     #[test]
@@ -15126,7 +15373,7 @@ mod tests {
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>SUBTOTAL(101,A1:A2)</f><v>8</v>"#),
+            sheet.contains(r#"<f>SUBTOTAL(101,A1:A2)</f><v>1.5</v>"#),
             "{sheet}"
         );
         assert!(
@@ -15153,6 +15400,44 @@ mod tests {
             sheet.contains(r#"<f>SUBTOTAL(9,A4)</f><v>0</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_skips_hidden_rows_in_subtotal() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>SUBTOTAL(9,A1:A3)</f><v>0</v></c><c r="C1"><f>SUBTOTAL(109,A1:A3)</f><v>0</v></c><c r="F6"><f>SUBTOTAL(109,E6:E7)</f><v>0</v></c><c r="G6"><f>SUBTOTAL(9,E6:E7)</f><v>0</v></c><c r="Z1"><v>0</v></c></row><row r="2" hidden="1"><c r="A2"><v>2</v></c></row><row r="3"><c r="A3"><v>4</v></c></row><row r="5"><c r="D5" t="inlineStr"><is><t>Item</t></is></c></row><row r="6"><c r="D6" t="inlineStr"><is><t>apple</t></is></c><c r="E6"><v>5</v></c></row><row r="7"><c r="D7" t="inlineStr"><is><t>pear</t></is></c><c r="E7"><v>9</v></c></row></sheetData><autoFilter ref="D5:E7"><filterColumn colId="0"><filters><filter val="apple"/></filters></filterColumn></autoFilter></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(9,A1:A3)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(109,A1:A3)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(109,E6:E7)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(9,E6:E7)</f><v>14</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"hidden="1""#), "{sheet}");
     }
 
     #[test]
