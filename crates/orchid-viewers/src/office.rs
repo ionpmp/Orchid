@@ -5600,6 +5600,54 @@ fn format_elapsed(number: f64, format: &str) -> Option<String> {
     Some(if negative { format!("-{body}") } else { body })
 }
 
+fn excel_month_name(month: i32, long: bool) -> Option<&'static str> {
+    const LONG: [&str; 12] = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ];
+    const SHORT: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let index = usize::try_from(month).ok()?.checked_sub(1)?;
+    if long {
+        LONG.get(index)
+    } else {
+        SHORT.get(index)
+    }
+    .copied()
+}
+
+fn excel_weekday_name(serial: f64, long: bool) -> Option<&'static str> {
+    const LONG: [&str; 7] = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    ];
+    const SHORT: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    let code = weekday_code(serial.trunc() as i64, 1)? as usize;
+    let index = code.checked_sub(1)?;
+    if long {
+        LONG.get(index)
+    } else {
+        SHORT.get(index)
+    }
+    .copied()
+}
+
 fn format_excel_date(serial: f64, format: &str) -> Option<String> {
     let (year, month, day) = excel_parts(serial)?;
     let chars: Vec<char> = format.chars().collect();
@@ -5628,10 +5676,18 @@ fn format_excel_date(serial: f64, format: &str) -> Option<String> {
             ("yyyy", format!("{year:04}"))
         } else if rest.starts_with("yy") {
             ("yy", format!("{:02}", year.rem_euclid(100)))
+        } else if rest.starts_with("mmmm") {
+            ("mmmm", excel_month_name(month, true)?.to_string())
+        } else if rest.starts_with("mmm") {
+            ("mmm", excel_month_name(month, false)?.to_string())
         } else if rest.starts_with("mm") {
             ("mm", format!("{month:02}"))
         } else if rest.starts_with('m') {
             ("m", month.to_string())
+        } else if rest.starts_with("dddd") {
+            ("dddd", excel_weekday_name(serial, true)?.to_string())
+        } else if rest.starts_with("ddd") {
+            ("ddd", excel_weekday_name(serial, false)?.to_string())
         } else if rest.starts_with("dd") {
             ("dd", format!("{day:02}"))
         } else if rest.starts_with('d') {
@@ -16228,6 +16284,55 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>TEXT(1,&quot;[mm]&quot;)</f><is><t>1440</t></is>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_text_names() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c><c r="A1"><f>TEXT(1,&quot;dddd&quot;)</f><v>0</v></c><c r="B1"><f>TEXT(1,&quot;ddd&quot;)</f><v>0</v></c><c r="C1"><f>TEXT(1,&quot;mmmm&quot;)</f><v>0</v></c><c r="D1"><f>TEXT(1,&quot;mmm&quot;)</f><v>0</v></c><c r="E1"><f>TEXT(61,&quot;dddd&quot;)</f><v>0</v></c><c r="F1"><f>TEXT(1,&quot;yyyy-mmm-dd&quot;)</f><v>0</v></c><c r="G1"><f>TEXT(1,&quot;[h]:mm&quot;)</f><v>4</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>TEXT(1,&quot;dddd&quot;)</f><is><t>Monday</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1,&quot;ddd&quot;)</f><is><t>Mon</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1,&quot;mmmm&quot;)</f><is><t>January</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1,&quot;mmm&quot;)</f><is><t>Jan</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(61,&quot;dddd&quot;)</f><is><t>Friday</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1,&quot;yyyy-mmm-dd&quot;)</f><is><t>1900-Jan-01</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1,&quot;[h]:mm&quot;)</f><v>4</v>"#),
             "{sheet}"
         );
     }

@@ -739,10 +739,14 @@ release yet.
   on thousands separators, and one `%` that multiplies by 100. Extra integer
   digits are kept. `#` after the dot drops trailing zeros, and `0` keeps them.
   A negative number keeps a leading minus, including `-0.00` when decimal
-  places remain. A date format uses `yyyy`, `yy`, `mm`, `m`, `dd`, and `d` on
-  the 1900 serial, with `-`, `/`, `.`, space, and `:` between them. Quoted text
-  is copied through.   A format that mixes a date token with a number token, or a
-  clock time, scientific, fraction, or color code, leaves the stored value.
+  places remain. A date format uses `yyyy`, `yy`, `mmmm`, `mmm`, `mm`, `m`,
+  `dddd`, `ddd`, `dd`, and `d` on the 1900 serial, with `-`, `/`, `.`, space,
+  and `:` between them. `mmmm` and `mmm` are English month names. `dddd` and
+  `ddd` are English weekday names, using the same serial as the other date
+  tokens and numbering Sunday as 1. A 1904 workbook therefore can disagree
+  with `WEEKDAY`. Quoted text is copied through. A format that mixes a date
+  token with a number token, or a clock time, scientific, fraction, or color
+  code, leaves the stored value.
   Elapsed time is a section whose text outside quotes is exactly `[h]`,
   `[hh]`, `[m]`, or `[mm]`. It writes the total hours or minutes, rounded
   half away from zero, and the total can pass 24 hours. `[hh]` and `[mm]`
