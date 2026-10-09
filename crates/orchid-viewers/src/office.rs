@@ -5574,6 +5574,11 @@ fn limited_text(text: String) -> Option<CalcValue> {
     }
 }
 
+fn is_subtotal_formula(formula: &str) -> bool {
+    let text = formula.trim_start();
+    text.len() >= 9 && text.as_bytes()[8] == b'(' && text[..8].eq_ignore_ascii_case("SUBTOTAL")
+}
+
 fn is_elapsed_token(format: &str) -> bool {
     matches!(
         format.trim().to_ascii_lowercase().as_str(),
@@ -9395,6 +9400,9 @@ impl<'a> CalcParser<'a> {
                 };
                 return Some(CalcValue::Num(if flag { 1.0 } else { 0.0 }));
             }
+            if word.eq_ignore_ascii_case("SUBTOTAL") {
+                return self.subtotal_call(env).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("NOT") {
                 let number = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
@@ -9699,6 +9707,140 @@ impl<'a> CalcParser<'a> {
             }
             _ => None,
         }
+    }
+
+    fn subtotal_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let kind = calc_num(self.compare(env)?)?;
+        if !kind.is_finite() {
+            return None;
+        }
+        let kind = kind.trunc();
+        if !(1.0..=11.0).contains(&kind) {
+            return None;
+        }
+        let kind = kind as i32;
+        self.require_comma()?;
+        let mut numbers = Vec::new();
+        let mut counted = 0.0;
+        let mut seen = 0usize;
+        let mut args = 0usize;
+        loop {
+            args += 1;
+            if args > 16 {
+                return None;
+            }
+            self.subtotal_arg(&mut numbers, &mut counted, &mut seen, env)?;
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => self.index += 1,
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        match kind {
+            1 if !numbers.is_empty() => {
+                let value = numbers.iter().sum::<f64>() / numbers.len() as f64;
+                value.is_finite().then_some(value)
+            }
+            2 => Some(numbers.len() as f64),
+            3 => Some(counted),
+            4 => numbers.into_iter().reduce(f64::max),
+            5 => numbers.into_iter().reduce(f64::min),
+            6 => {
+                let value = if numbers.is_empty() {
+                    0.0
+                } else {
+                    numbers.iter().product()
+                };
+                value.is_finite().then_some(value)
+            }
+            7 => stdev_excel(&numbers, true),
+            8 => stdev_excel(&numbers, false),
+            9 => Some(numbers.iter().sum()),
+            10 => var_excel(&numbers, true),
+            11 => var_excel(&numbers, false),
+            _ => None,
+        }
+    }
+
+    fn subtotal_arg(
+        &mut self,
+        numbers: &mut Vec<f64>,
+        counted: &mut f64,
+        seen: &mut usize,
+        env: &mut CalcEnv<'_>,
+    ) -> Option<()> {
+        let saved = self.index;
+        if let Some((cells, rows, cols)) = self.cell_block(env) {
+            self.skip();
+            if matches!(self.bytes.get(self.index).copied(), Some(b',') | Some(b')')) {
+                self.subtotal_cells(&cells, rows, cols, numbers, counted, seen, env)?;
+                return Some(());
+            }
+        }
+        self.index = saved;
+        self.skip();
+        if let Some(address) = self.cell_token() {
+            self.skip();
+            if matches!(self.bytes.get(self.index).copied(), Some(b',') | Some(b')')) {
+                self.subtotal_cells(&[address], 1, 1, numbers, counted, seen, env)?;
+                return Some(());
+            }
+        }
+        self.index = saved;
+        let number = calc_num(self.compare(env)?)?;
+        if !number.is_finite() {
+            return None;
+        }
+        numbers.push(number);
+        *counted += 1.0;
+        Some(())
+    }
+
+    fn subtotal_cells(
+        &mut self,
+        cells: &[String],
+        rows: u32,
+        cols: u32,
+        numbers: &mut Vec<f64>,
+        counted: &mut f64,
+        seen: &mut usize,
+        env: &mut CalcEnv<'_>,
+    ) -> Option<()> {
+        if rows == 0
+            || cols == 0
+            || rows.saturating_mul(cols) > 1024
+            || cells.len() != (rows * cols) as usize
+        {
+            return None;
+        }
+        *seen += cells.len();
+        if *seen > 4096 {
+            return None;
+        }
+        for address in cells {
+            let address = address.to_ascii_uppercase();
+            if env
+                .formulas
+                .get(&address)
+                .is_some_and(|formula| is_subtotal_formula(formula))
+            {
+                continue;
+            }
+            match self.cell_value(&address, env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => {
+                    numbers.push(number);
+                    *counted += 1.0;
+                }
+                Some(CalcValue::Text(text)) if !text.is_empty() => *counted += 1.0,
+                Some(CalcValue::Num(_)) => return None,
+                _ => {}
+            }
+        }
+        Some(())
     }
 
     fn logic_args(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
@@ -14258,6 +14400,67 @@ mod tests {
         assert!(sheet.contains(r#"<f>XOR(A1:B1)</f><v>0</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>NOT(A1:A2)</f><v>8</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>AND(A1:A2,1)</f><v>0</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_subtotal() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="C1" t="inlineStr"><is><t>x</t></is></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>2</v></c></row><row r="3"><c r="A3"><f>SUBTOTAL(9,A1:A2)</f><v>0</v></c><c r="B3"><f>SUBTOTAL(9,A1:A3)</f><v>0</v></c><c r="C3"><f>SUBTOTAL(3,A1:A2,C1)</f><v>0</v></c><c r="D3"><f>SUBTOTAL(101,A1:A2)</f><v>8</v></c><c r="E3"><f>SUBTOTAL(1,A1:A2)</f><v>0</v></c><c r="F3"><f>SUBTOTAL(2,A1:A2)</f><v>0</v></c><c r="G3"><f>SUBTOTAL(4,A1:A2)</f><v>0</v></c><c r="H3"><f>SUBTOTAL(5,A1:A2)</f><v>0</v></c><c r="I3"><f>SUBTOTAL(6,A1:A2)</f><v>0</v></c><c r="J3"><f>SUBTOTAL(9,A4)</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(9,A1:A2)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(9,A1:A3)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(3,A1:A2,C1)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(101,A1:A2)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(1,A1:A2)</f><v>1.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(2,A1:A2)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(4,A1:A2)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(5,A1:A2)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(6,A1:A2)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUBTOTAL(9,A4)</f><v>0</v>"#),
+            "{sheet}"
+        );
     }
 
     #[test]
