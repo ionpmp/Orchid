@@ -453,6 +453,9 @@ fn try_spill(formula: &str, env: &mut CalcEnv<'_>) -> Option<Spill> {
             | "TAKE"
             | "DROP"
             | "CHOOSECOLS"
+            | "CHOOSEROWS"
+            | "HSTACK"
+            | "VSTACK"
             | "WHATIF"
     ) {
         return None;
@@ -471,6 +474,9 @@ fn try_spill(formula: &str, env: &mut CalcEnv<'_>) -> Option<Spill> {
         "TAKE" => parser.take_spill(env)?,
         "DROP" => parser.drop_spill(env)?,
         "CHOOSECOLS" => parser.choosecols_spill(env)?,
+        "CHOOSEROWS" => parser.chooserows_spill(env)?,
+        "HSTACK" => parser.hstack_spill(env)?,
+        "VSTACK" => parser.vstack_spill(env)?,
         "WHATIF" => parser.whatif_spill(env)?,
         _ => return None,
     };
@@ -11466,6 +11472,92 @@ impl<'a> CalcParser<'a> {
         })
     }
 
+    fn chooserows_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let (values, rows, cols) = self.block_numbers(env)?;
+        self.require_comma()?;
+        let index = span_count(calc_num(self.compare(env)?)?)?;
+        self.close_paren()?;
+        let row = choose_index(rows, index)?;
+        let start = (row * cols) as usize;
+        Some(Spill {
+            values: values[start..start + cols as usize].to_vec(),
+            columns: cols,
+            all_or_nothing: true,
+        })
+    }
+
+    fn stack_blocks(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<(Vec<f64>, u32, u32)>> {
+        let mut blocks = Vec::new();
+        loop {
+            blocks.push(self.block_numbers(env)?);
+            if blocks.len() > 8 {
+                return None;
+            }
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                Some(b',') => self.index += 1,
+                _ => return None,
+            }
+        }
+        Some(blocks)
+    }
+
+    fn hstack_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let blocks = self.stack_blocks(env)?;
+        if !(2..=8).contains(&blocks.len()) {
+            return None;
+        }
+        let height = blocks[0].1;
+        if blocks.iter().any(|(_, rows, _)| *rows != height) {
+            return None;
+        }
+        let width: u32 = blocks.iter().map(|(_, _, cols)| *cols).sum();
+        if width == 0 || width > 16 || height.saturating_mul(width) > 256 {
+            return None;
+        }
+        let mut values = Vec::new();
+        for row in 0..height {
+            for (nums, _, cols) in &blocks {
+                for col in 0..*cols {
+                    values.push(nums[(row * *cols + col) as usize]);
+                }
+            }
+        }
+        Some(Spill {
+            values,
+            columns: width,
+            all_or_nothing: true,
+        })
+    }
+
+    fn vstack_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let blocks = self.stack_blocks(env)?;
+        if !(2..=8).contains(&blocks.len()) {
+            return None;
+        }
+        let width = blocks[0].2;
+        if blocks.iter().any(|(_, _, cols)| *cols != width) {
+            return None;
+        }
+        let height: u32 = blocks.iter().map(|(_, rows, _)| *rows).sum();
+        if height == 0 || height > 256 || height.saturating_mul(width) > 256 {
+            return None;
+        }
+        let mut values = Vec::new();
+        for (nums, _, _) in &blocks {
+            values.extend(nums.iter().copied());
+        }
+        Some(Spill {
+            values,
+            columns: width,
+            all_or_nothing: true,
+        })
+    }
+
     fn choosecols_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
         let (values, rows, cols) = self.block_numbers(env)?;
         self.require_comma()?;
@@ -13642,7 +13734,11 @@ mod tests {
         assert_eq!(cell("A2").width_px, 80);
         assert!(cell("A3").covered);
         assert_eq!(cell("C1").width_px, 72);
-        assert_eq!(cell("C2").span, 1, "a merge wider than 8 columns is skipped");
+        assert_eq!(
+            cell("C2").span,
+            1,
+            "a merge wider than 8 columns is skipped"
+        );
         assert!(!cell("C2").covered);
         assert_eq!(cell("D1").width_px, 320);
     }
@@ -15278,6 +15374,63 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>WHATIF(A1,B1,D1:D2,B1,E1:F1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_stacks_rows() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c><c r="C1"><f>CHOOSEROWS(A1:B2,2)</f><v>0</v></c><c r="D1"><v>0</v></c><c r="E1"><f>CHOOSEROWS(A1:B2,-1)</f><v>0</v></c><c r="F1"><v>0</v></c><c r="G1"><f>CHOOSEROWS(A1:B2,3)</f><v>9</v></c><c r="H1"><f>HSTACK(A1:A2,B1:B2)</f><v>0</v></c><c r="I1"><v>0</v></c><c r="J1"><f>VSTACK(A1:B1,A2:B2)</f><v>0</v></c><c r="K1"><v>0</v></c><c r="L1"><f>HSTACK(A1:A2,B1:B1)</f><v>8</v></c><c r="M1"><f>HSTACK(A1:B1,B1:B1)+0</f><v>7</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>3</v></c><c r="B2"><v>4</v></c><c r="H2"><v>0</v></c><c r="I2"><v>0</v></c><c r="J2"><v>0</v></c><c r="K2"><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>CHOOSEROWS(A1:B2,2)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="D1"><v>4</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>CHOOSEROWS(A1:B2,-1)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="F1"><v>4</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>CHOOSEROWS(A1:B2,3)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HSTACK(A1:A2,B1:B2)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="I1"><v>2</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="H2"><v>3</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="I2"><v>4</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>VSTACK(A1:B1,A2:B2)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="K1"><v>2</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="J2"><v>3</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="K2"><v>4</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>HSTACK(A1:A2,B1:B1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>HSTACK(A1:B1,B1:B1)+0</f><v>7</v>"#),
             "{sheet}"
         );
     }
