@@ -858,12 +858,13 @@ release yet.
   row fixed. Text inside quotes is not shifted. A shift that would leave the
   sheet, a missing master, or a formula type other than shared, including an
   array formula, leaves the stored value. Shared formulas on other sheets are
-  not expanded. `PRICE`, `YIELD`, `DURATION`, and `MDURATION` use basis 0, the US
-  30/360 day count, or basis 1, the actual number of days between coupon
-  dates counted as Excel serials. Frequency is 1, 2, or 4. Any other basis
-  or frequency leaves the stored value. There is no odd first or last coupon.
-  For basis 0 a coupon period is 360 divided by the frequency. For basis 1 it
-  is the number of serial days from the previous coupon date to the next.
+  not expanded. `PRICE`, `YIELD`, `DURATION`, and `MDURATION` use basis 0 through 4.
+  Basis 0 is the US 30/360 day count. Basis 1 counts the actual serial days
+  in the coupon period. Basis 2 counts those same actual days and divides by
+  360 over the frequency. Basis 3 divides by 365 over the frequency. Basis 4
+  is European 30/360: a day of 31 becomes 30 on both dates. Frequency is 1,
+  2, or 4. Any other basis or frequency leaves the stored value. There is no
+  odd first or last coupon.
   Settlement on or after
   maturity leaves the stored value. `YIELD` takes at most 40 Newton steps,
   starting from the coupon rate, or from 0.05 when the coupon is 0. A yield

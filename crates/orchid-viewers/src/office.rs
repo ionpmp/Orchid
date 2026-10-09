@@ -5025,6 +5025,18 @@ fn days360_us(start: f64, end: f64) -> Option<f64> {
     Some(f64::from((y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1)))
 }
 
+fn days360_eu(start: f64, end: f64) -> Option<f64> {
+    let (y1, m1, mut d1) = excel_parts(start)?;
+    let (y2, m2, mut d2) = excel_parts(end)?;
+    if d1 == 31 {
+        d1 = 30;
+    }
+    if d2 == 31 {
+        d2 = 30;
+    }
+    Some(f64::from((y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1)))
+}
+
 fn coupon_span(settlement: f64, maturity: f64, frequency: i32, basis: i32) -> Option<CouponSpan> {
     if !(1.0..=2_958_465.0).contains(&settlement)
         || !(1.0..=2_958_465.0).contains(&maturity)
@@ -5049,14 +5061,29 @@ fn coupon_span(settlement: f64, maturity: f64, frequency: i32, basis: i32) -> Op
         }
         cursor = earlier;
     };
-    let (accrued_days, next_days, period_days) = if basis == 0 {
-        (
+    let (accrued_days, next_days, period_days) = match basis {
+        0 => (
             days360_us(prev, settlement)?,
             days360_us(settlement, next)?,
             360.0 / f64::from(frequency),
-        )
-    } else {
-        (settlement - prev, next - settlement, next - prev)
+        ),
+        1 => (settlement - prev, next - settlement, next - prev),
+        2 => (
+            settlement - prev,
+            next - settlement,
+            360.0 / f64::from(frequency),
+        ),
+        3 => (
+            settlement - prev,
+            next - settlement,
+            365.0 / f64::from(frequency),
+        ),
+        4 => (
+            days360_eu(prev, settlement)?,
+            days360_eu(settlement, next)?,
+            360.0 / f64::from(frequency),
+        ),
+        _ => return None,
     };
     if accrued_days < 0.0 || next_days <= 0.0 {
         return None;
@@ -8758,7 +8785,7 @@ impl<'a> CalcParser<'a> {
                     return None;
                 }
                 let basis = basis.trunc();
-                if basis != 0.0 && basis != 1.0 {
+                if !(0.0..=4.0).contains(&basis) {
                     return None;
                 }
                 let basis = basis as i32;
@@ -15613,7 +15640,7 @@ mod tests {
             ),
             (
                 "xl/worksheets/sheet1.xml",
-                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c><c r="A1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,0)</f><v>0</v></c><c r="B1"><f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.63436162,100,2)</f><v>0</v></c><c r="C1"><f>DURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2)</f><v>0</v></c><c r="D1"><f>MDURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2)</f><v>0</v></c><c r="E1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,4)</f><v>9</v></c><c r="F1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,1)</f><v>8</v></c><c r="G1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,3)</f><v>7</v></c><c r="H1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,2)</f><v>6</v></c><c r="I1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,4,1)</f><v>4</v></c><c r="J1"><f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.63544921,100,2,1)</f><v>0</v></c><c r="K1"><f>DURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,4)</f><v>0</v></c><c r="L1"><f>MDURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2,1)</f><v>0</v></c><c r="M1"><f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.61509395,100,4)</f><v>0</v></c></row></sheetData></worksheet>"#,
+                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c><c r="A1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,0)</f><v>0</v></c><c r="B1"><f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.63436162,100,2)</f><v>0</v></c><c r="C1"><f>DURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2)</f><v>0</v></c><c r="D1"><f>MDURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2)</f><v>0</v></c><c r="E1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,4)</f><v>9</v></c><c r="F1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,1)</f><v>8</v></c><c r="G1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,3)</f><v>7</v></c><c r="H1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,2)</f><v>6</v></c><c r="N1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,3)</f><v>3</v></c><c r="O1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,4)</f><v>2</v></c><c r="P1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,5)</f><v>5</v></c><c r="Q1"><f>DURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2,2)</f><v>0</v></c><c r="R1"><f>PRICE(DATE(2008,1,31),DATE(2017,11,15),0.0575,0.065,100,2,0)</f><v>0</v></c><c r="S1"><f>PRICE(DATE(2008,1,31),DATE(2017,11,15),0.0575,0.065,100,2,4)</f><v>0</v></c><c r="T1"><f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.60241718,100,2,2)</f><v>0</v></c><c r="I1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,4,1)</f><v>4</v></c><c r="J1"><f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.63544921,100,2,1)</f><v>0</v></c><c r="K1"><f>DURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,4)</f><v>0</v></c><c r="L1"><f>MDURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2,1)</f><v>0</v></c><c r="M1"><f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.61509395,100,4)</f><v>0</v></c></row></sheetData></worksheet>"#,
             ),
         ]);
         let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
@@ -15656,7 +15683,7 @@ mod tests {
         );
         assert!(
             sheet.contains(
-                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,2)</f><v>6</v>"#
+                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,2)</f><v>94.60241718</v>"#
             ),
             "{sheet}"
         );
@@ -15687,6 +15714,48 @@ mod tests {
         assert!(
             sheet.contains(
                 r#"<f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.61509395,100,4)</f><v>0.065</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,5)</f><v>5</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,3)</f><v>94.64359455</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,4)</f><v>94.63436162</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>DURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2,2)</f><v>7.4164847</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>PRICE(DATE(2008,1,31),DATE(2017,11,15),0.0575,0.065,100,2,0)</f><v>94.60225776</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>PRICE(DATE(2008,1,31),DATE(2017,11,15),0.0575,0.065,100,2,4)</f><v>94.61822998</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.60241718,100,2,2)</f><v>0.065</v>"#
             ),
             "{sheet}"
         );
