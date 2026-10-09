@@ -961,7 +961,12 @@ release yet.
   number is kept. Text, a failed formula, or a cycle leaves the stored
   value. Results are written downward into existing value cells, and if any
   of those cells is missing, a formula, or text, nothing is written. This is
-  not an Excel data table and it is not a two-input table. An expression
+  not an Excel data table. A second input is
+  `WHATIF(formula_cell, row_input, row_values, col_input, col_values)`. The
+  row values are one column of 1 through 8 numbers and the column values are
+  one row of 1 through 8 numbers. The result is at most 64 cells, written
+  across and then down. The two inputs must differ from each other and from
+  the formula cell. An expression
   around the call leaves the stored value. `XLOOKUP` and `XMATCH` take one
   row or one column of at most 256 cells. The match is exact and ASCII
   case-insensitive. There are no wildcards: a lookup value that contains `*`,

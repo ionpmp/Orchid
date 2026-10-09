@@ -660,6 +660,42 @@ fn split_column(text: &str, delim: &str) -> Option<Vec<String>> {
     }
 }
 
+fn finite_cell(value: Option<CalcValue>) -> Option<f64> {
+    match value {
+        Some(CalcValue::Num(number)) if number.is_finite() => Some(number),
+        _ => None,
+    }
+}
+
+fn whatif_number(env: &mut CalcEnv<'_>, formula: &str, pairs: &[(&str, f64)]) -> Option<f64> {
+    let mut formulas = env.formulas.clone();
+    let mut literals = env.literals.clone();
+    let mut texts = env.texts.clone();
+    for (cell, number) in pairs {
+        formulas.remove(*cell);
+        literals.insert((*cell).to_string(), *number);
+        texts.remove(*cell);
+    }
+    let mut visiting = env.visiting.clone();
+    match eval_formula(
+        formula,
+        &formulas,
+        &literals,
+        &texts,
+        env.foreign,
+        env.names,
+        env.sheet_order,
+        env.sheet,
+        env.date1904,
+        env.previous,
+        false,
+        &mut visiting,
+    )? {
+        CalcValue::Num(number) if number.is_finite() => Some(number),
+        _ => None,
+    }
+}
+
 fn span_count(value: f64) -> Option<i64> {
     if !value.is_finite() {
         return None;
@@ -11098,52 +11134,73 @@ impl<'a> CalcParser<'a> {
         self.skip();
         let formula_cell = self.cell_token()?.to_ascii_uppercase();
         self.require_comma()?;
-        let input_cell = self.cell_token()?.to_ascii_uppercase();
-        if formula_cell == input_cell {
+        let row_input = self.cell_token()?.to_ascii_uppercase();
+        if formula_cell == row_input {
             return None;
         }
         self.require_comma()?;
-        let (cells, rows, cols) = self.cell_block(env)?;
+        let (row_cells, row_rows, row_cols) = self.cell_block(env)?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            if row_cols != 1
+                || row_rows == 0
+                || row_rows > 16
+                || row_cells.len() != row_rows as usize
+            {
+                return None;
+            }
+            let formula = env.formulas.get(&formula_cell)?.clone();
+            let mut values = Vec::with_capacity(row_cells.len());
+            for address in row_cells {
+                let number = finite_cell(self.cell_value(&address, env))?;
+                values.push(whatif_number(env, &formula, &[(&row_input, number)])?);
+            }
+            return Some(Spill {
+                values,
+                columns: 1,
+                all_or_nothing: true,
+            });
+        }
+        self.require_comma()?;
+        let col_input = self.cell_token()?.to_ascii_uppercase();
+        if col_input == formula_cell || col_input == row_input {
+            return None;
+        }
+        self.require_comma()?;
+        let (col_cells, col_rows, col_cols) = self.cell_block(env)?;
         self.close_paren()?;
-        if cols != 1 || rows == 0 || rows > 16 || cells.len() != rows as usize {
+        if row_cols != 1 || row_rows == 0 || row_rows > 8 || row_cells.len() != row_rows as usize {
+            return None;
+        }
+        if col_rows != 1 || col_cols == 0 || col_cols > 8 || col_cells.len() != col_cols as usize {
+            return None;
+        }
+        if row_rows * col_cols > 64 {
             return None;
         }
         let formula = env.formulas.get(&formula_cell)?.clone();
-        let mut values = Vec::with_capacity(cells.len());
-        for address in cells {
-            let number = match self.cell_value(&address, env) {
-                Some(CalcValue::Num(number)) if number.is_finite() => number,
-                _ => return None,
-            };
-            let mut formulas = env.formulas.clone();
-            formulas.remove(&input_cell);
-            let mut literals = env.literals.clone();
-            literals.insert(input_cell.clone(), number);
-            let mut texts = env.texts.clone();
-            texts.remove(&input_cell);
-            let mut visiting = env.visiting.clone();
-            let value = eval_formula(
-                &formula,
-                &formulas,
-                &literals,
-                &texts,
-                env.foreign,
-                env.names,
-                env.sheet_order,
-                env.sheet,
-                env.date1904,
-                env.previous,
-                false,
-                &mut visiting,
-            )?;
-            match value {
-                CalcValue::Num(number) if number.is_finite() => values.push(number),
-                _ => return None,
+        let mut row_numbers = Vec::with_capacity(row_cells.len());
+        for address in &row_cells {
+            row_numbers.push(finite_cell(self.cell_value(address, env))?);
+        }
+        let mut col_numbers = Vec::with_capacity(col_cells.len());
+        for address in &col_cells {
+            col_numbers.push(finite_cell(self.cell_value(address, env))?);
+        }
+        let mut values = Vec::with_capacity((row_rows * col_cols) as usize);
+        for row in &row_numbers {
+            for col in &col_numbers {
+                values.push(whatif_number(
+                    env,
+                    &formula,
+                    &[(&row_input, *row), (&col_input, *col)],
+                )?);
             }
         }
         Some(Spill {
             values,
-            columns: 1,
+            columns: col_cols,
             all_or_nothing: true,
         })
     }
@@ -14602,6 +14659,42 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>WHATIF(I1,B1,C1)</f><v>6</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_whatif_grid() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>B1+C1</f><v>0</v></c><c r="B1"><v>1</v></c><c r="C1"><v>10</v></c><c r="D1"><v>2</v></c><c r="E1"><v>4</v></c><c r="F1"><v>5</v></c><c r="G1"><f>WHATIF(A1,B1,D1:D2,C1,E1:F1)</f><v>0</v></c><c r="H1"><v>0</v></c><c r="I1"><f>WHATIF(A1,B1,D1:D2,C1,E1:F1)+1</f><v>9</v></c><c r="J1"><f>WHATIF(A1,B1,D1:D2,B1,E1:F1)</f><v>8</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="D2"><v>3</v></c><c r="G2"><v>0</v></c><c r="H2"><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>WHATIF(A1,B1,D1:D2,C1,E1:F1)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="H1"><v>7</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="G2"><v>7</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="H2"><v>8</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>WHATIF(A1,B1,D1:D2,C1,E1:F1)+1</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WHATIF(A1,B1,D1:D2,B1,E1:F1)</f><v>8</v>"#),
             "{sheet}"
         );
     }
