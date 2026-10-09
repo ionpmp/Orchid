@@ -254,11 +254,6 @@ pub(crate) fn set_sheet_cell(
         }
     }
     let xml = replace_cell_xml(&xml, &address, text)?;
-    let mut foreign = std::collections::HashMap::new();
-    foreign.insert(sheet_name.to_ascii_lowercase(), stored_sheet(&xml, &shared));
-    for (name, body) in other_sheets {
-        foreign.insert(name, stored_sheet(&body, &shared));
-    }
     let workbook = read_entry(&mut archive, "xl/workbook.xml").unwrap_or_default();
     let date1904 = workbook_date1904(&workbook);
     let sheet_key = sheet_name.to_ascii_lowercase();
@@ -269,6 +264,29 @@ pub(crate) fn set_sheet_cell(
     let mut names = workbook_names(&workbook, &sheet_order);
     names.tables = workbook_tables(&mut archive, &sheets);
     let iteration = workbook_iteration(&workbook);
+    let mut bodies = std::collections::HashMap::new();
+    bodies.insert(sheet_key.clone(), xml.clone());
+    let mut foreign = std::collections::HashMap::new();
+    foreign.insert(sheet_key.clone(), stored_sheet(&xml, &shared));
+    for (name, body) in &other_sheets {
+        bodies.insert(name.clone(), body.clone());
+        foreign.insert(name.clone(), stored_sheet(body, &shared));
+    }
+    for name in &sheet_order {
+        let Some(body) = bodies.get(name) else {
+            continue;
+        };
+        let passed = pass_sheet_once(
+            body,
+            &shared,
+            &foreign,
+            &names,
+            &sheet_order,
+            name,
+            date1904,
+        );
+        foreign.insert(name.clone(), passed);
+    }
     let xml = recalculate_sheet(
         &xml,
         &shared,
@@ -641,6 +659,65 @@ fn recalculate_sheet(
         out.replace_range(start..end, &text);
     }
     out
+}
+
+fn pass_sheet_once(
+    xml: &str,
+    shared: &[String],
+    foreign: &std::collections::HashMap<String, ForeignSheet>,
+    names: &NameBook,
+    sheet_order: &[String],
+    sheet: &str,
+    date1904: bool,
+) -> ForeignSheet {
+    let cells = sheet_cells(xml, shared);
+    let mut book = stored_sheet(xml, shared);
+    let formulas = std::collections::HashMap::new();
+    let literals = book.literals.clone();
+    let texts = book.texts.clone();
+    let previous = std::collections::HashMap::new();
+    let mut counted = 0usize;
+    for cell in &cells {
+        if counted >= 4096 {
+            break;
+        }
+        let Some(formula) = &cell.formula else {
+            continue;
+        };
+        if cell.text_cell {
+            continue;
+        }
+        counted += 1;
+        let mut visiting = std::collections::HashSet::new();
+        let Some(value) = eval_formula(
+            formula,
+            &formulas,
+            &literals,
+            &texts,
+            foreign,
+            names,
+            sheet_order,
+            sheet,
+            date1904,
+            &previous,
+            false,
+            &mut visiting,
+        ) else {
+            continue;
+        };
+        match value {
+            CalcValue::Num(number) if number.is_finite() => {
+                book.texts.remove(&cell.address);
+                book.literals.insert(cell.address.clone(), number);
+            }
+            CalcValue::Text(text) => {
+                book.literals.remove(&cell.address);
+                book.texts.insert(cell.address.clone(), text);
+            }
+            CalcValue::Num(_) => {}
+        }
+    }
+    book
 }
 
 fn stored_sheet(xml: &str, shared: &[String]) -> ForeignSheet {
@@ -12579,6 +12656,41 @@ mod tests {
     }
 
     #[test]
+    fn set_sheet_cell_passes_other_sheets() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/><sheet name="Other" sheetId="2" r:id="rId2"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>1+1</f><v>5</v></c><c r="B1"><f>A1+1</f><v>0</v></c><c r="C1"><f>Other!A1</f><v>0</v></c><c r="D1"><f>Other!B1</f><v>0</v></c><c r="E1"><f>Budgets!B1</f><v>0</v></c><c r="F1"><f>B1</f><v>0</v></c><c r="G1"><f>Other!C1</f><v>0</v></c><c r="H1"><f>Other!D1</f><v>0</v></c><c r="I1"><f>Other!E1</f><v>0</v></c><c r="J1"><f>Other!F1</f><v>0</v></c><c r="Z1"><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+            (
+                "xl/worksheets/sheet2.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>1+1</f><v>8</v></c><c r="B1"><f>A1+1</f><v>0</v></c><c r="C1"><f>1/0</f><v>7</v></c><c r="D1"><f>&quot;ab&quot;</f><v>0</v></c><c r="E1"><f>Budgets!B1</f><v>0</v></c><c r="F1"><f>FREQUENCY(A1:A1,B1:B1)</f><v>4</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>Other!A1</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Other!B1</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Budgets!B1</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>B1</f><v>3</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Other!C1</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains("<t>ab</t>"), "{sheet}");
+        assert!(sheet.contains(r#"<f>Other!E1</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Other!F1</f><v>4</v>"#), "{sheet}");
+        let other = read_entry(&mut archive, "xl/worksheets/sheet2.xml").unwrap();
+        assert!(other.contains(r#"<f>1+1</f><v>8</v>"#), "{other}");
+    }
+
+    #[test]
     fn set_sheet_cell_shared_and_other_sheet() {
         let bytes = zip_bytes(&[
             (
@@ -12592,7 +12704,7 @@ mod tests {
             ("xl/sharedStrings.xml", r#"<sst><si><t>Cat</t></si></sst>"#),
             (
                 "xl/worksheets/sheet1.xml",
-                r#"<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="M1"><f>1+1</f><v>9</v></c><c r="P1"><v>2</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="B2"><f>LEN(A1)</f><v>0</v></c><c r="C2"><f>MATCH(&quot;c*&quot;,A1:A1,0)</f><v>0</v></c><c r="D2"><f>Other!A1</f><v>0</v></c><c r="E2"><f>'My Sheet'!A1</f><v>0</v></c><c r="F2"><f>'Bob''s'!A1</f><v>0</v></c><c r="G2"><f>Other!B1</f><v>0</v></c><c r="H2"><f>Other!C1</f><v>5</v></c><c r="I2"><f>Other!A1:A2</f><v>6</v></c><c r="J2"><f>Missing!A1</f><v>3</v></c><c r="K2"><f>Budgets!M1</f><v>0</v></c><c r="L2"><f>M1</f><v>0</v></c><c r="N2"><f>IRR(A1:P1)</f><v>11</v></c><c r="O2"><f>INDEX(A1:A1,1)</f><v>0</v></c><c r="Q2"><f>AVERAGEA(A1,P1)</f><v>8</v></c></row></sheetData></worksheet>"#,
+                r#"<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="M1"><f>Q1+1</f><v>9</v></c><c r="P1"><v>2</v></c><c r="Q1"><f>1+1</f><v>5</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="B2"><f>LEN(A1)</f><v>0</v></c><c r="C2"><f>MATCH(&quot;c*&quot;,A1:A1,0)</f><v>0</v></c><c r="D2"><f>Other!A1</f><v>0</v></c><c r="E2"><f>'My Sheet'!A1</f><v>0</v></c><c r="F2"><f>'Bob''s'!A1</f><v>0</v></c><c r="G2"><f>Other!B1</f><v>0</v></c><c r="H2"><f>Other!C1</f><v>5</v></c><c r="I2"><f>Other!A1:A2</f><v>6</v></c><c r="J2"><f>Missing!A1</f><v>3</v></c><c r="K2"><f>Budgets!M1</f><v>0</v></c><c r="L2"><f>M1</f><v>0</v></c><c r="N2"><f>IRR(A1:P1)</f><v>11</v></c><c r="O2"><f>INDEX(A1:A1,1)</f><v>0</v></c><c r="Q2"><f>AVERAGEA(A1,P1)</f><v>8</v></c></row></sheetData></worksheet>"#,
             ),
             (
                 "xl/worksheets/sheet2.xml",
@@ -12618,12 +12730,12 @@ mod tests {
         assert!(sheet.contains(r#"<f>Other!A1</f><v>7</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>'My Sheet'!A1</f><v>4</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>'Bob''s'!A1</f><v>8</v>"#), "{sheet}");
-        assert!(sheet.contains(r#"<f>Other!B1</f><v>9</v>"#), "{sheet}");
-        assert!(sheet.contains(r#"<f>Other!C1</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Other!B1</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Other!C1</f><v>2</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Other!A1:A2</f><v>6</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Missing!A1</f><v>3</v>"#), "{sheet}");
-        assert!(sheet.contains(r#"<f>Budgets!M1</f><v>9</v>"#), "{sheet}");
-        assert!(sheet.contains(r#"<f>M1</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Budgets!M1</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>M1</f><v>3</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>IRR(A1:P1)</f><v>11</v>"#), "{sheet}");
         assert!(
             sheet.contains(
@@ -13029,8 +13141,8 @@ mod tests {
         assert!(sheet.contains(r#"<f>SUM(sales)</f><v>30</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Rate*2</f><v>6</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Live</f><v>2</v>"#), "{sheet}");
-        assert!(sheet.contains(r#"<f>OtherTotal</f><v>9</v>"#), "{sheet}");
-        assert!(sheet.contains(r#"<f>SUM(Abroad)</f><v>13</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>OtherTotal</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SUM(Abroad)</f><v>6</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Quoted</f><v>4</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Local</f><v>3</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Plus</f><v>11</v>"#), "{sheet}");
@@ -13250,7 +13362,7 @@ mod tests {
             ),
             (
                 "xl/worksheets/sheet1.xml",
-                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>10</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><f>1+1</f><v>8</v></c><c r="B2"><f>SUM(Budgets:Other!A1)</f><v>0</v></c><c r="C2"><f>SUM(Other:'My Sheet'!A1)</f><v>0</v></c><c r="D2"><f>SUM(Budgets:Budgets!A2)</f><v>0</v></c><c r="E2"><f>A2</f><v>0</v></c><c r="F2"><f>SUM(Nope:Other!A1)</f><v>6</v></c></row></sheetData></worksheet>"#,
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>10</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><f>A3+1</f><v>8</v></c><c r="B2"><f>SUM(Budgets:Other!A1)</f><v>0</v></c><c r="C2"><f>SUM(Other:'My Sheet'!A1)</f><v>0</v></c><c r="D2"><f>SUM(Budgets:Budgets!A2)</f><v>0</v></c><c r="E2"><f>A2</f><v>0</v></c><c r="F2"><f>SUM(Nope:Other!A1)</f><v>6</v></c></row><row r="3"><c r="A3"><f>1+1</f><v>5</v></c></row></sheetData></worksheet>"#,
             ),
             (
                 "xl/worksheets/sheet2.xml",
@@ -13273,10 +13385,10 @@ mod tests {
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>SUM(Budgets:Budgets!A2)</f><v>8</v>"#),
+            sheet.contains(r#"<f>SUM(Budgets:Budgets!A2)</f><v>6</v>"#),
             "{sheet}"
         );
-        assert!(sheet.contains(r#"<f>A2</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>A2</f><v>3</v>"#), "{sheet}");
         assert!(
             sheet.contains(r#"<f>SUM(Nope:Other!A1)</f><v>6</v>"#),
             "{sheet}"
@@ -13351,9 +13463,9 @@ mod tests {
         let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
         let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
         let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
-        assert!(sheet.contains(r#"<f>Plus</f><v>9</v>"#), "{sheet}");
-        assert!(sheet.contains(r#"<f>Plus*2</f><v>18</v>"#), "{sheet}");
-        assert!(sheet.contains(r#"<f>SUM(Plus)</f><v>9</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Plus</f><v>3</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>Plus*2</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SUM(Plus)</f><v>3</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Two</f><v>2</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Relative</f><v>4</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Nested</f><v>5</v>"#), "{sheet}");
@@ -13420,7 +13532,7 @@ mod tests {
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>SUM(Totals[N])</f><v>9</v>"#),
+            sheet.contains(r#"<f>SUM(Totals[N])</f><v>2</v>"#),
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>Tiny[Value]</f><v>2</v>"#), "{sheet}");

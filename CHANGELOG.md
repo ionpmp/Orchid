@@ -728,19 +728,23 @@ release yet.
   before that day is skipped. Without the flag, the 1900 system is unchanged.
   `IF` stays numeric.
   A shared-string cell on the sheet being recalculated is read as its shared
-  text. An index past the table is blank. A reference `Sheet!A1` or
-  `'My Sheet'!A1` reads one stored cell. The sheet name ignores ASCII case, and
-  a quoted name is at most 31 Unicode scalar values. A doubled apostrophe
-  inside a quoted name is one apostrophe. An unquoted name is the same kind of
-  token as a function name. A formula on the referenced cell is not
-  recalculated: only a stored `<v>` number is used, and a formula cell with no
-  stored number leaves the caller's stored value. The same rule applies to a
-  qualified reference on the sheet being edited. A cross-sheet range and another
-  workbook are not read. A formula can read `Sheet1:Sheet2!A1` or
-  `Sheet1:Sheet2!A1:B2`. The sheets are the inclusive span in workbook order,
-  at most 32 sheets and 4096 cells. Every sheet in the span is read from its
-  stored snapshot, including the sheet being edited, so a formula there is not
-  recalculated. A missing sheet name leaves the stored value. The reference
+  text. An index past the table is blank.   A reference `Sheet!A1` or
+  `'My Sheet'!A1` reads one cell from a single pass. Before the edited sheet is
+  recalculated, every sheet is passed once in workbook order. Each formula on
+  that pass reads stored values on its own sheet, including the stored value of
+  another formula there, and it reads an earlier sheet after that sheet's pass.
+  At most 4096 formulas on a sheet are passed. A formula that returns nothing
+  keeps its stored value. A spill formula keeps its stored value. The pass is
+  not written back into the other sheet's file. The sheet name ignores ASCII
+  case, and a quoted name is at most 31 Unicode scalar values. A doubled
+  apostrophe inside a quoted name is one apostrophe. An unquoted name is the
+  same kind of token as a function name. A qualified reference on the sheet
+  being edited reads that pass, so `Budgets!A1` is the pass and a bare `A1`
+  still follows a live formula. A cross-sheet range and another workbook are
+  not read. A formula can read `Sheet1:Sheet2!A1` or `Sheet1:Sheet2!A1:B2`.
+  The sheets are the inclusive span in workbook order, at most 32 sheets and
+  4096 cells. Every sheet in the span is read from that same pass, including
+  the sheet being edited. A missing sheet name leaves the stored value. The reference
   expands in `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `PRODUCT`, `AVERAGEA`,
   `COUNTA`, `COUNTBLANK`, and wherever a colon range is accepted. `CONCAT`,
   `CONCATENATE`, and `TEXTJOIN` do not expand it. A circular reference is
@@ -768,8 +772,7 @@ release yet.
   name used as a single value, or inside an expression, leaves the stored
   value. A name may also be one expression of at most 256 characters. Every cell
   reference in it must be fully absolute and written after a sheet name, such
-  as `Budgets!$A$1`. Those cells are read from the stored snapshot, so a
-  formula there is not recalculated. The expression cannot use another name. A
+  as `Budgets!$A$1`. Those cells are read from that same one pass. The expression cannot use another name. A
   relative reference, a 3D reference, another workbook, or a structured table
   reference is ignored. A formula name is one value and does not expand as a
   range. A formula can read one column of a table as `Table1[Amount]`. The
