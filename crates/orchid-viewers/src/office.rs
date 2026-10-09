@@ -6149,6 +6149,55 @@ fn number_matches(cell: f64, op: CriterionOp, target: f64) -> bool {
     }
 }
 
+fn header_label(value: Option<&CalcValue>) -> Option<String> {
+    let CalcValue::Text(text) = value? else {
+        return None;
+    };
+    let text = text.trim();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text.to_ascii_lowercase())
+    }
+}
+
+fn criterion_holds(cell: Option<&CalcValue>, criteria: &CalcValue) -> Option<bool> {
+    match criteria {
+        CalcValue::Num(target) if target.is_finite() => {
+            let Some(CalcValue::Num(number)) = cell else {
+                return Some(false);
+            };
+            Some(number.is_finite() && number_matches(*number, CriterionOp::Eq, *target))
+        }
+        CalcValue::Num(_) => None,
+        CalcValue::Text(text) => {
+            if text.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
+                return None;
+            }
+            if let Some((op, rest)) = criterion_op(text) {
+                if let Some(target) = value_excel(rest) {
+                    let Some(CalcValue::Num(number)) = cell else {
+                        return Some(false);
+                    };
+                    return Some(number.is_finite() && number_matches(*number, op, target));
+                }
+                if !matches!(op, CriterionOp::Eq | CriterionOp::Ne) {
+                    return None;
+                }
+                let rest = rest.trim_matches(' ');
+                let same = matches!(cell, Some(CalcValue::Text(value)) if value.eq_ignore_ascii_case(rest));
+                return Some(if matches!(op, CriterionOp::Eq) {
+                    same
+                } else {
+                    !same
+                });
+            }
+            let want = text.trim_matches(' ');
+            Some(matches!(cell, Some(CalcValue::Text(value)) if value.eq_ignore_ascii_case(want)))
+        }
+    }
+}
+
 fn compile_criterion(criteria: &CalcValue) -> Option<(CriterionOp, f64)> {
     match criteria {
         CalcValue::Num(target) if target.is_finite() => Some((CriterionOp::Eq, *target)),
@@ -7210,6 +7259,15 @@ impl<'a> CalcParser<'a> {
                 let number = calc_num(self.compare(env)?)?;
                 let multiple = self.comma_number(env)?;
                 return mround_excel(number, multiple).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("DSUM")
+                || word.eq_ignore_ascii_case("DAVERAGE")
+                || word.eq_ignore_ascii_case("DCOUNT")
+                || word.eq_ignore_ascii_case("DCOUNTA")
+                || word.eq_ignore_ascii_case("DMIN")
+                || word.eq_ignore_ascii_case("DMAX")
+            {
+                return self.database(env, &word).map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SUMIF") {
                 return self.sum_if(env).map(CalcValue::Num);
@@ -8957,6 +9015,128 @@ impl<'a> CalcParser<'a> {
             }
         }
         Some(parts)
+    }
+
+    fn database(&mut self, env: &mut CalcEnv<'_>, kind: &str) -> Option<f64> {
+        let (cells, rows, cols) = self.cell_block(env)?;
+        if rows < 2 || cols == 0 || rows > 1024 || cells.len() != (rows as usize) * (cols as usize)
+        {
+            return None;
+        }
+        self.require_comma()?;
+        let field = self.compare(env)?;
+        self.require_comma()?;
+        let (criteria, crit_rows, crit_cols) = self.cell_block(env)?;
+        self.close_paren()?;
+        if crit_rows != 2
+            || crit_cols == 0
+            || crit_cols > 32
+            || criteria.len() != (crit_rows as usize) * (crit_cols as usize)
+        {
+            return None;
+        }
+        let mut headers = Vec::with_capacity(cols as usize);
+        for col in 0..cols {
+            headers.push(header_label(
+                self.cell_value(&cells[col as usize], env).as_ref(),
+            ));
+        }
+        let field_col = match &field {
+            CalcValue::Num(number) if number.is_finite() => {
+                let col = number.trunc();
+                if col < 1.0 || col > f64::from(cols) {
+                    return None;
+                }
+                (col as u32) - 1
+            }
+            CalcValue::Text(text) => {
+                let want = text.trim().to_ascii_lowercase();
+                if want.is_empty() {
+                    return None;
+                }
+                headers
+                    .iter()
+                    .position(|item| item.as_deref() == Some(want.as_str()))? as u32
+            }
+            _ => return None,
+        };
+        let mut filters = Vec::new();
+        for col in 0..crit_cols {
+            let header = header_label(self.cell_value(&criteria[col as usize], env).as_ref());
+            let Some(name) = header else {
+                continue;
+            };
+            let value = self.cell_value(&criteria[(crit_cols + col) as usize], env);
+            if value.as_ref().is_none_or(|item| match item {
+                CalcValue::Text(text) => text.trim().is_empty(),
+                CalcValue::Num(_) => false,
+            }) {
+                continue;
+            }
+            let value = value?;
+            if let CalcValue::Text(text) = &value {
+                if text.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
+                    return None;
+                }
+            }
+            let Some(db_col) = headers
+                .iter()
+                .position(|item| item.as_deref() == Some(name.as_str()))
+            else {
+                return None;
+            };
+            filters.push((db_col as u32, value));
+        }
+        let mut numbers = Vec::new();
+        let mut counted = 0.0;
+        for row in 1..rows {
+            let mut matched = true;
+            for (col, criterion) in &filters {
+                let at = (row * cols + col) as usize;
+                let cell = self.cell_value(&cells[at], env);
+                if !criterion_holds(cell.as_ref(), criterion)? {
+                    matched = false;
+                    break;
+                }
+            }
+            if !matched {
+                continue;
+            }
+            let at = (row * cols + field_col) as usize;
+            match self.cell_value(&cells[at], env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => {
+                    numbers.push(number);
+                    counted += 1.0;
+                }
+                Some(CalcValue::Text(text)) if !text.is_empty() => counted += 1.0,
+                _ => {}
+            }
+        }
+        let count_all = kind.eq_ignore_ascii_case("DCOUNTA");
+        if count_all {
+            return Some(counted);
+        }
+        if kind.eq_ignore_ascii_case("DCOUNT") {
+            return Some(numbers.len() as f64);
+        }
+        if kind.eq_ignore_ascii_case("DSUM") {
+            let total = numbers.iter().sum::<f64>();
+            return total.is_finite().then_some(total);
+        }
+        if numbers.is_empty() {
+            return None;
+        }
+        if kind.eq_ignore_ascii_case("DAVERAGE") {
+            let average = numbers.iter().sum::<f64>() / numbers.len() as f64;
+            return average.is_finite().then_some(average);
+        }
+        if kind.eq_ignore_ascii_case("DMIN") {
+            return numbers.into_iter().reduce(f64::min);
+        }
+        if kind.eq_ignore_ascii_case("DMAX") {
+            return numbers.into_iter().reduce(f64::max);
+        }
+        None
     }
 
     fn sum_if(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
@@ -12582,6 +12762,79 @@ mod tests {
         assert!(sheet.contains(r#"<f>Two</f><v>2</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Relative</f><v>4</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Nested</f><v>5</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_database() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Item</t></is></c><c r="B1" t="inlineStr"><is><t>Qty</t></is></c><c r="C1" t="inlineStr"><is><t>Price</t></is></c><c r="E1" t="inlineStr"><is><t>Item</t></is></c><c r="F1" t="inlineStr"><is><t>Qty</t></is></c><c r="I1" t="inlineStr"><is><t>Item</t></is></c><c r="L1" t="inlineStr"><is><t>Qty</t></is></c><c r="P1" t="inlineStr"><is><t>Item</t></is></c><c r="Q1" t="inlineStr"><is><t>Qty</t></is></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>apple</t></is></c><c r="B2"><v>2</v></c><c r="C2"><v>5</v></c><c r="E2" t="inlineStr"><is><t>Apple</t></is></c><c r="F2" t="inlineStr"><is><t>&gt;1</t></is></c><c r="I2" t="inlineStr"><is><t>pear*</t></is></c><c r="L2" t="inlineStr"><is><t>&gt;10</t></is></c><c r="P2" t="inlineStr"><is><t>apple</t></is></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>pear</t></is></c><c r="B3"><v>4</v></c><c r="C3"><v>3</v></c></row><row r="4"><c r="A4" t="inlineStr"><is><t>apple</t></is></c><c r="B4"><v>1</v></c><c r="C4"><v>9</v></c></row><row r="6"><c r="A6"><f>DSUM(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="B6"><f>DAVERAGE(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="C6"><f>DCOUNT(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="D6"><f>DCOUNTA(A1:C4,&quot;Item&quot;,E1:F2)</f><v>0</v></c><c r="E6"><f>DMIN(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="F6"><f>DMAX(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="G6"><f>DSUM(A1:C4,3,E1:F2)</f><v>0</v></c><c r="H6"><f>DSUM(A1:C4,&quot;Price&quot;,E1:F3)</f><v>8</v></c><c r="I6"><f>DSUM(A1:C4,&quot;Price&quot;,I1:I2)</f><v>9</v></c><c r="J6"><f>DSUM(A1:C4,&quot;Nope&quot;,E1:F2)</f><v>7</v></c><c r="K6"><f>DSUM(A1:C4,&quot;Price&quot;,P1:Q2)</f><v>0</v></c><c r="L6"><f>DSUM(A1:C4,&quot;Price&quot;,L1:L2)</f><v>0</v></c><c r="M6"><f>DAVERAGE(A1:C4,&quot;Price&quot;,L1:L2)</f><v>4</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>DSUM(A1:C4,&quot;Price&quot;,E1:F2)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DAVERAGE(A1:C4,&quot;Price&quot;,E1:F2)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DCOUNT(A1:C4,&quot;Price&quot;,E1:F2)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DCOUNTA(A1:C4,&quot;Item&quot;,E1:F2)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DMIN(A1:C4,&quot;Price&quot;,E1:F2)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DMAX(A1:C4,&quot;Price&quot;,E1:F2)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DSUM(A1:C4,3,E1:F2)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DSUM(A1:C4,&quot;Price&quot;,E1:F3)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DSUM(A1:C4,&quot;Price&quot;,I1:I2)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DSUM(A1:C4,&quot;Nope&quot;,E1:F2)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DSUM(A1:C4,&quot;Price&quot;,P1:Q2)</f><v>14</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DSUM(A1:C4,&quot;Price&quot;,L1:L2)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DAVERAGE(A1:C4,&quot;Price&quot;,L1:L2)</f><v>4</v>"#),
+            "{sheet}"
+        );
     }
 
     #[test]
