@@ -765,7 +765,15 @@ release yet.
   most 16, into existing value cells. A second delimiter, more than 16
   pieces, or a blocked cell leaves the stored value. Consecutive delimiters
   keep an empty piece. An expression around `TEXTSPLIT` keeps the stored
-  value. A cross-sheet range and another workbook are
+  value. An array constant `{1,2;3,4}` is a whole argument of `SUM`,
+  `AVERAGE`, `MIN`, `MAX`, `COUNT`, `PRODUCT`, `AVERAGEA`, `COUNTA`, or
+  `COUNTBLANK`. A comma starts another column and a semicolon starts another
+  row. Each row must have the same number of columns. A value is a plain
+  number, with an optional sign, or quoted text. There is no cell reference,
+  no nested brace, no blank, and no scientific notation. Text is skipped by
+  the numeric functions and counts as 0 for `AVERAGEA`. At most 4096 values.
+  A ragged array, or the constant used as one value or as a `SUMIF` range,
+  leaves the stored value. A cross-sheet range and another workbook are
   not read. A formula can read `Sheet1:Sheet2!A1` or `Sheet1:Sheet2!A1:B2`.
   The sheets are the inclusive span in workbook order, at most 32 sheets and
   4096 cells. Every sheet in the span is read from that same pass, including

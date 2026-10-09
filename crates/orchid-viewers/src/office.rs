@@ -2227,6 +2227,12 @@ enum RefCall {
     Invalid,
 }
 
+enum ArrayConst {
+    Absent,
+    Invalid,
+    Values(Vec<CalcValue>),
+}
+
 struct ForeignSheet {
     literals: std::collections::HashMap<String, f64>,
     texts: std::collections::HashMap<String, String>,
@@ -9258,76 +9264,88 @@ impl<'a> CalcParser<'a> {
                 self.index += 1;
                 break;
             }
-            match self.ref_call(env) {
-                RefCall::Invalid => return None,
-                RefCall::Cells(cells) => {
-                    for address in cells {
-                        if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+            match self.array_constant() {
+                ArrayConst::Invalid => return None,
+                ArrayConst::Values(items) => {
+                    for item in items {
+                        if let CalcValue::Num(value) = item {
                             values.push(value);
                         }
                     }
                 }
-                RefCall::Absent => {
-                    let saved = self.index;
-                    if let Some(cells) = self.three_d_cells(env) {
+                ArrayConst::Absent => match self.ref_call(env) {
+                    RefCall::Invalid => return None,
+                    RefCall::Cells(cells) => {
                         for address in cells {
                             if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
                                 values.push(value);
                             }
                         }
-                    } else if let Some(defined) = self.take_table(env) {
-                        let cells = named_addresses(&defined, env);
-                        if cells.is_empty() || cells.len() > 4096 {
-                            return None;
-                        }
-                        for address in cells {
-                            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
-                                values.push(value);
-                            }
-                        }
-                    } else {
-                        match self.name_arg(env) {
-                            NameArg::Invalid => return None,
-                            NameArg::Cells(cells) => {
-                                for address in cells {
-                                    if let Some(CalcValue::Num(value)) =
-                                        self.cell_value(&address, env)
-                                    {
-                                        values.push(value);
-                                    }
+                    }
+                    RefCall::Absent => {
+                        let saved = self.index;
+                        if let Some(cells) = self.three_d_cells(env) {
+                            for address in cells {
+                                if let Some(CalcValue::Num(value)) = self.cell_value(&address, env)
+                                {
+                                    values.push(value);
                                 }
                             }
-                            NameArg::Absent => {
-                                if let Some(start) = self.cell_token() {
-                                    self.skip();
-                                    if self.bytes.get(self.index) == Some(&b':') {
-                                        self.index += 1;
+                        } else if let Some(defined) = self.take_table(env) {
+                            let cells = named_addresses(&defined, env);
+                            if cells.is_empty() || cells.len() > 4096 {
+                                return None;
+                            }
+                            for address in cells {
+                                if let Some(CalcValue::Num(value)) = self.cell_value(&address, env)
+                                {
+                                    values.push(value);
+                                }
+                            }
+                        } else {
+                            match self.name_arg(env) {
+                                NameArg::Invalid => return None,
+                                NameArg::Cells(cells) => {
+                                    for address in cells {
+                                        if let Some(CalcValue::Num(value)) =
+                                            self.cell_value(&address, env)
+                                        {
+                                            values.push(value);
+                                        }
+                                    }
+                                }
+                                NameArg::Absent => {
+                                    if let Some(start) = self.cell_token() {
                                         self.skip();
-                                        let Some(end) = self.cell_token() else {
-                                            return None;
-                                        };
-                                        let Some(cells) = cells_in_range(&start, &end) else {
-                                            return None;
-                                        };
-                                        for address in cells {
-                                            if let Some(CalcValue::Num(value)) =
-                                                self.cell_value(&address, env)
-                                            {
-                                                values.push(value);
+                                        if self.bytes.get(self.index) == Some(&b':') {
+                                            self.index += 1;
+                                            self.skip();
+                                            let Some(end) = self.cell_token() else {
+                                                return None;
+                                            };
+                                            let Some(cells) = cells_in_range(&start, &end) else {
+                                                return None;
+                                            };
+                                            for address in cells {
+                                                if let Some(CalcValue::Num(value)) =
+                                                    self.cell_value(&address, env)
+                                                {
+                                                    values.push(value);
+                                                }
                                             }
+                                        } else {
+                                            self.index = saved;
+                                            values.push(calc_num(self.expr(env)?)?);
                                         }
                                     } else {
                                         self.index = saved;
                                         values.push(calc_num(self.expr(env)?)?);
                                     }
-                                } else {
-                                    self.index = saved;
-                                    values.push(calc_num(self.expr(env)?)?);
                                 }
                             }
                         }
                     }
-                }
+                },
             }
             self.skip();
             match self.bytes.get(self.index).copied() {
@@ -9367,25 +9385,24 @@ impl<'a> CalcParser<'a> {
                 self.index += 1;
                 break;
             }
-            match self.ref_call(env) {
-                RefCall::Invalid => return None,
-                RefCall::Cells(cells) => {
-                    for address in cells {
-                        match self.cell_value(&address, env) {
-                            Some(CalcValue::Num(value)) => {
+            match self.array_constant() {
+                ArrayConst::Invalid => return None,
+                ArrayConst::Values(items) => {
+                    for item in items {
+                        match item {
+                            CalcValue::Num(value) => {
                                 if !value.is_finite() {
                                     return None;
                                 }
                                 values.push(value);
                             }
-                            Some(CalcValue::Text(_)) => values.push(0.0),
-                            None => {}
+                            CalcValue::Text(_) => values.push(0.0),
                         }
                     }
                 }
-                RefCall::Absent => {
-                    let saved = self.index;
-                    if let Some(cells) = self.three_d_cells(env) {
+                ArrayConst::Absent => match self.ref_call(env) {
+                    RefCall::Invalid => return None,
+                    RefCall::Cells(cells) => {
                         for address in cells {
                             match self.cell_value(&address, env) {
                                 Some(CalcValue::Num(value)) => {
@@ -9398,76 +9415,93 @@ impl<'a> CalcParser<'a> {
                                 None => {}
                             }
                         }
-                    } else if let Some(defined) = self.take_table(env) {
-                        let cells = named_addresses(&defined, env);
-                        if cells.is_empty() || cells.len() > 4096 {
-                            return None;
-                        }
-                        for address in cells {
-                            match self.cell_value(&address, env) {
-                                Some(CalcValue::Num(value)) => {
-                                    if !value.is_finite() {
-                                        return None;
-                                    }
-                                    values.push(value);
-                                }
-                                Some(CalcValue::Text(_)) => values.push(0.0),
-                                None => {}
-                            }
-                        }
-                    } else {
-                        match self.name_arg(env) {
-                            NameArg::Invalid => return None,
-                            NameArg::Cells(cells) => {
-                                for address in cells {
-                                    match self.cell_value(&address, env) {
-                                        Some(CalcValue::Num(value)) => {
-                                            if !value.is_finite() {
-                                                return None;
-                                            }
-                                            values.push(value);
+                    }
+                    RefCall::Absent => {
+                        let saved = self.index;
+                        if let Some(cells) = self.three_d_cells(env) {
+                            for address in cells {
+                                match self.cell_value(&address, env) {
+                                    Some(CalcValue::Num(value)) => {
+                                        if !value.is_finite() {
+                                            return None;
                                         }
-                                        Some(CalcValue::Text(_)) => values.push(0.0),
-                                        None => {}
+                                        values.push(value);
                                     }
+                                    Some(CalcValue::Text(_)) => values.push(0.0),
+                                    None => {}
                                 }
                             }
-                            NameArg::Absent => {
-                                if let Some(start) = self.cell_token() {
-                                    self.skip();
-                                    if self.bytes.get(self.index) == Some(&b':') {
-                                        self.index += 1;
-                                        self.skip();
-                                        let Some(end) = self.cell_token() else {
+                        } else if let Some(defined) = self.take_table(env) {
+                            let cells = named_addresses(&defined, env);
+                            if cells.is_empty() || cells.len() > 4096 {
+                                return None;
+                            }
+                            for address in cells {
+                                match self.cell_value(&address, env) {
+                                    Some(CalcValue::Num(value)) => {
+                                        if !value.is_finite() {
                                             return None;
-                                        };
-                                        let Some(cells) = cells_in_range(&start, &end) else {
-                                            return None;
-                                        };
-                                        for address in cells {
-                                            match self.cell_value(&address, env) {
-                                                Some(CalcValue::Num(value)) => {
-                                                    if !value.is_finite() {
-                                                        return None;
-                                                    }
-                                                    values.push(value);
+                                        }
+                                        values.push(value);
+                                    }
+                                    Some(CalcValue::Text(_)) => values.push(0.0),
+                                    None => {}
+                                }
+                            }
+                        } else {
+                            match self.name_arg(env) {
+                                NameArg::Invalid => return None,
+                                NameArg::Cells(cells) => {
+                                    for address in cells {
+                                        match self.cell_value(&address, env) {
+                                            Some(CalcValue::Num(value)) => {
+                                                if !value.is_finite() {
+                                                    return None;
                                                 }
-                                                Some(CalcValue::Text(_)) => values.push(0.0),
-                                                None => {}
+                                                values.push(value);
                                             }
+                                            Some(CalcValue::Text(_)) => values.push(0.0),
+                                            None => {}
+                                        }
+                                    }
+                                }
+                                NameArg::Absent => {
+                                    if let Some(start) = self.cell_token() {
+                                        self.skip();
+                                        if self.bytes.get(self.index) == Some(&b':') {
+                                            self.index += 1;
+                                            self.skip();
+                                            let Some(end) = self.cell_token() else {
+                                                return None;
+                                            };
+                                            let Some(cells) = cells_in_range(&start, &end) else {
+                                                return None;
+                                            };
+                                            for address in cells {
+                                                match self.cell_value(&address, env) {
+                                                    Some(CalcValue::Num(value)) => {
+                                                        if !value.is_finite() {
+                                                            return None;
+                                                        }
+                                                        values.push(value);
+                                                    }
+                                                    Some(CalcValue::Text(_)) => values.push(0.0),
+                                                    None => {}
+                                                }
+                                            }
+                                        } else {
+                                            self.index = saved;
+                                            values.push(self.a_scalar(env)?);
                                         }
                                     } else {
                                         self.index = saved;
                                         values.push(self.a_scalar(env)?);
                                     }
-                                } else {
-                                    self.index = saved;
-                                    values.push(self.a_scalar(env)?);
                                 }
                             }
                         }
                     }
-                }
+                },
             }
             self.skip();
             match self.bytes.get(self.index).copied() {
@@ -9501,23 +9535,20 @@ impl<'a> CalcParser<'a> {
                 self.index += 1;
                 break;
             }
-            match self.ref_call(env) {
-                RefCall::Invalid => return None,
-                RefCall::Cells(cells) => {
-                    for address in cells {
+            match self.array_constant() {
+                ArrayConst::Invalid => return None,
+                ArrayConst::Values(items) => {
+                    for item in items {
                         seen += 1;
                         if seen > 4096 {
                             return None;
                         }
-                        match self.cell_value(&address, env) {
-                            Some(value) => note_presence(&value, &mut present, &mut blank)?,
-                            None => blank += 1.0,
-                        }
+                        note_presence(&item, &mut present, &mut blank)?;
                     }
                 }
-                RefCall::Absent => {
-                    let saved = self.index;
-                    if let Some(cells) = self.three_d_cells(env) {
+                ArrayConst::Absent => match self.ref_call(env) {
+                    RefCall::Invalid => return None,
+                    RefCall::Cells(cells) => {
                         for address in cells {
                             seen += 1;
                             if seen > 4096 {
@@ -9528,73 +9559,94 @@ impl<'a> CalcParser<'a> {
                                 None => blank += 1.0,
                             }
                         }
-                    } else if let Some(defined) = self.take_table(env) {
-                        let cells = named_addresses(&defined, env);
-                        for address in cells {
-                            seen += 1;
-                            if seen > 4096 {
-                                return None;
-                            }
-                            match self.cell_value(&address, env) {
-                                Some(value) => note_presence(&value, &mut present, &mut blank)?,
-                                None => blank += 1.0,
-                            }
-                        }
-                    } else {
-                        match self.name_arg(env) {
-                            NameArg::Invalid => return None,
-                            NameArg::Cells(cells) => {
-                                for address in cells {
-                                    seen += 1;
-                                    if seen > 4096 {
-                                        return None;
-                                    }
-                                    match self.cell_value(&address, env) {
-                                        Some(value) => {
-                                            note_presence(&value, &mut present, &mut blank)?
-                                        }
-                                        None => blank += 1.0,
-                                    }
+                    }
+                    RefCall::Absent => {
+                        let saved = self.index;
+                        if let Some(cells) = self.three_d_cells(env) {
+                            for address in cells {
+                                seen += 1;
+                                if seen > 4096 {
+                                    return None;
+                                }
+                                match self.cell_value(&address, env) {
+                                    Some(value) => note_presence(&value, &mut present, &mut blank)?,
+                                    None => blank += 1.0,
                                 }
                             }
-                            NameArg::Absent => {
-                                if let Some(start) = self.cell_token() {
-                                    self.skip();
-                                    if self.bytes.get(self.index) == Some(&b':') {
-                                        self.index += 1;
+                        } else if let Some(defined) = self.take_table(env) {
+                            let cells = named_addresses(&defined, env);
+                            for address in cells {
+                                seen += 1;
+                                if seen > 4096 {
+                                    return None;
+                                }
+                                match self.cell_value(&address, env) {
+                                    Some(value) => note_presence(&value, &mut present, &mut blank)?,
+                                    None => blank += 1.0,
+                                }
+                            }
+                        } else {
+                            match self.name_arg(env) {
+                                NameArg::Invalid => return None,
+                                NameArg::Cells(cells) => {
+                                    for address in cells {
+                                        seen += 1;
+                                        if seen > 4096 {
+                                            return None;
+                                        }
+                                        match self.cell_value(&address, env) {
+                                            Some(value) => {
+                                                note_presence(&value, &mut present, &mut blank)?
+                                            }
+                                            None => blank += 1.0,
+                                        }
+                                    }
+                                }
+                                NameArg::Absent => {
+                                    if let Some(start) = self.cell_token() {
                                         self.skip();
-                                        let Some(end) = self.cell_token() else {
-                                            return None;
-                                        };
-                                        let Some(cells) = cells_in_range(&start, &end) else {
-                                            return None;
-                                        };
-                                        for address in cells {
-                                            seen += 1;
-                                            if seen > 4096 {
+                                        if self.bytes.get(self.index) == Some(&b':') {
+                                            self.index += 1;
+                                            self.skip();
+                                            let Some(end) = self.cell_token() else {
                                                 return None;
-                                            }
-                                            match self.cell_value(&address, env) {
-                                                Some(value) => {
-                                                    note_presence(&value, &mut present, &mut blank)?
+                                            };
+                                            let Some(cells) = cells_in_range(&start, &end) else {
+                                                return None;
+                                            };
+                                            for address in cells {
+                                                seen += 1;
+                                                if seen > 4096 {
+                                                    return None;
                                                 }
-                                                None => blank += 1.0,
+                                                match self.cell_value(&address, env) {
+                                                    Some(value) => note_presence(
+                                                        &value,
+                                                        &mut present,
+                                                        &mut blank,
+                                                    )?,
+                                                    None => blank += 1.0,
+                                                }
                                             }
+                                        } else {
+                                            self.index = saved;
+                                            seen += 1;
+                                            note_presence(
+                                                &self.expr(env)?,
+                                                &mut present,
+                                                &mut blank,
+                                            )?;
                                         }
                                     } else {
                                         self.index = saved;
                                         seen += 1;
                                         note_presence(&self.expr(env)?, &mut present, &mut blank)?;
                                     }
-                                } else {
-                                    self.index = saved;
-                                    seen += 1;
-                                    note_presence(&self.expr(env)?, &mut present, &mut blank)?;
                                 }
                             }
                         }
                     }
-                }
+                },
             }
             if seen > 4096 {
                 return None;
@@ -10049,6 +10101,98 @@ impl<'a> CalcParser<'a> {
         } else {
             Some(out)
         }
+    }
+
+    fn array_constant(&mut self) -> ArrayConst {
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b'{') {
+            return ArrayConst::Absent;
+        }
+        self.index += 1;
+        let mut values = Vec::new();
+        let mut width = None;
+        let mut cols = 0u32;
+        let mut expect = true;
+        loop {
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b'}') => {
+                    if expect || values.is_empty() {
+                        return ArrayConst::Invalid;
+                    }
+                    if let Some(expected) = width {
+                        if cols != expected {
+                            return ArrayConst::Invalid;
+                        }
+                    }
+                    self.index += 1;
+                    break;
+                }
+                _ if !expect => return ArrayConst::Invalid,
+                _ => {}
+            }
+            let Some(value) = self.array_item() else {
+                return ArrayConst::Invalid;
+            };
+            values.push(value);
+            if values.len() > 4096 {
+                return ArrayConst::Invalid;
+            }
+            cols += 1;
+            expect = false;
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => {
+                    self.index += 1;
+                    expect = true;
+                }
+                Some(b';') => {
+                    if let Some(expected) = width {
+                        if cols != expected {
+                            return ArrayConst::Invalid;
+                        }
+                    } else {
+                        width = Some(cols);
+                    }
+                    cols = 0;
+                    self.index += 1;
+                    expect = true;
+                }
+                Some(b'}') => {}
+                _ => return ArrayConst::Invalid,
+            }
+        }
+        if values.is_empty() {
+            ArrayConst::Invalid
+        } else {
+            ArrayConst::Values(values)
+        }
+    }
+
+    fn array_item(&mut self) -> Option<CalcValue> {
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b'"') {
+            return self.quoted().map(CalcValue::Text);
+        }
+        if self.bytes.get(self.index) == Some(&b'{') {
+            return None;
+        }
+        let negative = if self.bytes.get(self.index) == Some(&b'-') {
+            self.index += 1;
+            self.skip();
+            true
+        } else if self.bytes.get(self.index) == Some(&b'+') {
+            self.index += 1;
+            self.skip();
+            false
+        } else {
+            false
+        };
+        let number = self.number()?;
+        if !number.is_finite() {
+            return None;
+        }
+        Some(CalcValue::Num(if negative { -number } else { number }))
     }
 
     fn ref_call(&mut self, env: &mut CalcEnv<'_>) -> RefCall {
@@ -13315,6 +13459,66 @@ mod tests {
             sheet.contains(r#"<f>DATEDIF(43831,44256,&quot;MD&quot;)</f><v>0</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_array_constant() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>SUM({1,2;3,4})</f><v>0</v></c><c r="A2"><f>AVERAGE({1,2,3})</f><v>0</v></c><c r="A3"><f>COUNT({1,&quot;a&quot;,3})</f><v>0</v></c><c r="A4"><f>COUNTA({1,&quot;a&quot;})</f><v>0</v></c><c r="A5"><f>COUNTBLANK({1,&quot;a&quot;})</f><v>11</v></c><c r="A6"><f>SUM({1,2;3})</f><v>5</v></c><c r="A7"><f>SUM({1,,2})</f><v>6</v></c><c r="A8"><f>SUM({A1})</f><v>7</v></c><c r="A9"><f>{1}</f><v>8</v></c><c r="B1"><f>SUM({1,2})+1</f><v>0</v></c><c r="B2"><f>PRODUCT({2,3})</f><v>0</v></c><c r="B3"><f>MIN({3,1,2})</f><v>0</v></c><c r="B4"><f>AVERAGEA({1,&quot;a&quot;})</f><v>0</v></c><c r="B5"><f>SUMIF({1,2},&quot;&gt;0&quot;)</f><v>9</v></c><c r="B6"><f>MAX({1,-2})</f><v>0</v></c><c r="Z1"><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SUM({1,2;3,4})</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>AVERAGE({1,2,3})</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNT({1,&quot;a&quot;,3})</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTA({1,&quot;a&quot;})</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>COUNTBLANK({1,&quot;a&quot;})</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>SUM({1,2;3})</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SUM({1,,2})</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SUM({A1})</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>{1}</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SUM({1,2})+1</f><v>4</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>PRODUCT({2,3})</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>MIN({3,1,2})</f><v>1</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>AVERAGEA({1,&quot;a&quot;})</f><v>0.5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUMIF({1,2},&quot;&gt;0&quot;)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>MAX({1,-2})</f><v>1</v>"#), "{sheet}");
     }
 
     #[test]
