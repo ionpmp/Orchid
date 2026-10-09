@@ -974,13 +974,19 @@ release yet.
   across and then down. The two inputs must differ from each other and from
   the formula cell. An expression
   around the call leaves the stored value. `XLOOKUP` and `XMATCH` take one
-  row or one column of at most 256 cells. The match is exact and ASCII
-  case-insensitive. There are no wildcards: a lookup value that contains `*`,
-  `?`, or `~` leaves the stored value. Blank cells are skipped. The first match
-  wins. The `XLOOKUP` return range must be the same length. A blank return cell
-  is 0. The optional fourth argument is written when nothing matches. Without
-  it, or when `XMATCH` finds nothing, the stored value remains. `XMATCH`
-  accepts match mode 0 or no mode. Any other mode leaves the stored value.
+  row or one column of at most 256 cells. An omitted mode, or mode 0, is an
+  exact ASCII case-insensitive match. A lookup value may contain one `*`,
+  `?`, and `~` pattern. `~` escapes the next character. A pattern longer than
+  64 scalar values, or a key longer than 256, is not a match. Mode 1 returns
+  the last key that is not greater than the lookup and stops at the first
+  greater key, a blank, or a different type, so the keys should be ascending.
+  Mode -1 stops at the first smaller key, so the keys should be descending.
+  A wildcard with mode 1 or -1, or any other mode, leaves the stored value.
+  Blank cells are skipped on an exact match. The first exact match wins. The
+  `XLOOKUP` return range must be the same length. A blank return cell is 0.
+  The optional fourth argument is written when nothing matches. A fifth
+  argument is the match mode. Without the fourth argument, or when `XMATCH`
+  finds nothing, the stored value remains.
   `LET` binds up to eight names, then calculates the last argument. A name
   starts with a letter or underscore and uses letters, digits, underscores, and
   dots. It must not look like a cell address. A later binding replaces an

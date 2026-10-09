@@ -4192,14 +4192,10 @@ fn let_name_ok(name: &str) -> bool {
             .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '.')
 }
 
-fn xlookup_same(lookup: &CalcValue, cell: Option<&CalcValue>) -> bool {
-    match (lookup, cell) {
-        (CalcValue::Num(left), Some(CalcValue::Num(right))) => {
-            left.is_finite() && right.is_finite() && left == right
-        }
-        (CalcValue::Text(left), Some(CalcValue::Text(right))) => left.eq_ignore_ascii_case(right),
-        _ => false,
-    }
+enum LookupHit {
+    At(usize),
+    Miss,
+    Bad,
 }
 
 fn exact_lookup(lookup: &CalcValue, cell: Option<&CalcValue>) -> bool {
@@ -11373,11 +11369,6 @@ impl<'a> CalcParser<'a> {
 
     fn xlookup(&mut self, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
         let lookup = self.compare(env)?;
-        if let CalcValue::Text(text) = &lookup {
-            if text.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
-                return None;
-            }
-        }
         self.require_comma()?;
         let keys = self.vector_block(env)?;
         self.require_comma()?;
@@ -11386,58 +11377,94 @@ impl<'a> CalcParser<'a> {
             return None;
         }
         self.skip();
-        let missing = if self.bytes.get(self.index) == Some(&b')') {
+        let (missing, mode) = if self.bytes.get(self.index) == Some(&b')') {
             self.index += 1;
-            None
+            (None, 0)
         } else {
             self.require_comma()?;
             let missing = self.compare(env)?;
-            self.close_paren()?;
-            Some(missing)
+            self.skip();
+            let mode = if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                0
+            } else {
+                self.require_comma()?;
+                let mode = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !mode.is_finite() {
+                    return None;
+                }
+                mode.trunc() as i32
+            };
+            (Some(missing), mode)
         };
-        for (index, address) in keys.iter().enumerate() {
-            let cell = self.cell_value(address, env);
-            if xlookup_same(&lookup, cell.as_ref()) {
-                return match self.cell_value(&values[index], env) {
-                    Some(CalcValue::Num(number)) if number.is_finite() => {
-                        Some(CalcValue::Num(number))
-                    }
-                    Some(CalcValue::Text(text)) => Some(CalcValue::Text(text)),
-                    None => Some(CalcValue::Num(0.0)),
-                    _ => None,
-                };
-            }
+        match self.lookup_index(&lookup, &keys, env, mode) {
+            LookupHit::Bad => None,
+            LookupHit::Miss => missing.and_then(kept_calc),
+            LookupHit::At(index) => match self.cell_value(&values[index], env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => Some(CalcValue::Num(number)),
+                Some(CalcValue::Text(text)) => Some(CalcValue::Text(text)),
+                None => Some(CalcValue::Num(0.0)),
+                _ => None,
+            },
         }
-        missing.and_then(kept_calc)
     }
 
     fn xmatch(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
         let lookup = self.compare(env)?;
-        if let CalcValue::Text(text) = &lookup {
-            if text.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
-                return None;
-            }
-        }
         self.require_comma()?;
         let keys = self.vector_block(env)?;
         self.skip();
-        if self.bytes.get(self.index) == Some(&b')') {
+        let mode = if self.bytes.get(self.index) == Some(&b')') {
             self.index += 1;
+            0
         } else {
             self.require_comma()?;
             let mode = calc_num(self.compare(env)?)?;
             self.close_paren()?;
-            if !mode.is_finite() || mode.trunc() != 0.0 {
+            if !mode.is_finite() {
                 return None;
             }
+            mode.trunc() as i32
+        };
+        match self.lookup_index(&lookup, &keys, env, mode) {
+            LookupHit::At(index) => Some((index + 1) as f64),
+            LookupHit::Miss | LookupHit::Bad => None,
         }
-        for (index, address) in keys.iter().enumerate() {
-            let cell = self.cell_value(address, env);
-            if xlookup_same(&lookup, cell.as_ref()) {
-                return Some((index + 1) as f64);
+    }
+
+    fn lookup_index(
+        &mut self,
+        lookup: &CalcValue,
+        keys: &[String],
+        env: &mut CalcEnv<'_>,
+        mode: i32,
+    ) -> LookupHit {
+        if mode == 0 {
+            for (index, address) in keys.iter().enumerate() {
+                let cell = self.cell_value(address, env);
+                if exact_lookup(lookup, cell.as_ref()) {
+                    return LookupHit::At(index);
+                }
+            }
+            return LookupHit::Miss;
+        }
+        if mode != 1 && mode != -1 {
+            return LookupHit::Bad;
+        }
+        if let CalcValue::Text(text) = lookup {
+            if text.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
+                return LookupHit::Bad;
             }
         }
-        None
+        let mut loaded = Vec::with_capacity(keys.len());
+        for address in keys {
+            loaded.push(self.cell_value(address, env));
+        }
+        match approximate_index(&loaded, lookup, mode < 0) {
+            Some(index) => LookupHit::At(index),
+            None => LookupHit::Miss,
+        }
     }
 
     fn frequency_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
@@ -16278,15 +16305,62 @@ mod tests {
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>XLOOKUP(&quot;a*&quot;,A1:A4,B1:B4)</f><v>7</v>"#),
+            sheet.contains(r#"<f>XLOOKUP(&quot;a*&quot;,A1:A4,B1:B4)</f><v>10</v>"#),
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>XMATCH(&quot;pear&quot;,A1:A4,1)</f><v>8</v>"#),
+            sheet.contains(r#"<f>XMATCH(&quot;pear&quot;,A1:A4,1)</f><v>3</v>"#),
             "{sheet}"
         );
         assert!(
             sheet.contains(r#"<f>XLOOKUP(&quot;pear&quot;,A1:A4,B1:B3)</f><v>9</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_xlookup_mode() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="E1"><v>1</v></c><c r="F1"><v>10</v></c><c r="G1"><f>XLOOKUP(4,E1:E3,F1:F3,&quot;miss&quot;,1)</f><v>0</v></c><c r="H1"><f>XMATCH(4,E1:E3,1)</f><v>0</v></c><c r="I1"><f>XMATCH(4,E1:E3,-1)</f><v>9</v></c><c r="J1"><f>XMATCH(4,E1:E3,2)</f><v>8</v></c><c r="L1"><v>5</v></c><c r="M1"><v>50</v></c><c r="N1"><f>XLOOKUP(4,L1:L3,M1:M3,&quot;miss&quot;,-1)</f><v>0</v></c><c r="A1" t="inlineStr"><is><t>apple</t></is></c><c r="B1"><v>10</v></c><c r="O1"><f>XLOOKUP(&quot;a*&quot;,A1:A2,B1:B2,&quot;miss&quot;,1)</f><v>7</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="E2"><v>3</v></c><c r="F2"><v>30</v></c><c r="L2"><v>3</v></c><c r="M2"><v>30</v></c><c r="A2" t="inlineStr"><is><t>pear</t></is></c><c r="B2"><v>20</v></c></row><row r="3"><c r="E3"><v>5</v></c><c r="F3"><v>50</v></c><c r="L3"><v>1</v></c><c r="M3"><v>10</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(4,E1:E3,F1:F3,&quot;miss&quot;,1)</f><v>30</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XMATCH(4,E1:E3,1)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XMATCH(4,E1:E3,-1)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XMATCH(4,E1:E3,2)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(4,L1:L3,M1:M3,&quot;miss&quot;,-1)</f><v>50</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>XLOOKUP(&quot;a*&quot;,A1:A2,B1:B2,&quot;miss&quot;,1)</f><v>7</v>"#
+            ),
             "{sheet}"
         );
     }
