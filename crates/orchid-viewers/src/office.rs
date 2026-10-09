@@ -686,6 +686,43 @@ fn finite_cell(value: Option<CalcValue>) -> Option<f64> {
     }
 }
 
+fn goal_seek_newton(env: &mut CalcEnv<'_>, formula: &str, input: &str, target: f64) -> Option<f64> {
+    if !target.is_finite() {
+        return None;
+    }
+    let mut guess = match env.literals.get(input) {
+        Some(number) if number.is_finite() => *number,
+        _ => 0.0,
+    };
+    for _ in 0..40 {
+        let value = whatif_number(env, formula, &[(input, guess)])?;
+        let residual = value - target;
+        if residual.abs() <= 1e-7 * (1.0 + target.abs()) {
+            return guess.is_finite().then_some(guess);
+        }
+        let step = guess.abs().max(1.0) * 1e-6;
+        let right = whatif_number(env, formula, &[(input, guess + step)])?;
+        let slope = (right - value) / step;
+        if !slope.is_finite() || slope.abs() < 1e-12 {
+            return None;
+        }
+        let delta = residual / slope;
+        if !delta.is_finite() {
+            return None;
+        }
+        guess -= delta;
+        if !guess.is_finite() || guess.abs() > 1e12 {
+            return None;
+        }
+    }
+    let value = whatif_number(env, formula, &[(input, guess)])?;
+    if (value - target).abs() <= 1e-7 * (1.0 + target.abs()) && guess.is_finite() {
+        Some(guess)
+    } else {
+        None
+    }
+}
+
 fn whatif_number(env: &mut CalcEnv<'_>, formula: &str, pairs: &[(&str, f64)]) -> Option<f64> {
     let mut formulas = env.formulas.clone();
     let mut literals = env.literals.clone();
@@ -9185,6 +9222,9 @@ impl<'a> CalcParser<'a> {
                     .collect();
                 return networkdays_excel(start, end, &holidays).map(CalcValue::Num);
             }
+            if word.eq_ignore_ascii_case("GOALSEEK") {
+                return self.goal_seek(env).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("WORKDAY") {
                 let start = calc_num(self.compare(env)?)?;
                 self.require_comma()?;
@@ -11764,6 +11804,20 @@ impl<'a> CalcParser<'a> {
             columns: 1,
             all_or_nothing: true,
         })
+    }
+
+    fn goal_seek(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let formula_cell = self.cell_token()?.to_ascii_uppercase();
+        self.require_comma()?;
+        let input_cell = self.cell_token()?.to_ascii_uppercase();
+        self.require_comma()?;
+        let target = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        if formula_cell == input_cell || env.visiting.contains(&formula_cell) {
+            return None;
+        }
+        let formula = env.formulas.get(&formula_cell)?.clone();
+        goal_seek_newton(env, &formula, &input_cell, target)
     }
 
     fn sort_order(&mut self, env: &mut CalcEnv<'_>) -> Option<bool> {
@@ -17892,6 +17946,57 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>FILTER(A1:B3,C1:C3,1,1)</f><v>3</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_goal_seek() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>B1*2</f><v>0</v></c><c r="B1"><v>1</v></c><c r="C1"><f>GOALSEEK(A1,B1,10)</f><v>0</v></c><c r="D1"><f>GOALSEEK(A1,A1,10)</f><v>8</v></c><c r="E1"><f>GOALSEEK(B1,A1,10)</f><v>7</v></c><c r="F1"><f>GOALSEEK(A1,B1,0)</f><v>0</v></c><c r="G1"><f>GOALSEEK(A2,B2,2)</f><v>6</v></c><c r="H1"><f>GOALSEEK(A1,B1,&quot;x&quot;)</f><v>4</v></c><c r="I1"><f>GOALSEEK(A3,B3,4)</f><v>0</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><f>B2*0+1</f><v>0</v></c><c r="B2"><v>3</v></c></row><row r="3"><c r="A3"><f>B3+1</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>GOALSEEK(A1,B1,10)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="B1"><v>1</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>GOALSEEK(A1,A1,10)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GOALSEEK(B1,A1,10)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GOALSEEK(A1,B1,0)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GOALSEEK(A2,B2,2)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="B2"><v>3</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>GOALSEEK(A1,B1,&quot;x&quot;)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GOALSEEK(A3,B3,4)</f><v>3</v>"#),
             "{sheet}"
         );
     }
