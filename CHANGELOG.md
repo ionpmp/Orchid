@@ -980,15 +980,22 @@ release yet.
   with the first row replaced by m and b. A constant of 0, a perfect fit on
   that grid, or a non-positive y leaves the stored value. There is no
   `FORECAST.ETS`. `SORT`, `UNIQUE`, and `FILTER` are recalculated only when the formula
-  is that one call. Each takes one column of at most 256 cells. A blank is
+  is that one call. A one-column range is at most 256 cells. A blank is
   skipped. Text, including a shared string, leaves the stored value. Results
-  are written downward into existing value cells, and if any of those cells is
+  are written into existing value cells, and if any of those cells is
   missing, a formula, or text, nothing is written. `SORT` order defaults to 1.
   An order of -1 reverses it. Any other order leaves the stored value.
-  `UNIQUE` keeps the first number and treats values within 1e-9 as the same.
-  `FILTER` takes a second column of the same height and one numeric criterion,
-  the same kind `SUMIF` accepts. A row is kept when that criterion matches. No
-  remaining number leaves the stored value. `TAKE`, `DROP`, and `CHOOSECOLS` are recalculated only when the formula
+  `UNIQUE` stays one column and keeps the first number, treating values within
+  1e-9 as the same. `FILTER` takes a second column of the same height and one
+  numeric criterion, the same kind `SUMIF` accepts. A row is kept when that
+  criterion matches. No remaining number leaves the stored value. A rectangle
+  is at most 256 rows, 16 columns, and 256 cells, and every cell must be a
+  finite number. A blank or text leaves the stored value. `SORT` then takes a
+  1-based column index and an optional order of 1 or -1. The omitted index is
+  the first column. A negative index, 0, or an index past the rectangle leaves
+  the stored value. Equal keys keep their original order. `FILTER` keeps that
+  one criterion and writes each kept row across. A second criterion leaves the
+  stored value. `UNIQUE` does not take a rectangle. `TAKE`, `DROP`, and `CHOOSECOLS` are recalculated only when the formula
   is that one call. The source is one block of numbers, at most 256 rows
   and 16 columns, and every cell must be a finite number. A blank or text
   leaves the stored value. Counts are truncated and must be from -256

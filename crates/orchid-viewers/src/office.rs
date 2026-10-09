@@ -11766,35 +11766,109 @@ impl<'a> CalcParser<'a> {
         })
     }
 
-    fn sort_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
-        let mut values = self.column_numbers(env)?;
-        self.skip();
-        let descending = if self.bytes.get(self.index) == Some(&b')') {
-            self.index += 1;
-            false
-        } else {
-            self.require_comma()?;
-            let order = calc_num(self.compare(env)?)?;
-            self.close_paren()?;
-            if !order.is_finite() {
-                return None;
-            }
-            match order.trunc() {
-                1.0 => false,
-                -1.0 => true,
-                _ => return None,
-            }
-        };
-        if values.is_empty() {
+    fn sort_order(&mut self, env: &mut CalcEnv<'_>) -> Option<bool> {
+        let order = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        if !order.is_finite() {
             return None;
         }
-        values.sort_by(|left, right| left.total_cmp(right));
-        if descending {
-            values.reverse();
+        match order.trunc() {
+            1.0 => Some(false),
+            -1.0 => Some(true),
+            _ => None,
+        }
+    }
+
+    fn sort_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let (cells, rows, cols) = self.cell_block(env)?;
+        if rows == 0
+            || cols == 0
+            || rows > 256
+            || cols > 16
+            || rows.saturating_mul(cols) > 256
+            || cells.len() != (rows * cols) as usize
+        {
+            return None;
+        }
+        self.skip();
+        if cols == 1 {
+            let mut values = Vec::new();
+            for address in cells {
+                match self.cell_value(&address, env) {
+                    None => {}
+                    Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
+                    _ => return None,
+                }
+            }
+            let descending = if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                false
+            } else {
+                self.require_comma()?;
+                self.sort_order(env)?
+            };
+            if values.is_empty() {
+                return None;
+            }
+            values.sort_by(|left, right| left.total_cmp(right));
+            if descending {
+                values.reverse();
+            }
+            return Some(Spill {
+                values,
+                columns: 1,
+                all_or_nothing: true,
+            });
+        }
+        let mut grid = Vec::with_capacity(cells.len());
+        for address in cells {
+            match self.cell_value(&address, env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => grid.push(number),
+                _ => return None,
+            }
+        }
+        let (index, descending) = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            (0u32, false)
+        } else {
+            self.require_comma()?;
+            let index = calc_num(self.compare(env)?)?;
+            if !index.is_finite() {
+                return None;
+            }
+            let index = index.trunc();
+            if index < 1.0 || index > f64::from(cols) {
+                return None;
+            }
+            self.skip();
+            let descending = if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                false
+            } else {
+                self.require_comma()?;
+                self.sort_order(env)?
+            };
+            (index as u32 - 1, descending)
+        };
+        let mut order: Vec<u32> = (0..rows).collect();
+        order.sort_by(|left, right| {
+            let left = grid[(left * cols + index) as usize];
+            let right = grid[(right * cols + index) as usize];
+            let compared = left.total_cmp(&right);
+            if descending {
+                compared.reverse()
+            } else {
+                compared
+            }
+        });
+        let mut values = Vec::with_capacity(grid.len());
+        for row in order {
+            let start = (row * cols) as usize;
+            values.extend_from_slice(&grid[start..start + cols as usize]);
         }
         Some(Spill {
             values,
-            columns: 1,
+            columns: cols,
             all_or_nothing: true,
         })
     }
@@ -11821,7 +11895,13 @@ impl<'a> CalcParser<'a> {
 
     fn filter_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
         let (data, rows, cols) = self.cell_block(env)?;
-        if cols != 1 || rows == 0 || rows > 256 || data.len() != rows as usize {
+        if rows == 0
+            || cols == 0
+            || rows > 256
+            || cols > 16
+            || rows.saturating_mul(cols) > 256
+            || data.len() != (rows * cols) as usize
+        {
             return None;
         }
         self.require_comma()?;
@@ -11833,30 +11913,63 @@ impl<'a> CalcParser<'a> {
         let criteria = self.compare(env)?;
         let (op, target) = compile_criterion(&criteria)?;
         self.close_paren()?;
+        if cols == 1 {
+            let mut values = Vec::new();
+            for index in 0..rows as usize {
+                let flag = self.cell_value(&test[index], env);
+                let Some(CalcValue::Num(number)) = &flag else {
+                    if flag.is_some() {
+                        return None;
+                    }
+                    continue;
+                };
+                if !number.is_finite() || !number_matches(*number, op, target) {
+                    continue;
+                }
+                match self.cell_value(&data[index], env) {
+                    Some(CalcValue::Num(value)) if value.is_finite() => values.push(value),
+                    None => {}
+                    _ => return None,
+                }
+            }
+            if values.is_empty() {
+                return None;
+            }
+            return Some(Spill {
+                values,
+                columns: 1,
+                all_or_nothing: true,
+            });
+        }
+        let mut grid = Vec::with_capacity(data.len());
+        for address in &data {
+            match self.cell_value(address, env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => grid.push(number),
+                _ => return None,
+            }
+        }
         let mut values = Vec::new();
         for index in 0..rows as usize {
             let flag = self.cell_value(&test[index], env);
-            let Some(CalcValue::Num(number)) = &flag else {
-                if flag.is_some() {
-                    return None;
+            let keep = match &flag {
+                Some(CalcValue::Num(number)) if number.is_finite() => {
+                    number_matches(*number, op, target)
                 }
-                continue;
-            };
-            if !number.is_finite() || !number_matches(*number, op, target) {
-                continue;
-            }
-            match self.cell_value(&data[index], env) {
-                Some(CalcValue::Num(value)) if value.is_finite() => values.push(value),
-                None => {}
+                None => false,
                 _ => return None,
+            };
+            if !keep {
+                continue;
             }
+            let start = index * cols as usize;
+            values.extend_from_slice(&grid[start..start + cols as usize]);
         }
         if values.is_empty() {
             return None;
         }
         Some(Spill {
             values,
-            columns: 1,
+            columns: cols,
             all_or_nothing: true,
         })
     }
@@ -17716,6 +17829,71 @@ mod tests {
         assert!(sheet.contains(r#"<f>SORT(A1:A3)+1</f><v>4</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>SORT(A1:A2)</f><v>9</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>FOO()</f><v>5</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_sorts_a_rectangle() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>3</v></c><c r="B1"><v>10</v></c><c r="C1"><v>1</v></c><c r="D1"><f>SORT(A1:B3,2)</f><v>0</v></c><c r="E1"><v>0</v></c><c r="F1"><f>FILTER(A1:B3,C1:C3,1)</f><v>0</v></c><c r="G1"><v>0</v></c><c r="H1"><f>SORT(A1:B3)</f><v>0</v></c><c r="I1"><v>0</v></c><c r="J1"><f>SORT(A1:B3,1,-1)</f><v>0</v></c><c r="K1"><v>0</v></c><c r="L1"><f>SORT(A1:B3,3)</f><v>8</v></c><c r="M1"><f>SORT(A1:B3,-1)</f><v>7</v></c><c r="N1"><f>SORT(A1:B4)</f><v>6</v></c><c r="O1"><f>SORT(A5:B5)</f><v>5</v></c><c r="P1"><f>FILTER(A1:B3,C1:C3,9)</f><v>4</v></c><c r="Q1"><f>FILTER(A1:B3,C1:C3,1,1)</f><v>3</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>1</v></c><c r="B2"><v>20</v></c><c r="C2"><v>0</v></c><c r="D2"><v>0</v></c><c r="E2"><v>0</v></c><c r="F2"><v>0</v></c><c r="G2"><v>0</v></c><c r="H2"><v>0</v></c><c r="I2"><v>0</v></c><c r="J2"><v>0</v></c><c r="K2"><v>0</v></c></row><row r="3"><c r="A3"><v>3</v></c><c r="B3"><v>5</v></c><c r="C3"><v>1</v></c><c r="D3"><v>0</v></c><c r="E3"><v>0</v></c><c r="F3"><v>9</v></c><c r="G3"><v>0</v></c><c r="H3"><v>0</v></c><c r="I3"><v>0</v></c><c r="J3"><v>0</v></c><c r="K3"><v>0</v></c></row><row r="5"><c r="A5"><v>1</v></c><c r="B5" t="inlineStr"><is><t>x</t></is></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>SORT(A1:B3,2)</f><v>3</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="E1"><v>5</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="D2"><v>3</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="E2"><v>10</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="D3"><v>1</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="E3"><v>20</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SORT(A1:B3)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="I1"><v>20</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="H2"><v>3</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="I2"><v>10</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="H3"><v>3</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="I3"><v>5</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>SORT(A1:B3,1,-1)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="K1"><v>10</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="J2"><v>3</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="K2"><v>5</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="J3"><v>1</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="K3"><v>20</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>FILTER(A1:B3,C1:C3,1)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="G1"><v>10</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="F2"><v>3</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="G2"><v>5</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="F3"><v>9</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SORT(A1:B3,3)</f><v>8</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>SORT(A1:B3,-1)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>SORT(A1:B4)</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SORT(A5:B5)</f><v>5</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>FILTER(A1:B3,C1:C3,9)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>FILTER(A1:B3,C1:C3,1,1)</f><v>3</v>"#),
+            "{sheet}"
+        );
     }
 
     #[test]
