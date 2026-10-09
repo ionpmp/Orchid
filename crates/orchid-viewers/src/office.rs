@@ -5471,9 +5471,12 @@ fn text_excel(value: CalcValue, format: &str, date1904: bool) -> Option<CalcValu
         };
         return format_elapsed(number, &unquoted).and_then(limited_text);
     }
-    let date = unquoted
-        .chars()
-        .any(|ch| matches!(ch, 'y' | 'Y' | 'd' | 'D' | 'm' | 'M'));
+    let date = unquoted.chars().any(|ch| {
+        matches!(
+            ch,
+            'y' | 'Y' | 'd' | 'D' | 'm' | 'M' | 'h' | 'H' | 's' | 'S'
+        )
+    });
     let number_code = unquoted
         .chars()
         .any(|ch| matches!(ch, '0' | '#' | '%' | '.'));
@@ -5654,12 +5657,45 @@ fn excel_weekday_name(serial: f64, long: bool) -> Option<&'static str> {
     .copied()
 }
 
+fn clock_parts(serial: f64) -> (u32, u32, u32) {
+    let fraction = serial - serial.trunc();
+    let mut seconds = if fraction.is_finite() && fraction > 0.0 {
+        (fraction * 86_400.0).round() as i64
+    } else {
+        0
+    };
+    if !(0..86_400).contains(&seconds) {
+        seconds = 0;
+    }
+    let hours = (seconds / 3600) as u32;
+    let minutes = ((seconds % 3600) / 60) as u32;
+    let secs = (seconds % 60) as u32;
+    (hours, minutes, secs)
+}
+
+fn minutes_here(rest: &str, last_was_hour: bool) -> bool {
+    if last_was_hour {
+        return true;
+    }
+    let chars: Vec<char> = rest.chars().collect();
+    let mut index = 0usize;
+    while index < chars.len() && chars[index] == 'm' {
+        index += 1;
+    }
+    while index < chars.len() && matches!(chars[index], ':' | ' ' | '.' | '-' | '/') {
+        index += 1;
+    }
+    chars.get(index) == Some(&'s')
+}
+
 fn format_excel_date(serial: f64, format: &str) -> Option<String> {
     let (year, month, day) = excel_parts(serial)?;
+    let (hours, minutes, seconds) = clock_parts(serial);
     let chars: Vec<char> = format.chars().collect();
     let mut index = 0usize;
     let mut out = String::new();
     let mut saw_token = false;
+    let mut last_was_hour = false;
     while index < chars.len() {
         if chars[index] == '"' {
             index += 1;
@@ -5686,10 +5722,22 @@ fn format_excel_date(serial: f64, format: &str) -> Option<String> {
             ("mmmm", excel_month_name(month, true)?.to_string())
         } else if rest.starts_with("mmm") {
             ("mmm", excel_month_name(month, false)?.to_string())
+        } else if rest.starts_with("mm") && minutes_here(&rest, last_was_hour) {
+            ("mm", format!("{minutes:02}"))
+        } else if rest.starts_with('m') && minutes_here(&rest, last_was_hour) {
+            ("m", minutes.to_string())
         } else if rest.starts_with("mm") {
             ("mm", format!("{month:02}"))
         } else if rest.starts_with('m') {
             ("m", month.to_string())
+        } else if rest.starts_with("hh") {
+            ("hh", format!("{hours:02}"))
+        } else if rest.starts_with('h') {
+            ("h", hours.to_string())
+        } else if rest.starts_with("ss") {
+            ("ss", format!("{seconds:02}"))
+        } else if rest.starts_with('s') {
+            ("s", seconds.to_string())
         } else if rest.starts_with("dddd") {
             ("dddd", excel_weekday_name(serial, true)?.to_string())
         } else if rest.starts_with("ddd") {
@@ -5705,6 +5753,7 @@ fn format_excel_date(serial: f64, format: &str) -> Option<String> {
         } else {
             return None;
         };
+        last_was_hour = token.starts_with('h');
         saw_token = true;
         index += token.len();
         out.push_str(&text);
@@ -16688,6 +16737,62 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>TEXT(1,&quot;[h]:mm&quot;)</f><v>4</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_text_clock() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c><c r="A1"><f>TEXT(1.5,&quot;hh:mm&quot;)</f><v>0</v></c><c r="B1"><f>TEXT(1.5,&quot;h:mm:ss&quot;)</f><v>0</v></c><c r="C1"><f>TEXT(1+1/86400,&quot;hh:mm:ss&quot;)</f><v>0</v></c><c r="D1"><f>TEXT(1,&quot;yyyy-mm-dd hh:mm&quot;)</f><v>0</v></c><c r="E1"><f>TEXT(1,&quot;mm:ss&quot;)</f><v>0</v></c><c r="F1"><f>TEXT(1.75,&quot;h&quot;)</f><v>0</v></c><c r="G1"><f>TEXT(1.5,&quot;[h]:mm&quot;)</f><v>4</v></c><c r="H1"><f>TEXT(1.5,&quot;hh:mm AM&quot;)</f><v>5</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>TEXT(1.5,&quot;hh:mm&quot;)</f><is><t>12:00</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1.5,&quot;h:mm:ss&quot;)</f><is><t>12:00:00</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet
+                .contains(r#"<f>TEXT(1+1/86400,&quot;hh:mm:ss&quot;)</f><is><t>00:00:01</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>TEXT(1,&quot;yyyy-mm-dd hh:mm&quot;)</f><is><t>1900-01-01 00:00</t></is>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1,&quot;mm:ss&quot;)</f><is><t>00:00</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1.75,&quot;h&quot;)</f><is><t>18</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1.5,&quot;[h]:mm&quot;)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1.5,&quot;hh:mm AM&quot;)</f><v>5</v>"#),
             "{sheet}"
         );
     }

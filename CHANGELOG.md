@@ -751,8 +751,13 @@ release yet.
   `ddd` are English weekday names, using the same serial as the other date
   tokens and numbering Sunday as 1. A 1904 workbook therefore can disagree
   with `WEEKDAY`. Quoted text is copied through. A format that mixes a date
-  token with a number token, or a clock time, scientific, fraction, or color
-  code, leaves the stored value.
+  or time token with a number token, or a scientific, fraction, or color
+  code, leaves the stored value. A clock uses `h`, `hh`, `s`, and `ss`.
+  `m` or `mm` is minutes when it follows an hour token or comes just before
+  a seconds token, and otherwise it is the month. Hours run from 0 through
+  23. The time is the fractional day rounded to the nearest second. A
+  fraction that rounds to 24:00:00 is shown as 00:00:00 and the date is not
+  rolled forward. `AM/PM` leaves the stored value.
   Elapsed time is a section whose text outside quotes is exactly `[h]`,
   `[hh]`, `[m]`, or `[mm]`. It writes the total hours or minutes, rounded
   half away from zero, and the total can pass 24 hours. `[hh]` and `[mm]`
