@@ -829,7 +829,11 @@ release yet.
   calculated reads the previous pass, or the stored number on the first pass,
   or 0 when that cell has no stored number. The last pass is written even when
   the change is still larger than the delta. Without the flag, a cycle leaves
-  the stored value. A workbook defined name is one
+  the stored value. When the flag is on, each round also refreshes every
+  sheet's qualified values from stored inputs and the previous round. The
+  edited sheet is calculated once more after those rounds, so it can be one
+  step ahead. Other sheet files are not written. A bare reference on another
+  sheet still reads that sheet's stored inputs. A workbook defined name is one
   cell or one colon range on one sheet in this workbook. The name is ASCII
   case-insensitive, at most 255 characters, and uses letters, digits,
   underscores, and dots. It must not look like a cell address. A name with

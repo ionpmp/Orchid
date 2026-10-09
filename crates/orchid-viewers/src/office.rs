@@ -272,20 +272,33 @@ pub(crate) fn set_sheet_cell(
         bodies.insert(name.clone(), body.clone());
         foreign.insert(name.clone(), stored_sheet(body, &shared));
     }
-    for name in &sheet_order {
-        let Some(body) = bodies.get(name) else {
-            continue;
-        };
-        let passed = pass_sheet_once(
-            body,
+    if let Some((count, delta)) = iteration {
+        foreign = iterate_sheets(
+            &bodies,
             &shared,
             &foreign,
             &names,
             &sheet_order,
-            name,
             date1904,
+            count,
+            delta,
         );
-        foreign.insert(name.clone(), passed);
+    } else {
+        for name in &sheet_order {
+            let Some(body) = bodies.get(name) else {
+                continue;
+            };
+            let passed = pass_sheet_once(
+                body,
+                &shared,
+                &foreign,
+                &names,
+                &sheet_order,
+                name,
+                date1904,
+            );
+            foreign.insert(name.clone(), passed);
+        }
     }
     let xml = recalculate_sheet(
         &xml,
@@ -963,6 +976,53 @@ fn recalculate_sheet(
         out.replace_range(start..end, &text);
     }
     out
+}
+
+fn iterate_sheets(
+    bodies: &std::collections::HashMap<String, String>,
+    shared: &[String],
+    foreign: &std::collections::HashMap<String, ForeignSheet>,
+    names: &NameBook,
+    sheet_order: &[String],
+    date1904: bool,
+    count: u32,
+    delta: f64,
+) -> std::collections::HashMap<String, ForeignSheet> {
+    let mut current = foreign.clone();
+    for _ in 0..count {
+        let mut next = current.clone();
+        let mut settled = true;
+        for name in sheet_order {
+            let Some(body) = bodies.get(name) else {
+                continue;
+            };
+            let passed =
+                pass_sheet_once(body, shared, &current, names, sheet_order, name, date1904);
+            if !sheet_close(current.get(name), &passed, delta) {
+                settled = false;
+            }
+            next.insert(name.clone(), passed);
+        }
+        current = next;
+        if settled {
+            break;
+        }
+    }
+    current
+}
+
+fn sheet_close(before: Option<&ForeignSheet>, after: &ForeignSheet, delta: f64) -> bool {
+    let Some(before) = before else {
+        return false;
+    };
+    let mut keys = std::collections::HashSet::<String>::new();
+    keys.extend(before.literals.keys().cloned());
+    keys.extend(after.literals.keys().cloned());
+    keys.iter().all(|key| {
+        let left = before.literals.get(key).copied().unwrap_or(0.0);
+        let right = after.literals.get(key).copied().unwrap_or(0.0);
+        (left - right).abs() <= delta
+    })
 }
 
 fn pass_sheet_once(
@@ -2372,6 +2432,7 @@ enum ArrayConst {
     Values(Vec<CalcValue>),
 }
 
+#[derive(Clone)]
 struct ForeignSheet {
     literals: std::collections::HashMap<String, f64>,
     texts: std::collections::HashMap<String, String>,
@@ -16119,6 +16180,48 @@ mod tests {
         assert!(
             iterated_sheet.contains(r#"<f>A1+1</f><v>2</v>"#),
             "{iterated_sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_iterates_across_sheets() {
+        let budgets = r#"<worksheet><sheetData><row r="1"><c r="A1"><f>Abroad!A1+1</f><v>0</v></c><c r="Z1"><v>0</v></c></row></sheetData></worksheet>"#;
+        let abroad = r#"<worksheet><sheetData><row r="1"><c r="A1"><f>Budgets!A1+1</f><v>0</v></c></row></sheetData></worksheet>"#;
+        let book = |calc: &str| {
+            zip_bytes(&[
+                ("xl/workbook.xml", calc),
+                (
+                    "xl/_rels/workbook.xml.rels",
+                    r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>"#,
+                ),
+                ("xl/worksheets/sheet1.xml", abroad),
+                ("xl/worksheets/sheet2.xml", budgets),
+            ])
+        };
+        let plain = book(
+            r#"<workbook><sheets><sheet name="Abroad" sheetId="1" r:id="rId1"/><sheet name="Budgets" sheetId="2" r:id="rId2"/></sheets></workbook>"#,
+        );
+        let iterated = book(
+            r#"<workbook><calcPr iterate="1" iterateCount="2" iterateDelta="0.001"/><sheets><sheet name="Abroad" sheetId="1" r:id="rId1"/><sheet name="Budgets" sheetId="2" r:id="rId2"/></sheets></workbook>"#,
+        );
+        let plain = set_sheet_cell(&plain, "Budgets", "Z1", "1").unwrap();
+        let iterated = set_sheet_cell(&iterated, "Budgets", "Z1", "1").unwrap();
+        let mut plain_zip = ZipArchive::new(Cursor::new(plain)).unwrap();
+        let mut iterated_zip = ZipArchive::new(Cursor::new(iterated)).unwrap();
+        let plain_sheet = read_entry(&mut plain_zip, "xl/worksheets/sheet2.xml").unwrap();
+        let iterated_sheet = read_entry(&mut iterated_zip, "xl/worksheets/sheet2.xml").unwrap();
+        let abroad = read_entry(&mut iterated_zip, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            plain_sheet.contains(r#"<f>Abroad!A1+1</f><v>2</v>"#),
+            "{plain_sheet}"
+        );
+        assert!(
+            iterated_sheet.contains(r#"<f>Abroad!A1+1</f><v>3</v>"#),
+            "{iterated_sheet}"
+        );
+        assert!(
+            abroad.contains(r#"<f>Budgets!A1+1</f><v>0</v>"#),
+            "{abroad}"
         );
     }
 
