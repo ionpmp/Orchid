@@ -12828,11 +12828,32 @@ fn normalize_part(target: &str) -> String {
     }
 }
 
+enum CfOp {
+    Gt,
+    Lt,
+    Eq,
+    Ge,
+    Le,
+    Ne,
+}
+
+struct CfExpr {
+    ref_col: u32,
+    ref_row: u32,
+    col_locked: bool,
+    row_locked: bool,
+    origin_col: u32,
+    origin_row: u32,
+    op: CfOp,
+    threshold: f64,
+}
+
 enum CfKind {
     Greater(f64),
     EqualNum(f64),
     EqualText(String),
     Pattern(String),
+    Expr(CfExpr),
 }
 
 struct CfRule {
@@ -12933,6 +12954,9 @@ fn compile_cf(kind: &str, operator: &str, formula: &str, sqref: &str) -> Option<
                 return None;
             }
             CfKind::Pattern(pattern)
+        } else if kind.eq_ignore_ascii_case("expression") {
+            let origin = cells.first()?;
+            CfKind::Expr(compile_cf_expr(formula, origin)?)
         } else {
             return None;
         };
@@ -13002,6 +13026,122 @@ fn conditional_rules(xml: &str) -> Vec<CfRule> {
     rules
 }
 
+fn compile_cf_expr(formula: &str, origin: &str) -> Option<CfExpr> {
+    let (origin_col, origin_row) = split_address(origin)?;
+    let text = formula.trim();
+    let text = text.strip_prefix('=').unwrap_or(text).trim_start();
+    let bytes = text.as_bytes();
+    let mut index = 0usize;
+    let col_locked = if bytes.get(index) == Some(&b'$') {
+        index += 1;
+        true
+    } else {
+        false
+    };
+    let col_start = index;
+    while bytes
+        .get(index)
+        .is_some_and(|byte| byte.is_ascii_alphabetic())
+    {
+        index += 1;
+    }
+    if index == col_start {
+        return None;
+    }
+    let ref_col = column_index(&text[col_start..index])?;
+    let row_locked = if bytes.get(index) == Some(&b'$') {
+        index += 1;
+        true
+    } else {
+        false
+    };
+    let row_start = index;
+    while bytes.get(index).is_some_and(|byte| byte.is_ascii_digit()) {
+        index += 1;
+    }
+    if index == row_start {
+        return None;
+    }
+    let ref_row = text[row_start..index].parse::<u32>().ok()?;
+    if ref_col == 0 || ref_row == 0 {
+        return None;
+    }
+    while bytes
+        .get(index)
+        .is_some_and(|byte| byte.is_ascii_whitespace())
+    {
+        index += 1;
+    }
+    let op = if text[index..].starts_with(">=") {
+        index += 2;
+        CfOp::Ge
+    } else if text[index..].starts_with("<=") {
+        index += 2;
+        CfOp::Le
+    } else if text[index..].starts_with("<>") {
+        index += 2;
+        CfOp::Ne
+    } else if text[index..].starts_with('>') {
+        index += 1;
+        CfOp::Gt
+    } else if text[index..].starts_with('<') {
+        index += 1;
+        CfOp::Lt
+    } else if text[index..].starts_with('=') {
+        index += 1;
+        CfOp::Eq
+    } else {
+        return None;
+    };
+    let threshold = plain_preview_number(text[index..].trim())?;
+    Some(CfExpr {
+        ref_col,
+        ref_row,
+        col_locked,
+        row_locked,
+        origin_col,
+        origin_row,
+        op,
+        threshold,
+    })
+}
+
+fn expr_matches(
+    expr: &CfExpr,
+    address: &str,
+    values: &std::collections::HashMap<String, String>,
+) -> bool {
+    let Some((col, row)) = split_address(address) else {
+        return false;
+    };
+    let look_col = if expr.col_locked {
+        i64::from(expr.ref_col)
+    } else {
+        i64::from(expr.ref_col) + i64::from(col) - i64::from(expr.origin_col)
+    };
+    let look_row = if expr.row_locked {
+        i64::from(expr.ref_row)
+    } else {
+        i64::from(expr.ref_row) + i64::from(row) - i64::from(expr.origin_row)
+    };
+    if look_col < 1 || look_row < 1 || look_col > 16_384 || look_row > 1_048_576 {
+        return false;
+    }
+    let key = format!("{}{look_row}", column_name(look_col as u32));
+    let Some(number) = values.get(&key).and_then(|text| plain_preview_number(text)) else {
+        return false;
+    };
+    let gap = (number - expr.threshold).abs();
+    match expr.op {
+        CfOp::Gt => number > expr.threshold,
+        CfOp::Lt => number < expr.threshold,
+        CfOp::Eq => gap <= 1e-9,
+        CfOp::Ge => number > expr.threshold || gap <= 1e-9,
+        CfOp::Le => number < expr.threshold || gap <= 1e-9,
+        CfOp::Ne => gap > 1e-9,
+    }
+}
+
 fn cf_matches(kind: &CfKind, text: &str) -> bool {
     match kind {
         CfKind::Greater(threshold) => {
@@ -13012,6 +13152,7 @@ fn cf_matches(kind: &CfKind, text: &str) -> bool {
         }
         CfKind::EqualText(expected) => text.eq_ignore_ascii_case(expected),
         CfKind::Pattern(pattern) => text_pattern(pattern, text),
+        CfKind::Expr(_) => false,
     }
 }
 
@@ -13116,16 +13257,28 @@ fn apply_notes(rows: &mut [Vec<SheetCell>], notes: &[(String, String)]) {
 }
 
 fn apply_highlights(rows: &mut [Vec<SheetCell>], rules: &[CfRule]) {
+    let mut values = std::collections::HashMap::new();
+    for row in rows.iter() {
+        for cell in row {
+            values.insert(cell.address.to_ascii_uppercase(), cell.text.clone());
+        }
+    }
     for row in rows {
         for cell in row.iter_mut() {
             let address = cell.address.to_ascii_uppercase();
             for rule in rules {
-                if rule
+                if !rule
                     .cells
                     .iter()
                     .any(|item| item.eq_ignore_ascii_case(&address))
-                    && cf_matches(&rule.kind, &cell.text)
                 {
+                    continue;
+                }
+                let hit = match &rule.kind {
+                    CfKind::Expr(expr) => expr_matches(expr, &address, &values),
+                    other => cf_matches(other, &cell.text),
+                };
+                if hit {
                     cell.highlight = true;
                     break;
                 }
@@ -13884,6 +14037,90 @@ mod tests {
         assert!(cell("C1").highlight);
         assert!(cell("D1").highlight);
         assert!(!cell("A3").highlight, "a range past 32 cells is ignored");
+    }
+
+    #[test]
+    fn sheet_preview_expression_formatting() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>11</v></c><c r="C1"><v>4</v></c><c r="E1"><v>1</v></c><c r="F1"><v>1</v></c><c r="G1"><v>5</v></c><c r="H1"><v>5</v></c><c r="I1"><v>4</v></c><c r="J1"><v>5</v></c><c r="M1"><v>1</v></c></row><row r="2"><c r="B2"><v>1</v></c><c r="D2"><v>1</v></c><c r="E2"><v>9</v></c><c r="F2"><v>9</v></c></row><row r="3"><c r="B3"><v>0</v></c></row></sheetData><conditionalFormatting sqref="D2"><cfRule type="expression"><formula>SUM(D2)&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="M1"><cfRule type="expression"><formula>M1&gt;0+1</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B2:B3"><cfRule type="expression"><formula>=B2&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="C1"><cfRule type="expression"><formula>A1&gt;10</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="E1:E2"><cfRule type="expression"><formula>E1&gt;5</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="F1:F2"><cfRule type="expression"><formula>$F$1&gt;5</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="G1"><cfRule type="expression"><formula>G1&gt;=5</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="H1"><cfRule type="expression"><formula>H1&lt;&gt;5</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="I1"><cfRule type="expression"><formula>I1&lt;=4</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="J1"><cfRule type="expression"><formula>J1=5</formula></cfRule></conditionalFormatting></worksheet>"#,
+            ),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let cell = |address: &str| {
+            book.sheets[0]
+                .rows
+                .iter()
+                .flatten()
+                .find(|cell| cell.address == address)
+                .unwrap_or_else(|| panic!("missing {address}"))
+        };
+        assert!(cell("B2").highlight, "1 is greater than 0");
+        assert!(!cell("B3").highlight, "0 is not greater than 0");
+        assert!(cell("C1").highlight, "the rule reads A1");
+        assert!(!cell("D2").highlight, "a function is skipped");
+        assert!(!cell("E1").highlight);
+        assert!(cell("E2").highlight, "the address shifts down one row");
+        assert!(!cell("F1").highlight);
+        assert!(!cell("F2").highlight, "a locked address stays on F1");
+        assert!(cell("G1").highlight);
+        assert!(!cell("H1").highlight);
+        assert!(cell("I1").highlight);
+        assert!(cell("J1").highlight);
+        assert!(
+            !cell("M1").highlight,
+            "arithmetic is not a plain comparison"
+        );
+    }
+
+    #[test]
+    fn sheet_preview_skipped_formula_rules_do_not_fill_the_cap() {
+        let mut rules = String::new();
+        for _ in 0..8 {
+            rules.push_str(
+                r#"<conditionalFormatting sqref="A1"><cfRule type="expression"><formula>SUM(A1)&gt;0</formula></cfRule></conditionalFormatting>"#,
+            );
+        }
+        let sheet = format!(
+            r#"<worksheet><sheetData><row r="1"><c r="A1"><v>3</v></c><c r="N1"><v>2</v></c></row></sheetData>{rules}<conditionalFormatting sqref="N1"><cfRule type="cellIs" operator="greaterThan"><formula>0</formula></cfRule></conditionalFormatting></worksheet>"#
+        );
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            ("xl/worksheets/sheet1.xml", sheet.as_str()),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let cell = |address: &str| {
+            book.sheets[0]
+                .rows
+                .iter()
+                .flatten()
+                .find(|cell| cell.address == address)
+                .unwrap_or_else(|| panic!("missing {address}"))
+        };
+        assert!(!cell("A1").highlight, "a function rule does not count");
+        assert!(cell("N1").highlight, "skipped rules do not fill the 8");
     }
 
     #[test]

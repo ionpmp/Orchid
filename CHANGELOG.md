@@ -94,8 +94,13 @@ release yet.
   `*`, `?`, and `~`. A pattern without those characters is an exact ASCII
   case-insensitive match, not a substring search. A pattern longer than 64
   characters, or cell text longer than 256 characters, is not a match. The
-  first matching rule wins. Colors, data bars, color scales, and formula
-  rules are skipped and do not count toward the 8. A range larger than 32
+  first matching rule wins. A formula rule is one comparison of a cell
+  address to a plain number, using `>`, `<`, `=`, `>=`, `<=`, or `<>`.
+  The address shifts from the first cell of the range, and `$` locks that
+  side. The compared value is that cell's preview text, read as a plain
+  number. A function, text, another sheet, or any other formula is skipped
+  and does not count toward the 8. Colors, data bars, and color scales are
+  still skipped and do not count toward the 8. A range larger than 32
   cells is skipped. The highlight is not written back and formulas do not
   use it. A selected cell can show a legacy comment from the worksheet
   comments part. At most 32 comments are read, each note is at most 256
