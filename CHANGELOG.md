@@ -772,7 +772,15 @@ release yet.
   formula there is not recalculated. The expression cannot use another name. A
   relative reference, a 3D reference, another workbook, or a structured table
   reference is ignored. A formula name is one value and does not expand as a
-  range. A shared formula on the sheet being
+  range. A formula can read one column of a table as `Table1[Amount]`. The
+  table name and the column name are ASCII case-insensitive. The column is the
+  data cells under that header, not the header and not a totals row.
+  `headerRowCount` must be missing or 1. `totalsRowCount` must be missing, 0,
+  or 1. On the sheet being edited those cells are read live. On another sheet
+  they are read from the stored snapshot. The column expands where a colon
+  range expands. A column used as one value works only when it has a single
+  data cell. `Table1[[#This Row],[Amount]]`, `#All`, `#Headers`, `#Data`, and
+  `#Totals` are ignored. A shared formula on the sheet being
   edited is the cell whose `<f t="shared">` contains the formula. Each other
   cell with the same `si` and an empty shared formula uses that formula shifted
   by the row and column distance from the master. A `$` keeps that column or

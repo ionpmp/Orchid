@@ -266,7 +266,8 @@ pub(crate) fn set_sheet_cell(
         .iter()
         .map(|(name, _)| name.to_ascii_lowercase())
         .collect();
-    let names = workbook_names(&workbook, &sheet_order);
+    let mut names = workbook_names(&workbook, &sheet_order);
+    names.tables = workbook_tables(&mut archive, &sheets);
     let iteration = workbook_iteration(&workbook);
     let xml = recalculate_sheet(
         &xml,
@@ -3059,6 +3060,7 @@ fn workbook_iteration(xml: &str) -> Option<(u32, f64)> {
 struct NameBook {
     global: std::collections::HashMap<String, DefinedRef>,
     local: std::collections::HashMap<(String, String), DefinedRef>,
+    tables: std::collections::HashMap<(String, String), DefinedRef>,
 }
 
 impl NameBook {
@@ -3073,6 +3075,7 @@ fn workbook_names(xml: &str, sheet_order: &[String]) -> NameBook {
     let mut names = NameBook {
         global: std::collections::HashMap::new(),
         local: std::collections::HashMap::new(),
+        tables: std::collections::HashMap::new(),
     };
     let mut index = 0usize;
     while let Some(at) = xml[index..].find("<definedName ") {
@@ -3134,6 +3137,197 @@ fn workbook_names(xml: &str, sheet_order: &[String]) -> NameBook {
         }
     }
     names
+}
+
+fn workbook_tables<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    sheets: &[(String, String)],
+) -> std::collections::HashMap<(String, String), DefinedRef> {
+    let mut tables = std::collections::HashMap::new();
+    for (sheet, path) in sheets {
+        let Some(rels_path) = rels_for(path) else {
+            continue;
+        };
+        let Some(rels) = read_entry(archive, &rels_path) else {
+            continue;
+        };
+        for target in table_targets(&rels) {
+            let part = join_target(path, &target);
+            let Some(xml) = read_entry(archive, &part) else {
+                continue;
+            };
+            load_table(&xml, &sheet.to_ascii_lowercase(), &mut tables);
+        }
+    }
+    tables
+}
+
+fn rels_for(path: &str) -> Option<String> {
+    let (dir, file) = path.rsplit_once('/')?;
+    Some(format!("{dir}/_rels/{file}.rels"))
+}
+
+fn join_target(base_file: &str, target: &str) -> String {
+    let target = target.replace('\\', "/");
+    if target.starts_with('/') || target.starts_with("xl/") {
+        return target.trim_start_matches('/').to_string();
+    }
+    let dir = base_file.rsplit_once('/').map(|(dir, _)| dir).unwrap_or("");
+    let mut parts: Vec<&str> = dir.split('/').filter(|part| !part.is_empty()).collect();
+    for part in target.split('/') {
+        if part == ".." {
+            parts.pop();
+        } else if !part.is_empty() && part != "." {
+            parts.push(part);
+        }
+    }
+    parts.join("/")
+}
+
+fn table_targets(rels: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut index = 0usize;
+    while let Some(at) = rels[index..].find("<Relationship ") {
+        let start = index + at;
+        let Some(end) = rels[start..].find('>') else {
+            break;
+        };
+        let tag = &rels[start..start + end];
+        index = start + end + 1;
+        let target = xml_attr(tag, "Target").unwrap_or_default();
+        let kind = xml_attr(tag, "Type").unwrap_or_default();
+        if target.is_empty() {
+            continue;
+        }
+        if kind.ends_with("/table") || target.to_ascii_lowercase().contains("/tables/") {
+            out.push(target);
+        }
+    }
+    out
+}
+
+fn load_table(
+    xml: &str,
+    sheet: &str,
+    tables: &mut std::collections::HashMap<(String, String), DefinedRef>,
+) {
+    let Some(tag) = first_tag(xml, "table") else {
+        return;
+    };
+    let Some(name) = xml_attr(tag, "name").or_else(|| xml_attr(tag, "displayName")) else {
+        return;
+    };
+    let name = unescape_xml(&name);
+    let count = name.chars().count();
+    if count == 0
+        || count > 255
+        || is_cell_address(&name)
+        || name
+            .chars()
+            .any(|ch| !(ch.is_ascii_alphanumeric() || ch == '_' || ch == '.'))
+    {
+        return;
+    }
+    let Some(refer) = xml_attr(tag, "ref") else {
+        return;
+    };
+    let Some((col_start, _col_end, row_start, row_end)) = table_bounds(&refer) else {
+        return;
+    };
+    let header = xml_attr(tag, "headerRowCount")
+        .and_then(|text| text.parse::<u32>().ok())
+        .unwrap_or(1);
+    let totals = xml_attr(tag, "totalsRowCount")
+        .and_then(|text| text.parse::<u32>().ok())
+        .unwrap_or(0);
+    if header != 1 || totals > 1 {
+        return;
+    }
+    let data_start = row_start.saturating_add(header);
+    let Some(data_end) = row_end.checked_sub(totals) else {
+        return;
+    };
+    if data_start == 0 || data_start > data_end {
+        return;
+    }
+    let width = _col_end - col_start + 1;
+    let mut columns = Vec::new();
+    let mut index = 0usize;
+    while let Some(at) = xml[index..].find("<tableColumn ") {
+        let start = index + at;
+        let Some(end) = xml[start..].find('>') else {
+            break;
+        };
+        let column_tag = &xml[start..start + end];
+        index = start + end + 1;
+        let Some(column) = xml_attr(column_tag, "name") else {
+            continue;
+        };
+        columns.push(unescape_xml(&column));
+    }
+    for (offset, column) in columns.iter().enumerate() {
+        if offset as u32 >= width {
+            break;
+        }
+        let column = column.trim();
+        if column.is_empty()
+            || column.chars().count() > 255
+            || column.contains('[')
+            || column.contains(']')
+            || column.starts_with('#')
+        {
+            continue;
+        }
+        let col = col_start + offset as u32;
+        let mut cells = Vec::new();
+        for row in data_start..=data_end {
+            cells.push(format!("{}{row}", column_name(col)));
+            if cells.len() > 4096 {
+                cells.clear();
+                break;
+            }
+        }
+        if cells.is_empty() {
+            continue;
+        }
+        let rows = cells.len() as u32;
+        tables.insert(
+            (name.to_ascii_lowercase(), column.to_ascii_lowercase()),
+            DefinedRef {
+                sheet: sheet.to_string(),
+                cells,
+                rows,
+                cols: 1,
+                formula: None,
+            },
+        );
+    }
+}
+
+fn first_tag<'a>(xml: &'a str, local: &str) -> Option<&'a str> {
+    let mut index = 0usize;
+    while let Some(at) = xml[index..].find('<') {
+        let start = index + at;
+        let Some(end) = xml[start..].find('>') else {
+            return None;
+        };
+        let tag = &xml[start..start + end];
+        index = start + end + 1;
+        let head = tag.trim_start_matches('<').trim_start_matches('/');
+        let head = head.split_whitespace().next().unwrap_or("");
+        let found = head.rsplit(':').next().unwrap_or(head);
+        if found == local {
+            return Some(tag);
+        }
+    }
+    None
+}
+
+fn table_bounds(refer: &str) -> Option<(u32, u32, u32, u32)> {
+    let (start, end) = refer.split_once(':')?;
+    let (c1, r1) = split_address(start.trim())?;
+    let (c2, r2) = split_address(end.trim())?;
+    Some((c1.min(c2), c1.max(c2), r1.min(r2), r1.max(r2)))
 }
 
 fn xml_attr(tag: &str, key: &str) -> Option<String> {
@@ -3237,6 +3431,7 @@ fn eval_name_formula(formula: &str, env: &mut CalcEnv<'_>) -> Option<CalcValue> 
     let names = NameBook {
         global: std::collections::HashMap::new(),
         local: std::collections::HashMap::new(),
+        tables: std::collections::HashMap::new(),
     };
     eval_formula(
         formula,
@@ -6467,8 +6662,20 @@ impl<'a> CalcParser<'a> {
             let name = self.quoted_sheet()?;
             return self.foreign_cell(&name, env);
         }
+        let word_at = self.index;
         let word = self.word()?;
         self.skip();
+        if self.bytes.get(self.index) == Some(&b'[') {
+            self.index = word_at;
+            let Some(defined) = self.take_table(env) else {
+                return None;
+            };
+            if defined.cells.len() != 1 {
+                return None;
+            }
+            let address = named_addresses(&defined, env);
+            return self.cell_value(address.first()?, env);
+        }
         if self.bytes.get(self.index) == Some(&b'(') {
             self.index += 1;
             if word.eq_ignore_ascii_case("LET") {
@@ -8744,6 +8951,16 @@ impl<'a> CalcParser<'a> {
                         values.push(value);
                     }
                 }
+            } else if let Some(defined) = self.take_table(env) {
+                let cells = named_addresses(&defined, env);
+                if cells.is_empty() || cells.len() > 4096 {
+                    return None;
+                }
+                for address in cells {
+                    if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                        values.push(value);
+                    }
+                }
             } else {
                 match self.name_arg(env) {
                     NameArg::Invalid => return None,
@@ -8824,6 +9041,23 @@ impl<'a> CalcParser<'a> {
             }
             let saved = self.index;
             if let Some(cells) = self.three_d_cells(env) {
+                for address in cells {
+                    match self.cell_value(&address, env) {
+                        Some(CalcValue::Num(value)) => {
+                            if !value.is_finite() {
+                                return None;
+                            }
+                            values.push(value);
+                        }
+                        Some(CalcValue::Text(_)) => values.push(0.0),
+                        None => {}
+                    }
+                }
+            } else if let Some(defined) = self.take_table(env) {
+                let cells = named_addresses(&defined, env);
+                if cells.is_empty() || cells.len() > 4096 {
+                    return None;
+                }
                 for address in cells {
                     match self.cell_value(&address, env) {
                         Some(CalcValue::Num(value)) => {
@@ -8922,6 +9156,18 @@ impl<'a> CalcParser<'a> {
             }
             let saved = self.index;
             if let Some(cells) = self.three_d_cells(env) {
+                for address in cells {
+                    seen += 1;
+                    if seen > 4096 {
+                        return None;
+                    }
+                    match self.cell_value(&address, env) {
+                        Some(value) => note_presence(&value, &mut present, &mut blank)?,
+                        None => blank += 1.0,
+                    }
+                }
+            } else if let Some(defined) = self.take_table(env) {
+                let cells = named_addresses(&defined, env);
                 for address in cells {
                     seen += 1;
                     if seen > 4096 {
@@ -9259,6 +9505,57 @@ impl<'a> CalcParser<'a> {
         Some(matched)
     }
 
+    fn take_table(&mut self, env: &CalcEnv<'_>) -> Option<DefinedRef> {
+        let saved = self.index;
+        self.skip();
+        let Some(table) = self.word() else {
+            self.index = saved;
+            return None;
+        };
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b'[') {
+            self.index = saved;
+            return None;
+        }
+        self.index += 1;
+        if matches!(self.bytes.get(self.index), Some(b'[' | b'#')) {
+            self.index = saved;
+            return None;
+        }
+        let start = self.index;
+        while let Some(byte) = self.bytes.get(self.index).copied() {
+            if byte == b']' {
+                break;
+            }
+            if byte == b'[' {
+                self.index = saved;
+                return None;
+            }
+            self.index += 1;
+        }
+        if self.bytes.get(self.index) != Some(&b']') {
+            self.index = saved;
+            return None;
+        }
+        let column = std::str::from_utf8(&self.bytes[start..self.index])
+            .ok()?
+            .trim();
+        if column.is_empty() || column.chars().count() > 255 {
+            self.index = saved;
+            return None;
+        }
+        self.index += 1;
+        let defined = env
+            .names
+            .tables
+            .get(&(table.to_ascii_lowercase(), column.to_ascii_lowercase()))
+            .cloned();
+        if defined.is_none() {
+            self.index = saved;
+        }
+        defined
+    }
+
     fn take_name(&mut self, env: &CalcEnv<'_>) -> Option<DefinedRef> {
         let saved = self.index;
         self.skip();
@@ -9392,6 +9689,13 @@ impl<'a> CalcParser<'a> {
         if let Some(cells) = self.three_d_cells(env) {
             return Some(cells);
         }
+        if let Some(defined) = self.take_table(env) {
+            let cells = named_addresses(&defined, env);
+            if cells.is_empty() || cells.len() > 4096 {
+                return None;
+            }
+            return Some(cells);
+        }
         if let Some(defined) = self.take_name(env) {
             let cells = named_addresses(&defined, env);
             if cells.is_empty() || cells.len() > 4096 {
@@ -9430,6 +9734,13 @@ impl<'a> CalcParser<'a> {
     }
 
     fn cell_block(&mut self, env: &CalcEnv<'_>) -> Option<(Vec<String>, u32, u32)> {
+        if let Some(defined) = self.take_table(env) {
+            let cells = named_addresses(&defined, env);
+            if cells.is_empty() {
+                return None;
+            }
+            return Some((cells, defined.rows, defined.cols));
+        }
         if let Some(defined) = self.take_name(env) {
             let cells = named_addresses(&defined, env);
             if cells.is_empty() {
@@ -13046,6 +13357,73 @@ mod tests {
         assert!(sheet.contains(r#"<f>Two</f><v>2</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Relative</f><v>4</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Nested</f><v>5</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_table_column() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/><sheet name="Other" sheetId="2" r:id="rId2"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/_rels/sheet1.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table3.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/_rels/sheet2.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table2.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/tables/table1.xml",
+                r#"<table name="Sales" displayName="Sales" ref="A1:B3"><tableColumns count="2"><tableColumn id="1" name="Item"/><tableColumn id="2" name="Amount"/></tableColumns></table>"#,
+            ),
+            (
+                "xl/tables/table2.xml",
+                r#"<table name="Totals" displayName="Totals" ref="C1:C2"><tableColumns count="1"><tableColumn id="1" name="N"/></tableColumns></table>"#,
+            ),
+            (
+                "xl/tables/table3.xml",
+                r#"<table name="Tiny" displayName="Tiny" ref="D10:D11"><tableColumns count="1"><tableColumn id="1" name="Value"/></tableColumns></table>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Item</t></is></c><c r="B1" t="inlineStr"><is><t>Amount</t></is></c><c r="D1"><f>SUM(Sales[Amount])</f><v>0</v></c><c r="E1"><f>Sales[Amount]</f><v>5</v></c><c r="F1"><f>SUM(Sales[[#This Row],[Amount]])</f><v>6</v></c><c r="G1"><f>SUM(Sales[Nope])</f><v>8</v></c><c r="H1"><f>SUM(Totals[N])</f><v>0</v></c><c r="J1"><f>Tiny[Value]</f><v>0</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>apple</t></is></c><c r="B2"><f>5+5</f><v>9</v></c><c r="D2"><f>SUM(sales[amount])</f><v>0</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>pear</t></is></c><c r="B3"><v>4</v></c></row><row r="10"><c r="D10" t="inlineStr"><is><t>Value</t></is></c></row><row r="11"><c r="D11"><v>2</v></c></row></sheetData></worksheet>"#,
+            ),
+            (
+                "xl/worksheets/sheet2.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="C1" t="inlineStr"><is><t>N</t></is></c></row><row r="2"><c r="C2"><f>1+1</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SUM(Sales[Amount])</f><v>14</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUM(sales[amount])</f><v>14</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>Sales[Amount]</f><v>5</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>SUM(Sales[[#This Row],[Amount]])</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUM(Sales[Nope])</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUM(Totals[N])</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>Tiny[Value]</f><v>2</v>"#), "{sheet}");
     }
 
     #[test]
