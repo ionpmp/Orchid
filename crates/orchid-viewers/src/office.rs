@@ -408,6 +408,12 @@ struct Spill {
     all_or_nothing: bool,
 }
 
+enum TextSpill {
+    Absent,
+    Invalid,
+    Parts(Vec<String>),
+}
+
 fn try_spill(formula: &str, env: &mut CalcEnv<'_>) -> Option<Spill> {
     let mut parser = CalcParser {
         bytes: formula.as_bytes(),
@@ -490,6 +496,149 @@ fn place_spill(
         None
     } else {
         Some(writes)
+    }
+}
+
+fn text_spill_call(formula: &str, env: &mut CalcEnv<'_>) -> TextSpill {
+    let mut parser = CalcParser {
+        bytes: formula.as_bytes(),
+        index: 0,
+    };
+    parser.skip();
+    let Some(word) = parser.word() else {
+        return TextSpill::Absent;
+    };
+    parser.skip();
+    if !word.eq_ignore_ascii_case("TEXTSPLIT") || parser.bytes.get(parser.index) != Some(&b'(') {
+        return TextSpill::Absent;
+    }
+    parser.index += 1;
+    let Some(parts) = parser.text_split_call(env) else {
+        return TextSpill::Invalid;
+    };
+    parser.skip();
+    if parser.index == parser.bytes.len() {
+        TextSpill::Parts(parts)
+    } else {
+        TextSpill::Invalid
+    }
+}
+
+fn place_text_column(
+    origin: &str,
+    parts: &[String],
+    cells: &[SheetCellRef],
+    taken: &std::collections::HashSet<String>,
+) -> Option<Vec<(String, String)>> {
+    if parts.is_empty() || parts.len() > 16 {
+        return None;
+    }
+    let mut writes = Vec::new();
+    for (step, text) in parts.iter().enumerate() {
+        let address = if step == 0 {
+            origin.to_string()
+        } else {
+            shift_address(origin, step as u32, 0)?
+        };
+        if step > 0 {
+            let blocked = taken.contains(&address)
+                || cells
+                    .iter()
+                    .find(|cell| cell.address == address)
+                    .is_none_or(|cell| cell.formula.is_some() || cell.text_cell);
+            if blocked {
+                return None;
+            }
+        }
+        writes.push((address, text.clone()));
+    }
+    Some(writes)
+}
+
+fn push_text_edit(
+    edits: &mut Vec<(usize, usize, String)>,
+    cell: &SheetCellRef,
+    xml: &str,
+    text: &str,
+) -> bool {
+    let inline = format!("<is><t>{}</t></is>", escape(text));
+    let (open_start, open_end) = cell.open_span;
+    let Some(open) = open_tag_inline(&xml[open_start..open_end]) else {
+        return false;
+    };
+    edits.push((open_start, open_end, open));
+    if let Some((start, end)) = cell.value_span {
+        edits.push((start.saturating_sub(3), end + 4, inline));
+        true
+    } else if let Some(at) = cell.insert_at {
+        edits.push((at, at, inline));
+        true
+    } else {
+        false
+    }
+}
+
+fn find_delim(chars: &[char], delim: &[char], instance: usize) -> Option<usize> {
+    if delim.is_empty() || instance == 0 || instance > 16 || chars.len() > 1024 || delim.len() > 64
+    {
+        return None;
+    }
+    let mut found = 0usize;
+    let mut index = 0usize;
+    while index + delim.len() <= chars.len() {
+        if chars[index..index + delim.len()] == delim[..] {
+            found += 1;
+            if found == instance {
+                return Some(index);
+            }
+            index += delim.len();
+            continue;
+        }
+        index += 1;
+    }
+    None
+}
+
+fn text_before(text: &str, delim: &str, instance: usize) -> Option<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let delim: Vec<char> = delim.chars().collect();
+    let at = find_delim(&chars, &delim, instance)?;
+    Some(chars[..at].iter().collect())
+}
+
+fn text_after(text: &str, delim: &str, instance: usize) -> Option<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let delim_chars: Vec<char> = delim.chars().collect();
+    let at = find_delim(&chars, &delim_chars, instance)?;
+    Some(chars[at + delim_chars.len()..].iter().collect())
+}
+
+fn split_column(text: &str, delim: &str) -> Option<Vec<String>> {
+    let chars: Vec<char> = text.chars().collect();
+    let delim: Vec<char> = delim.chars().collect();
+    if delim.is_empty() || chars.len() > 1024 || delim.len() > 64 {
+        return None;
+    }
+    let mut parts = Vec::new();
+    let mut start = 0usize;
+    let mut index = 0usize;
+    while index + delim.len() <= chars.len() {
+        if chars[index..index + delim.len()] == delim[..] {
+            parts.push(chars[start..index].iter().collect());
+            if parts.len() > 16 {
+                return None;
+            }
+            index += delim.len();
+            start = index;
+            continue;
+        }
+        index += 1;
+    }
+    parts.push(chars[start..].iter().collect());
+    if parts.is_empty() || parts.len() > 16 {
+        None
+    } else {
+        Some(parts)
     }
 }
 
@@ -576,6 +725,37 @@ fn recalculate_sheet(
                     let_names: std::collections::HashMap::new(),
                     hide_book_names: false,
                 };
+                match text_spill_call(formula, &mut spill_env) {
+                    TextSpill::Invalid => continue,
+                    TextSpill::Parts(parts) => {
+                        if let Some(writes) =
+                            place_text_column(&cell.address, &parts, &cells, &spilled)
+                        {
+                            let mut local = Vec::new();
+                            let mut ok = true;
+                            for (address, text) in &writes {
+                                let Some(target) =
+                                    cells.iter().find(|item| item.address == *address)
+                                else {
+                                    ok = false;
+                                    break;
+                                };
+                                if !push_text_edit(&mut local, target, xml, text) {
+                                    ok = false;
+                                    break;
+                                }
+                            }
+                            if ok {
+                                for (address, _) in &writes {
+                                    spilled.insert(address.clone());
+                                }
+                                edits.extend(local);
+                            }
+                        }
+                        continue;
+                    }
+                    TextSpill::Absent => {}
+                }
                 if let Some(spill) = try_spill(formula, &mut spill_env) {
                     if let Some(writes) = place_spill(&cell.address, &spill, &cells, &spilled) {
                         for (address, number) in writes {
@@ -8575,6 +8755,19 @@ impl<'a> CalcParser<'a> {
                 self.close_paren()?;
                 return Some(CalcValue::Text(text.to_lowercase()));
             }
+            if word.eq_ignore_ascii_case("TEXTBEFORE") || word.eq_ignore_ascii_case("TEXTAFTER") {
+                let after = word.eq_ignore_ascii_case("TEXTAFTER");
+                let text = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let delim = calc_text(&self.compare(env)?);
+                let instance = self.text_instance(env)?;
+                let result = if after {
+                    text_after(&text, &delim, instance)
+                } else {
+                    text_before(&text, &delim, instance)
+                };
+                return result.map(CalcValue::Text);
+            }
             if word.eq_ignore_ascii_case("LEFT") {
                 let text = calc_text(&self.compare(env)?);
                 let count = self.comma_number(env)?;
@@ -8916,6 +9109,33 @@ impl<'a> CalcParser<'a> {
             }
             self.index += 1;
         }
+    }
+
+    fn text_instance(&mut self, env: &mut CalcEnv<'_>) -> Option<usize> {
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(1);
+        }
+        self.require_comma()?;
+        let number = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        if !number.is_finite() {
+            return None;
+        }
+        let number = number.trunc();
+        if number < 1.0 || number > 16.0 {
+            return None;
+        }
+        Some(number as usize)
+    }
+
+    fn text_split_call(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<String>> {
+        let text = calc_text(&self.compare(env)?);
+        self.require_comma()?;
+        let delim = calc_text(&self.compare(env)?);
+        self.close_paren()?;
+        split_column(&text, &delim)
     }
 
     fn comma_number(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
@@ -13093,6 +13313,113 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>DATEDIF(43831,44256,&quot;MD&quot;)</f><v>0</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_text_split() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>TEXTBEFORE(&quot;red,green&quot;,&quot;,&quot;)</f><v>0</v></c><c r="A2"><f>TEXTAFTER(&quot;red,green&quot;,&quot;,&quot;)</f><v>0</v></c><c r="A3"><f>TEXTAFTER(&quot;red,green,blue&quot;,&quot;,&quot;,2)</f><v>0</v></c><c r="A4"><f>TEXTBEFORE(&quot;a*b*c&quot;,&quot;*&quot;,2)</f><v>0</v></c><c r="A5"><f>TEXTBEFORE(&quot;Ab&quot;,&quot;B&quot;)</f><v>4</v></c><c r="A6"><f>TEXTBEFORE(&quot;red&quot;,&quot;,&quot;)</f><v>5</v></c><c r="A7"><f>TEXTBEFORE(&quot;red&quot;,&quot;&quot;)</f><v>6</v></c><c r="A8"><f>TEXTBEFORE(&quot;red,green&quot;,&quot;,&quot;,0)</f><v>7</v></c><c r="B1"><f>TEXTSPLIT(&quot;red,green,blue&quot;,&quot;,&quot;)</f><v>0</v></c><c r="C1"><f>TEXTSPLIT(&quot;a-a-a-a-a-a-a-a-a-a-a-a-a-a-a-a-a&quot;,&quot;-&quot;)</f><v>9</v></c><c r="D1"><f>TEXTSPLIT(&quot;red,green&quot;,&quot;,&quot;)</f><v>0</v></c><c r="E1"><f>TEXTBEFORE(&quot;café,x&quot;,&quot;é&quot;)</f><v>0</v></c><c r="F1"><f>TEXTBEFORE(&quot;,red&quot;,&quot;,&quot;)</f><v>1</v></c><c r="G1"><v>2</v></c><c r="H1"><f>TEXTSPLIT(&quot;a,b&quot;,&quot;,&quot;,&quot;;&quot;)</f><v>10</v></c><c r="I1"><f>TEXTSPLIT(&quot;red,green&quot;,&quot;,&quot;)+1</f><v>8</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A9"><f>TEXTAFTER(&quot;a-b-c&quot;,&quot;-&quot;,G1)</f><v>0</v></c><c r="B2"><v>1</v></c><c r="C2"><v>2</v></c><c r="D2"><f>FOO()</f><v>3</v></c></row><row r="3"><c r="B3"><v>1</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(
+                r#"<f>TEXTBEFORE(&quot;red,green&quot;,&quot;,&quot;)</f><is><t>red</t></is>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>TEXTAFTER(&quot;red,green&quot;,&quot;,&quot;)</f><is><t>green</t></is>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTAFTER(&quot;red,green,blue&quot;,&quot;,&quot;,2)</f><is><t>blue</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>TEXTBEFORE(&quot;a*b*c&quot;,&quot;*&quot;,2)</f><is><t>a*b</t></is>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTBEFORE(&quot;Ab&quot;,&quot;B&quot;)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTBEFORE(&quot;red&quot;,&quot;,&quot;)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTBEFORE(&quot;red&quot;,&quot;&quot;)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTBEFORE(&quot;red,green&quot;,&quot;,&quot;,0)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="B1" t="inlineStr"><f>TEXTSPLIT(&quot;red,green,blue&quot;,&quot;,&quot;)</f><is><t>red</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="B2" t="inlineStr"><is><t>green</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="B3" t="inlineStr"><is><t>blue</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTSPLIT(&quot;a-a-a-a-a-a-a-a-a-a-a-a-a-a-a-a-a&quot;,&quot;-&quot;)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="C2"><v>2</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>TEXTSPLIT(&quot;red,green&quot;,&quot;,&quot;)</f><v>0</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>FOO()</f><v>3</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(
+                r#"<f>TEXTBEFORE(&quot;café,x&quot;,&quot;é&quot;)</f><is><t>caf</t></is>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTBEFORE(&quot;,red&quot;,&quot;,&quot;)</f><is><t></t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>TEXTAFTER(&quot;a-b-c&quot;,&quot;-&quot;,G1)</f><is><t>c</t></is>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>TEXTSPLIT(&quot;a,b&quot;,&quot;,&quot;,&quot;;&quot;)</f><v>10</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXTSPLIT(&quot;red,green&quot;,&quot;,&quot;)+1</f><v>8</v>"#),
             "{sheet}"
         );
     }
