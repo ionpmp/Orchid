@@ -130,10 +130,13 @@ release yet.
   Text is stored as an inline string. Length,
   slices, and find positions count Unicode scalar values. `TRIM` collapses
   only U+0020. `SEARCH` ignores ASCII letter case and has no wildcards.
-  `REPT` stops at 32,767 scalar values. `EXACT` writes 1 or 0. `AND` and
-  `OR` take up to 255 comma-separated numbers or comparisons and write 1
-  or 0; a cell range is not expanded. `XOR` uses those same arguments and
-  writes 1 when an odd count of them is not zero. `TEXTJOIN` takes a
+  `REPT` stops at 32,767 scalar values. `EXACT` writes 1 or 0.   `AND` and
+  `OR` take up to 255 comma-separated numbers, comparisons, or ranges and
+  write 1 or 0. One argument may be a range of at most 256 cells. Blank
+  cells and text in that range are skipped. A range with no finite number,
+  or a larger range, leaves the stored value. Collected numbers stop at 256.
+  `XOR` uses those same arguments and writes 1 when an odd count of them is
+  not zero. `NOT` stays one value and does not expand a range. `TEXTJOIN` takes a
   delimiter, a number, and the same text arguments as `CONCAT`, including
   a cell range. A nonzero number skips empty text. A missing cell inside
   a range is empty text. A shared-string cell contributes its text. A missing cell

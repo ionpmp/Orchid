@@ -9537,8 +9537,8 @@ impl<'a> CalcParser<'a> {
             return None;
         }
         loop {
-            values.push(calc_num(self.compare(env)?)?);
-            if values.len() > 255 {
+            self.push_logic(&mut values, env)?;
+            if values.len() > 256 {
                 return None;
             }
             self.skip();
@@ -9551,7 +9551,46 @@ impl<'a> CalcParser<'a> {
                 _ => return None,
             }
         }
-        Some(values)
+        if values.is_empty() {
+            None
+        } else {
+            Some(values)
+        }
+    }
+
+    fn push_logic(&mut self, values: &mut Vec<f64>, env: &mut CalcEnv<'_>) -> Option<()> {
+        let saved = self.index;
+        if let Some((cells, rows, cols)) = self.cell_block(env) {
+            self.skip();
+            if matches!(self.bytes.get(self.index).copied(), Some(b',') | Some(b')')) {
+                if rows == 0
+                    || cols == 0
+                    || rows.saturating_mul(cols) > 256
+                    || cells.len() != (rows * cols) as usize
+                {
+                    return None;
+                }
+                let before = values.len();
+                for address in cells {
+                    match self.cell_value(&address, env) {
+                        Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
+                        Some(CalcValue::Num(_)) => return None,
+                        _ => {}
+                    }
+                }
+                if values.len() == before {
+                    return None;
+                }
+                return Some(());
+            }
+        }
+        self.index = saved;
+        let number = calc_num(self.compare(env)?)?;
+        if !number.is_finite() {
+            return None;
+        }
+        values.push(number);
+        Some(())
     }
 
     fn quoted(&mut self) -> Option<String> {
@@ -13667,6 +13706,36 @@ mod tests {
         assert!(sheet.contains(r#"<f>NOT(A1)</f><v>0</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>AND()</f><v>7</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>NOT("a")</f><v>8</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_logic_range() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>0</v></c></row><row r="4"><c r="A4" t="inlineStr"><is><t>x</t></is></c></row><row r="5"><c r="A5"><f>AND(A1:A2)</f><v>0</v></c><c r="B5"><f>OR(A1:A2)</f><v>0</v></c><c r="C5"><f>XOR(A1:A2)</f><v>0</v></c><c r="D5"><f>AND(A1:A4)</f><v>0</v></c><c r="E5"><f>OR(A3:A4)</f><v>6</v></c><c r="F5"><f>AND(A1:A257)</f><v>7</v></c><c r="G5"><f>XOR(A1:B1)</f><v>0</v></c><c r="H5"><f>NOT(A1:A2)</f><v>8</v></c><c r="I5"><f>AND(A1:A2,1)</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>AND(A1:A2)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>OR(A1:A2)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>XOR(A1:A2)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>AND(A1:A4)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>OR(A3:A4)</f><v>6</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>AND(A1:A257)</f><v>7</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>XOR(A1:B1)</f><v>0</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>NOT(A1:A2)</f><v>8</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>AND(A1:A2,1)</f><v>0</v>"#), "{sheet}");
     }
 
     #[test]

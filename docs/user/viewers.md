@@ -24,10 +24,13 @@ not treat `*` or `?` as wildcards; a miss leaves the stored value.
 1-based count. An empty search text leaves the stored value, and a count
 past the last match leaves the text unchanged. `REPT` stops at 32,767
 scalar values. `EXACT` writes 1 or 0. `AND` and `OR` take up to 255
-comma-separated numbers or comparisons and write 1 or 0. A cell range
-is not expanded, and an empty call or a text argument leaves the stored
-value. `XOR` uses those same arguments and writes 1 when an odd count of
-them is not zero. `TEXTJOIN` takes a delimiter, a number, and the same text
+comma-separated numbers, comparisons, or ranges and write 1 or 0. One
+argument may be a range of at most 256 cells. Blank cells and text in that
+range are skipped. A range with no finite number, or a larger range, leaves
+the stored value. Collected numbers stop at 256. An empty call or a text
+argument leaves the stored value. `XOR` uses those same arguments and
+writes 1 when an odd count of them is not zero. `NOT` stays one value and
+does not expand a range. `TEXTJOIN` takes a delimiter, a number, and the same text
 arguments as `CONCAT`, including a cell range. A nonzero number skips
 empty text. A missing cell inside a range is empty text. A shared-string
 cell contributes its text. A missing cell named on its own leaves the
