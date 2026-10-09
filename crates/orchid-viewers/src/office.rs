@@ -12387,6 +12387,7 @@ fn render_sheets<R: Read + Seek>(
         let (mut rows, truncated) = parse_sheet(&xml, &shared, &formats);
         apply_highlights(&mut rows, &conditional_rules(&xml));
         apply_notes(&mut rows, &load_sheet_notes(archive, path));
+        apply_sheet_layout(&mut rows, &xml);
         if rows.is_empty() {
             continue;
         }
@@ -13094,7 +13095,164 @@ fn place(row: &mut Vec<SheetCell>, col: usize, text: String, address: String) {
         address,
         highlight: false,
         note: String::new(),
+        span: 1,
+        covered: false,
+        width_px: 72,
     };
+}
+
+fn apply_sheet_layout(rows: &mut [Vec<SheetCell>], xml: &str) {
+    let widths = column_widths(xml);
+    let merges = merge_refs(xml);
+    for row in rows.iter_mut() {
+        for cell in row.iter_mut() {
+            let Some((col, row_num)) = split_address(&cell.address) else {
+                cell.span = 1;
+                cell.covered = false;
+                cell.width_px = 72;
+                continue;
+            };
+            let col = col.saturating_sub(1) as usize;
+            if col >= 32 {
+                continue;
+            }
+            if let Some(merge) = merges
+                .iter()
+                .find(|merge| merge_covers(merge, col, row_num))
+            {
+                if col == merge.col && row_num == merge.row {
+                    cell.covered = false;
+                    cell.span = merge.cols;
+                    let mut px = 0u32;
+                    for offset in 0..merge.cols {
+                        let at = col + offset as usize;
+                        if at >= 32 {
+                            break;
+                        }
+                        px = px.saturating_add(column_px(&widths, at));
+                    }
+                    cell.width_px = px.max(72);
+                } else {
+                    cell.covered = true;
+                    cell.span = 1;
+                    cell.width_px = 0;
+                }
+            } else {
+                cell.span = 1;
+                cell.covered = false;
+                cell.width_px = column_px(&widths, col);
+            }
+        }
+    }
+}
+
+struct SheetMerge {
+    col: usize,
+    row: u32,
+    cols: u32,
+    rows: u32,
+}
+
+fn merge_covers(merge: &SheetMerge, col: usize, row: u32) -> bool {
+    col >= merge.col
+        && row >= merge.row
+        && col < merge.col + merge.cols as usize
+        && row < merge.row + merge.rows
+}
+
+fn column_px(widths: &[f32], col: usize) -> u32 {
+    let excel = widths.get(col).copied().unwrap_or(0.0);
+    if excel > 0.0 {
+        (excel * 8.0).round() as u32
+    } else {
+        72
+    }
+}
+
+fn column_widths(xml: &str) -> Vec<f32> {
+    let mut widths = vec![0.0; 32];
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event) | Event::Empty(event)) => {
+                if local_name(event.name().as_ref()) != "col" {
+                    buf.clear();
+                    continue;
+                }
+                let Some(min) = attr(&event, "min").parse::<u32>().ok() else {
+                    buf.clear();
+                    continue;
+                };
+                let max = attr(&event, "max").parse::<u32>().unwrap_or(min);
+                let Some(width) = attr(&event, "width").parse::<f32>().ok() else {
+                    buf.clear();
+                    continue;
+                };
+                if !width.is_finite() || min == 0 {
+                    buf.clear();
+                    continue;
+                }
+                let width = width.clamp(1.0, 40.0);
+                let start = min.saturating_sub(1).min(32);
+                let end = max.min(32);
+                for col in start..end {
+                    widths[col as usize] = width;
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    widths
+}
+
+fn merge_refs(xml: &str) -> Vec<SheetMerge> {
+    let mut merges = Vec::new();
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+    loop {
+        if merges.len() >= 16 {
+            break;
+        }
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event) | Event::Empty(event)) => {
+                if local_name(event.name().as_ref()) == "mergeCell" {
+                    if let Some(merge) = parse_merge(&attr(&event, "ref")) {
+                        merges.push(merge);
+                    }
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    merges
+}
+
+fn parse_merge(reference: &str) -> Option<SheetMerge> {
+    let (start, end) = reference.split_once(':')?;
+    let (c1, r1) = split_address(start)?;
+    let (c2, r2) = split_address(end)?;
+    let cols = c1.abs_diff(c2) + 1;
+    let rows = r1.abs_diff(r2) + 1;
+    if cols > 8 || rows > 8 || (cols == 1 && rows == 1) {
+        return None;
+    }
+    let col = c1.min(c2).saturating_sub(1) as usize;
+    if col >= 32 {
+        return None;
+    }
+    Some(SheetMerge {
+        col,
+        row: r1.min(r2),
+        cols,
+        rows,
+    })
 }
 
 fn fill_gap_addresses(row: &mut [SheetCell]) {
@@ -13443,6 +13601,50 @@ mod tests {
         assert!(cell("C1").highlight);
         assert!(cell("D1").highlight);
         assert!(!cell("A3").highlight, "a range past 32 cells is ignored");
+    }
+
+    #[test]
+    fn sheet_preview_merges_and_widths() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><cols><col min="1" max="1" width="10"/><col min="2" max="2" width="20"/><col min="4" max="4" width="100"/></cols><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Hi</t></is></c><c r="B1"><v>2</v></c><c r="C1"><v>3</v></c><c r="D1"><v>4</v></c></row><row r="2"><c r="A2"><v>5</v></c><c r="C2"><v>6</v></c></row><row r="3"><c r="A3"><v>7</v></c></row></sheetData><mergeCells><mergeCell ref="A1:B1"/><mergeCell ref="A2:A3"/><mergeCell ref="C2:K2"/></mergeCells></worksheet>"#,
+            ),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let cell = |address: &str| {
+            book.sheets[0]
+                .rows
+                .iter()
+                .flatten()
+                .find(|cell| cell.address == address)
+                .unwrap_or_else(|| panic!("missing {address}"))
+        };
+        let origin = cell("A1");
+        assert_eq!(origin.text, "Hi");
+        assert_eq!(origin.span, 2);
+        assert!(!origin.covered);
+        assert_eq!(origin.width_px, 240);
+        assert!(cell("B1").covered);
+        assert_eq!(cell("B1").width_px, 0);
+        assert_eq!(cell("A2").span, 1);
+        assert_eq!(cell("A2").width_px, 80);
+        assert!(cell("A3").covered);
+        assert_eq!(cell("C1").width_px, 72);
+        assert_eq!(cell("C2").span, 1, "a merge wider than 8 columns is skipped");
+        assert!(!cell("C2").covered);
+        assert_eq!(cell("D1").width_px, 320);
     }
 
     #[test]

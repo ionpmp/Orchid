@@ -100,7 +100,13 @@ release yet.
   use it. A selected cell can show a legacy comment from the worksheet
   comments part. At most 32 comments are read, each note is at most 256
   characters, and the author is ignored. Threaded comments are not read.
-  The note is not editable and is not written back. The preview can show a
+  The note is not editable and is not written back. The preview reads at
+  most 16 merged ranges. Each range covers at most 8 columns and 8 rows.
+  The origin cell widens across those columns, and the other cells in the
+  range are hidden. The row does not grow taller. Column widths come from
+  the worksheet `cols` list, clamped from 1 to 40 character units and drawn
+  at 8 pixels per unit. A missing width stays 72 pixels. A merge or a width
+  is not written back. The preview can show a
   short list of number formats without changing the stored number. Percent
   is built-in format 9 or 10, or a custom format that is exactly `0%` or
   `0.00%`: the number times 100, trimmed the same way other calculated

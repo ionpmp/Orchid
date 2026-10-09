@@ -632,6 +632,12 @@ pub struct SheetCell {
     pub highlight: bool,
     /// Legacy cell comment shown in the preview. Empty when the cell has none.
     pub note: String,
+    /// Columns covered by this cell, including itself.
+    pub span: u32,
+    /// True when another cell's merge already covers this one.
+    pub covered: bool,
+    /// Preview width in pixels. A covered cell is 0.
+    pub width_px: u32,
 }
 
 /// HTML snapshot (embedded preview + source + Open in browser).

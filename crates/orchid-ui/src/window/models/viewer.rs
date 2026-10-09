@@ -776,6 +776,8 @@ fn build_sheet_model(
                             address: cell.address.clone().into(),
                             highlight: cell.highlight,
                             note: cell.note.clone().into(),
+                            covered: cell.covered,
+                            width_px: i32::try_from(cell.width_px).unwrap_or(72),
                         })
                         .collect();
                     ViewerSheetRow {
