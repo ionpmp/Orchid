@@ -6785,6 +6785,60 @@ fn substitute_text(text: &str, old: &str, new: &str, instance: Option<f64>) -> O
     Some(text.to_string())
 }
 
+fn search_wildcard(haystack: &str, needle: &str, start: f64) -> Option<f64> {
+    if needle.is_empty() || !start.is_finite() || start < 1.0 || start > 32_767.0 {
+        return None;
+    }
+    let hay: Vec<char> = haystack.chars().collect();
+    let pattern: Vec<char> = needle.chars().collect();
+    if pattern.len() > 64 || hay.len() > 256 {
+        return None;
+    }
+    let start = (start.trunc() as usize).saturating_sub(1);
+    if start > hay.len() {
+        return None;
+    }
+    for index in start..=hay.len() {
+        if wildcard_prefix(&pattern, &hay[index..]) {
+            return Some((index + 1) as f64);
+        }
+    }
+    None
+}
+
+fn wildcard_prefix(pattern: &[char], text: &[char]) -> bool {
+    if pattern.is_empty() {
+        return true;
+    }
+    if pattern[0] == '~' {
+        return pattern.len() > 1
+            && !text.is_empty()
+            && pattern[1].eq_ignore_ascii_case(&text[0])
+            && wildcard_prefix(&pattern[2..], &text[1..]);
+    }
+    if pattern[0] == '?' {
+        return !text.is_empty() && wildcard_prefix(&pattern[1..], &text[1..]);
+    }
+    if pattern[0] == '*' {
+        let mut rest = &pattern[1..];
+        while rest.first() == Some(&'*') {
+            rest = &rest[1..];
+        }
+        if rest.is_empty() {
+            return true;
+        }
+        for start in 0..=text.len() {
+            if wildcard_prefix(rest, &text[start..]) {
+                return true;
+            }
+        }
+        return false;
+    }
+    !text.is_empty()
+        && pattern[0].eq_ignore_ascii_case(&text[0])
+        && wildcard_prefix(&pattern[1..], &text[1..])
+}
+
 fn find_scalar(haystack: &str, needle: &str, start: f64, ignore_ascii_case: bool) -> Option<f64> {
     if needle.is_empty() || !start.is_finite() || start < 1.0 || start > 32_767.0 {
         return None;
@@ -9145,8 +9199,14 @@ impl<'a> CalcParser<'a> {
                 self.require_comma()?;
                 let haystack = calc_text(&self.compare(env)?);
                 let start = self.optional_number(env, 1.0)?;
-                return find_scalar(&haystack, &needle, start, ignore_ascii_case)
-                    .map(CalcValue::Num);
+                let found = if ignore_ascii_case
+                    && needle.chars().any(|ch| matches!(ch, '*' | '?' | '~'))
+                {
+                    search_wildcard(&haystack, &needle, start)
+                } else {
+                    find_scalar(&haystack, &needle, start, ignore_ascii_case)
+                };
+                return found.map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("SUBSTITUTE") {
                 let text = calc_text(&self.compare(env)?);
@@ -13671,6 +13731,65 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<f>REPT("a",-1)</f><v>9</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_search_wildcard() {
+        let wide = "?".repeat(65);
+        let hay = "a".repeat(257);
+        let body = format!(
+            r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>SEARCH("a*c","xxabyc")</f><v>0</v></c><c r="C1"><f>SEARCH("~*","a*b")</f><v>0</v></c><c r="D1"><f>SEARCH("?pple","Apple")</f><v>0</v></c><c r="E1"><f>FIND("a*","xa*b")</f><v>0</v></c><c r="F1"><f>SEARCH("z*","apple")</f><v>6</v></c><c r="G1"><f>SEARCH("*","abc")</f><v>0</v></c><c r="H1"><f>SEARCH("b*","abbc",3)</f><v>0</v></c><c r="I1"><f>SEARCH("{wide}","abc")</f><v>7</v></c><c r="J1"><f>SEARCH("a*","{hay}")</f><v>8</v></c></row></sheetData></worksheet>"#
+        );
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            ("xl/worksheets/sheet1.xml", &body),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "A1", "2").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SEARCH("a*c","xxabyc")</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SEARCH("~*","a*b")</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SEARCH("?pple","Apple")</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>FIND("a*","xa*b")</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SEARCH("z*","apple")</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SEARCH("*","abc")</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SEARCH("b*","abbc",3)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(&format!(r#"<f>SEARCH("{wide}","abc")</f><v>7</v>"#)),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(&format!(r#"<f>SEARCH("a*","{hay}")</f><v>8</v>"#)),
+            "{sheet}"
+        );
     }
 
     #[test]
