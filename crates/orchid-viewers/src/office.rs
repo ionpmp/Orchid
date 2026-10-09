@@ -5023,7 +5023,7 @@ fn days360_us(start: f64, end: f64) -> Option<f64> {
     Some(f64::from((y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1)))
 }
 
-fn coupon_span(settlement: f64, maturity: f64, frequency: i32) -> Option<CouponSpan> {
+fn coupon_span(settlement: f64, maturity: f64, frequency: i32, basis: i32) -> Option<CouponSpan> {
     if !(1.0..=2_958_465.0).contains(&settlement)
         || !(1.0..=2_958_465.0).contains(&maturity)
         || settlement >= maturity
@@ -5047,9 +5047,15 @@ fn coupon_span(settlement: f64, maturity: f64, frequency: i32) -> Option<CouponS
         }
         cursor = earlier;
     };
-    let period_days = 360.0 / f64::from(frequency);
-    let accrued_days = days360_us(prev, settlement)?;
-    let next_days = days360_us(settlement, next)?;
+    let (accrued_days, next_days, period_days) = if basis == 0 {
+        (
+            days360_us(prev, settlement)?,
+            days360_us(settlement, next)?,
+            360.0 / f64::from(frequency),
+        )
+    } else {
+        (settlement - prev, next - settlement, next - prev)
+    };
     if accrued_days < 0.0 || next_days <= 0.0 {
         return None;
     }
@@ -5066,7 +5072,7 @@ fn bond_frequency(frequency: f64) -> Option<i32> {
         return None;
     }
     match frequency.trunc() as i32 {
-        frequency @ (1 | 2) => Some(frequency),
+        frequency @ (1 | 2 | 4) => Some(frequency),
         _ => None,
     }
 }
@@ -5087,6 +5093,7 @@ fn price_excel(
     yld: f64,
     redemption: f64,
     frequency: i32,
+    basis: i32,
 ) -> Option<f64> {
     if !rate.is_finite()
         || !yld.is_finite()
@@ -5096,7 +5103,7 @@ fn price_excel(
     {
         return None;
     }
-    let span = coupon_span(settlement, maturity, frequency)?;
+    let span = coupon_span(settlement, maturity, frequency, basis)?;
     let per_yield = yld / f64::from(frequency);
     if per_yield <= -1.0 {
         return None;
@@ -5123,13 +5130,16 @@ fn yield_excel(
     price: f64,
     redemption: f64,
     frequency: i32,
+    basis: i32,
 ) -> Option<f64> {
     if !price.is_finite() || price <= 0.0 {
         return None;
     }
     let mut yld = if rate > 0.0 { rate } else { 0.05 };
     for _ in 0..40 {
-        let quote = price_excel(settlement, maturity, rate, yld, redemption, frequency)?;
+        let quote = price_excel(
+            settlement, maturity, rate, yld, redemption, frequency, basis,
+        )?;
         let step = 1e-6 * yld.abs().max(1.0);
         let above = price_excel(
             settlement,
@@ -5138,6 +5148,7 @@ fn yield_excel(
             yld + step,
             redemption,
             frequency,
+            basis,
         )?;
         let slope = (above - quote) / step;
         if !slope.is_finite() || slope.abs() < 1e-12 {
@@ -5161,11 +5172,12 @@ fn duration_excel(
     rate: f64,
     yld: f64,
     frequency: i32,
+    basis: i32,
 ) -> Option<f64> {
     if !rate.is_finite() || !yld.is_finite() || rate < 0.0 {
         return None;
     }
-    let span = coupon_span(settlement, maturity, frequency)?;
+    let span = coupon_span(settlement, maturity, frequency, basis)?;
     let per_yield = yld / f64::from(frequency);
     if per_yield <= -1.0 {
         return None;
@@ -8740,19 +8752,28 @@ impl<'a> CalcParser<'a> {
                     self.close_paren()?;
                     basis
                 };
-                if !basis.is_finite() || basis.trunc() != 0.0 {
+                if !basis.is_finite() {
                     return None;
                 }
+                let basis = basis.trunc();
+                if basis != 0.0 && basis != 1.0 {
+                    return None;
+                }
+                let basis = basis as i32;
                 let value = match kind.as_str() {
-                    "PRICE" => {
-                        price_excel(settlement, maturity, rate, second, redemption, frequency)
+                    "PRICE" => price_excel(
+                        settlement, maturity, rate, second, redemption, frequency, basis,
+                    ),
+                    "YIELD" => yield_excel(
+                        settlement, maturity, rate, second, redemption, frequency, basis,
+                    ),
+                    "DURATION" => {
+                        duration_excel(settlement, maturity, rate, second, frequency, basis)
                     }
-                    "YIELD" => {
-                        yield_excel(settlement, maturity, rate, second, redemption, frequency)
+                    "MDURATION" => {
+                        duration_excel(settlement, maturity, rate, second, frequency, basis)
+                            .map(|years| years / (1.0 + second / f64::from(frequency)))
                     }
-                    "DURATION" => duration_excel(settlement, maturity, rate, second, frequency),
-                    "MDURATION" => duration_excel(settlement, maturity, rate, second, frequency)
-                        .map(|years| years / (1.0 + second / f64::from(frequency))),
                     _ => None,
                 }?;
                 if value.is_finite() {
@@ -14909,7 +14930,7 @@ mod tests {
             ),
             (
                 "xl/worksheets/sheet1.xml",
-                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c><c r="A1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,0)</f><v>0</v></c><c r="B1"><f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.63436162,100,2)</f><v>0</v></c><c r="C1"><f>DURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2)</f><v>0</v></c><c r="D1"><f>MDURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2)</f><v>0</v></c><c r="E1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,4)</f><v>9</v></c><c r="F1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,1)</f><v>8</v></c></row></sheetData></worksheet>"#,
+                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c><c r="A1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,0)</f><v>0</v></c><c r="B1"><f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.63436162,100,2)</f><v>0</v></c><c r="C1"><f>DURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2)</f><v>0</v></c><c r="D1"><f>MDURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2)</f><v>0</v></c><c r="E1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,4)</f><v>9</v></c><c r="F1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,1)</f><v>8</v></c><c r="G1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,3)</f><v>7</v></c><c r="H1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,2)</f><v>6</v></c><c r="I1"><f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,4,1)</f><v>4</v></c><c r="J1"><f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.63544921,100,2,1)</f><v>0</v></c><c r="K1"><f>DURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,4)</f><v>0</v></c><c r="L1"><f>MDURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2,1)</f><v>0</v></c><c r="M1"><f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.61509395,100,4)</f><v>0</v></c></row></sheetData></worksheet>"#,
             ),
         ]);
         let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
@@ -14934,13 +14955,55 @@ mod tests {
         );
         assert!(
             sheet.contains(
-                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,4)</f><v>9</v>"#
+                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,4)</f><v>94.61509395</v>"#
             ),
             "{sheet}"
         );
         assert!(
             sheet.contains(
-                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,1)</f><v>8</v>"#
+                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,1)</f><v>94.63544921</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,3)</f><v>7</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,2,2)</f><v>6</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>PRICE(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,100,4,1)</f><v>94.61509395</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.63544921,100,2,1)</f><v>0.065</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>DURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,4)</f><v>7.45611478</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>MDURATION(DATE(2008,2,15),DATE(2017,11,15),0.0575,0.065,2,1)</f><v>7.18037525</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.61509395,100,4)</f><v>0.065</v>"#
             ),
             "{sheet}"
         );
