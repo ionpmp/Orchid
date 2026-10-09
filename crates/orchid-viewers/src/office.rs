@@ -11951,6 +11951,7 @@ fn render_sheets<R: Read + Seek>(
         };
         let (mut rows, truncated) = parse_sheet(&xml, &shared);
         apply_highlights(&mut rows, &conditional_rules(&xml));
+        apply_notes(&mut rows, &load_sheet_notes(archive, path));
         if rows.is_empty() {
             continue;
         }
@@ -12295,6 +12296,106 @@ fn cf_matches(kind: &CfKind, text: &str) -> bool {
     }
 }
 
+fn comments_target(rels: &str) -> Option<String> {
+    let mut index = 0usize;
+    while let Some(at) = rels[index..].find("<Relationship ") {
+        let start = index + at;
+        let Some(end) = rels[start..].find('>') else {
+            break;
+        };
+        let tag = &rels[start..start + end];
+        index = start + end + 1;
+        let target = xml_attr(tag, "Target").unwrap_or_default();
+        let kind = xml_attr(tag, "Type").unwrap_or_default();
+        if !target.is_empty() && kind.to_ascii_lowercase().ends_with("/comments") {
+            return Some(target);
+        }
+    }
+    None
+}
+
+fn load_sheet_notes<R: Read + Seek>(
+    archive: &mut ZipArchive<R>,
+    path: &str,
+) -> Vec<(String, String)> {
+    let Some(rels_path) = rels_for(path) else {
+        return Vec::new();
+    };
+    let Some(rels) = read_entry(archive, &rels_path) else {
+        return Vec::new();
+    };
+    let Some(target) = comments_target(&rels) else {
+        return Vec::new();
+    };
+    let Some(xml) = read_entry(archive, &join_target(path, &target)) else {
+        return Vec::new();
+    };
+    sheet_comment_notes(&xml)
+}
+
+fn sheet_comment_notes(xml: &str) -> Vec<(String, String)> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut notes = Vec::new();
+    let mut reference = String::new();
+    let mut text = String::new();
+    let mut in_comment = false;
+    let mut in_t = false;
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "comment" && notes.len() < 32 {
+                    in_comment = true;
+                    in_t = false;
+                    reference = attr(&event, "ref");
+                    text.clear();
+                } else if in_comment && name == "t" {
+                    in_t = true;
+                }
+            }
+            Ok(Event::Text(event)) if in_t => {
+                text.push_str(&xml_text(event.as_ref()));
+            }
+            Ok(Event::GeneralRef(entity)) if in_t => {
+                text.push_str(entity_text(entity.as_ref()));
+            }
+            Ok(Event::End(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "t" {
+                    in_t = false;
+                } else if name == "comment" && in_comment {
+                    in_comment = false;
+                    let note: String = text.chars().take(256).collect();
+                    let reference = reference.trim().to_ascii_uppercase();
+                    if !reference.is_empty() && !note.is_empty() && notes.len() < 32 {
+                        notes.push((reference, note));
+                    }
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    notes
+}
+
+fn apply_notes(rows: &mut [Vec<SheetCell>], notes: &[(String, String)]) {
+    for row in rows {
+        for cell in row.iter_mut() {
+            let address = cell.address.to_ascii_uppercase();
+            if let Some((_, note)) = notes
+                .iter()
+                .find(|(item, _)| item.eq_ignore_ascii_case(&address))
+            {
+                cell.note.clone_from(note);
+            }
+        }
+    }
+}
+
 fn apply_highlights(rows: &mut [Vec<SheetCell>], rules: &[CfRule]) {
     for row in rows {
         for cell in row.iter_mut() {
@@ -12421,6 +12522,7 @@ fn place(row: &mut Vec<SheetCell>, col: usize, text: String, address: String) {
         text,
         address,
         highlight: false,
+        note: String::new(),
     };
 }
 
@@ -12770,6 +12872,55 @@ mod tests {
         assert!(cell("C1").highlight);
         assert!(cell("D1").highlight);
         assert!(!cell("A3").highlight, "a range past 32 cells is ignored");
+    }
+
+    #[test]
+    fn sheet_preview_legacy_comments() {
+        let mut comments = String::from(
+            r#"<comments><commentList><comment ref="A1" authorId="1"><text><t>Hello &amp; there</t></text></comment><comment ref="D1"><text><r><t>One</t></r><r><t> two</t></r></text></comment>"#,
+        );
+        for index in 1..=30 {
+            comments.push_str(&format!(
+                r#"<comment ref="Z{index}"><text><t>skip</t></text></comment>"#
+            ));
+        }
+        comments.push_str(
+            r#"<comment ref="B1"><text><t>Late</t></text></comment></commentList></comments>"#,
+        );
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/_rels/sheet1.xml.rels",
+                r#"<Relationships><Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/></Relationships>"#,
+            ),
+            ("xl/comments1.xml", &comments),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c><c r="D1"><v>4</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let cell = |address: &str| {
+            book.sheets[0]
+                .rows
+                .iter()
+                .flatten()
+                .find(|cell| cell.address == address)
+                .unwrap_or_else(|| panic!("missing {address}"))
+        };
+        assert_eq!(cell("A1").note, "Hello & there");
+        assert_eq!(cell("D1").note, "One two");
+        assert!(cell("B1").note.is_empty(), "the 33rd comment is ignored");
     }
 
     #[test]

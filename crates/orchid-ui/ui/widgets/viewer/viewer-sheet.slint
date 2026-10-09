@@ -12,6 +12,7 @@ export component ViewerSheetView inherits Rectangle {
     property <int> sheet: min(root.sheet-index, max(root.model.sheets.length - 1, 0));
     property <string> cell-address: root.model.sheets[root.sheet].rows[root.sel-row].cells[root.sel-col].address;
     property <string> cell-text: root.model.sheets[root.sheet].rows[root.sel-row].cells[root.sel-col].text;
+    property <string> cell-note: root.model.sheets[root.sheet].rows[root.sel-row].cells[root.sel-col].note;
     property <string> draft: root.cell-text;
     property <bool> editing: false;
 
@@ -145,6 +146,13 @@ export component ViewerSheetView inherits Rectangle {
                 font-size: Theme.font-size-sm;
                 vertical-alignment: center;
             }
+        }
+
+        if root.model.sheets.length > 0 && root.cell-note != "" : Text {
+            text: root.cell-note;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
         }
 
         if root.model.sheets.length > 0 : Text {

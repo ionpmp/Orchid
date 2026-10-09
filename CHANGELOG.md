@@ -97,7 +97,11 @@ release yet.
   first matching rule wins. Colors, data bars, color scales, and formula
   rules are skipped and do not count toward the 8. A range larger than 32
   cells is skipped. The highlight is not written back and formulas do not
-  use it. Enter or Save writes the current cell back into the workbook. A formula
+  use it. A selected cell can show a legacy comment from the worksheet
+  comments part. At most 32 comments are read, each note is at most 256
+  characters, and the author is ignored. Threaded comments are not read.
+  The note is not editable and is not written back. Enter or Save writes
+  the current cell back into the workbook. A formula
   cell is left unchanged. A value edit recalculates arithmetic, comparisons,
   cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `IF`, `ROUND`,
   `ABS`, `INT`, text joined with `&` or `CONCAT`, `LEN`, `LEFT`, `RIGHT`,

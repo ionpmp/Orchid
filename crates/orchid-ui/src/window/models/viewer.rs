@@ -775,6 +775,7 @@ fn build_sheet_model(
                             text: cell.text.clone().into(),
                             address: cell.address.clone().into(),
                             highlight: cell.highlight,
+                            note: cell.note.clone().into(),
                         })
                         .collect();
                     ViewerSheetRow {

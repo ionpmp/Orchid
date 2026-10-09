@@ -630,6 +630,8 @@ pub struct SheetCell {
     pub address: String,
     /// Preview highlight from a matching conditional-formatting rule.
     pub highlight: bool,
+    /// Legacy cell comment shown in the preview. Empty when the cell has none.
+    pub note: String,
 }
 
 /// HTML snapshot (embedded preview + source + Open in browser).
