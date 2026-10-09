@@ -882,7 +882,7 @@ release yet.
   `DURATION` and `MDURATION` redeem at 100. `MDURATION` divides the Macaulay
   duration in years by one plus the yield per coupon period. `DSUM`,
   `DAVERAGE`, `DCOUNT`, `DCOUNTA`, `DMIN`, and `DMAX` take a database range
-  with a header row, a field, and a criteria range of exactly two rows. The
+  with a header row, a field, and a criteria range of 2 through 8 rows. The
   field is a header name or a column number starting at 1. The first header
   with that spelling is used. A criteria header must match a database header,
   ignoring ASCII case. A blank criteria cell, or a criteria column whose
@@ -894,8 +894,10 @@ release yet.
   ASCII case, and count Unicode scalar values. `~` escapes the next
   character. A pattern longer than 64 scalar values, or a cell longer than
   256, leaves the stored value. A wildcard does not match a number. `=` and
-  `<>` may carry the same pattern. A text ordering such as `>apple`, or more
-  than one criteria row, leaves the stored value. `DSUM` of no numbers
+  `<>` may carry the same pattern. A text ordering such as `>apple` leaves
+  the stored value. Columns of one criteria row are AND. Further criteria
+  rows, through 7, are OR. A blank criteria row matches every record. More
+  than 7 criteria rows leaves the stored value. `DSUM` of no numbers
   is 0. `DAVERAGE`, `DMIN`, and `DMAX` with no numbers leave the stored value.
   Text in the field column is skipped by the numeric functions and counted by
   `DCOUNTA`. `FREQUENCY`, `LINEST`,

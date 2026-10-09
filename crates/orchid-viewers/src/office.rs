@@ -10108,7 +10108,7 @@ impl<'a> CalcParser<'a> {
         self.require_comma()?;
         let (criteria, crit_rows, crit_cols) = self.cell_block(env)?;
         self.close_paren()?;
-        if crit_rows != 2
+        if !(2..=8).contains(&crit_rows)
             || crit_cols == 0
             || crit_cols > 32
             || criteria.len() != (crit_rows as usize) * (crit_cols as usize)
@@ -10140,37 +10140,48 @@ impl<'a> CalcParser<'a> {
             }
             _ => return None,
         };
-        let mut filters = Vec::new();
-        for col in 0..crit_cols {
-            let header = header_label(self.cell_value(&criteria[col as usize], env).as_ref());
-            let Some(name) = header else {
-                continue;
-            };
-            let value = self.cell_value(&criteria[(crit_cols + col) as usize], env);
-            if value.as_ref().is_none_or(|item| match item {
-                CalcValue::Text(text) => text.trim().is_empty(),
-                CalcValue::Num(_) => false,
-            }) {
-                continue;
+        let mut criteria_rows = Vec::new();
+        for crit_row in 1..crit_rows {
+            let mut filters = Vec::new();
+            for col in 0..crit_cols {
+                let header = header_label(self.cell_value(&criteria[col as usize], env).as_ref());
+                let Some(name) = header else {
+                    continue;
+                };
+                let value = self.cell_value(&criteria[(crit_row * crit_cols + col) as usize], env);
+                if value.as_ref().is_none_or(|item| match item {
+                    CalcValue::Text(text) => text.trim().is_empty(),
+                    CalcValue::Num(_) => false,
+                }) {
+                    continue;
+                }
+                let value = value?;
+                let Some(db_col) = headers
+                    .iter()
+                    .position(|item| item.as_deref() == Some(name.as_str()))
+                else {
+                    return None;
+                };
+                filters.push((db_col as u32, value));
             }
-            let value = value?;
-            let Some(db_col) = headers
-                .iter()
-                .position(|item| item.as_deref() == Some(name.as_str()))
-            else {
-                return None;
-            };
-            filters.push((db_col as u32, value));
+            criteria_rows.push(filters);
         }
         let mut numbers = Vec::new();
         let mut counted = 0.0;
         for row in 1..rows {
-            let mut matched = true;
-            for (col, criterion) in &filters {
-                let at = (row * cols + col) as usize;
-                let cell = self.cell_value(&cells[at], env);
-                if !criterion_holds(cell.as_ref(), criterion)? {
-                    matched = false;
+            let mut matched = false;
+            for filters in &criteria_rows {
+                let mut row_ok = true;
+                for (col, criterion) in filters {
+                    let at = (row * cols + col) as usize;
+                    let cell = self.cell_value(&cells[at], env);
+                    if !criterion_holds(cell.as_ref(), criterion)? {
+                        row_ok = false;
+                        break;
+                    }
+                }
+                if row_ok {
+                    matched = true;
                     break;
                 }
             }
@@ -16531,7 +16542,7 @@ mod tests {
             ),
             (
                 "xl/worksheets/sheet1.xml",
-                r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Item</t></is></c><c r="B1" t="inlineStr"><is><t>Qty</t></is></c><c r="C1" t="inlineStr"><is><t>Price</t></is></c><c r="E1" t="inlineStr"><is><t>Item</t></is></c><c r="F1" t="inlineStr"><is><t>Qty</t></is></c><c r="I1" t="inlineStr"><is><t>Item</t></is></c><c r="L1" t="inlineStr"><is><t>Qty</t></is></c><c r="P1" t="inlineStr"><is><t>Item</t></is></c><c r="Q1" t="inlineStr"><is><t>Qty</t></is></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>apple</t></is></c><c r="B2"><v>2</v></c><c r="C2"><v>5</v></c><c r="E2" t="inlineStr"><is><t>Apple</t></is></c><c r="F2" t="inlineStr"><is><t>&gt;1</t></is></c><c r="I2" t="inlineStr"><is><t>pear*</t></is></c><c r="L2" t="inlineStr"><is><t>&gt;10</t></is></c><c r="P2" t="inlineStr"><is><t>apple</t></is></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>pear</t></is></c><c r="B3"><v>4</v></c><c r="C3"><v>3</v></c></row><row r="4"><c r="A4" t="inlineStr"><is><t>apple</t></is></c><c r="B4"><v>1</v></c><c r="C4"><v>9</v></c></row><row r="6"><c r="A6"><f>DSUM(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="B6"><f>DAVERAGE(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="C6"><f>DCOUNT(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="D6"><f>DCOUNTA(A1:C4,&quot;Item&quot;,E1:F2)</f><v>0</v></c><c r="E6"><f>DMIN(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="F6"><f>DMAX(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="G6"><f>DSUM(A1:C4,3,E1:F2)</f><v>0</v></c><c r="H6"><f>DSUM(A1:C4,&quot;Price&quot;,E1:F3)</f><v>8</v></c><c r="I6"><f>DSUM(A1:C4,&quot;Price&quot;,I1:I2)</f><v>9</v></c><c r="J6"><f>DSUM(A1:C4,&quot;Nope&quot;,E1:F2)</f><v>7</v></c><c r="K6"><f>DSUM(A1:C4,&quot;Price&quot;,P1:Q2)</f><v>0</v></c><c r="L6"><f>DSUM(A1:C4,&quot;Price&quot;,L1:L2)</f><v>0</v></c><c r="M6"><f>DAVERAGE(A1:C4,&quot;Price&quot;,L1:L2)</f><v>4</v></c></row></sheetData></worksheet>"#,
+                r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Item</t></is></c><c r="B1" t="inlineStr"><is><t>Qty</t></is></c><c r="C1" t="inlineStr"><is><t>Price</t></is></c><c r="E1" t="inlineStr"><is><t>Item</t></is></c><c r="F1" t="inlineStr"><is><t>Qty</t></is></c><c r="I1" t="inlineStr"><is><t>Item</t></is></c><c r="L1" t="inlineStr"><is><t>Qty</t></is></c><c r="P1" t="inlineStr"><is><t>Item</t></is></c><c r="Q1" t="inlineStr"><is><t>Qty</t></is></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>apple</t></is></c><c r="B2"><v>2</v></c><c r="C2"><v>5</v></c><c r="E2" t="inlineStr"><is><t>Apple</t></is></c><c r="F2" t="inlineStr"><is><t>&gt;1</t></is></c><c r="I2" t="inlineStr"><is><t>pear*</t></is></c><c r="L2" t="inlineStr"><is><t>&gt;10</t></is></c><c r="P2" t="inlineStr"><is><t>apple</t></is></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>pear</t></is></c><c r="B3"><v>4</v></c><c r="C3"><v>3</v></c><c r="E3" t="inlineStr"><is><t>pear</t></is></c></row><row r="4"><c r="A4" t="inlineStr"><is><t>apple</t></is></c><c r="B4"><v>1</v></c><c r="C4"><v>9</v></c></row><row r="6"><c r="A6"><f>DSUM(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="B6"><f>DAVERAGE(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="C6"><f>DCOUNT(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="D6"><f>DCOUNTA(A1:C4,&quot;Item&quot;,E1:F2)</f><v>0</v></c><c r="E6"><f>DMIN(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="F6"><f>DMAX(A1:C4,&quot;Price&quot;,E1:F2)</f><v>0</v></c><c r="G6"><f>DSUM(A1:C4,3,E1:F2)</f><v>0</v></c><c r="H6"><f>DSUM(A1:C4,&quot;Price&quot;,E1:F3)</f><v>1</v></c><c r="I6"><f>DSUM(A1:C4,&quot;Price&quot;,I1:I2)</f><v>9</v></c><c r="J6"><f>DSUM(A1:C4,&quot;Nope&quot;,E1:F2)</f><v>7</v></c><c r="K6"><f>DSUM(A1:C4,&quot;Price&quot;,P1:Q2)</f><v>0</v></c><c r="L6"><f>DSUM(A1:C4,&quot;Price&quot;,L1:L2)</f><v>0</v></c><c r="M6"><f>DAVERAGE(A1:C4,&quot;Price&quot;,L1:L2)</f><v>4</v></c><c r="N6"><f>DSUM(A1:C4,&quot;Price&quot;,E1:F10)</f><v>6</v></c></row></sheetData></worksheet>"#,
             ),
         ]);
         let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
@@ -16587,6 +16598,10 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>DAVERAGE(A1:C4,&quot;Price&quot;,L1:L2)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DSUM(A1:C4,&quot;Price&quot;,E1:F10)</f><v>6</v>"#),
             "{sheet}"
         );
     }
