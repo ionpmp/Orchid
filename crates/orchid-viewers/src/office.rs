@@ -2041,6 +2041,12 @@ enum NameArg {
     Invalid,
 }
 
+enum RefCall {
+    Absent,
+    Cells(Vec<String>),
+    Invalid,
+}
+
 struct ForeignSheet {
     literals: std::collections::HashMap<String, f64>,
     texts: std::collections::HashMap<String, String>,
@@ -6755,6 +6761,17 @@ impl<'a> CalcParser<'a> {
         }
         if self.bytes.get(self.index) == Some(&b'(') {
             self.index += 1;
+            if word.eq_ignore_ascii_case("INDIRECT") || word.eq_ignore_ascii_case("OFFSET") {
+                let cells = if word.eq_ignore_ascii_case("INDIRECT") {
+                    self.indirect_cells(env)?
+                } else {
+                    self.offset_cells(env)?
+                };
+                if cells.len() != 1 {
+                    return None;
+                }
+                return self.cell_value(cells.first()?, env);
+            }
             if word.eq_ignore_ascii_case("LET") {
                 return self.let_call(env);
             }
@@ -9021,45 +9038,37 @@ impl<'a> CalcParser<'a> {
                 self.index += 1;
                 break;
             }
-            let saved = self.index;
-            if let Some(cells) = self.three_d_cells(env) {
-                for address in cells {
-                    if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
-                        values.push(value);
+            match self.ref_call(env) {
+                RefCall::Invalid => return None,
+                RefCall::Cells(cells) => {
+                    for address in cells {
+                        if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                            values.push(value);
+                        }
                     }
                 }
-            } else if let Some(defined) = self.take_table(env) {
-                let cells = named_addresses(&defined, env);
-                if cells.is_empty() || cells.len() > 4096 {
-                    return None;
-                }
-                for address in cells {
-                    if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
-                        values.push(value);
-                    }
-                }
-            } else {
-                match self.name_arg(env) {
-                    NameArg::Invalid => return None,
-                    NameArg::Cells(cells) => {
+                RefCall::Absent => {
+                    let saved = self.index;
+                    if let Some(cells) = self.three_d_cells(env) {
                         for address in cells {
                             if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
                                 values.push(value);
                             }
                         }
-                    }
-                    NameArg::Absent => {
-                        if let Some(start) = self.cell_token() {
-                            self.skip();
-                            if self.bytes.get(self.index) == Some(&b':') {
-                                self.index += 1;
-                                self.skip();
-                                let Some(end) = self.cell_token() else {
-                                    return None;
-                                };
-                                let Some(cells) = cells_in_range(&start, &end) else {
-                                    return None;
-                                };
+                    } else if let Some(defined) = self.take_table(env) {
+                        let cells = named_addresses(&defined, env);
+                        if cells.is_empty() || cells.len() > 4096 {
+                            return None;
+                        }
+                        for address in cells {
+                            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                                values.push(value);
+                            }
+                        }
+                    } else {
+                        match self.name_arg(env) {
+                            NameArg::Invalid => return None,
+                            NameArg::Cells(cells) => {
                                 for address in cells {
                                     if let Some(CalcValue::Num(value)) =
                                         self.cell_value(&address, env)
@@ -9067,13 +9076,35 @@ impl<'a> CalcParser<'a> {
                                         values.push(value);
                                     }
                                 }
-                            } else {
-                                self.index = saved;
-                                values.push(calc_num(self.expr(env)?)?);
                             }
-                        } else {
-                            self.index = saved;
-                            values.push(calc_num(self.expr(env)?)?);
+                            NameArg::Absent => {
+                                if let Some(start) = self.cell_token() {
+                                    self.skip();
+                                    if self.bytes.get(self.index) == Some(&b':') {
+                                        self.index += 1;
+                                        self.skip();
+                                        let Some(end) = self.cell_token() else {
+                                            return None;
+                                        };
+                                        let Some(cells) = cells_in_range(&start, &end) else {
+                                            return None;
+                                        };
+                                        for address in cells {
+                                            if let Some(CalcValue::Num(value)) =
+                                                self.cell_value(&address, env)
+                                            {
+                                                values.push(value);
+                                            }
+                                        }
+                                    } else {
+                                        self.index = saved;
+                                        values.push(calc_num(self.expr(env)?)?);
+                                    }
+                                } else {
+                                    self.index = saved;
+                                    values.push(calc_num(self.expr(env)?)?);
+                                }
+                            }
                         }
                     }
                 }
@@ -9116,41 +9147,25 @@ impl<'a> CalcParser<'a> {
                 self.index += 1;
                 break;
             }
-            let saved = self.index;
-            if let Some(cells) = self.three_d_cells(env) {
-                for address in cells {
-                    match self.cell_value(&address, env) {
-                        Some(CalcValue::Num(value)) => {
-                            if !value.is_finite() {
-                                return None;
+            match self.ref_call(env) {
+                RefCall::Invalid => return None,
+                RefCall::Cells(cells) => {
+                    for address in cells {
+                        match self.cell_value(&address, env) {
+                            Some(CalcValue::Num(value)) => {
+                                if !value.is_finite() {
+                                    return None;
+                                }
+                                values.push(value);
                             }
-                            values.push(value);
+                            Some(CalcValue::Text(_)) => values.push(0.0),
+                            None => {}
                         }
-                        Some(CalcValue::Text(_)) => values.push(0.0),
-                        None => {}
                     }
                 }
-            } else if let Some(defined) = self.take_table(env) {
-                let cells = named_addresses(&defined, env);
-                if cells.is_empty() || cells.len() > 4096 {
-                    return None;
-                }
-                for address in cells {
-                    match self.cell_value(&address, env) {
-                        Some(CalcValue::Num(value)) => {
-                            if !value.is_finite() {
-                                return None;
-                            }
-                            values.push(value);
-                        }
-                        Some(CalcValue::Text(_)) => values.push(0.0),
-                        None => {}
-                    }
-                }
-            } else {
-                match self.name_arg(env) {
-                    NameArg::Invalid => return None,
-                    NameArg::Cells(cells) => {
+                RefCall::Absent => {
+                    let saved = self.index;
+                    if let Some(cells) = self.three_d_cells(env) {
                         for address in cells {
                             match self.cell_value(&address, env) {
                                 Some(CalcValue::Num(value)) => {
@@ -9163,19 +9178,27 @@ impl<'a> CalcParser<'a> {
                                 None => {}
                             }
                         }
-                    }
-                    NameArg::Absent => {
-                        if let Some(start) = self.cell_token() {
-                            self.skip();
-                            if self.bytes.get(self.index) == Some(&b':') {
-                                self.index += 1;
-                                self.skip();
-                                let Some(end) = self.cell_token() else {
-                                    return None;
-                                };
-                                let Some(cells) = cells_in_range(&start, &end) else {
-                                    return None;
-                                };
+                    } else if let Some(defined) = self.take_table(env) {
+                        let cells = named_addresses(&defined, env);
+                        if cells.is_empty() || cells.len() > 4096 {
+                            return None;
+                        }
+                        for address in cells {
+                            match self.cell_value(&address, env) {
+                                Some(CalcValue::Num(value)) => {
+                                    if !value.is_finite() {
+                                        return None;
+                                    }
+                                    values.push(value);
+                                }
+                                Some(CalcValue::Text(_)) => values.push(0.0),
+                                None => {}
+                            }
+                        }
+                    } else {
+                        match self.name_arg(env) {
+                            NameArg::Invalid => return None,
+                            NameArg::Cells(cells) => {
                                 for address in cells {
                                     match self.cell_value(&address, env) {
                                         Some(CalcValue::Num(value)) => {
@@ -9188,13 +9211,40 @@ impl<'a> CalcParser<'a> {
                                         None => {}
                                     }
                                 }
-                            } else {
-                                self.index = saved;
-                                values.push(self.a_scalar(env)?);
                             }
-                        } else {
-                            self.index = saved;
-                            values.push(self.a_scalar(env)?);
+                            NameArg::Absent => {
+                                if let Some(start) = self.cell_token() {
+                                    self.skip();
+                                    if self.bytes.get(self.index) == Some(&b':') {
+                                        self.index += 1;
+                                        self.skip();
+                                        let Some(end) = self.cell_token() else {
+                                            return None;
+                                        };
+                                        let Some(cells) = cells_in_range(&start, &end) else {
+                                            return None;
+                                        };
+                                        for address in cells {
+                                            match self.cell_value(&address, env) {
+                                                Some(CalcValue::Num(value)) => {
+                                                    if !value.is_finite() {
+                                                        return None;
+                                                    }
+                                                    values.push(value);
+                                                }
+                                                Some(CalcValue::Text(_)) => values.push(0.0),
+                                                None => {}
+                                            }
+                                        }
+                                    } else {
+                                        self.index = saved;
+                                        values.push(self.a_scalar(env)?);
+                                    }
+                                } else {
+                                    self.index = saved;
+                                    values.push(self.a_scalar(env)?);
+                                }
+                            }
                         }
                     }
                 }
@@ -9231,34 +9281,23 @@ impl<'a> CalcParser<'a> {
                 self.index += 1;
                 break;
             }
-            let saved = self.index;
-            if let Some(cells) = self.three_d_cells(env) {
-                for address in cells {
-                    seen += 1;
-                    if seen > 4096 {
-                        return None;
-                    }
-                    match self.cell_value(&address, env) {
-                        Some(value) => note_presence(&value, &mut present, &mut blank)?,
-                        None => blank += 1.0,
-                    }
-                }
-            } else if let Some(defined) = self.take_table(env) {
-                let cells = named_addresses(&defined, env);
-                for address in cells {
-                    seen += 1;
-                    if seen > 4096 {
-                        return None;
-                    }
-                    match self.cell_value(&address, env) {
-                        Some(value) => note_presence(&value, &mut present, &mut blank)?,
-                        None => blank += 1.0,
+            match self.ref_call(env) {
+                RefCall::Invalid => return None,
+                RefCall::Cells(cells) => {
+                    for address in cells {
+                        seen += 1;
+                        if seen > 4096 {
+                            return None;
+                        }
+                        match self.cell_value(&address, env) {
+                            Some(value) => note_presence(&value, &mut present, &mut blank)?,
+                            None => blank += 1.0,
+                        }
                     }
                 }
-            } else {
-                match self.name_arg(env) {
-                    NameArg::Invalid => return None,
-                    NameArg::Cells(cells) => {
+                RefCall::Absent => {
+                    let saved = self.index;
+                    if let Some(cells) = self.three_d_cells(env) {
                         for address in cells {
                             seen += 1;
                             if seen > 4096 {
@@ -9269,19 +9308,22 @@ impl<'a> CalcParser<'a> {
                                 None => blank += 1.0,
                             }
                         }
-                    }
-                    NameArg::Absent => {
-                        if let Some(start) = self.cell_token() {
-                            self.skip();
-                            if self.bytes.get(self.index) == Some(&b':') {
-                                self.index += 1;
-                                self.skip();
-                                let Some(end) = self.cell_token() else {
-                                    return None;
-                                };
-                                let Some(cells) = cells_in_range(&start, &end) else {
-                                    return None;
-                                };
+                    } else if let Some(defined) = self.take_table(env) {
+                        let cells = named_addresses(&defined, env);
+                        for address in cells {
+                            seen += 1;
+                            if seen > 4096 {
+                                return None;
+                            }
+                            match self.cell_value(&address, env) {
+                                Some(value) => note_presence(&value, &mut present, &mut blank)?,
+                                None => blank += 1.0,
+                            }
+                        }
+                    } else {
+                        match self.name_arg(env) {
+                            NameArg::Invalid => return None,
+                            NameArg::Cells(cells) => {
                                 for address in cells {
                                     seen += 1;
                                     if seen > 4096 {
@@ -9294,15 +9336,42 @@ impl<'a> CalcParser<'a> {
                                         None => blank += 1.0,
                                     }
                                 }
-                            } else {
-                                self.index = saved;
-                                seen += 1;
-                                note_presence(&self.expr(env)?, &mut present, &mut blank)?;
                             }
-                        } else {
-                            self.index = saved;
-                            seen += 1;
-                            note_presence(&self.expr(env)?, &mut present, &mut blank)?;
+                            NameArg::Absent => {
+                                if let Some(start) = self.cell_token() {
+                                    self.skip();
+                                    if self.bytes.get(self.index) == Some(&b':') {
+                                        self.index += 1;
+                                        self.skip();
+                                        let Some(end) = self.cell_token() else {
+                                            return None;
+                                        };
+                                        let Some(cells) = cells_in_range(&start, &end) else {
+                                            return None;
+                                        };
+                                        for address in cells {
+                                            seen += 1;
+                                            if seen > 4096 {
+                                                return None;
+                                            }
+                                            match self.cell_value(&address, env) {
+                                                Some(value) => {
+                                                    note_presence(&value, &mut present, &mut blank)?
+                                                }
+                                                None => blank += 1.0,
+                                            }
+                                        }
+                                    } else {
+                                        self.index = saved;
+                                        seen += 1;
+                                        note_presence(&self.expr(env)?, &mut present, &mut blank)?;
+                                    }
+                                } else {
+                                    self.index = saved;
+                                    seen += 1;
+                                    note_presence(&self.expr(env)?, &mut present, &mut blank)?;
+                                }
+                            }
                         }
                     }
                 }
@@ -9762,7 +9831,169 @@ impl<'a> CalcParser<'a> {
         }
     }
 
-    fn cell_range(&mut self, env: &CalcEnv<'_>) -> Option<Vec<String>> {
+    fn ref_call(&mut self, env: &mut CalcEnv<'_>) -> RefCall {
+        let saved = self.index;
+        self.skip();
+        let Some(word) = self.word() else {
+            self.index = saved;
+            return RefCall::Absent;
+        };
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b'(') {
+            self.index = saved;
+            return RefCall::Absent;
+        }
+        let indirect = if word.eq_ignore_ascii_case("INDIRECT") {
+            true
+        } else if word.eq_ignore_ascii_case("OFFSET") {
+            false
+        } else {
+            self.index = saved;
+            return RefCall::Absent;
+        };
+        self.index += 1;
+        let cells = if indirect {
+            self.indirect_cells(env)
+        } else {
+            self.offset_cells(env)
+        };
+        match cells {
+            Some(cells) if !cells.is_empty() => RefCall::Cells(cells),
+            _ => RefCall::Invalid,
+        }
+    }
+
+    fn indirect_cells(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<String>> {
+        let text = calc_text(&self.compare(env)?);
+        self.close_paren()?;
+        indirect_addresses(&text)
+    }
+
+    fn offset_cells(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<String>> {
+        let (sheet, col, row, mut height, mut width) = self.offset_anchor(env)?;
+        self.require_comma()?;
+        let down = trunc_offset(calc_num(self.compare(env)?)?)?;
+        self.require_comma()?;
+        let right = trunc_offset(calc_num(self.compare(env)?)?)?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b',') {
+            self.index += 1;
+            height = positive_span(calc_num(self.compare(env)?)?)?;
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b',') {
+                self.index += 1;
+                width = positive_span(calc_num(self.compare(env)?)?)?;
+            }
+        }
+        self.close_paren()?;
+        if height > 256 || width > 256 || height.saturating_mul(width) > 4096 {
+            return None;
+        }
+        let col = shift_index(col, right, 16384)?;
+        let row = shift_index(row, down, 9_999_999)?;
+        let mut cells = Vec::new();
+        for down_row in 0..height {
+            for right_col in 0..width {
+                let cell_col = col.checked_add(right_col)?;
+                let cell_row = row.checked_add(down_row)?;
+                if cell_col > 16384 || cell_row > 9_999_999 {
+                    return None;
+                }
+                let name = column_name(cell_col);
+                if name.is_empty() || name.len() > 3 {
+                    return None;
+                }
+                let address = format!("{name}{cell_row}");
+                cells.push(match &sheet {
+                    Some(sheet) => format!("{sheet}!{address}"),
+                    None => address,
+                });
+            }
+        }
+        Some(cells)
+    }
+
+    fn offset_anchor(
+        &mut self,
+        env: &mut CalcEnv<'_>,
+    ) -> Option<(Option<String>, u32, u32, u32, u32)> {
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b'\'') {
+            let name = self.quoted_sheet()?;
+            self.skip();
+            if self.bytes.get(self.index) != Some(&b'!') {
+                return None;
+            }
+            self.index += 1;
+            return self.offset_local(Some(name.to_ascii_lowercase()));
+        }
+        let word = self.word()?;
+        self.skip();
+        if word.eq_ignore_ascii_case("INDIRECT") {
+            if self.bytes.get(self.index) != Some(&b'(') {
+                return None;
+            }
+            self.index += 1;
+            return rectangle(&self.indirect_cells(env)?);
+        }
+        if self.bytes.get(self.index) == Some(&b'!') {
+            if is_cell_address(&word) || word.chars().count() > 31 {
+                return None;
+            }
+            self.index += 1;
+            return self.offset_local(Some(word.to_ascii_lowercase()));
+        }
+        if is_cell_address(&word) {
+            return self.offset_from_cell(None, &word);
+        }
+        None
+    }
+
+    fn offset_local(
+        &mut self,
+        sheet: Option<String>,
+    ) -> Option<(Option<String>, u32, u32, u32, u32)> {
+        self.skip();
+        let start = self.cell_token()?;
+        self.offset_from_cell(sheet, &start)
+    }
+
+    fn offset_from_cell(
+        &mut self,
+        sheet: Option<String>,
+        start: &str,
+    ) -> Option<(Option<String>, u32, u32, u32, u32)> {
+        self.skip();
+        let end = if self.bytes.get(self.index) == Some(&b':') {
+            self.index += 1;
+            self.skip();
+            Some(self.cell_token()?)
+        } else {
+            None
+        };
+        let cells = if let Some(end) = end {
+            let cells = cells_in_range(start, &end)?;
+            match sheet {
+                Some(sheet) => cells
+                    .into_iter()
+                    .map(|cell| format!("{sheet}!{cell}"))
+                    .collect(),
+                None => cells,
+            }
+        } else if let Some(sheet) = sheet {
+            vec![format!("{sheet}!{start}")]
+        } else {
+            vec![start.to_string()]
+        };
+        rectangle(&cells)
+    }
+
+    fn cell_range(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<String>> {
+        match self.ref_call(env) {
+            RefCall::Invalid => return None,
+            RefCall::Cells(cells) => return Some(cells),
+            RefCall::Absent => {}
+        }
         if let Some(cells) = self.three_d_cells(env) {
             return Some(cells);
         }
@@ -9810,7 +10041,15 @@ impl<'a> CalcParser<'a> {
         Some(values)
     }
 
-    fn cell_block(&mut self, env: &CalcEnv<'_>) -> Option<(Vec<String>, u32, u32)> {
+    fn cell_block(&mut self, env: &mut CalcEnv<'_>) -> Option<(Vec<String>, u32, u32)> {
+        match self.ref_call(env) {
+            RefCall::Invalid => return None,
+            RefCall::Cells(cells) => {
+                let (_sheet, _col, _row, height, width) = rectangle(&cells)?;
+                return Some((cells, height, width));
+            }
+            RefCall::Absent => {}
+        }
         if let Some(defined) = self.take_table(env) {
             let cells = named_addresses(&defined, env);
             if cells.is_empty() {
@@ -10662,6 +10901,209 @@ impl<'a> CalcParser<'a> {
         env.visiting.remove(&address);
         value
     }
+}
+
+fn indirect_addresses(text: &str) -> Option<Vec<String>> {
+    let text = text.trim();
+    if text.is_empty() || text.chars().count() > 128 || text.contains('[') || text.contains(']') {
+        return None;
+    }
+    let bytes = text.as_bytes();
+    let mut index = 0usize;
+    while bytes.get(index) == Some(&b' ') {
+        index += 1;
+    }
+    let mut sheet = None;
+    if bytes.get(index) == Some(&b'\'') {
+        index += 1;
+        let mut raw = Vec::new();
+        loop {
+            let byte = *bytes.get(index)?;
+            index += 1;
+            if byte == b'\'' {
+                if bytes.get(index) == Some(&b'\'') {
+                    raw.push(b'\'');
+                    index += 1;
+                    continue;
+                }
+                break;
+            }
+            raw.push(byte);
+            if raw.len() > 128 {
+                return None;
+            }
+        }
+        let name = String::from_utf8(raw).ok()?;
+        if name.is_empty() || name.chars().count() > 31 || bytes.get(index) != Some(&b'!') {
+            return None;
+        }
+        index += 1;
+        sheet = Some(name.to_ascii_lowercase());
+    } else {
+        let start = index;
+        while bytes
+            .get(index)
+            .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'.')
+        {
+            index += 1;
+        }
+        let name_end = index;
+        while bytes.get(index) == Some(&b' ') {
+            index += 1;
+        }
+        if name_end > start && bytes.get(index) == Some(&b'!') {
+            let name = std::str::from_utf8(&bytes[start..name_end]).ok()?;
+            if is_cell_address(name) || name.chars().count() > 31 {
+                return None;
+            }
+            sheet = Some(name.to_ascii_lowercase());
+            index += 1;
+        } else {
+            index = start;
+        }
+    }
+    while bytes.get(index) == Some(&b' ') {
+        index += 1;
+    }
+    let start_cell = take_a1(bytes, &mut index)?;
+    while bytes.get(index) == Some(&b' ') {
+        index += 1;
+    }
+    let end_cell = if bytes.get(index) == Some(&b':') {
+        index += 1;
+        while bytes.get(index) == Some(&b' ') {
+            index += 1;
+        }
+        Some(take_a1(bytes, &mut index)?)
+    } else {
+        None
+    };
+    while bytes.get(index) == Some(&b' ') {
+        index += 1;
+    }
+    if index != bytes.len() {
+        return None;
+    }
+    let cells = if let Some(end) = end_cell {
+        cells_in_range(&start_cell, &end)?
+    } else {
+        vec![start_cell]
+    };
+    if cells.is_empty() || cells.len() > 4096 {
+        return None;
+    }
+    Some(match sheet {
+        Some(sheet) => cells
+            .into_iter()
+            .map(|cell| format!("{sheet}!{cell}"))
+            .collect(),
+        None => cells,
+    })
+}
+
+fn take_a1(bytes: &[u8], index: &mut usize) -> Option<String> {
+    if bytes.get(*index) == Some(&b'$') {
+        *index += 1;
+    }
+    let col_start = *index;
+    while bytes
+        .get(*index)
+        .is_some_and(|byte| byte.is_ascii_alphabetic())
+    {
+        *index += 1;
+        if *index - col_start > 3 {
+            return None;
+        }
+    }
+    if *index == col_start {
+        return None;
+    }
+    let letter_end = *index;
+    if bytes.get(*index) == Some(&b'$') {
+        *index += 1;
+    }
+    let row_start = *index;
+    while bytes.get(*index).is_some_and(|byte| byte.is_ascii_digit()) {
+        *index += 1;
+        if *index - row_start > 7 {
+            return None;
+        }
+    }
+    if *index == row_start {
+        return None;
+    }
+    let letters = std::str::from_utf8(&bytes[col_start..letter_end]).ok()?;
+    let digits = std::str::from_utf8(&bytes[row_start..*index]).ok()?;
+    let address = format!("{letters}{digits}").to_ascii_uppercase();
+    if !is_cell_address(&address) {
+        return None;
+    }
+    Some(address)
+}
+
+fn rectangle(cells: &[String]) -> Option<(Option<String>, u32, u32, u32, u32)> {
+    if cells.is_empty() || cells.len() > 4096 {
+        return None;
+    }
+    let mut sheet = None;
+    let mut first = true;
+    let mut min_col = u32::MAX;
+    let mut max_col = 0u32;
+    let mut min_row = u32::MAX;
+    let mut max_row = 0u32;
+    for cell in cells {
+        let (this_sheet, address) = match cell.split_once('!') {
+            Some((name, address)) => (Some(name), address),
+            None => (None, cell.as_str()),
+        };
+        if first {
+            sheet = this_sheet.map(str::to_string);
+            first = false;
+        } else if sheet.as_deref() != this_sheet {
+            return None;
+        }
+        let (col, row) = split_address(address)?;
+        min_col = min_col.min(col);
+        max_col = max_col.max(col);
+        min_row = min_row.min(row);
+        max_row = max_row.max(row);
+    }
+    let height = max_row - min_row + 1;
+    let width = max_col - min_col + 1;
+    if height.saturating_mul(width) != cells.len() as u32 {
+        return None;
+    }
+    Some((sheet, min_col, min_row, height, width))
+}
+
+fn trunc_offset(value: f64) -> Option<i64> {
+    if !value.is_finite() {
+        return None;
+    }
+    let value = value.trunc();
+    if value < -1_000_000.0 || value > 1_000_000.0 {
+        return None;
+    }
+    Some(value as i64)
+}
+
+fn positive_span(value: f64) -> Option<u32> {
+    if !value.is_finite() {
+        return None;
+    }
+    let value = value.trunc();
+    if value < 1.0 || value > 256.0 {
+        return None;
+    }
+    Some(value as u32)
+}
+
+fn shift_index(base: u32, delta: i64, max: u32) -> Option<u32> {
+    let next = i64::from(base) + delta;
+    if next < 1 || next > i64::from(max) {
+        return None;
+    }
+    u32::try_from(next).ok()
 }
 
 fn cells_in_range(start: &str, end: &str) -> Option<Vec<String>> {
@@ -12651,6 +13093,104 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>DATEDIF(43831,44256,&quot;MD&quot;)</f><v>0</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_indirect() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/><sheet name="Other" sheetId="2" r:id="rId2"/><sheet name="My Sheet" sheetId="3" r:id="rId3"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Target="worksheets/sheet3.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>C1+1</f><v>0</v></c><c r="B1"><v>4</v></c><c r="C1"><f>1+1</f><v>8</v></c><c r="D1" t="inlineStr"><is><t>A2</t></is></c><c r="E1"><f>INDIRECT(&quot;A1&quot;)</f><v>0</v></c><c r="F1"><f>INDIRECT(&quot;Budgets!A1&quot;)</f><v>0</v></c><c r="G1"><f>INDIRECT(&quot;Other!A1&quot;)</f><v>0</v></c><c r="H1"><f>SUM(INDIRECT(&quot;A1:A2&quot;))</f><v>0</v></c><c r="I1"><f>INDIRECT(&quot;A1:A2&quot;)</f><v>5</v></c><c r="J1"><f>INDIRECT(&quot;R1C1&quot;)</f><v>6</v></c><c r="K1"><f>INDIRECT(&quot;[Book]A1&quot;)</f><v>7</v></c><c r="L1"><f>OFFSET(A1,1,0)</f><v>0</v></c><c r="M1"><f>SUM(OFFSET(A1,0,0,2,1))</f><v>0</v></c><c r="N1"><f>OFFSET(A1,-1,0)</f><v>8</v></c><c r="O1"><f>SUM(OFFSET(INDIRECT(&quot;A1&quot;),0,0,2,1))</f><v>0</v></c><c r="P1"><f>INDIRECT(&quot;$A$2&quot;)</f><v>0</v></c><c r="Q1"><f>INDIRECT(D1)</f><v>0</v></c><c r="R1"><f>OFFSET(Budgets!A1,0,0)</f><v>0</v></c><c r="S1"><f>SUM(OFFSET(A1:A2,0,1))</f><v>0</v></c><c r="T1"><f>INDIRECT(&quot;'My Sheet'!A1&quot;)</f><v>0</v></c><c r="U1"><f>INDIRECT(&quot;Missing!A1&quot;)</f><v>11</v></c><c r="V1"><f>OFFSET(A1,0,0,0,1)</f><v>12</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>20</v></c></row></sheetData></worksheet>"#,
+            ),
+            (
+                "xl/worksheets/sheet2.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>1+1</f><v>8</v></c></row></sheetData></worksheet>"#,
+            ),
+            (
+                "xl/worksheets/sheet3.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>4</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>INDIRECT(&quot;A1&quot;)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>INDIRECT(&quot;Budgets!A1&quot;)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>INDIRECT(&quot;Other!A1&quot;)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUM(INDIRECT(&quot;A1:A2&quot;))</f><v>23</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>INDIRECT(&quot;A1:A2&quot;)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>INDIRECT(&quot;R1C1&quot;)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>INDIRECT(&quot;[Book]A1&quot;)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>OFFSET(A1,1,0)</f><v>20</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUM(OFFSET(A1,0,0,2,1))</f><v>23</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>OFFSET(A1,-1,0)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUM(OFFSET(INDIRECT(&quot;A1&quot;),0,0,2,1))</f><v>23</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>INDIRECT(&quot;$A$2&quot;)</f><v>20</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>INDIRECT(D1)</f><v>20</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>OFFSET(Budgets!A1,0,0)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SUM(OFFSET(A1:A2,0,1))</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>INDIRECT(&quot;'My Sheet'!A1&quot;)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>INDIRECT(&quot;Missing!A1&quot;)</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>OFFSET(A1,0,0,0,1)</f><v>12</v>"#),
             "{sheet}"
         );
     }
