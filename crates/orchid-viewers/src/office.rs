@@ -428,7 +428,15 @@ fn try_spill(formula: &str, env: &mut CalcEnv<'_>) -> Option<Spill> {
     let name = word.to_ascii_uppercase();
     if !matches!(
         name.as_str(),
-        "FREQUENCY" | "LINEST" | "TREND" | "MODE.MULT" | "SORT" | "UNIQUE" | "FILTER"
+        "FREQUENCY"
+            | "LINEST"
+            | "TREND"
+            | "GROWTH"
+            | "LOGEST"
+            | "MODE.MULT"
+            | "SORT"
+            | "UNIQUE"
+            | "FILTER"
     ) {
         return None;
     }
@@ -438,6 +446,8 @@ fn try_spill(formula: &str, env: &mut CalcEnv<'_>) -> Option<Spill> {
         "MODE.MULT" => parser.mode_mult_spill(env)?,
         "LINEST" => parser.linest_spill(env)?,
         "TREND" => parser.trend_spill(env)?,
+        "GROWTH" => parser.growth_spill(env)?,
+        "LOGEST" => parser.logest_spill(env)?,
         "SORT" => parser.sort_spill(env)?,
         "UNIQUE" => parser.unique_spill(env)?,
         "FILTER" => parser.filter_spill(env)?,
@@ -1444,6 +1454,21 @@ fn slope_excel(pairs: &[(f64, f64)]) -> Option<f64> {
     } else {
         None
     }
+}
+
+fn log_pairs(pairs: Vec<(f64, f64)>) -> Option<Vec<(f64, f64)>> {
+    let mut logged = Vec::new();
+    for (y_value, x_value) in pairs {
+        if y_value <= 0.0 {
+            return None;
+        }
+        let y_value = y_value.ln();
+        if !y_value.is_finite() {
+            return None;
+        }
+        logged.push((y_value, x_value));
+    }
+    Some(logged)
 }
 
 fn intercept_excel(pairs: &[(f64, f64)]) -> Option<f64> {
@@ -11162,6 +11187,96 @@ impl<'a> CalcParser<'a> {
         })
     }
 
+    fn growth_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let pairs = log_pairs(self.line_pairs(env)?)?;
+        self.require_comma()?;
+        let (news, rows, cols) = self.cell_block(env)?;
+        if news.is_empty() || news.len() > 16 || (rows != 1 && cols != 1) {
+            return None;
+        }
+        self.close_paren()?;
+        let slope = slope_excel(&pairs)?;
+        let intercept = intercept_excel(&pairs)?;
+        let mut values = Vec::new();
+        for address in news {
+            let Some(CalcValue::Num(x_value)) = self.cell_value(&address, env) else {
+                return None;
+            };
+            if !x_value.is_finite() {
+                return None;
+            }
+            let y_value = (intercept + slope * x_value).exp();
+            if !y_value.is_finite() {
+                return None;
+            }
+            values.push(y_value);
+        }
+        Some(Spill {
+            values,
+            columns: 1,
+            all_or_nothing: true,
+        })
+    }
+
+    fn logest_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let pairs = log_pairs(self.line_pairs(env)?)?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            let two = vec![slope_excel(&pairs)?.exp(), intercept_excel(&pairs)?.exp()];
+            if two.iter().any(|value| !value.is_finite()) {
+                return None;
+            }
+            return Some(Spill {
+                values: two,
+                columns: 2,
+                all_or_nothing: true,
+            });
+        }
+        self.require_comma()?;
+        let constant = calc_num(self.compare(env)?)?;
+        if !constant.is_finite() || constant.trunc() == 0.0 {
+            return None;
+        }
+        self.skip();
+        let two = vec![slope_excel(&pairs)?.exp(), intercept_excel(&pairs)?.exp()];
+        if two.iter().any(|value| !value.is_finite()) {
+            return None;
+        }
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(Spill {
+                values: two,
+                columns: 2,
+                all_or_nothing: true,
+            });
+        }
+        self.require_comma()?;
+        let stats = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        if !stats.is_finite() {
+            return None;
+        }
+        if stats.trunc() == 0.0 {
+            return Some(Spill {
+                values: two,
+                columns: 2,
+                all_or_nothing: true,
+            });
+        }
+        let mut grid = linest_stats(&pairs)?;
+        grid[0] = grid[0].exp();
+        grid[1] = grid[1].exp();
+        if grid.iter().any(|value| !value.is_finite()) {
+            return None;
+        }
+        Some(Spill {
+            values: grid,
+            columns: 2,
+            all_or_nothing: true,
+        })
+    }
+
     fn quoted_sheet(&mut self) -> Option<String> {
         if self.bytes.get(self.index) != Some(&b'\'') {
             return None;
@@ -13457,6 +13572,90 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>DATEDIF(43831,44256,&quot;MD&quot;)</f><v>0</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_growth() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>1</v></c><c r="C1"><v>4</v></c><c r="D1"><f>GROWTH(A1:A3,B1:B3,C1:C2)</f><v>0</v></c><c r="E1"><f>LOGEST(A1:A3,B1:B3)</f><v>0</v></c><c r="F1"><v>0</v></c><c r="G1"><f>GROWTH(H1:H3,I1:I3,J1)</f><v>3</v></c><c r="H1"><v>1</v></c><c r="I1"><v>1</v></c><c r="J1"><v>4</v></c><c r="K1"><f>LOGEST(A1:A3,B1:B3,0)</f><v>4</v></c><c r="L1"><f>LOGEST(A1:A3,B1:B3,1,1)</f><v>5</v></c><c r="M1"><v>1</v></c><c r="N1"><v>1</v></c><c r="O1"><f>LOGEST(M1:M3,N1:N3,1,1)</f><v>9</v></c><c r="P1"><v>9</v></c><c r="Q1"><f>GROWTH(A1:A3,B1:B3,C1:C2)+1</f><v>6</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>2</v></c><c r="B2"><v>2</v></c><c r="C2"><v>5</v></c><c r="D2"><v>0</v></c><c r="H2"><v>0</v></c><c r="I2"><v>2</v></c><c r="M2"><v>2</v></c><c r="N2"><v>2</v></c><c r="O2"><v>9</v></c><c r="P2"><v>9</v></c></row><row r="3"><c r="A3"><v>4</v></c><c r="B3"><v>3</v></c><c r="H3"><v>4</v></c><c r="I3"><v>3</v></c><c r="M3"><v>5</v></c><c r="N3"><v>3</v></c><c r="O3"><v>9</v></c><c r="P3"><v>9</v></c></row><row r="4"><c r="O4"><v>9</v></c><c r="P4"><v>9</v></c></row><row r="5"><c r="O5"><v>9</v></c><c r="P5"><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>GROWTH(A1:A3,B1:B3,C1:C2)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="D2"><v>16</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>LOGEST(A1:A3,B1:B3)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="F1"><v>0.5</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>GROWTH(H1:H3,I1:I3,J1)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGEST(A1:A3,B1:B3,0)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGEST(A1:A3,B1:B3,1,1)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>GROWTH(A1:A3,B1:B3,C1:C2)+1</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LOGEST(M1:M3,N1:N3,1,1)</f><v>2.23606798</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="P1"><v>0.43088694</v></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="O2"><v>0.06441599</v></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="P2"><v>0.13915445</v></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="O3"><v>0.99363314</v></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="P3"><v>0.09109797</v></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="O4"><v>156.06338719</v></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="P4"><v>1</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="O5"><v>1.2951452</v></c>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="P5"><v>0.00829884</v></c>"#),
             "{sheet}"
         );
     }
