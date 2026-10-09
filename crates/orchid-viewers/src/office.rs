@@ -5382,6 +5382,12 @@ fn text_excel(value: CalcValue, format: &str, date1904: bool) -> Option<CalcValu
             }
         }
     };
+    if sections.iter().any(|section| {
+        let unquoted = unquoted_format(section).unwrap_or_default();
+        (unquoted.contains('[') || unquoted.contains(']')) && !is_elapsed_token(&unquoted)
+    }) {
+        return None;
+    }
     if section.is_empty() {
         return limited_text(String::new());
     }
@@ -5395,6 +5401,12 @@ fn text_excel(value: CalcValue, format: &str, date1904: bool) -> Option<CalcValu
     let unquoted = unquoted_format(section)?;
     if unquoted.is_empty() {
         return quoted_literals(section).and_then(limited_text);
+    }
+    if unquoted.contains('[') || unquoted.contains(']') {
+        let CalcValue::Num(number) = value else {
+            return None;
+        };
+        return format_elapsed(number, &unquoted).and_then(limited_text);
     }
     let date = unquoted
         .chars()
@@ -5436,12 +5448,7 @@ fn split_format_sections(format: &str) -> Option<Vec<&str>> {
         return None;
     }
     sections.push(&format[start..]);
-    if sections.is_empty()
-        || sections.len() > 3
-        || sections
-            .iter()
-            .any(|section| section.contains('[') || section.contains(']'))
-    {
+    if sections.is_empty() || sections.len() > 3 {
         return None;
     }
     Some(sections)
@@ -5499,6 +5506,41 @@ fn limited_text(text: String) -> Option<CalcValue> {
     } else {
         Some(CalcValue::Text(text))
     }
+}
+
+fn is_elapsed_token(format: &str) -> bool {
+    matches!(
+        format.trim().to_ascii_lowercase().as_str(),
+        "[h]" | "[hh]" | "[m]" | "[mm]"
+    )
+}
+
+fn format_elapsed(number: f64, format: &str) -> Option<String> {
+    if !is_elapsed_token(format) {
+        return None;
+    }
+    let (scale, width) = match format.trim().to_ascii_lowercase().as_str() {
+        "[h]" => (24.0, 0usize),
+        "[hh]" => (24.0, 2usize),
+        "[m]" => (24.0 * 60.0, 0usize),
+        "[mm]" => (24.0 * 60.0, 2usize),
+        _ => return None,
+    };
+    if !number.is_finite() || number.abs() >= 1_000_000.0 {
+        return None;
+    }
+    let negative = number < 0.0;
+    let whole = (number.abs() * scale).round();
+    if !whole.is_finite() || whole >= 1e15 {
+        return None;
+    }
+    let digits = format!("{}", whole as u64);
+    let body = if width > digits.len() {
+        format!("{digits:0>width$}")
+    } else {
+        digits
+    };
+    Some(if negative { format!("-{body}") } else { body })
 }
 
 fn format_excel_date(serial: f64, format: &str) -> Option<String> {
@@ -15850,6 +15892,59 @@ mod tests {
             sheet.contains(
                 r#"<f>YIELD(DATE(2008,2,15),DATE(2017,11,15),0.0575,94.60241718,100,2,2)</f><v>0.065</v>"#
             ),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_text_elapsed() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c><c r="A1"><f>TEXT(1,&quot;yyyy-mm-dd&quot;)</f><v>0</v></c><c r="B1"><f>TEXT(1.5,&quot;[h]&quot;)</f><v>0</v></c><c r="C1"><f>TEXT(1.5,&quot;[m]&quot;)</f><v>0</v></c><c r="D1"><f>TEXT(1/24,&quot;[hh]&quot;)</f><v>0</v></c><c r="E1"><f>TEXT(-1.5,&quot;[h]&quot;)</f><v>0</v></c><c r="F1"><f>TEXT(1.5,&quot;[h]:mm&quot;)</f><v>4</v></c><c r="G1"><f>TEXT(1000000,&quot;[h]&quot;)</f><v>5</v></c><c r="H1"><f>TEXT(1,&quot;[mm]&quot;)</f><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>TEXT(1,&quot;yyyy-mm-dd&quot;)</f><is><t>1900-01-01</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1.5,&quot;[h]&quot;)</f><is><t>36</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1.5,&quot;[m]&quot;)</f><is><t>2160</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1/24,&quot;[hh]&quot;)</f><is><t>01</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(-1.5,&quot;[h]&quot;)</f><is><t>-36</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1.5,&quot;[h]:mm&quot;)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1000000,&quot;[h]&quot;)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1,&quot;[mm]&quot;)</f><is><t>1440</t></is>"#),
             "{sheet}"
         );
     }

@@ -735,8 +735,14 @@ release yet.
   A negative number keeps a leading minus, including `-0.00` when decimal
   places remain. A date format uses `yyyy`, `yy`, `mm`, `m`, `dd`, and `d` on
   the 1900 serial, with `-`, `/`, `.`, space, and `:` between them. Quoted text
-  is copied through. A format that mixes a date token with a number token, or a
-  time, scientific, fraction, or color code, leaves the stored value. `CONVERT`
+  is copied through.   A format that mixes a date token with a number token, or a
+  clock time, scientific, fraction, or color code, leaves the stored value.
+  Elapsed time is a section whose text outside quotes is exactly `[h]`,
+  `[hh]`, `[m]`, or `[mm]`. It writes the total hours or minutes, rounded
+  half away from zero, and the total can pass 24 hours. `[hh]` and `[mm]`
+  use at least two digits. A negative value keeps a leading minus. The
+  absolute serial must be below 1000000. A clock such as `[h]:mm`, a color,
+  or any other bracket leaves the stored value. `CONVERT`
   reads a number and two unit names. The names are case-sensitive. Length is
   `m`, `cm`, `mm`, `km`, `in`, `ft`, `yd`, and `mi`. Mass is `g`, `kg`, `mg`,
   `lbm`, and `ozm`. Time is `sec`, `mn`, `hr`, `day`, and `yr`, and a year is
