@@ -3567,6 +3567,16 @@ fn mdeterm_excel(values: &[f64], n: usize) -> Option<f64> {
     }
 }
 
+fn xlookup_same(lookup: &CalcValue, cell: Option<&CalcValue>) -> bool {
+    match (lookup, cell) {
+        (CalcValue::Num(left), Some(CalcValue::Num(right))) => {
+            left.is_finite() && right.is_finite() && left == right
+        }
+        (CalcValue::Text(left), Some(CalcValue::Text(right))) => left.eq_ignore_ascii_case(right),
+        _ => false,
+    }
+}
+
 fn exact_lookup(lookup: &CalcValue, cell: Option<&CalcValue>) -> bool {
     match (lookup, cell) {
         (CalcValue::Num(left), Some(CalcValue::Num(right))) => {
@@ -7609,6 +7619,12 @@ impl<'a> CalcParser<'a> {
                     _ => None,
                 };
             }
+            if word.eq_ignore_ascii_case("XLOOKUP") {
+                return self.xlookup(env);
+            }
+            if word.eq_ignore_ascii_case("XMATCH") {
+                return self.xmatch(env).map(CalcValue::Num);
+            }
             if word.eq_ignore_ascii_case("MATCH") {
                 let lookup = self.compare(env)?;
                 self.require_comma()?;
@@ -9817,6 +9833,87 @@ impl<'a> CalcParser<'a> {
             columns: 1,
             all_or_nothing: true,
         })
+    }
+
+    fn vector_block(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<String>> {
+        let (cells, rows, cols) = self.cell_block(env)?;
+        if (rows != 1 && cols != 1)
+            || cells.is_empty()
+            || cells.len() > 256
+            || cells.len() != (rows as usize) * (cols as usize)
+        {
+            return None;
+        }
+        Some(cells)
+    }
+
+    fn xlookup(&mut self, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+        let lookup = self.compare(env)?;
+        if let CalcValue::Text(text) = &lookup {
+            if text.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
+                return None;
+            }
+        }
+        self.require_comma()?;
+        let keys = self.vector_block(env)?;
+        self.require_comma()?;
+        let values = self.vector_block(env)?;
+        if keys.len() != values.len() {
+            return None;
+        }
+        self.skip();
+        let missing = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            None
+        } else {
+            self.require_comma()?;
+            let missing = self.compare(env)?;
+            self.close_paren()?;
+            Some(missing)
+        };
+        for (index, address) in keys.iter().enumerate() {
+            let cell = self.cell_value(address, env);
+            if xlookup_same(&lookup, cell.as_ref()) {
+                return match self.cell_value(&values[index], env) {
+                    Some(CalcValue::Num(number)) if number.is_finite() => {
+                        Some(CalcValue::Num(number))
+                    }
+                    Some(CalcValue::Text(text)) => Some(CalcValue::Text(text)),
+                    None => Some(CalcValue::Num(0.0)),
+                    _ => None,
+                };
+            }
+        }
+        missing.and_then(kept_calc)
+    }
+
+    fn xmatch(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let lookup = self.compare(env)?;
+        if let CalcValue::Text(text) = &lookup {
+            if text.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
+                return None;
+            }
+        }
+        self.require_comma()?;
+        let keys = self.vector_block(env)?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+        } else {
+            self.require_comma()?;
+            let mode = calc_num(self.compare(env)?)?;
+            self.close_paren()?;
+            if !mode.is_finite() || mode.trunc() != 0.0 {
+                return None;
+            }
+        }
+        for (index, address) in keys.iter().enumerate() {
+            let cell = self.cell_value(address, env);
+            if xlookup_same(&lookup, cell.as_ref()) {
+                return Some((index + 1) as f64);
+            }
+        }
+        None
     }
 
     fn frequency_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
@@ -12876,6 +12973,64 @@ mod tests {
         assert!(sheet.contains(r#"<f>Two</f><v>2</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Relative</f><v>4</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Nested</f><v>5</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_xlookup() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>apple</t></is></c><c r="B1"><v>10</v></c><c r="D1"><f>XLOOKUP(&quot;apple&quot;,A1:A4,B1:B4)</f><v>0</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>pear</t></is></c><c r="B2"><v>20</v></c><c r="D2"><f>XLOOKUP(&quot;pear&quot;,A1:A4,B1:B4)</f><v>0</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>apple</t></is></c><c r="B3"><v>30</v></c><c r="D3"><f>XLOOKUP(&quot;nope&quot;,A1:A4,B1:B4,&quot;miss&quot;)</f><v>0</v></c></row><row r="4"><c r="A4"><v>4</v></c><c r="B4"><v>40</v></c><c r="D4"><f>XLOOKUP(&quot;nope&quot;,A1:A4,B1:B4)</f><v>5</v></c></row><row r="5"><c r="D5"><f>XLOOKUP(4,A1:A4,B1:B4)</f><v>0</v></c></row><row r="6"><c r="D6"><f>XMATCH(&quot;Apple&quot;,A1:A4)</f><v>0</v></c></row><row r="7"><c r="D7"><f>XMATCH(&quot;nope&quot;,A1:A4)</f><v>6</v></c></row><row r="8"><c r="D8"><f>XLOOKUP(&quot;a*&quot;,A1:A4,B1:B4)</f><v>7</v></c></row><row r="9"><c r="D9"><f>XMATCH(&quot;pear&quot;,A1:A4,1)</f><v>8</v></c></row><row r="10"><c r="D10"><f>XLOOKUP(&quot;pear&quot;,A1:A4,B1:B3)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(&quot;apple&quot;,A1:A4,B1:B4)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(&quot;pear&quot;,A1:A4,B1:B4)</f><v>20</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains("<t>miss</t>"), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(&quot;nope&quot;,A1:A4,B1:B4)</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(4,A1:A4,B1:B4)</f><v>40</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XMATCH(&quot;Apple&quot;,A1:A4)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XMATCH(&quot;nope&quot;,A1:A4)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(&quot;a*&quot;,A1:A4,B1:B4)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XMATCH(&quot;pear&quot;,A1:A4,1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(&quot;pear&quot;,A1:A4,B1:B3)</f><v>9</v>"#),
+            "{sheet}"
+        );
     }
 
     #[test]
