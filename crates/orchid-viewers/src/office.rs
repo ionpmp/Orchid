@@ -437,6 +437,9 @@ fn try_spill(formula: &str, env: &mut CalcEnv<'_>) -> Option<Spill> {
             | "SORT"
             | "UNIQUE"
             | "FILTER"
+            | "TAKE"
+            | "DROP"
+            | "CHOOSECOLS"
     ) {
         return None;
     }
@@ -451,6 +454,9 @@ fn try_spill(formula: &str, env: &mut CalcEnv<'_>) -> Option<Spill> {
         "SORT" => parser.sort_spill(env)?,
         "UNIQUE" => parser.unique_spill(env)?,
         "FILTER" => parser.filter_spill(env)?,
+        "TAKE" => parser.take_spill(env)?,
+        "DROP" => parser.drop_spill(env)?,
+        "CHOOSECOLS" => parser.choosecols_spill(env)?,
         _ => return None,
     };
     parser.skip();
@@ -650,6 +656,76 @@ fn split_column(text: &str, delim: &str) -> Option<Vec<String>> {
     } else {
         Some(parts)
     }
+}
+
+fn span_count(value: f64) -> Option<i64> {
+    if !value.is_finite() {
+        return None;
+    }
+    let value = value.trunc();
+    if value < -256.0 || value > 256.0 {
+        return None;
+    }
+    Some(value as i64)
+}
+
+fn take_bounds(size: u32, count: i64) -> Option<(u32, u32)> {
+    if count == 0 {
+        return None;
+    }
+    let kept = u32::try_from(count.unsigned_abs()).ok()?;
+    if kept == 0 || kept > size {
+        return None;
+    }
+    if count > 0 {
+        Some((0, kept))
+    } else {
+        Some((size - kept, kept))
+    }
+}
+
+fn drop_bounds(size: u32, count: i64) -> Option<(u32, u32)> {
+    if count == 0 {
+        return Some((0, size));
+    }
+    let dropped = u32::try_from(count.unsigned_abs()).ok()?;
+    if dropped >= size {
+        return None;
+    }
+    if count > 0 {
+        Some((dropped, size - dropped))
+    } else {
+        Some((0, size - dropped))
+    }
+}
+
+fn choose_index(size: u32, index: i64) -> Option<u32> {
+    if index > 0 {
+        let index = u32::try_from(index).ok()?;
+        (1..=size).contains(&index).then_some(index - 1)
+    } else if index < 0 {
+        let index = i64::from(size) + index;
+        u32::try_from(index).ok().filter(|index| *index < size)
+    } else {
+        None
+    }
+}
+
+fn slice_block(
+    values: &[f64],
+    cols: u32,
+    row0: u32,
+    height: u32,
+    col0: u32,
+    width: u32,
+) -> Vec<f64> {
+    let mut out = Vec::with_capacity((height * width) as usize);
+    for row in row0..row0 + height {
+        for col in col0..col0 + width {
+            out.push(values[(row * cols + col) as usize]);
+        }
+    }
+    out
 }
 
 fn shift_address(address: &str, down: u32, right: u32) -> Option<String> {
@@ -10896,6 +10972,95 @@ impl<'a> CalcParser<'a> {
         Some(values)
     }
 
+    fn block_numbers(&mut self, env: &mut CalcEnv<'_>) -> Option<(Vec<f64>, u32, u32)> {
+        let (cells, rows, cols) = self.cell_block(env)?;
+        if rows == 0
+            || cols == 0
+            || rows > 256
+            || cols > 16
+            || cells.len() != (rows * cols) as usize
+        {
+            return None;
+        }
+        let mut values = Vec::with_capacity(cells.len());
+        for address in cells {
+            match self.cell_value(&address, env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
+                _ => return None,
+            }
+        }
+        Some((values, rows, cols))
+    }
+
+    fn take_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let (values, rows, cols) = self.block_numbers(env)?;
+        self.require_comma()?;
+        let row_count = span_count(calc_num(self.compare(env)?)?)?;
+        self.skip();
+        let col_count = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            i64::from(cols)
+        } else {
+            self.require_comma()?;
+            let count = span_count(calc_num(self.compare(env)?)?)?;
+            self.close_paren()?;
+            count
+        };
+        let (row0, height) = take_bounds(rows, row_count)?;
+        let (col0, width) = take_bounds(cols, col_count)?;
+        if height * width > 256 {
+            return None;
+        }
+        Some(Spill {
+            values: slice_block(&values, cols, row0, height, col0, width),
+            columns: width,
+            all_or_nothing: true,
+        })
+    }
+
+    fn drop_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let (values, rows, cols) = self.block_numbers(env)?;
+        self.require_comma()?;
+        let row_count = span_count(calc_num(self.compare(env)?)?)?;
+        self.skip();
+        let col_count = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            0
+        } else {
+            self.require_comma()?;
+            let count = span_count(calc_num(self.compare(env)?)?)?;
+            self.close_paren()?;
+            count
+        };
+        let (row0, height) = drop_bounds(rows, row_count)?;
+        let (col0, width) = drop_bounds(cols, col_count)?;
+        if height == 0 || width == 0 || height * width > 256 {
+            return None;
+        }
+        Some(Spill {
+            values: slice_block(&values, cols, row0, height, col0, width),
+            columns: width,
+            all_or_nothing: true,
+        })
+    }
+
+    fn choosecols_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let (values, rows, cols) = self.block_numbers(env)?;
+        self.require_comma()?;
+        let index = span_count(calc_num(self.compare(env)?)?)?;
+        self.close_paren()?;
+        let col = choose_index(cols, index)?;
+        let mut picked = Vec::with_capacity(rows as usize);
+        for row in 0..rows {
+            picked.push(values[(row * cols + col) as usize]);
+        }
+        Some(Spill {
+            values: picked,
+            columns: 1,
+            all_or_nothing: true,
+        })
+    }
+
     fn sort_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
         let mut values = self.column_numbers(env)?;
         self.skip();
@@ -13706,6 +13871,85 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>COUNTIF(A1:A3,&quot;C*&quot;)</f><v>2</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_take() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>10</v></c><c r="C1"><f>TAKE(A1:A4,2)</f><v>0</v></c><c r="D1"><f>TAKE(A1:A4,-2)</f><v>0</v></c><c r="E1"><f>DROP(A1:A4,1)</f><v>0</v></c><c r="F1"><v>1</v></c><c r="G1"><v>10</v></c><c r="H1"><f>CHOOSECOLS(F1:G2,2)</f><v>0</v></c><c r="I1"><f>TAKE(F1:G2,1,2)</f><v>0</v></c><c r="J1"><v>0</v></c><c r="K1"><f>TAKE(A1:A4,0)</f><v>5</v></c><c r="L1"><f>TAKE(A1:A4,2)+1</f><v>6</v></c><c r="M1"><f>CHOOSECOLS(F1:G2,3)</f><v>7</v></c><c r="N1"><f>DROP(A1:A4,4)</f><v>8</v></c><c r="O1"><f>TAKE(A1:A4,1,2)</f><v>9</v></c><c r="P1"><f>TAKE(Q1:Q2,1)</f><v>11</v></c><c r="Q1"><v>1</v></c><c r="R1"><f>DROP(A1:A4,-1)</f><v>0</v></c><c r="S1"><f>CHOOSECOLS(F1:G2,-1)</f><v>0</v></c><c r="T1"><f>DROP(F1:G2,0,1)</f><v>0</v></c><c r="U1"><f>TAKE(F1:G2,-1,-1)</f><v>0</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>2</v></c><c r="C2"><v>0</v></c><c r="D2"><v>0</v></c><c r="E2"><v>0</v></c><c r="F2"><v>2</v></c><c r="G2"><v>20</v></c><c r="H2"><v>0</v></c><c r="Q2" t="inlineStr"><is><t>x</t></is></c><c r="R2"><v>0</v></c><c r="S2"><v>0</v></c><c r="T2"><v>0</v></c></row><row r="3"><c r="A3"><v>3</v></c><c r="E3"><v>0</v></c><c r="R3"><v>0</v></c></row><row r="4"><c r="A4"><v>4</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(r#"<f>TAKE(A1:A4,2)</f><v>1</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="C2"><v>2</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>TAKE(A1:A4,-2)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="D2"><v>4</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>DROP(A1:A4,1)</f><v>2</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="E2"><v>3</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="E3"><v>4</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>CHOOSECOLS(F1:G2,2)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="H2"><v>20</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>TAKE(F1:G2,1,2)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="J1"><v>10</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>TAKE(A1:A4,0)</f><v>5</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>TAKE(A1:A4,2)+1</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>CHOOSECOLS(F1:G2,3)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>DROP(A1:A4,4)</f><v>8</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>TAKE(A1:A4,1,2)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TAKE(Q1:Q2,1)</f><v>11</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>DROP(A1:A4,-1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="R2"><v>2</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="R3"><v>3</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>CHOOSECOLS(F1:G2,-1)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="S2"><v>20</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>DROP(F1:G2,0,1)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="T2"><v>20</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>TAKE(F1:G2,-1,-1)</f><v>20</v>"#),
             "{sheet}"
         );
     }
