@@ -209,7 +209,7 @@ export component ViewerSheetView inherits Rectangle {
 
                 for cell[ci] in row.cells : Rectangle {
                     min-width: 72px;
-                    background: ri == root.sel-row && ci == root.sel-col ? Theme.state-selected : cell-ta.has-hover ? Theme.state-hover : Theme.surface-raised;
+                    background: ri == root.sel-row && ci == root.sel-col ? Theme.state-selected : cell.highlight ? Theme.accent-muted : cell-ta.has-hover ? Theme.state-hover : Theme.surface-raised;
                     border-width: ri == root.sel-row && ci == root.sel-col ? 1px : 0px;
                     border-color: Theme.accent-brand;
 

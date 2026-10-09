@@ -628,6 +628,8 @@ pub struct SheetCell {
     pub text: String,
     /// Spreadsheet address such as `B2`, when the file stored one.
     pub address: String,
+    /// Preview highlight from a matching conditional-formatting rule.
+    pub highlight: bool,
 }
 
 /// HTML snapshot (embedded preview + source + Open in browser).

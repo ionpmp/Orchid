@@ -774,6 +774,7 @@ fn build_sheet_model(
                         .map(|cell| ViewerSheetCell {
                             text: cell.text.clone().into(),
                             address: cell.address.clone().into(),
+                            highlight: cell.highlight,
                         })
                         .collect();
                     ViewerSheetRow {

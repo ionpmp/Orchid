@@ -88,7 +88,16 @@ release yet.
   bars are scaled to the peak working set in the window. The samples stay
   in memory and are not written to disk.
 - **Spreadsheets:** `.xlsx` and `.xlsm` open as a sheet and cell table.
-  Enter or Save writes the current cell back into the workbook. A formula
+  The preview highlights at most 8 conditional formatting rules. Each range
+  covers at most 32 cells. A rule can be greater than a plain number, equal
+  to a plain number or a quoted string, or a containsText pattern using
+  `*`, `?`, and `~`. A pattern without those characters is an exact ASCII
+  case-insensitive match, not a substring search. A pattern longer than 64
+  characters, or cell text longer than 256 characters, is not a match. The
+  first matching rule wins. Colors, data bars, color scales, and formula
+  rules are skipped and do not count toward the 8. A range larger than 32
+  cells is skipped. The highlight is not written back and formulas do not
+  use it. Enter or Save writes the current cell back into the workbook. A formula
   cell is left unchanged. A value edit recalculates arithmetic, comparisons,
   cell references, `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `IF`, `ROUND`,
   `ABS`, `INT`, text joined with `&` or `CONCAT`, `LEN`, `LEFT`, `RIGHT`,

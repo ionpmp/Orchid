@@ -11949,7 +11949,8 @@ fn render_sheets<R: Read + Seek>(
         let Some(xml) = read_entry(archive, path) else {
             continue;
         };
-        let (rows, truncated) = parse_sheet(&xml, &shared);
+        let (mut rows, truncated) = parse_sheet(&xml, &shared);
+        apply_highlights(&mut rows, &conditional_rules(&xml));
         if rows.is_empty() {
             continue;
         }
@@ -12107,6 +12108,212 @@ fn normalize_part(target: &str) -> String {
     }
 }
 
+enum CfKind {
+    Greater(f64),
+    EqualNum(f64),
+    EqualText(String),
+    Pattern(String),
+}
+
+struct CfRule {
+    cells: Vec<String>,
+    kind: CfKind,
+}
+
+fn plain_preview_number(text: &str) -> Option<f64> {
+    let text = text.trim();
+    if text.is_empty() || text.len() > 32 {
+        return None;
+    }
+    let mut chars = text.chars();
+    let first = chars.next()?;
+    let rest = if first == '+' || first == '-' {
+        chars.as_str()
+    } else if first.is_ascii_digit() {
+        text
+    } else {
+        return None;
+    };
+    let mut dot = false;
+    if rest.is_empty() {
+        return None;
+    }
+    for ch in rest.chars() {
+        if ch == '.' {
+            if dot {
+                return None;
+            }
+            dot = true;
+        } else if !ch.is_ascii_digit() {
+            return None;
+        }
+    }
+    text.parse::<f64>().ok().filter(|number| number.is_finite())
+}
+
+fn first_quoted(text: &str) -> Option<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let start = chars.iter().position(|ch| *ch == '"')?;
+    let mut out = String::new();
+    let mut index = start + 1;
+    while index < chars.len() {
+        if chars[index] == '"' {
+            if chars.get(index + 1) == Some(&'"') {
+                out.push('"');
+                index += 2;
+                continue;
+            }
+            return Some(out);
+        }
+        out.push(chars[index]);
+        index += 1;
+    }
+    None
+}
+
+fn sqref_cells(sqref: &str) -> Option<Vec<String>> {
+    let mut cells = Vec::new();
+    for part in sqref.split_whitespace() {
+        let part = part.replace('$', "").to_ascii_uppercase();
+        if part.is_empty() {
+            continue;
+        }
+        let extra = if let Some((start, end)) = part.split_once(':') {
+            cells_in_range(start, end)?
+        } else {
+            split_address(&part)?;
+            vec![part]
+        };
+        if cells.len() + extra.len() > 32 {
+            return None;
+        }
+        cells.extend(extra);
+    }
+    if cells.is_empty() {
+        None
+    } else {
+        Some(cells)
+    }
+}
+
+fn compile_cf(kind: &str, operator: &str, formula: &str, sqref: &str) -> Option<CfRule> {
+    let cells = sqref_cells(sqref)?;
+    let kind =
+        if kind.eq_ignore_ascii_case("cellIs") && operator.eq_ignore_ascii_case("greaterThan") {
+            CfKind::Greater(plain_preview_number(formula)?)
+        } else if kind.eq_ignore_ascii_case("cellIs") && operator.eq_ignore_ascii_case("equal") {
+            if formula.trim_start().starts_with('"') {
+                CfKind::EqualText(first_quoted(formula)?)
+            } else {
+                CfKind::EqualNum(plain_preview_number(formula)?)
+            }
+        } else if kind.eq_ignore_ascii_case("containsText") {
+            let pattern = first_quoted(formula)?;
+            if pattern.chars().count() > 64 {
+                return None;
+            }
+            CfKind::Pattern(pattern)
+        } else {
+            return None;
+        };
+    Some(CfRule { cells, kind })
+}
+
+fn conditional_rules(xml: &str) -> Vec<CfRule> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut rules = Vec::new();
+    let mut sqref = String::new();
+    let mut rule_type = String::new();
+    let mut operator = String::new();
+    let mut formula = String::new();
+    let mut in_rule = false;
+    let mut in_formula = false;
+    let mut saw_formula = false;
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "conditionalFormatting" {
+                    sqref = attr(&event, "sqref");
+                } else if name == "cfRule" && rules.len() < 8 {
+                    in_rule = true;
+                    saw_formula = false;
+                    formula.clear();
+                    rule_type = attr(&event, "type");
+                    operator = attr(&event, "operator");
+                } else if in_rule && name == "formula" && !saw_formula {
+                    in_formula = true;
+                    formula.clear();
+                }
+            }
+            Ok(Event::Empty(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "conditionalFormatting" {
+                    sqref = attr(&event, "sqref");
+                }
+            }
+            Ok(Event::Text(text)) if in_formula => {
+                formula.push_str(&xml_text(text.as_ref()));
+            }
+            Ok(Event::GeneralRef(entity)) if in_formula => {
+                formula.push_str(entity_text(entity.as_ref()));
+            }
+            Ok(Event::End(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "formula" && in_formula {
+                    in_formula = false;
+                    saw_formula = true;
+                } else if name == "cfRule" && in_rule {
+                    in_rule = false;
+                    if rules.len() < 8 {
+                        if let Some(rule) = compile_cf(&rule_type, &operator, &formula, &sqref) {
+                            rules.push(rule);
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    rules
+}
+
+fn cf_matches(kind: &CfKind, text: &str) -> bool {
+    match kind {
+        CfKind::Greater(threshold) => {
+            plain_preview_number(text).is_some_and(|number| number > *threshold)
+        }
+        CfKind::EqualNum(threshold) => {
+            plain_preview_number(text).is_some_and(|number| (number - *threshold).abs() <= 1e-9)
+        }
+        CfKind::EqualText(expected) => text.eq_ignore_ascii_case(expected),
+        CfKind::Pattern(pattern) => text_pattern(pattern, text),
+    }
+}
+
+fn apply_highlights(rows: &mut [Vec<SheetCell>], rules: &[CfRule]) {
+    for row in rows {
+        for cell in row.iter_mut() {
+            let address = cell.address.to_ascii_uppercase();
+            for rule in rules {
+                if rule
+                    .cells
+                    .iter()
+                    .any(|item| item.eq_ignore_ascii_case(&address))
+                    && cf_matches(&rule.kind, &cell.text)
+                {
+                    cell.highlight = true;
+                    break;
+                }
+            }
+        }
+    }
+}
+
 fn parse_sheet(xml: &str, shared: &[String]) -> (Vec<Vec<SheetCell>>, bool) {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
@@ -12210,7 +12417,11 @@ fn place(row: &mut Vec<SheetCell>, col: usize, text: String, address: String) {
     if row.len() <= col {
         row.resize(col + 1, SheetCell::default());
     }
-    row[col] = SheetCell { text, address };
+    row[col] = SheetCell {
+        text,
+        address,
+        highlight: false,
+    };
 }
 
 fn fill_gap_addresses(row: &mut [SheetCell]) {
@@ -12522,6 +12733,43 @@ mod tests {
         assert_eq!(row[1].text, "42");
         assert_eq!(row[1].address, "B1");
         assert!(book.info.contains("1 sheets"), "{}", book.info);
+        assert!(!row[0].highlight);
+    }
+
+    #[test]
+    fn sheet_preview_conditional_formatting() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>11</v></c><c r="B1"><v>5</v></c><c r="C1" t="inlineStr"><is><t>Pear</t></is></c><c r="D1" t="inlineStr"><is><t>Cat</t></is></c></row><row r="2"><c r="A2"><v>3</v></c></row><row r="3"><c r="A3"><v>100</v></c></row></sheetData><conditionalFormatting sqref="A1:A2"><cfRule type="cellIs" operator="greaterThan"><formula>10</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1"><cfRule type="cellIs" operator="equal"><formula>5</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="C1"><cfRule type="cellIs" operator="equal"><formula>&quot;pear&quot;</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="D1"><cfRule type="containsText"><formula>NOT(ISERROR(SEARCH(&quot;c*&quot;,D1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="A1"><cfRule type="expression"><formula>A1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="A3:A35"><cfRule type="cellIs" operator="greaterThan"><formula>1</formula></cfRule></conditionalFormatting></worksheet>"#,
+            ),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let cell = |address: &str| {
+            book.sheets[0]
+                .rows
+                .iter()
+                .flatten()
+                .find(|cell| cell.address == address)
+                .unwrap_or_else(|| panic!("missing {address}"))
+        };
+        assert!(cell("A1").highlight, "11 is greater than 10");
+        assert!(!cell("A2").highlight, "3 is not greater than 10");
+        assert!(cell("B1").highlight);
+        assert!(cell("C1").highlight);
+        assert!(cell("D1").highlight);
+        assert!(!cell("A3").highlight, "a range past 32 cells is ignored");
     }
 
     #[test]
