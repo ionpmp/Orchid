@@ -6076,10 +6076,36 @@ fn datedif_excel(start: f64, end: f64, unit: &str) -> Option<f64> {
     }
 }
 
-fn is_workday_serial(serial: i64) -> bool {
+const WEEKEND_SAT_SUN: [bool; 7] = [false, false, false, false, false, true, true];
+
+fn weekday_mon0(serial: i64) -> usize {
     let day = serial.rem_euclid(7);
     let day = if day == 0 { 7 } else { day };
-    (1..=5).contains(&day)
+    (day - 1) as usize
+}
+
+fn is_workday_serial(serial: i64) -> bool {
+    !WEEKEND_SAT_SUN[weekday_mon0(serial)]
+}
+
+fn weekend_mask(text: &str) -> Option<[bool; 7]> {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() != 7 {
+        return None;
+    }
+    let mut mask = [false; 7];
+    for (index, ch) in chars.iter().enumerate() {
+        match ch {
+            '0' => {}
+            '1' => mask[index] = true,
+            _ => return None,
+        }
+    }
+    if mask.iter().all(|bit| *bit) {
+        None
+    } else {
+        Some(mask)
+    }
 }
 
 fn networkdays_excel(start: f64, end: f64, holidays: &[f64]) -> Option<f64> {
@@ -6108,7 +6134,7 @@ fn holiday_hit(day: i64, holidays: &[f64]) -> bool {
     holidays.iter().any(|holiday| holiday.trunc() as i64 == day)
 }
 
-fn workday_excel(start: f64, days: f64, holidays: &[f64]) -> Option<f64> {
+fn workday_excel(start: f64, days: f64, holidays: &[f64], weekend: &[bool; 7]) -> Option<f64> {
     if !start.is_finite() || !days.is_finite() || start < 0.0 || start > 2_958_465.0 {
         return None;
     }
@@ -6129,7 +6155,7 @@ fn workday_excel(start: f64, days: f64, holidays: &[f64]) -> Option<f64> {
         if guard > 20_000 || !(0..=2_958_465).contains(&day) {
             return None;
         }
-        if is_workday_serial(day) && !holiday_hit(day, holidays) {
+        if !weekend[weekday_mon0(day)] && !holiday_hit(day, holidays) {
             left -= 1;
         }
     }
@@ -9229,33 +9255,39 @@ impl<'a> CalcParser<'a> {
                 let start = calc_num(self.compare(env)?)?;
                 self.require_comma()?;
                 let days = calc_num(self.compare(env)?)?;
+                let holidays = self.optional_holidays(env)?;
+                let start = as_weekday_serial(start, env.date1904)?;
+                let holidays: Vec<f64> = holidays
+                    .iter()
+                    .filter_map(|number| as_weekday_serial(*number, env.date1904))
+                    .collect();
+                return workday_excel(start, days, &holidays, &WEEKEND_SAT_SUN)
+                    .and_then(|serial| from_weekday_serial(serial, env.date1904))
+                    .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("WORKDAY.INTL") {
+                let start = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let days = calc_num(self.compare(env)?)?;
                 self.skip();
-                let holidays = if self.bytes.get(self.index) == Some(&b')') {
+                let (weekend, holidays) = if self.bytes.get(self.index) == Some(&b')') {
                     self.index += 1;
-                    Vec::new()
+                    (WEEKEND_SAT_SUN, Vec::new())
                 } else {
                     self.require_comma()?;
-                    let cells = self.cell_range(env)?;
-                    self.close_paren()?;
-                    if cells.len() > 512 {
-                        return None;
-                    }
-                    let mut holidays = Vec::new();
-                    for address in cells {
-                        if let Some(CalcValue::Num(number)) = self.cell_value(&address, env) {
-                            if number.is_finite() {
-                                holidays.push(number);
-                            }
-                        }
-                    }
-                    holidays
+                    let weekend = match self.compare(env)? {
+                        CalcValue::Text(text) => weekend_mask(&text)?,
+                        CalcValue::Num(_) => return None,
+                    };
+                    let holidays = self.optional_holidays(env)?;
+                    (weekend, holidays)
                 };
                 let start = as_weekday_serial(start, env.date1904)?;
                 let holidays: Vec<f64> = holidays
                     .iter()
                     .filter_map(|number| as_weekday_serial(*number, env.date1904))
                     .collect();
-                return workday_excel(start, days, &holidays)
+                return workday_excel(start, days, &holidays, &weekend)
                     .and_then(|serial| from_weekday_serial(serial, env.date1904))
                     .map(CalcValue::Num);
             }
@@ -11804,6 +11836,29 @@ impl<'a> CalcParser<'a> {
             columns: 1,
             all_or_nothing: true,
         })
+    }
+
+    fn optional_holidays(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(Vec::new());
+        }
+        self.require_comma()?;
+        let cells = self.cell_range(env)?;
+        self.close_paren()?;
+        if cells.len() > 512 {
+            return None;
+        }
+        let mut holidays = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(number)) = self.cell_value(&address, env) {
+                if number.is_finite() {
+                    holidays.push(number);
+                }
+            }
+        }
+        Some(holidays)
     }
 
     fn goal_seek(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
@@ -17997,6 +18052,60 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>GOALSEEK(A3,B3,4)</f><v>3</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_workday_intl() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>WORKDAY.INTL(1,5)</f><v>0</v></c><c r="B1"><f>WORKDAY.INTL(1,5,&quot;0000011&quot;)</f><v>0</v></c><c r="C1"><f>WORKDAY(5,1)</f><v>0</v></c><c r="D1"><f>WORKDAY.INTL(5,1,&quot;0000110&quot;)</f><v>0</v></c><c r="E1"><f>WORKDAY.INTL(1,5,&quot;1111111&quot;)</f><v>9</v></c><c r="F1"><f>WORKDAY.INTL(1,5,1)</f><v>8</v></c><c r="G1"><f>WORKDAY.INTL(1,1,&quot;0000011&quot;,B2:B2)</f><v>0</v></c><c r="H1"><f>WORKDAY.INTL(1,5,&quot;000001&quot;)</f><v>7</v></c><c r="I1"><f>WORKDAY.INTL(1,5,&quot;0000012&quot;)</f><v>6</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="B2"><v>2</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>WORKDAY.INTL(1,5)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WORKDAY.INTL(1,5,&quot;0000011&quot;)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>WORKDAY(5,1)</f><v>8</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>WORKDAY.INTL(5,1,&quot;0000110&quot;)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WORKDAY.INTL(1,5,&quot;1111111&quot;)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WORKDAY.INTL(1,5,1)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WORKDAY.INTL(1,1,&quot;0000011&quot;,B2:B2)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WORKDAY.INTL(1,5,&quot;000001&quot;)</f><v>7</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>WORKDAY.INTL(1,5,&quot;0000012&quot;)</f><v>6</v>"#),
             "{sheet}"
         );
     }

@@ -794,11 +794,16 @@ release yet.
   `NETWORKDAYS` and `WORKDAY` count Monday through Friday. An optional holiday
   range may hold at most 512 numbers; text in that range is skipped. A weekend
   holiday is not counted twice. The inclusive span must be at most 100000 days,
-  and `WORKDAY` moves at most 10000 working days. When `workbookPr` has
+  and `WORKDAY` moves at most 10000 working days. `WORKDAY.INTL` uses the same
+  holiday list. Its weekend is a text of seven `0` or `1` characters, Monday
+  first, where `1` is a weekend day. An omitted weekend is Saturday and
+  Sunday, the same as `WORKDAY`. A numeric weekend code, a string that is not
+  those seven characters, or a string of seven `1`s leaves the stored value.
+  When `workbookPr` has
   `date1904="1"` or `date1904="true"`, serial 0 is 1904-01-01. `DATE`, `YEAR`,
   `MONTH`, `DAY`, `EDATE`, `EOMONTH`, `DATEDIF`, and a `TEXT` date format shift
-  that serial by 1462 onto the 1900 calendar. `WEEKDAY`, `NETWORKDAYS`, and
-  `WORKDAY` shift by 1461, so the fictional 29 February 1900 does not move
+  that serial by 1462 onto the 1900 calendar. `WEEKDAY`, `NETWORKDAYS`,
+  `WORKDAY`, and `WORKDAY.INTL` shift by 1461, so the fictional 29 February 1900 does not move
   those weekdays. A date before 1904-01-01 leaves the stored value. A holiday
   before that day is skipped. Without the flag, the 1900 system is unchanged.
   `IF` can return one number or one text value. Both branches are calculated,
