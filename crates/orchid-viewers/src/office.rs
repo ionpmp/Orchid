@@ -554,6 +554,8 @@ fn recalculate_sheet(
                     previous: &previous,
                     iterate,
                     visiting: &mut visiting,
+                    let_names: std::collections::HashMap::new(),
+                    hide_book_names: false,
                 };
                 if let Some(spill) = try_spill(formula, &mut spill_env) {
                     if let Some(writes) = place_spill(&cell.address, &spill, &cells, &spilled) {
@@ -1841,6 +1843,8 @@ fn eval_formula(
         previous,
         iterate,
         visiting,
+        let_names: std::collections::HashMap::new(),
+        hide_book_names: false,
     };
     let value = parser.compare(&mut env)?;
     parser.skip();
@@ -1922,6 +1926,7 @@ fn split_top_args(bytes: &[u8], start: usize) -> Option<(Vec<(usize, usize)>, us
     None
 }
 
+#[derive(Clone)]
 enum CalcValue {
     Num(f64),
     Text(String),
@@ -1939,6 +1944,8 @@ struct CalcEnv<'a> {
     previous: &'a std::collections::HashMap<String, f64>,
     iterate: bool,
     visiting: &'a mut std::collections::HashSet<String>,
+    let_names: std::collections::HashMap<String, CalcValue>,
+    hide_book_names: bool,
 }
 
 #[derive(Clone)]
@@ -3565,6 +3572,21 @@ fn mdeterm_excel(values: &[f64], n: usize) -> Option<f64> {
     } else {
         None
     }
+}
+
+fn let_name_ok(name: &str) -> bool {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return false;
+    }
+    name.chars().count() <= 255
+        && !is_cell_address(name)
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '.')
 }
 
 fn xlookup_same(lookup: &CalcValue, cell: Option<&CalcValue>) -> bool {
@@ -6449,6 +6471,9 @@ impl<'a> CalcParser<'a> {
         self.skip();
         if self.bytes.get(self.index) == Some(&b'(') {
             self.index += 1;
+            if word.eq_ignore_ascii_case("LET") {
+                return self.let_call(env);
+            }
             if word.eq_ignore_ascii_case("IF") {
                 let cond = calc_num(self.compare(env)?)?;
                 self.skip();
@@ -8534,18 +8559,62 @@ impl<'a> CalcParser<'a> {
             return self.foreign_cell(&word, env);
         }
         if !is_cell_address(&word) {
-            if let Some(defined) = env.names.get(env.sheet, &word.to_ascii_lowercase()) {
-                if let Some(formula) = &defined.formula {
-                    return eval_name_formula(formula, env);
+            if let Some(value) = env.let_names.get(&word.to_ascii_lowercase()) {
+                return Some(value.clone());
+            }
+            if !env.hide_book_names {
+                if let Some(defined) = env.names.get(env.sheet, &word.to_ascii_lowercase()) {
+                    if let Some(formula) = &defined.formula {
+                        return eval_name_formula(formula, env);
+                    }
+                    if defined.cells.len() != 1 {
+                        return None;
+                    }
+                    let address = named_addresses(defined, env);
+                    return self.cell_value(&address[0], env);
                 }
-                if defined.cells.len() != 1 {
-                    return None;
-                }
-                let address = named_addresses(defined, env);
-                return self.cell_value(&address[0], env);
             }
         }
         self.cell_value(&word, env)
+    }
+
+    fn let_call(&mut self, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+        let saved_names = env.let_names.clone();
+        let saved_hide = env.hide_book_names;
+        env.hide_book_names = true;
+        let result = self.let_body(env);
+        env.let_names = saved_names;
+        env.hide_book_names = saved_hide;
+        result
+    }
+
+    fn let_body(&mut self, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+        let mut bindings = 0u32;
+        loop {
+            self.skip();
+            let name_at = self.index;
+            let Some(name) = self.word() else {
+                let value = self.compare(env)?;
+                self.close_paren()?;
+                return kept_calc(value);
+            };
+            self.skip();
+            if self.bytes.get(self.index) != Some(&b',') || !let_name_ok(&name) || bindings >= 8 {
+                self.index = name_at;
+                let value = self.compare(env)?;
+                self.close_paren()?;
+                return kept_calc(value);
+            }
+            self.index += 1;
+            let value = kept_calc(self.compare(env)?)?;
+            env.let_names.insert(name.to_ascii_lowercase(), value);
+            bindings += 1;
+            self.skip();
+            if self.bytes.get(self.index) != Some(&b',') {
+                return None;
+            }
+            self.index += 1;
+        }
     }
 
     fn comma_number(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
@@ -9203,6 +9272,10 @@ impl<'a> CalcParser<'a> {
         }
         self.skip();
         if matches!(self.bytes.get(self.index), Some(b'(' | b'!')) {
+            self.index = saved;
+            return None;
+        }
+        if env.hide_book_names {
             self.index = saved;
             return None;
         }
@@ -12973,6 +13046,50 @@ mod tests {
         assert!(sheet.contains(r#"<f>Two</f><v>2</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Relative</f><v>4</v>"#), "{sheet}");
         assert!(sheet.contains(r#"<f>Nested</f><v>5</v>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_let_names() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="Rate">Budgets!$B$1</definedName></definedNames></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>10</v></c><c r="B1"><v>3</v></c><c r="D1"><f>LET(x,A1+1,x*2)</f><v>0</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="D2"><f>LET(x,1,x,x+1,x)</f><v>0</v></c></row><row r="3"><c r="D3"><f>LET(x,1,LET(y,x+1,y))</f><v>0</v></c></row><row r="4"><c r="D4"><f>LET(x,&quot;ab&quot;,x)</f><v>0</v></c></row><row r="5"><c r="D5"><f>LET(x,Rate,x)</f><v>5</v></c></row><row r="6"><c r="D6"><f>LET(A1,1,A1)</f><v>6</v></c></row><row r="7"><c r="D7"><f>LET(x,1,y,2,z,3,a,4,b,5,c,6,d,7,e,8,e)</f><v>0</v></c></row><row r="8"><c r="D8"><f>LET(x,1,y,2,z,3,a,4,b,5,c,6,d,7,e,8,f,9,f)</f><v>9</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>LET(x,A1+1,x*2)</f><v>22</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LET(x,1,x,x+1,x)</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LET(x,1,LET(y,x+1,y))</f><v>2</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains("<t>ab</t>"), "{sheet}");
+        assert!(sheet.contains(r#"<f>LET(x,Rate,x)</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>LET(A1,1,A1)</f><v>6</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>LET(x,1,y,2,z,3,a,4,b,5,c,6,d,7,e,8,e)</f><v>8</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>LET(x,1,y,2,z,3,a,4,b,5,c,6,d,7,e,8,f,9,f)</f><v>9</v>"#),
+            "{sheet}"
+        );
     }
 
     #[test]
