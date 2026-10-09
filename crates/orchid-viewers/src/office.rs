@@ -5288,6 +5288,156 @@ fn price_excel(
     value.is_finite().then_some(value)
 }
 
+fn basis_days(start: f64, end: f64, basis: i32) -> Option<f64> {
+    if end < start {
+        return None;
+    }
+    match basis {
+        0 => days360_us(start, end),
+        4 => days360_eu(start, end),
+        1 | 2 | 3 => Some(end - start),
+        _ => None,
+    }
+}
+
+fn normal_period_days(start: f64, end: f64, basis: i32, frequency: i32) -> Option<f64> {
+    let days = match basis {
+        1 => end - start,
+        0 | 2 | 4 => 360.0 / f64::from(frequency),
+        3 => 365.0 / f64::from(frequency),
+        _ => return None,
+    };
+    (days > 0.0).then_some(days)
+}
+
+fn coupons_until(first: f64, maturity: f64, frequency: i32) -> Option<u32> {
+    let step = 12 / frequency;
+    let mut cursor = first;
+    let mut count = 1u32;
+    loop {
+        if (cursor - maturity).abs() < 0.5 {
+            return Some(count);
+        }
+        if cursor > maturity || count > 4_800 {
+            return None;
+        }
+        cursor = shift_months(cursor, f64::from(step), false)?;
+        count += 1;
+    }
+}
+
+fn oddf_price(
+    settlement: f64,
+    maturity: f64,
+    issue: f64,
+    first_coupon: f64,
+    rate: f64,
+    yld: f64,
+    redemption: f64,
+    frequency: i32,
+    basis: i32,
+) -> Option<f64> {
+    if !rate.is_finite()
+        || !yld.is_finite()
+        || !redemption.is_finite()
+        || rate < 0.0
+        || yld < 0.0
+        || redemption <= 0.0
+        || !(issue < settlement && settlement < first_coupon && first_coupon < maturity)
+    {
+        return None;
+    }
+    let early = shift_months(first_coupon, -f64::from(12 / frequency), false)?;
+    let period = normal_period_days(early, first_coupon, basis, frequency)?;
+    let odd_days = basis_days(issue, first_coupon, basis)?;
+    if odd_days <= 0.0 || odd_days > period + 1e-9 {
+        return None;
+    }
+    let next_days = basis_days(settlement, first_coupon, basis)?;
+    let accrued = basis_days(issue, settlement, basis)?;
+    if next_days <= 0.0 || accrued < 0.0 {
+        return None;
+    }
+    let coupons = coupons_until(first_coupon, maturity, frequency)?;
+    let per_yield = yld / f64::from(frequency);
+    if per_yield <= -1.0 {
+        return None;
+    }
+    let coupon = 100.0 * rate / f64::from(frequency);
+    let base = 1.0 + per_yield;
+    let frac = next_days / period;
+    let mut present = redemption / base.powf((coupons - 1) as f64 + frac);
+    present += coupon * (odd_days / period) / base.powf(frac);
+    for index in 2..=coupons {
+        present += coupon / base.powf((index - 1) as f64 + frac);
+    }
+    let value = present - coupon * (accrued / period);
+    value.is_finite().then_some(value)
+}
+
+fn oddl_price(
+    settlement: f64,
+    maturity: f64,
+    last_interest: f64,
+    rate: f64,
+    yld: f64,
+    redemption: f64,
+    frequency: i32,
+    basis: i32,
+) -> Option<f64> {
+    if !rate.is_finite()
+        || !yld.is_finite()
+        || !redemption.is_finite()
+        || rate < 0.0
+        || yld < 0.0
+        || redemption <= 0.0
+        || !(last_interest < settlement && settlement < maturity)
+    {
+        return None;
+    }
+    let early = shift_months(maturity, -f64::from(12 / frequency), false)?;
+    let period = normal_period_days(early, maturity, basis, frequency)?;
+    let odd_days = basis_days(last_interest, maturity, basis)?;
+    let next_days = basis_days(settlement, maturity, basis)?;
+    let accrued = basis_days(last_interest, settlement, basis)?;
+    if odd_days <= 0.0 || next_days <= 0.0 || accrued < 0.0 || odd_days > period * 2.0 + 1e-6 {
+        return None;
+    }
+    let per_yield = yld / f64::from(frequency);
+    let coupon = 100.0 * rate / f64::from(frequency);
+    let denom = 1.0 + per_yield * (next_days / period);
+    if denom <= 0.0 {
+        return None;
+    }
+    let value = (redemption + coupon * odd_days / period) / denom - coupon * accrued / period;
+    value.is_finite().then_some(value)
+}
+
+fn odd_yield(price: f64, frequency: i32, quote: impl Fn(f64) -> Option<f64>) -> Option<f64> {
+    if !price.is_finite() || price <= 0.0 {
+        return None;
+    }
+    let mut yld = 0.05;
+    for _ in 0..40 {
+        let value = quote(yld)?;
+        let step = 1e-6 * yld.abs().max(1.0);
+        let above = quote(yld + step)?;
+        let slope = (above - value) / step;
+        if !slope.is_finite() || slope.abs() < 1e-12 {
+            return None;
+        }
+        let next = yld - (value - price) / slope;
+        if !next.is_finite() || next < 0.0 || next <= f64::from(-frequency) {
+            return None;
+        }
+        if (next - yld).abs() <= 1e-8 * next.abs().max(1.0) {
+            return Some(next);
+        }
+        yld = next;
+    }
+    None
+}
+
 fn yield_excel(
     settlement: f64,
     maturity: f64,
@@ -9113,6 +9263,89 @@ impl<'a> CalcParser<'a> {
                 let reinvest = calc_num(self.compare(env)?)?;
                 self.close_paren()?;
                 return mirr_excel(&values, finance, reinvest).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ODDFPRICE")
+                || word.eq_ignore_ascii_case("ODDFYIELD")
+                || word.eq_ignore_ascii_case("ODDLPRICE")
+                || word.eq_ignore_ascii_case("ODDLYIELD")
+            {
+                let kind = word.to_ascii_uppercase();
+                let first = kind.starts_with("ODDF");
+                let yield_call = kind.ends_with("YIELD");
+                let settlement = bond_serial(calc_num(self.compare(env)?)?, env.date1904)?;
+                self.require_comma()?;
+                let maturity = bond_serial(calc_num(self.compare(env)?)?, env.date1904)?;
+                self.require_comma()?;
+                let anchor = bond_serial(calc_num(self.compare(env)?)?, env.date1904)?;
+                let first_coupon = if first {
+                    self.require_comma()?;
+                    bond_serial(calc_num(self.compare(env)?)?, env.date1904)?
+                } else {
+                    0.0
+                };
+                self.require_comma()?;
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let second = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let redemption = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let frequency = bond_frequency(calc_num(self.compare(env)?)?)?;
+                self.skip();
+                let basis = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    0.0
+                } else {
+                    self.require_comma()?;
+                    let basis = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    basis
+                };
+                if !basis.is_finite() || !(0.0..=4.0).contains(&basis.trunc()) {
+                    return None;
+                }
+                let basis = basis.trunc() as i32;
+                let value = if yield_call {
+                    if first {
+                        odd_yield(second, frequency, |yld| {
+                            oddf_price(
+                                settlement,
+                                maturity,
+                                anchor,
+                                first_coupon,
+                                rate,
+                                yld,
+                                redemption,
+                                frequency,
+                                basis,
+                            )
+                        })
+                    } else {
+                        odd_yield(second, frequency, |yld| {
+                            oddl_price(
+                                settlement, maturity, anchor, rate, yld, redemption, frequency,
+                                basis,
+                            )
+                        })
+                    }
+                } else if first {
+                    oddf_price(
+                        settlement,
+                        maturity,
+                        anchor,
+                        first_coupon,
+                        rate,
+                        second,
+                        redemption,
+                        frequency,
+                        basis,
+                    )
+                } else {
+                    oddl_price(
+                        settlement, maturity, anchor, rate, second, redemption, frequency, basis,
+                    )
+                };
+                return value.map(CalcValue::Num);
             }
             if word.eq_ignore_ascii_case("PRICE")
                 || word.eq_ignore_ascii_case("YIELD")
@@ -18052,6 +18285,63 @@ mod tests {
         );
         assert!(
             sheet.contains(r#"<f>GOALSEEK(A3,B3,4)</f><v>3</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
+    fn set_sheet_cell_odd_coupon() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>ODDFPRICE(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,10,15),DATE(2009,3,1),0.0785,0.0625,100,2,1)</f><v>0</v></c><c r="B1"><f>ODDFYIELD(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,10,15),DATE(2009,3,1),0.0785,113.597717474079,100,2,1)</f><v>0</v></c><c r="C1"><f>ODDLPRICE(DATE(2008,2,7),DATE(2008,6,15),DATE(2007,10,15),0.0375,0.0405,100,2,0)</f><v>0</v></c><c r="D1"><f>ODDLYIELD(DATE(2008,2,7),DATE(2008,6,15),DATE(2007,10,15),0.0375,99.8782860147213,100,2,0)</f><v>0</v></c><c r="E1"><f>ODDFPRICE(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,1,15),DATE(2009,3,1),0.0785,0.0625,100,2,1)</f><v>4</v></c><c r="F1"><f>ODDLPRICE(DATE(2008,2,7),DATE(2008,6,15),DATE(2007,1,15),0.0375,0.0405,100,2,0)</f><v>5</v></c><c r="Z1"><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(
+                r#"<f>ODDFPRICE(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,10,15),DATE(2009,3,1),0.0785,0.0625,100,2,1)</f><v>113.59771747</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>ODDFYIELD(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,10,15),DATE(2009,3,1),0.0785,113.597717474079,100,2,1)</f><v>0.0625</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>ODDLPRICE(DATE(2008,2,7),DATE(2008,6,15),DATE(2007,10,15),0.0375,0.0405,100,2,0)</f><v>99.87828601</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>ODDLYIELD(DATE(2008,2,7),DATE(2008,6,15),DATE(2007,10,15),0.0375,99.8782860147213,100,2,0)</f><v>0.0405</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>ODDFPRICE(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,1,15),DATE(2009,3,1),0.0785,0.0625,100,2,1)</f><v>4</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>ODDLPRICE(DATE(2008,2,7),DATE(2008,6,15),DATE(2007,1,15),0.0375,0.0405,100,2,0)</f><v>5</v>"#
+            ),
             "{sheet}"
         );
     }
