@@ -6007,36 +6007,104 @@ fn is_subtotal_formula(formula: &str) -> bool {
 fn is_elapsed_token(format: &str) -> bool {
     matches!(
         format.trim().to_ascii_lowercase().as_str(),
-        "[h]" | "[hh]" | "[m]" | "[mm]"
+        "[h]" | "[hh]" | "[m]" | "[mm]" | "[h]:mm" | "[hh]:mm" | "[h]:mm:ss" | "[hh]:mm:ss"
     )
+}
+
+fn elapsed_digits(number: f64, scale: f64, width: usize) -> Option<String> {
+    let whole = (number.abs() * scale).round();
+    if !whole.is_finite() || whole >= 1e15 {
+        return None;
+    }
+    let digits = format!("{}", whole as u64);
+    Some(if width > digits.len() {
+        format!("{digits:0>width$}")
+    } else {
+        digits
+    })
+}
+
+fn elapsed_clock(number: f64, pad_hours: bool, with_seconds: bool) -> Option<String> {
+    let total = if with_seconds {
+        (number.abs() * 86_400.0).round()
+    } else {
+        (number.abs() * 1_440.0).round()
+    };
+    if !total.is_finite() || total >= 1e15 {
+        return None;
+    }
+    let total = total as u64;
+    let (hours, minutes, seconds) = if with_seconds {
+        (total / 3_600, (total % 3_600) / 60, total % 60)
+    } else {
+        (total / 60, total % 60, 0)
+    };
+    let hours = if pad_hours {
+        format!("{hours:02}")
+    } else {
+        hours.to_string()
+    };
+    if with_seconds {
+        Some(format!("{hours}:{minutes:02}:{seconds:02}"))
+    } else {
+        Some(format!("{hours}:{minutes:02}"))
+    }
 }
 
 fn format_elapsed(number: f64, format: &str) -> Option<String> {
     if !is_elapsed_token(format) {
         return None;
     }
-    let (scale, width) = match format.trim().to_ascii_lowercase().as_str() {
-        "[h]" => (24.0, 0usize),
-        "[hh]" => (24.0, 2usize),
-        "[m]" => (24.0 * 60.0, 0usize),
-        "[mm]" => (24.0 * 60.0, 2usize),
-        _ => return None,
-    };
     if !number.is_finite() || number.abs() >= 1_000_000.0 {
         return None;
     }
-    let negative = number < 0.0;
-    let whole = (number.abs() * scale).round();
-    if !whole.is_finite() || whole >= 1e15 {
-        return None;
-    }
-    let digits = format!("{}", whole as u64);
-    let body = if width > digits.len() {
-        format!("{digits:0>width$}")
-    } else {
-        digits
+    let body = match format.trim().to_ascii_lowercase().as_str() {
+        "[h]" => elapsed_digits(number, 24.0, 0)?,
+        "[hh]" => elapsed_digits(number, 24.0, 2)?,
+        "[m]" => elapsed_digits(number, 24.0 * 60.0, 0)?,
+        "[mm]" => elapsed_digits(number, 24.0 * 60.0, 2)?,
+        "[h]:mm" => elapsed_clock(number, false, false)?,
+        "[hh]:mm" => elapsed_clock(number, true, false)?,
+        "[h]:mm:ss" => elapsed_clock(number, false, true)?,
+        "[hh]:mm:ss" => elapsed_clock(number, true, true)?,
+        _ => return None,
     };
-    Some(if negative { format!("-{body}") } else { body })
+    Some(if number < 0.0 {
+        format!("-{body}")
+    } else {
+        body
+    })
+}
+
+fn display_hour(hours: u32, twelve: bool) -> u32 {
+    if !twelve {
+        return hours;
+    }
+    match hours {
+        0 => 12,
+        13..=23 => hours - 12,
+        _ => hours,
+    }
+}
+
+fn meridian_text(hours: u32, upper: bool, short: bool) -> String {
+    let pm = hours >= 12;
+    let text = if short {
+        if pm {
+            "P"
+        } else {
+            "A"
+        }
+    } else if pm {
+        "PM"
+    } else {
+        "AM"
+    };
+    if upper {
+        text.to_string()
+    } else {
+        text.to_ascii_lowercase()
+    }
 }
 
 fn excel_month_name(month: i32, long: bool) -> Option<&'static str> {
@@ -6121,6 +6189,13 @@ fn minutes_here(rest: &str, last_was_hour: bool) -> bool {
 fn format_excel_date(serial: f64, format: &str) -> Option<String> {
     let (year, month, day) = excel_parts(serial)?;
     let (hours, minutes, seconds) = clock_parts(serial);
+    let twelve = unquoted_format(format).is_some_and(|text| {
+        let lower = text.to_ascii_lowercase();
+        lower.contains("am/pm")
+            || lower.contains("a/p")
+            || lower.contains("am")
+            || lower.contains("pm")
+    });
     let chars: Vec<char> = format.chars().collect();
     let mut index = 0usize;
     let mut out = String::new();
@@ -6161,9 +6236,26 @@ fn format_excel_date(serial: f64, format: &str) -> Option<String> {
         } else if rest.starts_with('m') {
             ("m", month.to_string())
         } else if rest.starts_with("hh") {
-            ("hh", format!("{hours:02}"))
+            let hour = display_hour(hours, twelve);
+            ("hh", format!("{hour:02}"))
         } else if rest.starts_with('h') {
-            ("h", hours.to_string())
+            let hour = display_hour(hours, twelve);
+            ("h", hour.to_string())
+        } else if rest.starts_with("am/pm") {
+            (
+                "am/pm",
+                meridian_text(hours, chars[index].is_uppercase(), false),
+            )
+        } else if rest.starts_with("a/p") {
+            (
+                "a/p",
+                meridian_text(hours, chars[index].is_uppercase(), true),
+            )
+        } else if rest.starts_with("am") || rest.starts_with("pm") {
+            (
+                "am",
+                meridian_text(hours, chars[index].is_uppercase(), false),
+            )
         } else if rest.starts_with("ss") {
             ("ss", format!("{seconds:02}"))
         } else if rest.starts_with('s') {
@@ -19209,7 +19301,7 @@ mod tests {
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>TEXT(1.5,&quot;[h]:mm&quot;)</f><v>4</v>"#),
+            sheet.contains(r#"<f>TEXT(1.5,&quot;[h]:mm&quot;)</f><is><t>36:00</t></is>"#),
             "{sheet}"
         );
         assert!(
@@ -19266,7 +19358,7 @@ mod tests {
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>TEXT(1,&quot;[h]:mm&quot;)</f><v>4</v>"#),
+            sheet.contains(r#"<f>TEXT(1,&quot;[h]:mm&quot;)</f><is><t>24:00</t></is>"#),
             "{sheet}"
         );
     }
@@ -19284,7 +19376,7 @@ mod tests {
             ),
             (
                 "xl/worksheets/sheet1.xml",
-                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c><c r="A1"><f>TEXT(1.5,&quot;hh:mm&quot;)</f><v>0</v></c><c r="B1"><f>TEXT(1.5,&quot;h:mm:ss&quot;)</f><v>0</v></c><c r="C1"><f>TEXT(1+1/86400,&quot;hh:mm:ss&quot;)</f><v>0</v></c><c r="D1"><f>TEXT(1,&quot;yyyy-mm-dd hh:mm&quot;)</f><v>0</v></c><c r="E1"><f>TEXT(1,&quot;mm:ss&quot;)</f><v>0</v></c><c r="F1"><f>TEXT(1.75,&quot;h&quot;)</f><v>0</v></c><c r="G1"><f>TEXT(1.5,&quot;[h]:mm&quot;)</f><v>4</v></c><c r="H1"><f>TEXT(1.5,&quot;hh:mm AM&quot;)</f><v>5</v></c></row></sheetData></worksheet>"#,
+                r#"<worksheet><sheetData><row r="1"><c r="Z1"><v>0</v></c><c r="A1"><f>TEXT(1.5,&quot;hh:mm&quot;)</f><v>0</v></c><c r="B1"><f>TEXT(1.5,&quot;h:mm:ss&quot;)</f><v>0</v></c><c r="C1"><f>TEXT(1+1/86400,&quot;hh:mm:ss&quot;)</f><v>0</v></c><c r="D1"><f>TEXT(1,&quot;yyyy-mm-dd hh:mm&quot;)</f><v>0</v></c><c r="E1"><f>TEXT(1,&quot;mm:ss&quot;)</f><v>0</v></c><c r="F1"><f>TEXT(1.75,&quot;h&quot;)</f><v>0</v></c><c r="G1"><f>TEXT(1.5,&quot;[h]:mm&quot;)</f><v>4</v></c><c r="H1"><f>TEXT(1.5,&quot;hh:mm AM&quot;)</f><v>5</v></c></row><row r="2"><c r="A2"><f>TEXT(0.25,&quot;h:mm AM&quot;)</f><v>0</v></c><c r="B2"><f>TEXT(1.5,&quot;[h]:mm:ss&quot;)</f><v>0</v></c><c r="C2"><f>TEXT(-1.5,&quot;[h]:mm&quot;)</f><v>0</v></c><c r="D2"><f>TEXT(1.5,&quot;yyyy-mm-dd hh:mm AM&quot;)</f><v>0</v></c><c r="E2"><f>TEXT(1/24,&quot;[hh]:mm&quot;)</f><v>0</v></c></row></sheetData></worksheet>"#,
             ),
         ]);
         let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
@@ -19318,11 +19410,33 @@ mod tests {
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>TEXT(1.5,&quot;[h]:mm&quot;)</f><v>4</v>"#),
+            sheet.contains(r#"<f>TEXT(1.5,&quot;[h]:mm&quot;)</f><is><t>36:00</t></is>"#),
             "{sheet}"
         );
         assert!(
-            sheet.contains(r#"<f>TEXT(1.5,&quot;hh:mm AM&quot;)</f><v>5</v>"#),
+            sheet.contains(r#"<f>TEXT(1.5,&quot;hh:mm AM&quot;)</f><is><t>12:00 PM</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(0.25,&quot;h:mm AM&quot;)</f><is><t>6:00 AM</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1.5,&quot;[h]:mm:ss&quot;)</f><is><t>36:00:00</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(-1.5,&quot;[h]:mm&quot;)</f><is><t>-36:00</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>TEXT(1.5,&quot;yyyy-mm-dd hh:mm AM&quot;)</f><is><t>1900-01-01 12:00 PM</t></is>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>TEXT(1/24,&quot;[hh]:mm&quot;)</f><is><t>01:00</t></is>"#),
             "{sheet}"
         );
     }

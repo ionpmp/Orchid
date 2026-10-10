@@ -806,13 +806,17 @@ release yet.
   a seconds token, and otherwise it is the month. Hours run from 0 through
   23. The time is the fractional day rounded to the nearest second. A
   fraction that rounds to 24:00:00 is shown as 00:00:00 and the date is not
-  rolled forward. `AM/PM` leaves the stored value.
+  rolled forward. `AM/PM`, `A/P`, `AM`, or `PM` switches `h` and `hh` to a
+  12-hour clock and writes the meridian in the case of that token. Hour 0
+  and hour 12 are written as 12. A date token can sit in the same format.
   Elapsed time is a section whose text outside quotes is exactly `[h]`,
-  `[hh]`, `[m]`, or `[mm]`. It writes the total hours or minutes, rounded
-  half away from zero, and the total can pass 24 hours. `[hh]` and `[mm]`
-  use at least two digits. A negative value keeps a leading minus. The
-  absolute serial must be below 1000000. A clock such as `[h]:mm`, a color,
-  or any other bracket leaves the stored value. `CONVERT`
+  `[hh]`, `[m]`, `[mm]`, `[h]:mm`, `[hh]:mm`, `[h]:mm:ss`, or `[hh]:mm:ss`.
+  The bare tokens write the total hours or minutes, rounded half away from
+  zero, and the total can pass 24 hours. `[hh]` and `[mm]` use at least two
+  digits. `[h]:mm` and `[hh]:mm` write total hours and minutes, and the
+  seconds forms add seconds. `[hh]` in those clocks pads the hours. A
+  negative value keeps a leading minus. The absolute serial must be below
+  1000000. A color or any other bracket leaves the stored value. `CONVERT`
   reads a number and two unit names. The names are case-sensitive. Length is
   `m`, `cm`, `mm`, `km`, `in`, `ft`, `yd`, and `mi`. Mass is `g`, `kg`, `mg`,
   `lbm`, and `ozm`. Time is `sec`, `mn`, `hr`, `day`, and `yr`, and a year is
