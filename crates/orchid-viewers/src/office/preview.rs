@@ -1806,10 +1806,22 @@ fn place(row: &mut Vec<SheetCell>, col: usize, text: String, address: String) {
         span: 1,
         covered: false,
         width_px: 72,
+        height_px: 0,
     };
 }
 
 fn apply_sheet_layout(rows: &mut [Vec<SheetCell>], xml: &str) {
+    let heights = row_heights(xml);
+    for row in rows.iter_mut() {
+        for cell in row.iter_mut() {
+            let Some((_, row_number)) = split_address(&cell.address) else {
+                continue;
+            };
+            if let Some(height) = heights.get(&row_number) {
+                cell.height_px = *height;
+            }
+        }
+    }
     let widths = column_widths(xml);
     let merges = merge_refs(xml);
     for row in rows.iter_mut() {
@@ -1875,6 +1887,46 @@ fn column_px(widths: &[f32], col: usize) -> u32 {
     } else {
         72
     }
+}
+
+fn row_heights(xml: &str) -> std::collections::HashMap<u32, u32> {
+    let mut heights = std::collections::HashMap::new();
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event) | Event::Empty(event)) => {
+                if local_name(event.name().as_ref()) != "row" {
+                    buf.clear();
+                    continue;
+                }
+                let custom = attr(&event, "customHeight");
+                if custom == "0" || custom.eq_ignore_ascii_case("false") {
+                    buf.clear();
+                    continue;
+                }
+                let Ok(row) = attr(&event, "r").parse::<u32>() else {
+                    buf.clear();
+                    continue;
+                };
+                let Ok(points) = attr(&event, "ht").parse::<f64>() else {
+                    buf.clear();
+                    continue;
+                };
+                if !points.is_finite() || points <= 0.0 {
+                    buf.clear();
+                    continue;
+                }
+                let pixels = (points * 4.0 / 3.0).round().clamp(12.0, 64.0);
+                heights.insert(row, pixels as u32);
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    heights
 }
 
 fn column_widths(xml: &str) -> Vec<f32> {

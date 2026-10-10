@@ -68,6 +68,19 @@ export component ViewerSheetView inherits Rectangle {
     property <int> sheet: min(root.sheet-index, max(root.model.sheets.length - 1, 0));
     property <int> freeze-rows: root.model.sheets.length == 0 ? 0 : root.model.sheets[root.sheet].freeze-rows;
     property <int> freeze-cols: root.model.sheets.length == 0 ? 0 : root.model.sheets[root.sheet].freeze-cols;
+
+    function row-height(index: int) -> length {
+        if (root.model.sheets.length == 0 || index < 0 || index >= root.model.sheets[root.sheet].rows.length) {
+            return Theme.row-height;
+        }
+        let custom = root.model.sheets[root.sheet].rows[index].height-px;
+        custom > 0 ? custom * 1px : Theme.row-height
+    }
+
+    function freeze-band() -> length {
+        let n = root.freeze-rows;
+        (n > 0 ? root.row-height(0) : 0px) + (n > 1 ? root.row-height(1) + 1px : 0px) + (n > 2 ? root.row-height(2) + 1px : 0px) + (n > 3 ? root.row-height(3) + 1px : 0px) + (n > 4 ? root.row-height(4) + 1px : 0px) + (n > 5 ? root.row-height(5) + 1px : 0px) + (n > 6 ? root.row-height(6) + 1px : 0px) + (n > 7 ? root.row-height(7) + 1px : 0px);
+    }
     property <string> cell-address: root.model.sheets[root.sheet].rows[root.sel-row].cells[root.sel-col].address;
     property <string> cell-text: root.model.sheets[root.sheet].rows[root.sel-row].cells[root.sel-col].text;
     property <string> cell-note: root.model.sheets[root.sheet].rows[root.sel-row].cells[root.sel-col].note;
@@ -269,7 +282,7 @@ export component ViewerSheetView inherits Rectangle {
                 spacing: 1px;
 
                 for row[ri] in root.model.sheets[root.sheet].rows : HorizontalLayout {
-                    height: Theme.row-height;
+                    height: root.row-height(ri);
                     spacing: 1px;
                     alignment: start;
 
@@ -305,7 +318,7 @@ export component ViewerSheetView inherits Rectangle {
 
             if root.freeze-rows > 0 : HorizontalLayout {
                 spacing: 1px;
-                height: root.freeze-rows * Theme.row-height + max(root.freeze-rows - 1, 0) * 1px;
+                height: root.freeze-band();
 
                 if root.freeze-cols > 0 : VerticalLayout {
                     alignment: start;
@@ -313,7 +326,7 @@ export component ViewerSheetView inherits Rectangle {
 
                     for row[ri] in root.model.sheets[root.sheet].rows : HorizontalLayout {
                         visible: ri < root.freeze-rows;
-                        height: ri < root.freeze-rows ? Theme.row-height : 0px;
+                        height: ri < root.freeze-rows ? root.row-height(ri) : 0px;
                         spacing: 1px;
                         alignment: start;
 
@@ -355,7 +368,7 @@ export component ViewerSheetView inherits Rectangle {
 
                         for row[ri] in root.model.sheets[root.sheet].rows : HorizontalLayout {
                             visible: ri < root.freeze-rows;
-                            height: ri < root.freeze-rows ? Theme.row-height : 0px;
+                            height: ri < root.freeze-rows ? root.row-height(ri) : 0px;
                             spacing: 1px;
                             alignment: start;
 
@@ -403,7 +416,7 @@ export component ViewerSheetView inherits Rectangle {
 
                         for row[ri] in root.model.sheets[root.sheet].rows : HorizontalLayout {
                             visible: ri >= root.freeze-rows;
-                            height: ri >= root.freeze-rows ? Theme.row-height : 0px;
+                            height: ri >= root.freeze-rows ? root.row-height(ri) : 0px;
                             spacing: 1px;
                             alignment: start;
 
@@ -446,7 +459,7 @@ export component ViewerSheetView inherits Rectangle {
 
                         for row[ri] in root.model.sheets[root.sheet].rows : HorizontalLayout {
                             visible: ri >= root.freeze-rows;
-                            height: ri >= root.freeze-rows ? Theme.row-height : 0px;
+                            height: ri >= root.freeze-rows ? root.row-height(ri) : 0px;
                             spacing: 1px;
                             alignment: start;
 

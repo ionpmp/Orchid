@@ -664,6 +664,8 @@ pub struct SheetCell {
     pub covered: bool,
     /// Preview width in pixels. A covered cell is 0.
     pub width_px: u32,
+    /// Preview row height in pixels. `0` keeps the theme row height.
+    pub height_px: u32,
 }
 
 /// HTML snapshot (embedded preview + source + Open in browser).

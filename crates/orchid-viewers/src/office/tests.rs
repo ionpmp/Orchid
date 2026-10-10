@@ -513,6 +513,50 @@ mod tests {
     }
 
     #[test]
+    fn sheet_preview_row_heights() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetViews><sheetView><pane ySplit="1" state="frozen"/></sheetView></sheetViews><sheetData><row r="1" ht="30"><c r="A1"><v>1</v></c></row><row r="2" hidden="1" ht="40"><c r="A2"><v>2</v></c></row><row r="3" ht="15" customHeight="0"><c r="A3"><v>3</v></c></row><row r="4" ht="6"><c r="A4"><v>4</v></c></row><row r="5" ht="90" customHeight="1"><c r="A5"><v>5</v></c></row><row r="6" ht="18" customHeight="true"><c r="A6"><v>6</v></c></row></sheetData><mergeCells><mergeCell ref="A5:A6"/></mergeCells></worksheet>"#,
+            ),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let cell = |address: &str| {
+            book.sheets[0]
+                .rows
+                .iter()
+                .flatten()
+                .find(|cell| cell.address == address)
+                .unwrap_or_else(|| panic!("missing {address}"))
+        };
+        let addresses: Vec<&str> = book.sheets[0]
+            .rows
+            .iter()
+            .flatten()
+            .map(|cell| cell.address.as_str())
+            .collect();
+        assert!(!addresses.contains(&"A2"), "the hidden row is omitted");
+        assert_eq!(book.sheets[0].freeze_rows, 1);
+        assert_eq!(cell("A1").height_px, 40, "30 points is 40 pixels");
+        assert_eq!(cell("A3").height_px, 0, "customHeight 0 keeps the theme");
+        assert_eq!(cell("A4").height_px, 12, "a short row is clamped");
+        assert_eq!(cell("A5").height_px, 64, "a tall row is clamped");
+        assert_eq!(cell("A6").height_px, 24, "18 points is 24 pixels");
+        assert_eq!(cell("A5").span, 1, "a merge does not change this row");
+    }
+
+    #[test]
     fn sheet_preview_merges_and_widths() {
         let bytes = zip_bytes(&[
             (

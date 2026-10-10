@@ -149,7 +149,14 @@ release yet.
   cell is the one shown. The note is not editable and is not written back. The preview reads at
   most 16 merged ranges. Each range covers at most 8 columns and 8 rows.
   The origin cell widens across those columns, and the other cells in the
-  range are hidden. The row does not grow taller. Column widths come from
+  range are hidden. A merge does not make the row taller. A row height comes
+  from the worksheet `ht` when `customHeight` is missing, 1, or true.
+  `customHeight` 0 or false keeps the theme height. A point becomes 4/3
+  pixels, rounded, then clamped from 12 through 64. A missing height stays
+  the theme row height. The height is matched by the worksheet row number,
+  because hidden rows are already omitted. A frozen band is the sum of the
+  pinned row heights plus a 1 pixel gap between them. The height is not
+  written back. Column widths come from
   the worksheet `cols` list, clamped from 1 to 40 character units and drawn
   at 8 pixels per unit. A missing width stays 72 pixels. A merge or a width
   is not written back. A frozen pane stays on screen while the rest of the

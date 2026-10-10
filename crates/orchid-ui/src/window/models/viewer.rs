@@ -796,6 +796,8 @@ fn build_sheet_model(
                         .collect();
                     ViewerSheetRow {
                         cells: ModelRc::new(VecModel::from(cells)),
+                        height_px: i32::try_from(row.first().map(|cell| cell.height_px).unwrap_or(0))
+                            .unwrap_or(0),
                     }
                 })
                 .collect();
