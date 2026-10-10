@@ -101,6 +101,14 @@ Explorer drop. Lyrics: sidecar `.lrc`, else ID3 `SYLT`/`USLT` or
 Vorbis/FLAC comments. **L** or the lyrics chip toggles a scrollable panel
 (click a synced line to seek). Panel open state persists.
 
+**Sleep** cycles off, 15, 30, 60, and 90 minutes, then pauses playback
+when the timer ends. A `sleep:<minutes>` command can set another length.
+**EQ** cycles Flat, Bass, Treble, and Vocal (libmpv `lavfi` filters).
+**ReplayGain** cycles off, track, and album from tags in the file.
+**Speed** cycles 0.75×, 1×, 1.25×, 1.5×, and 2×. EQ, ReplayGain, and
+speed are saved with the widget. The sleep deadline stays in memory and
+is cleared when the widget closes.
+
 Needs libmpv. Mutually pauses with a media Viewer.
 
 ## Browser

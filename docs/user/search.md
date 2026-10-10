@@ -24,8 +24,9 @@ replacement graph that accepts `features` (`float32[1, 32]`) and returns
 
 A question that starts with `?` asks the agent in Settings → Agent. The
 agent is off until you enable it. The desktop app sends the message to
-Ollama (`http://127.0.0.1:11434` when the endpoint is empty) or to an
-OpenAI-compatible `/chat/completions` URL, on the background job queue.
+Ollama or an OpenAI-compatible `/chat/completions` URL, on the background
+job queue. An empty endpoint uses `http://127.0.0.1:11434` for Ollama and
+`https://api.openai.com/v1` for OpenAI.
 The reply is a notification, and the same turn is appended to the shared
 transcript in `data/agent-chat.json` (about 40 messages). The Agent widget
 shows that transcript. The model may read a local text file, list one
@@ -39,15 +40,19 @@ keeps the saved key.
 
 Settings → Search, and `[search]` in `config.toml`: `included-roots`
 (empty → Documents), `excluded-patterns`, `max-file-size-mib`,
-`extract-text` / `extract-pdf` (PDF needs pdfium; the same switch also
-indexes DOCX, XLSX / XLSM cell text, PPTX / PPTM / PPSX slide and
-notes text, EPUB chapters, OpenDocument `.odt` / `.ods` / `.odp`,
-RTF, visible HTML text (scripts and styles are skipped), audio
-tags (ID3 and Vorbis comments: title, artist, album, lyrics), and
-FictionBook (`.fb2` and `.fb2.zip`, including Windows-1251), and email
-(`.eml`: subject, from, to, and text or HTML bodies; attachments are
-skipped)).
-`extract-text` also indexes source files (`.rs`, `.py`, `.js`,
+`extract-text` and `extract-pdf`. Content is read only when at least one
+of those is on. The text extractors (source code, calendars, contacts,
+the formats listed below) are always registered. `extract-pdf` also
+registers the rich extractors: PDF (needs pdfium), DOCX, XLSX / XLSM
+cell text, PPTX / PPTM / PPSX slide and notes text, EPUB chapters,
+OpenDocument `.odt` / `.ods` / `.odp`, RTF, visible HTML text (scripts
+and styles are skipped), audio tags (ID3 and Vorbis comments: title,
+artist, album, lyrics), FictionBook (`.fb2` and `.fb2.zip`, including
+Windows-1251), and email (`.eml`: subject, from, to, and text or HTML
+bodies; attachments are skipped). Turning on only `extract-pdf` still
+indexes source files, because extraction runs and the text extractor
+stays in the chain.
+Those text extractors cover source files (`.rs`, `.py`, `.js`,
 `.ts`, `.ps1`, `.sql`, and similar), plus calendar (`.ics`) and
 contact (`.vcf`) fields. Photo and attachment blobs in those files are
 skipped. Protocol Buffers (`.proto`), GraphQL (`.graphql`, `.gql`),

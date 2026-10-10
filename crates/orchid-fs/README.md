@@ -1,6 +1,6 @@
 # orchid-fs
 
-Filesystem layer for Orchid. Exposes a pluggable provider abstraction (with a working `LocalProvider`), a cross-provider `FileWatcher` that fans notify events into the Orchid event bus, tagging via `orchid-storage`, archive browsing (ZIP / 7z / TAR / TAR.GZ / TAR.XZ), high-level file operations (copy / move / delete / recycle-bin), and two domain engines: managed (content-addressed dedup) and encrypted (`age` + reveal sessions) folders.
+Filesystem layer for Orchid. Exposes a pluggable provider abstraction (with a working `LocalProvider`), a cross-provider `FileWatcher` that fans notify events into the Orchid event bus, tagging via `orchid-storage`, archive browsing (ZIP / 7z / TAR / TAR.GZ / TAR.XZ / TAR.BZ2), high-level file operations (copy / move / delete / recycle-bin, plus compare and sync, hashes, split/join, attributes, ACL, shares, previous versions, and BitLocker status), and two domain engines: managed (content-addressed dedup) and encrypted (`age` + reveal sessions) folders.
 
 Network listing uses a long-lived `rclone rcd` on localhost when available,
 falling back to per-operation CLI. Transfers still spawn the CLI. **Connect

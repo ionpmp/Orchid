@@ -433,12 +433,12 @@ payload to:
 - **Merge:** loading two forks with the same `file_uuid` unions op logs by
   op id, then materializes. DONE criterion for Phase 4 is a deterministic
   concurrent two-client merge test.
-- **Wire encoding:** FlatBuffers or postcard/bincode for ops; exact schema
-  lands with Phase 4. The region `content_type` string identifies the
-  schema (e.g. `orchid.structured.crdt.v1`).
+- **Wire encoding:** region magic `ORCT`, version 1, then the op list
+  described below. Content type `orchid.structured.crdt.v1`.
 
-Until Phase 4, Structured `content_type` is
-`orchid.structured.snapshot.v1` and the payload is a single snapshot blob.
+Until the CRDT wire landed, Structured `content_type` was
+`orchid.structured.snapshot.v1` (a single snapshot blob). That name is not
+what this tree writes.
 
 **Phase 4 wire (implemented):** magic `ORCT`, version `1`, reserved snapshot
 watermark (`u64`, `0` = none), then an append-only op list. Ops are
@@ -485,9 +485,10 @@ Embedding metadata so a stored vector is reused only when the id matches.
 
 ### Hybrid search
 
-`orchid-search` continues to use Tantivy BM25 over Clean-Text. Phase 5 adds
-an ANN index (candidates: `instant-distance` or `hnsw_rs`) over Embedding
-vectors. Query path:
+`orchid-search` fuses Tantivy BM25 over Clean-Text with an in-memory ANN
+index by reciprocal rank fusion. The desktop app embeds the query with the
+compiled-in model above. The ANN snapshot is brute-force (`AnnIndex`);
+HNSW is not shipped. Query path:
 
 1. Embed the query with the same bundled model.
 2. ANN top-k over `.orchid` embedding postings.
@@ -585,16 +586,16 @@ unless a required region type cannot be interpreted.
 | `Chunker` / FastCDC | `crates/orchid-crypto/src/content/chunker.rs` | Split region payloads for linked mode; BLAKE3 per chunk |
 | `ChunkStore` | `crates/orchid-crypto/src/content/store.rs` | CAS put/get/release; `garbage_collect` for generation GC |
 | `hash_bytes` / BLAKE3 | `crates/orchid-crypto/src/content/hash` | TOC digests, footer `toc_blake3`, chunk ids |
-| `Encryptor` / `Decryptor` / `Identity` | `crates/orchid-crypto/src/age_encryption/` | Whole-file today; extend to per-region (Phase 2 gap) |
+| `Encryptor` / `Decryptor` / `Identity` | `crates/orchid-crypto/src/age_encryption/` | Whole-file age, and per-region age via `orchid-format` `crypto_region` |
 | `EncryptedFileMeta` | `age_encryption/metadata.rs` | Pattern for plaintext size/hash; fold into `EncryptionInfo` |
 | `memmap2` | already used (e.g. PDF extract in `orchid-search`) | Map sealed files; page-aligned regions |
 | Tantivy BM25 | `crates/orchid-search` | Index Clean-Text |
 | Document OOXML path | `crates/orchid-viewers/src/document/` | Import/export bridge until native save dominates |
 | Managed folders | `orchid-fs` | Default linked saves + retention policy |
 
-### Future crate
+### Crate home
 
-Suggested home for parsers, writers, CLI, and FlatBuffers generated code:
+Parsers, writers, the CLI, and the generated FlatBuffers live in:
 
 ```text
 crates/orchid-format/
@@ -631,8 +632,9 @@ the reverse.
    text, …), materializing Raw to a temp file when needed; Raw DOCX /
    editor envelopes stay in the document viewer. UI chrome shows the
    `.orchid` path; temp unwraps are removed when the viewer closes.
-4. **Search** indexes `.orchid` via Clean-Text (live `OrchidExtractor`);
-   semantic / hybrid path in Phase 5.
+4. **Search** indexes `.orchid` via Clean-Text (`OrchidExtractor`). Hybrid
+   search is shipped in `orchid-search`: Tantivy BM25 fused with the ANN
+   index. A stored Embedding region is reused when its model id matches.
 5. **MIME / extension** registered in the Windows installer when the CLI
    and editor open path are stable. `scripts/install-desktop.ps1` associates
    `.orchid` → `application/vnd.orchid` with `orchid.exe` under HKCU.
@@ -706,9 +708,11 @@ identical materialized document hash).
 **Scope**
 
 - Hierarchical Embedding region + token counts
-- Bundled quantized sentence model via ORT (asset parallel to `pdfium.dll`)
-- ANN (`instant-distance` or `hnsw_rs`) fused with Tantivy BM25 in
-  `orchid-search`
+- Compiled-in quantized model (`hash-q.onnx` / `orchid.onnx.hash.q.v1`)
+  behind `orchid-embed`'s `ort` feature. ORT itself is a crate dependency,
+  not a side-by-side DLL. Builds without `ort` stay on `StubEmbedder`
+- Brute-force ANN fused with Tantivy BM25 in `orchid-search` (HNSW is not
+  shipped)
 
 **Status:** Embedding wire (`OREM` / `orchid.embedding.hier.f32.v1`) in
 `orchid-format`. `orchid-embed` ships [`StubEmbedder`](../crates/orchid-embed)
@@ -728,7 +732,9 @@ BM25 query misses on the same corpus
 
 - [x] `crates/orchid-format` crate skeleton + `orchid_toc.fbs`
 - [x] Header / region / footer writers with 4 KiB padding
-- [x] Sealed create/read CLI (`orchid-format` or `orchid-app` subcommand)
+- [x] Sealed create/read CLI (`orchid-format` binary; phases 1–3: create,
+      read, C2PA). CRDT and embeddings are library APIs. `orchid.exe` opens
+      a path; it has no format subcommand
 - [x] Round-trip tests with three regions
 - [x] MIME + extension constants (`ORCD`, `application/vnd.orchid`)
 - [x] Document this file’s status → “implemented” when Phase 1 DONE lands
@@ -744,10 +750,10 @@ Footer terminator:  ORCD
 Alignment:          4096 bytes
 Hash:               BLAKE3-256
 Chunking:           FastCDC (ChunkerConfig defaults)
-Encryption:         age (per-region in Phase 2; whole-file only today)
+Encryption:         age (whole-file and per-region)
 TOC:                FlatBuffers (Toc)
 ```
 
 ---
 
-*End of draft specification.*
+*End of specification.*

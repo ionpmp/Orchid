@@ -136,11 +136,12 @@ python scripts/i18n_sync_keys.py
 ## Linting
 
 ```bash
-cargo fmt --all
-cargo clippy --all-targets --all-features -- -D warnings
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 ```
 
-CI runs the same checks on Windows — see [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+CI runs those three checks on Windows — see [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). `--all-features` is not part of CI.
 
 ## Troubleshooting
 

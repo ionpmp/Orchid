@@ -39,8 +39,9 @@ leader-key `n` / `b`. Hidden workspaces sleep their widgets.
 | Universal search | Top edge swipe |
 | Hint mode | `Win+?` |
 
-Three-finger swipe up → `widget show all`. Four-finger left/right switches
-workspaces. Sides swap for left-hand / `mirror-edge-swipes`.
+Two-finger tap anywhere → `navigation.back`. Three-finger swipe up →
+`widget show all`. Four-finger left/right switches workspaces. Sides swap
+for left-hand / `mirror-edge-swipes`.
 
 In-app notifications persist in redb (soft cap ~50). Settings → **Windows
 notifications** (`[general].os-notifications`, off by default) also sends

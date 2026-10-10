@@ -6,7 +6,7 @@ that are not built yet live in the [roadmap](../ROADMAP.md), not here.
 | Chapter | Contents |
 |---------|----------|
 | [Workspace](workspace.md) | Canvas, dock, catalog, groups, floating windows |
-| [File manager](file-manager.md) | Panes, tools, archives, encryption, network, `.orchid` wrap |
+| [File manager](file-manager.md) | Panes, virtual folders, archives, encryption, network, Tools, `.orchid` wrap |
 | [Viewers](viewers.md) | Images, PDF, text, archives, media, HTML, DOCX / `.orchid` |
 | [Widgets](widgets.md) | Catalog types including Browser, Mail, Contacts, Agent, Optimize, Protection |
 | [Mail](mail.md) | IMAP/SMTP account wizard, reading, attachments |

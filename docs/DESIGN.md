@@ -31,8 +31,9 @@ does not change because a mouse moved.
 Settings → Appearance chooses the density. The three modes scale the UI:
 
 - **Touch:** 1.2× (48 dp targets at the 40 dp baseline)
-- **Hybrid:** 1.0×, the default. On a narrow canvas the scale moves toward
-  touch; past 1600 px it moves toward mouse
+- **Hybrid:** 1.0×, the default. Below 1100 px the scale moves from 1.2×
+  toward 1.0×. From 1100 px through 1600 px it stays 1.0×. Past 1600 px it
+  moves toward 0.8×, reaching mouse scale at 2000 px
 - **Mouse:** 0.8×
 
 The choice is stored in `[appearance].density`. It is not inferred from the

@@ -24,18 +24,22 @@ Product how-to: [`docs/user/mail.md`](../../docs/user/mail.md).
 `MailEngine::open` is constructed in `OrchidApp::bootstrap` and handed to
 `mail::descriptor`. Accounts are shared by every Mail widget.
 
-## Limits that are part of the crate
+## Engine behavior
 
 - Search is an IMAP `TEXT` query plus a filter over the cached folder.
-- IDLE waits about 90 seconds, then syncs again when the server reports mail.
+- `idle_folder` waits for the `Duration` the caller passes, then the
+  widget syncs again when the server reports mail. The Mail widget uses
+  about 90 seconds.
+- `move_message` copies one message into a destination folder and removes
+  it from the source.
+- `set_seen_many` / `set_unseen_many` set or clear `\Seen` on the UIDs the
+  caller lists, in one command. The widget passes the open folder's cached
+  list (at most 100 headers).
+
+## Limits the Mail widget adds
+
 - Compose attachments are read at send or save-draft time (at most 10 files
   and 25 MB). Forward does not copy the original files. Bcc addresses are
   part of the compose message the widget sends.
-- `move_message` copies one message into a destination folder and removes
-  it from the source. The widget only offers folders the account already
-  lists.
-- Mark read stores `\Seen` on the UIDs in the open folder's cached list
-  (at most 100) in one command. It does not walk the rest of the mailbox.
-- Mark unread clears `\Seen` on the read UIDs in that same list, also in
-  one command. Messages outside the list keep their flags.
+- The widget only offers move destinations the account already lists.
 - Rules and Microsoft Graph are not implemented.

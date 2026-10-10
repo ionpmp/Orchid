@@ -2,12 +2,12 @@
 
 ## Supported Versions
 
-During the MVP/pre-alpha phase, only the latest release is supported.
+There is no tagged release. Only the latest `main` tree is supported.
 
-| Version | Supported |
+| Tree | Supported |
 |---|---|
-| 0.1.x | ✅ Yes |
-| < 0.1 | ❌ No |
+| Latest `main` (`0.1.0` workspace, pre-alpha) | Yes |
+| Older commits | No |
 
 ## Reporting a Vulnerability
 

@@ -8,9 +8,12 @@ bridge between `orchid-widgets` snapshots and Slint models.
 
 - **`OrchidApp`** (`app`) — composition root. [`OrchidApp::bootstrap`] wires
   config, storage, the event bus, [`LocaleManager`], [`ThemeManager`],
-  `WidgetManager`, `WorkspaceManager`, terminal sessions, and every built-in
+  `WidgetManager`, `WorkspaceManager`, terminal sessions (`alacritty-grid`
+  is enabled), search (`ort` is enabled), and every built-in
   widget descriptor. [`OrchidApp::run_startup`] opens the onboarding window;
-  [`OrchidApp::run_main`] opens the workspace dashboard.
+  [`OrchidApp::run_main`] opens the workspace dashboard. `run_main` takes
+  the paths to open and an optional channel of paths forwarded by a second
+  `orchid.exe`.
 - **Config hot-reload** — a `ConfigWatcher` subscription sets a flag on
   [`ConfigUpdated`]; the next UI tick in [`MainWindowController`] re-applies
   theme, locale, density, shortcut overrides, and rebuilds the workspace model.
@@ -97,7 +100,7 @@ use orchid_ui::OrchidApp;
 let paths = OrchidPaths::resolve()?;
 let app = OrchidApp::bootstrap(paths).await?;
 // app.run_startup()?;   // first-run window
-// app.run_main(Vec::new())?;      // workspace dashboard
+// app.run_main(Vec::new(), None)?;  // workspace dashboard
 # Ok(())
 # }
 ```

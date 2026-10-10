@@ -6,7 +6,7 @@ Storage layer for Orchid. Owns two independent subsystems:
   holding history, widget instances, workspaces, file tags, session, and
   caches. Values use [`bincode_reloaded`](https://docs.rs/bincode_reloaded) 3.
   Schema version **2** (`WindowPlacement`); migrations in `state::migrations`.
-- **Configuration** — a TOML file (`config.toml`) with `serde`-driven schema, atomic saves, and an optional async [`ConfigWatcher`] that hot-reloads the configuration via `notify-debouncer-full` and broadcasts updates over a `tokio::sync::broadcast` channel. Sections include appearance, input, shortcuts, search, agent, photos, shell, and the policy URL. `policy.toml` beside the config file is a separate lock document (`policy` module); it does not rewrite values.
+- **Configuration** — a TOML file (`config.toml`) with `serde`-driven schema, atomic saves, and an optional async [`ConfigWatcher`] that hot-reloads the configuration via `notify-debouncer-full` and broadcasts updates over a `tokio::sync::broadcast` channel. Sections are `general`, `appearance`, `input`, `shortcuts`, `locale`, `privacy`, `file_manager`, `search`, `onboarding`, `terminal`, `agent`, `photos`, `shell`, and the policy URL (`policy` module, separate file). `policy.toml` beside the config file is a separate lock document (`policy` module); it does not rewrite values.
 
 OS-appropriate filesystem locations for both live on [`OrchidPaths`], resolved via the [`directories`](https://docs.rs/directories) crate.
 

@@ -48,7 +48,7 @@ Prefix every line with `orc `.
 | `workspace switch` | `workspace.switch_to` |
 | `workspace switch next` | `workspace.switch_next` |
 | `workspace switch previous` | `workspace.switch_previous` |
-| `widget group dissolve` | `group.dissolve` |
+| `widget group dissolve` | `widget.group.dissolve` |
 
 ### Terminal
 
@@ -98,14 +98,19 @@ resolved by `orchid_core::lookup_fm_action` / profile bindings.
 | `fs.tab-new` | Ctrl+T |
 | `fs.drive-root` | Ctrl+\ |
 | `fs.drives-menu` | Alt+F1 |
+| `fs.select-all` | Ctrl+A |
+| `fs.deselect-all` | Escape |
 | `fs.invert-selection` | * |
 | `fs.select-mask-add` | + |
 | `fs.select-mask-sub` | − |
 | `viewer.open` | F3 |
 | `viewer.edit` | F4 |
 
-Menu-only FM ids (`fs.copy-verify`, `fs.delete-recycle`, …) live on the
-context menu and are **not** in `PROFILE_BINDINGS`.
+Menu-only FM ids (`fs.copy-verify`, `fs.delete-recycle`, the Tools menu
+under `fs.tools`, the image and metadata suites, links, hashes, compare
+and sync, and the Windows share / versions / BitLocker items) live on the
+context menu and are **not** in `PROFILE_BINDINGS`. The user-facing list
+is [file-manager.md](user/file-manager.md).
 
 When adding a user-visible operation: register a `CommandDescriptor` with a
 `TerminalInvocation` if it should be an `orc` verb; add a `ProfileBinding`

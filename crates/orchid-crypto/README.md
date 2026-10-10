@@ -1,10 +1,12 @@
 # orchid-crypto
 
-Cryptography layer for Orchid. Three independent subsystems sharing common secret-handling primitives:
+Cryptography layer for Orchid. Subsystems sharing common secret-handling primitives:
 
 - **File encryption** (`age_encryption`) — `age`-based symmetric (passphrase) and asymmetric (X25519) encryption of files, in-memory buffers, async streams, and whole directories (tar-in-memory). Includes a `RevealManager` that decrypts into a per-session temp directory, wipes the revealed plaintext after a configurable window, and publishes bus events for UI coordination.
 - **Password database** (`kdbx`) — KDBX4 read/write via the `keepass` crate, with Orchid-facing `PasswordEntry`, `PasswordGroup`, `SearchQuery`/`SearchResult` types, TOTP helpers (`parse_otpauth_uri`, `generate_code`), and a `SecureClipboard` trait that `orchid-ui` implements.
 - **Content-addressed storage** (`content`) — BLAKE3 hashing (streaming + mmap), FastCDC chunking, and a refcount-aware `ChunkStore` backed by a local `crypto_chunk_refs` table on the existing `orchid-storage` redb database. `Deduplicator` turns files into `FileManifest`s that share chunks across inputs.
+- **Vault session** (`vault`) — `PasswordVault` and `FmPassphraseVault` hold an unlocked KDBX (or the file-manager passphrase) for the process and publish lock state.
+- **Windows Hello** (`biometric`) — `check_biometric_availability` and `verify_biometric_user` for the vault unlock path.
 
 ## Threat model
 

@@ -24,7 +24,7 @@ Be respectful. We are building a product for a diverse audience and expect the s
 1. Fork the repository ([ionpmp/Orchid](https://github.com/ionpmp/Orchid))
 2. Create a branch: `git checkout -b feat/my-feature` or `fix/issue-123`
 3. Write code following the guidelines below
-4. Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo test`
+4. Run `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace`
 5. For user-visible work, update [`CHANGELOG.md`](../CHANGELOG.md) under
    **Unreleased** (Added / Changed / Fixed / Security) **and** the matching
    [user](user/README.md) / [admin](admin/README.md) page

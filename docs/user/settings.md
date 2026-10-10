@@ -9,14 +9,14 @@ Full key list: [admin/configuration.md](../admin/configuration.md).
 
 | Section | You can change | Shown but not wired |
 |---------|----------------|---------------------|
-| General | Open on startup, Windows notifications, auto-update, telemetry | — |
+| General | Open on startup, Windows notifications, auto-update, telemetry, telemetry endpoint | — |
 | Terminal | Terminal grid (built-in or Alacritty) | — |
-| Appearance | Theme, density, font, reduce motion, follow system | — |
+| Appearance | Theme, density, font family, font scale (0.75–2.0), reduce motion, follow system | — |
 | Input | Primary hand, mirror edge swipes, palm rejection, pen double-tap, haptic feedback | — |
 | Shortcuts | Profile, remaps, leader key/timeout, leader map | — |
 | Locale | Language, date/time format, first day of week | — |
 | Privacy | History, retention, clipboard clear, vault auto-lock | — |
-| Search | Index roots, exclusions, size limit, text and PDF extraction, ONNX path | — |
+| Search | Index roots, exclusions, size limit, text extraction, rich extraction (`extract-pdf`), ONNX path | — |
 | Marketplace | Install Ink, Dawn, Pine, or Ember; add a built-in widget | — |
 | Agent | Enable Ollama or an OpenAI-compatible chat, endpoint, model, API key | — |
 | Photos | Auto-tag from folder names; find faces in the open folder | — |
@@ -31,8 +31,9 @@ Settings → Agent. Off until enabled. Universal Search `? your question`
 and the Agent widget share one transcript in `data/agent-chat.json`.
 The model may read a local text file, list one folder, and search the
 index. A file write waits until you confirm it in the Agent widget.
-Set the model name. Leave the API key blank to keep the saved key.
-**Clear key** removes it.
+Set the model name. An empty endpoint uses `http://127.0.0.1:11434` for
+Ollama and `https://api.openai.com/v1` for OpenAI. Leave the API key
+blank to keep the saved key. **Clear key** removes it.
 
 ## Shell
 
@@ -71,6 +72,19 @@ Ember) as `config/themes/<id>.json` and switches `[appearance].theme` to it.
 Remove deletes that file only when its id matches the catalog. Removing the
 active palette switches back to `orchid-dark`. **Add widget** places a
 built-in widget on the workspace. Orchid does not download widget code.
+
+## Export
+
+The command palette can write two zip archives on this computer:
+
+- `orc diagnostics export` — a support bundle. Network-mount passwords are
+  redacted. The vault is not copied.
+- `orc data export backup` — config, `state.redb`, the vault, chunks, and
+  network bookmarks. The search index, logs, cache, `data/mail`,
+  `agent-chat.json`, `photo-faces.json`, and `telemetry.jsonl` are left out.
+
+Paths and what each archive omits:
+[admin/data-and-operations.md](../admin/data-and-operations.md).
 
 ## Updates and telemetry
 

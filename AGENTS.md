@@ -19,9 +19,9 @@ work in the guides.
 ## Build & test
 
 ```bash
-cargo fmt
-cargo clippy --all-targets -- --deny warnings
-cargo test
+cargo fmt --all
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 python scripts/i18n_sync_keys.py
 ```
 

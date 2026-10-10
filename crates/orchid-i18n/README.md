@@ -44,7 +44,10 @@ This lets users patch or extend translations without rebuilding Orchid.
 | [`LocaleManager::current`] / [`set_current`] | Read or switch the active locale |
 | [`LocaleManager::available_locales`] | List registered locales |
 | [`LocaleManager::tr`] | Resolve a key in the current locale |
+| [`LocaleManager::tr_shared`] | Same lookup, returned as `Arc<str>` for Slint models |
 | [`LocaleManager::tr_args`] | Same, with Fluent placeholder arguments |
+| [`LocaleManager::format_byte_size`] | Localized byte size |
+| [`LocaleManager::format_duration_secs`] | Localized duration |
 | [`default_language`] | Returns `en-US` (fallback when a key is missing) |
 
 Missing keys fall back to `en-US`, then echo the key so untranslated strings

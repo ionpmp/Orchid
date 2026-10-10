@@ -35,11 +35,13 @@ calculator, notes, **agent**, calendar, **contacts**, **browser**
 (WebView2), RSS, universal search, now-playing (SMTC), **audio-player**,
 **video-player**, password manager, viewer, file manager, recent files.
 
-**Mail** is registered from `OrchidApp::bootstrap` with an
-`orchid_mail::MailEngine` (it is not part of `register_all`). **Terminal**
-is registered from `orchid-ui`. Catalog Document Editor / Media Player
-spawn `viewer` instances. Contacts is in `register_all` and is also
-registered in the desktop bootstrap.
+**Mail**, **viewer**, **file manager**, and **recent files** are registered
+from `OrchidApp::bootstrap` and are not part of `register_all` or
+`register_core`. **Terminal** is registered from `orchid-ui`. The desktop
+bootstrap registers widgets one by one; it does not call `register_all`.
+Catalog Document Editor / Media Player spawn `viewer` instances. Contacts
+is in `register_all` / `register_core` and is also registered on its own
+in the desktop bootstrap.
 
 Product how-to: [`docs/user/widgets.md`](../../docs/user/widgets.md).
 
@@ -72,6 +74,7 @@ let storage = Arc::new(orchid_storage::StateStore::open_in_memory("demo").unwrap
 let config = Arc::new(parking_lot::RwLock::new(orchid_storage::OrchidConfig::default()));
 
 let registry = Arc::new(WidgetRegistry::new());
+orchid_widgets::builtin::register_core(&registry, reqwest::Client::new())?;
 let jobs = Arc::new(orchid_core::BackgroundJobQueue::new());
 let widgets = WidgetManager::new(
     registry.clone(),
@@ -86,7 +89,7 @@ let workspaces = WorkspaceManager::new(bus.clone(), storage.clone());
 
 let ws = workspaces.create("Main".into()).await?;
 let id = widgets.create(CreateWidgetRequest {
-    type_id: "terminal".into(),
+    type_id: "weather".into(),
     workspace_id: ws,
     position: None,
     size: None,

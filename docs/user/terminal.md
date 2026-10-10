@@ -11,7 +11,11 @@ OSC 52, and store the OSC 7 directory. OSC 52 paste is ignored. zlib Kitty
 payloads are skipped. A session keeps the grid it opened with.
 
 **Backends:** PowerShell, cmd, WSL, SSH (`ssh://`), Custom. Custom and SSH
-extra args can spawn arbitrary processes.
+extra args can spawn arbitrary processes. The saved widget state keeps
+PowerShell, cmd, the WSL distro, and the SSH host. A Custom command is
+not stored: the next open uses the platform default (PowerShell on
+Windows). An SSH session restores the host only; user, port, jump hosts,
+identity file, and extra args are dropped.
 
 **Layout:** tabs, horizontal/vertical splits, persisted with the widget.
 Orchid-profile defaults: `Ctrl+Shift+H`/`J` split, `Ctrl+Shift+T` tab,

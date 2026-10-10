@@ -19,7 +19,7 @@ lives in the user and admin guides. **Planned** work lives only in
 
 | Document | Description |
 |----------|-------------|
-| [user/README.md](user/README.md) | Workspace, FM, viewers, widgets, mail, terminal, search, vault, settings, text mode |
+| [user/README.md](user/README.md) | Workspace, FM (including Tools), viewers, widgets, mail, terminal, search, vault, settings, text mode |
 | [admin/README.md](admin/README.md) | Install, `config.toml`, data layout, rclone, backups |
 | [jyotish.md](jyotish.md) | Jyotish widget details |
 | [DESIGN.md](DESIGN.md) | UX philosophy + cinema kit |

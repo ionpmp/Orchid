@@ -6,7 +6,7 @@ overlays. Planned systems (WASM plugins, mobile companion) are not in the
 tree — see [ROADMAP.md](ROADMAP.md). A local `policy.toml` can lock settings;
 it is not a management server.
 
-Reviewed against the tree on **2026-10-05** (`0.1.0` pre-alpha, no tagged
+Reviewed against the tree on **2026-10-08** (`0.1.0` pre-alpha, no tagged
 release).
 
 ## High-level diagram
@@ -163,6 +163,12 @@ rclone argv at use time.
 Mail speaks IMAP and SMTP itself (rustls). Implicit TLS and STARTTLS are
 accepted. Cleartext login is refused. HTML bodies render in a WebView2
 overlay with scripts disabled.
+
+File-manager tools that are not `orc` verbs (compare and sync, hashes,
+image and metadata edits, links, and on Windows shares, previous versions,
+and BitLocker) run in `orchid-widgets` on top of `orchid-fs`. Shortcut
+profiles do not bind them. Inventory: [user/file-manager.md](user/file-manager.md)
+and [commands.md](commands.md).
 
 ## Related
 

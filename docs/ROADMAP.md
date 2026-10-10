@@ -4,7 +4,7 @@ Legend: `[~]` in progress · `[ ]` not started.
 
 This file lists **planned** work only. Shipped behavior is in the
 [user guide](user/README.md), [admin guide](admin/README.md), and
-[`CHANGELOG.md`](../CHANGELOG.md). Last reviewed **2026-10-05** (`0.1.0`
+[`CHANGELOG.md`](../CHANGELOG.md). Last reviewed **2026-10-08** (`0.1.0`
 pre-alpha, no tagged release).
 
 `.orchid` spec (implemented Phases 1–5): [`ORCHID_FORMAT.md`](ORCHID_FORMAT.md).

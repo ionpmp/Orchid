@@ -81,7 +81,15 @@ on-screen snapshot.
 
 Settings → Search, and `[search]` in `config.toml`. `included-roots`
 (empty → Documents), `excluded-patterns`, `max-file-size-mib` (50, range
-1–4096), `extract-text`, `extract-pdf`. In the panel, lists are separated
+1–4096), `extract-text`, `extract-pdf`. Content is extracted only when at
+least one of those is on. `extract-text` is enough for the built-in text
+extractors (source, calendars, contacts, playlists, and the other
+plaintext formats in the user search guide). `extract-pdf` also registers
+PDF, DOCX, XLSX / XLSM, PPTX / PPTM / PPSX, EPUB, OpenDocument, RTF, HTML,
+audio tags, FictionBook, and `.eml`. The name is historical: the switch is
+the rich-extractor set, not PDF alone. PDF still needs pdfium. Turning on
+only `extract-pdf` still indexes source files, because the text extractor
+stays in the chain and extraction runs. In the panel, lists are separated
 by semicolons. Roots are Orchid `FsPath` strings
 (`local:c:/Users/Alice/Documents`). Saving roots, exclusions, or the size
 limit updates the running index. `sentence-model` is an optional path
