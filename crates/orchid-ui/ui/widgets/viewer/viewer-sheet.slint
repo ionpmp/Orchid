@@ -15,6 +15,7 @@ component PreviewCell inherits Rectangle {
     in property <int> bar-r;
     in property <int> bar-g;
     in property <int> bar-b;
+    in property <string> icon-mark;
     in property <bool> highlight;
     callback clicked();
 
@@ -37,8 +38,16 @@ component PreviewCell inherits Rectangle {
         background: rgb(root.bar-r, root.bar-g, root.bar-b);
     }
 
-    Text {
+    if root.icon-mark != "" : Text {
         x: Theme.space-1;
+        text: root.icon-mark;
+        color: Theme.text-secondary;
+        font-size: Theme.font-size-sm;
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: root.icon-mark == "" ? Theme.space-1 : Theme.space-1 + 14px;
         width: parent.width - Theme.space-1 * 2;
         text: root.cell-text;
         color: Theme.text-primary;
@@ -279,6 +288,7 @@ export component ViewerSheetView inherits Rectangle {
                         bar-r: cell.bar-r;
                         bar-g: cell.bar-g;
                         bar-b: cell.bar-b;
+                        icon-mark: cell.icon-mark;
                         clicked => {
                             root.sel-row = ri;
                             root.sel-col = ci;
@@ -323,6 +333,7 @@ export component ViewerSheetView inherits Rectangle {
                         bar-r: cell.bar-r;
                         bar-g: cell.bar-g;
                         bar-b: cell.bar-b;
+                        icon-mark: cell.icon-mark;
                             clicked => {
                                 root.sel-row = ri;
                                 root.sel-col = ci;
@@ -364,6 +375,7 @@ export component ViewerSheetView inherits Rectangle {
                         bar-r: cell.bar-r;
                         bar-g: cell.bar-g;
                         bar-b: cell.bar-b;
+                        icon-mark: cell.icon-mark;
                                 clicked => {
                                     root.sel-row = ri;
                                     root.sel-col = ci;
@@ -411,6 +423,7 @@ export component ViewerSheetView inherits Rectangle {
                         bar-r: cell.bar-r;
                         bar-g: cell.bar-g;
                         bar-b: cell.bar-b;
+                        icon-mark: cell.icon-mark;
                                 clicked => {
                                     root.sel-row = ri;
                                     root.sel-col = ci;
@@ -453,6 +466,7 @@ export component ViewerSheetView inherits Rectangle {
                         bar-r: cell.bar-r;
                         bar-g: cell.bar-g;
                         bar-b: cell.bar-b;
+                        icon-mark: cell.icon-mark;
                                 clicked => {
                                     root.sel-row = ri;
                                     root.sel-col = ci;

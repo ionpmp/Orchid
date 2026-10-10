@@ -469,6 +469,50 @@ mod tests {
     }
 
     #[test]
+    fn sheet_preview_icon_set() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Marks" sheetId="1" r:id="rId1"/><sheet name="Later" sheetId="2" r:id="rId2"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>5</v></c><c r="C1"><v>100</v></c></row><row r="2"><c r="A2"><v>50</v></c></row><row r="3"><c r="A3"><v>100</v></c></row></sheetData><conditionalFormatting sqref="A1:A3"><cfRule type="iconSet"><iconSet><cfvo type="percent" val="0"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet></cfRule></conditionalFormatting><conditionalFormatting sqref="B1"><cfRule type="iconSet"><iconSet><cfvo type="num" val="10"/><cfvo type="num" val="20"/><cfvo type="num" val="30"/></iconSet></cfRule></conditionalFormatting><conditionalFormatting sqref="B1"><cfRule type="iconSet"><iconSet><cfvo type="percent" val="0"/><cfvo type="percent" val="0"/><cfvo type="percent" val="0"/></iconSet></cfRule></conditionalFormatting><conditionalFormatting sqref="C1"><cfRule type="iconSet"><iconSet reverse="1"><cfvo type="percent" val="0"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet></cfRule></conditionalFormatting><conditionalFormatting sqref="C1"><cfRule type="iconSet"><iconSet><cfvo type="percent" val="0"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet></cfRule></conditionalFormatting></worksheet>"#,
+            ),
+            (
+                "xl/worksheets/sheet2.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="D1"><v>100</v></c><c r="E1"><v>10</v></c><c r="G1"><v>0</v></c><c r="H1"><v>100</v></c></row><row r="2"><c r="G2"><v>100</v></c></row></sheetData><conditionalFormatting sqref="D1"><cfRule type="iconSet"><iconSet><cfvo type="formula" val="1"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet></cfRule></conditionalFormatting><conditionalFormatting sqref="D1"><cfRule type="iconSet"><iconSet><cfvo type="percent" val="0"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet></cfRule></conditionalFormatting><conditionalFormatting sqref="E1"><cfRule type="iconSet"><iconSet><cfvo type="percent" val="0"/><cfvo type="percent" val="50"/><cfvo type="percent" val="100"/><icon iconSet="3Arrows" iconId="0"/></iconSet></cfRule></conditionalFormatting><conditionalFormatting sqref="G1:G2"><cfRule type="iconSet"><iconSet><cfvo type="percent" val="0"/><cfvo type="percent" val="50"/><cfvo type="percent" val="90"/></iconSet></cfRule></conditionalFormatting><conditionalFormatting sqref="G1"><cfRule type="iconSet"><iconSet><cfvo type="num" val="0"/><cfvo type="num" val="0"/><cfvo type="num" val="0"/></iconSet></cfRule></conditionalFormatting><conditionalFormatting sqref="H1"><cfRule type="iconSet"><iconSet><cfvo type="percent" val="0"/><cfvo type="percent" val="25"/><cfvo type="percent" val="50"/><cfvo type="percent" val="75"/></iconSet></cfRule></conditionalFormatting></worksheet>"#,
+            ),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let cell = |sheet: usize, address: &str| {
+            book.sheets[sheet]
+                .rows
+                .iter()
+                .flatten()
+                .find(|cell| cell.address == address)
+                .unwrap_or_else(|| panic!("missing {address}"))
+        };
+        assert_eq!(cell(0, "A1").icon, 1, "0 meets only the first percent");
+        assert_eq!(cell(0, "A2").icon, 2, "50 meets the 33 percent");
+        assert_eq!(cell(0, "A3").icon, 3, "100 meets every percent");
+        assert_eq!(cell(0, "B1").icon, 0, "5 is below every number");
+        assert!(cell(0, "B1").has_icon, "the first set still takes the cell");
+        assert_eq!(cell(0, "C1").icon, 3, "reverse does not count");
+        assert_eq!(cell(1, "D1").icon, 3, "a formula threshold does not count");
+        assert!(!cell(1, "E1").has_icon, "an icon child drops the set");
+        assert_eq!(cell(1, "G1").icon, 1, "the first set wins");
+        assert_eq!(cell(1, "H1").icon, 4, "four thresholds");
+    }
+
+    #[test]
     fn sheet_preview_merges_and_widths() {
         let bytes = zip_bytes(&[
             (

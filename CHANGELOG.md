@@ -127,7 +127,17 @@ release yet.
   theme color, more or fewer than two stops, a stop that falls, or a range
   larger than 32 cells leaves that bar undrawn and does not count toward
   the 4. The first bar that covers a cell wins. Hidden rows are already
-  omitted. Icon sets are still skipped. The bar is not written back. The
+  omitted. An icon set is also separate. At most 4 sets are drawn. Each
+  range is at most 32 cells. A set has 3, 4, or 5 thresholds: min, a number,
+  a percentile from 0 through 100, or a percent of the span from the lowest
+  preview number to the highest. The preview shows a digit from 1 through 5,
+  the highest threshold the number still meets. A value below every threshold
+  shows no digit, and that cell is still taken by the set. The digit is not
+  an Excel icon picture. `reverse`, an `icon` child, a formula threshold, any
+  other threshold, fewer or more stops, or a range larger than 32 cells
+  leaves that set undrawn and does not count toward the 4. The first set that
+  covers a cell wins. Hidden rows are already omitted. The digit is not
+  written back. The bar is not written back. The
   fill is not written back. A range larger than 32
   cells is skipped. The highlight is not written back and formulas do not
   use it. A selected cell can show a legacy comment from the worksheet

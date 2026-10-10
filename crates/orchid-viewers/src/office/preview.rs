@@ -108,6 +108,7 @@ fn render_sheets<R: Read + Seek>(
         apply_highlights(&mut rows, &conditional_rules(&xml));
         apply_color_scales(&mut rows, &color_scales(&xml));
         apply_data_bars(&mut rows, &data_bars(&xml));
+        apply_icon_sets(&mut rows, &icon_sets(&xml));
         apply_notes(&mut rows, &load_threaded_notes(archive, path));
         apply_notes(&mut rows, &load_sheet_notes(archive, path));
         apply_sheet_layout(&mut rows, &xml);
@@ -1282,6 +1283,175 @@ fn bar_percent(number: f64, low: f64, high: f64) -> u8 {
     (portion * 100.0).round() as u8
 }
 
+#[derive(Clone, Copy)]
+enum IconStop {
+    Min,
+    Num(f64),
+    Percentile(f64),
+    Percent(f64),
+}
+
+struct IconRule {
+    cells: Vec<String>,
+    stops: Vec<IconStop>,
+}
+
+fn icon_stop(kind: &str, value: &str) -> Option<IconStop> {
+    if kind.eq_ignore_ascii_case("min") {
+        Some(IconStop::Min)
+    } else if kind.eq_ignore_ascii_case("num") {
+        Some(IconStop::Num(plain_preview_number(value)?))
+    } else if kind.eq_ignore_ascii_case("percentile") || kind.eq_ignore_ascii_case("percent") {
+        let number = plain_preview_number(value)?;
+        if !(0.0..=100.0).contains(&number) {
+            return None;
+        }
+        if kind.eq_ignore_ascii_case("percentile") {
+            Some(IconStop::Percentile(number))
+        } else {
+            Some(IconStop::Percent(number))
+        }
+    } else {
+        None
+    }
+}
+
+fn icon_sets(xml: &str) -> Vec<IconRule> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut sets = Vec::new();
+    let mut sqref = String::new();
+    let mut in_rule = false;
+    let mut rejected = false;
+    let mut stops = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event) | Event::Empty(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "conditionalFormatting" {
+                    sqref = attr(&event, "sqref");
+                } else if name == "cfRule"
+                    && attr(&event, "type").eq_ignore_ascii_case("iconSet")
+                    && sets.len() < 4
+                {
+                    in_rule = true;
+                    rejected = false;
+                    stops.clear();
+                } else if in_rule && name == "iconSet" {
+                    let reverse = attr(&event, "reverse");
+                    if reverse == "1" || reverse.eq_ignore_ascii_case("true") {
+                        rejected = true;
+                    }
+                } else if in_rule && name == "icon" {
+                    rejected = true;
+                } else if in_rule && name == "cfvo" {
+                    if stops.len() >= 5 {
+                        rejected = true;
+                    } else if let Some(stop) =
+                        icon_stop(&attr(&event, "type"), &attr(&event, "val"))
+                    {
+                        stops.push(stop);
+                    } else {
+                        rejected = true;
+                    }
+                }
+            }
+            Ok(Event::End(event)) => {
+                if local_name(event.name().as_ref()) == "cfRule" && in_rule {
+                    in_rule = false;
+                    if !rejected && (3..=5).contains(&stops.len()) && sets.len() < 4 {
+                        if let Some(cells) = sqref_cells(&sqref) {
+                            sets.push(IconRule {
+                                cells,
+                                stops: stops.clone(),
+                            });
+                        }
+                    }
+                    stops.clear();
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    sets
+}
+
+fn icon_threshold(stop: &IconStop, sorted: &[f64]) -> Option<f64> {
+    let low = *sorted.first()?;
+    let high = *sorted.last()?;
+    let value = match stop {
+        IconStop::Min => low,
+        IconStop::Num(number) => *number,
+        IconStop::Percentile(percent) => percentile_inc(sorted, *percent),
+        IconStop::Percent(percent) => low + percent / 100.0 * (high - low),
+    };
+    value.is_finite().then_some(value)
+}
+
+fn icon_digit(number: f64, thresholds: &[f64]) -> u8 {
+    let mut digit = 0u8;
+    for (index, threshold) in thresholds.iter().enumerate() {
+        if number + 1e-9 >= *threshold {
+            digit = (index + 1) as u8;
+        }
+    }
+    digit
+}
+
+fn apply_icon_sets(rows: &mut [Vec<SheetCell>], sets: &[IconRule]) {
+    let mut numbers = std::collections::HashMap::new();
+    for row in rows.iter() {
+        for cell in row {
+            if let Some(number) = plain_preview_number(&cell.text) {
+                numbers.insert(cell.address.to_ascii_uppercase(), number);
+            }
+        }
+    }
+    for set in sets {
+        let samples: Vec<f64> = set
+            .cells
+            .iter()
+            .filter_map(|address| numbers.get(&address.to_ascii_uppercase()).copied())
+            .collect();
+        if samples.is_empty() {
+            continue;
+        }
+        let mut sorted = samples;
+        sorted.sort_by(f64::total_cmp);
+        let thresholds: Vec<f64> = set
+            .stops
+            .iter()
+            .filter_map(|stop| icon_threshold(stop, &sorted))
+            .collect();
+        if thresholds.len() != set.stops.len() {
+            continue;
+        }
+        for row in rows.iter_mut() {
+            for cell in row.iter_mut() {
+                if cell.has_icon {
+                    continue;
+                }
+                let address = cell.address.to_ascii_uppercase();
+                if !set
+                    .cells
+                    .iter()
+                    .any(|item| item.eq_ignore_ascii_case(&address))
+                {
+                    continue;
+                }
+                let Some(number) = numbers.get(&address).copied() else {
+                    continue;
+                };
+                cell.icon = icon_digit(number, &thresholds);
+                cell.has_icon = true;
+            }
+        }
+    }
+}
+
 fn apply_data_bars(rows: &mut [Vec<SheetCell>], bars: &[DataBar]) {
     let mut numbers = std::collections::HashMap::new();
     for row in rows.iter() {
@@ -1630,6 +1800,8 @@ fn place(row: &mut Vec<SheetCell>, col: usize, text: String, address: String) {
         bar_g: 0,
         bar_b: 0,
         has_bar: false,
+        icon: 0,
+        has_icon: false,
         note: String::new(),
         span: 1,
         covered: false,

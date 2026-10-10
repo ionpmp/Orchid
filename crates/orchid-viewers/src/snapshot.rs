@@ -652,6 +652,10 @@ pub struct SheetCell {
     pub bar_b: u8,
     /// True when a data bar covers this cell.
     pub has_bar: bool,
+    /// Icon-set digit from 1 through 5. `0` draws nothing.
+    pub icon: u8,
+    /// True when an icon set covers this cell, even if `icon` is 0.
+    pub has_icon: bool,
     /// Legacy cell comment shown in the preview. Empty when the cell has none.
     pub note: String,
     /// Columns covered by this cell, including itself.

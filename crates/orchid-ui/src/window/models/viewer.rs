@@ -784,6 +784,11 @@ fn build_sheet_model(
                             bar_g: i32::from(cell.bar_g),
                             bar_b: i32::from(cell.bar_b),
                             has_bar: cell.has_bar,
+                            icon_mark: if cell.icon > 0 {
+                                cell.icon.to_string().into()
+                            } else {
+                                SharedString::new()
+                            },
                             note: cell.note.clone().into(),
                             covered: cell.covered,
                             width_px: i32::try_from(cell.width_px).unwrap_or(72),
