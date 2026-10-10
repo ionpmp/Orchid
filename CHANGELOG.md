@@ -108,8 +108,21 @@ release yet.
   than 32 cells leaves that scale undrawn and does not count toward the 4.
   The first scale that covers a cell wins. When every stop is the same
   number, the first color is used. Hidden rows are already omitted, so they
-  are not part of min, max, or a percentile. Data bars and icon sets are
-  still skipped. The fill is not written back. A range larger than 32
+  are not part of min, max, or a percentile. A data bar is also separate
+  from those 8 rules and from the 4 scales. At most 4 bars are drawn. Each
+  range is at most 32 cells. A bar has two stops: min, max, a number, or a
+  percentile from 0 through 100. The length is that cell's preview number
+  as a percent of the span from the low stop to the high stop, from 0
+  through 100. A value below the low stop draws nothing and a value above
+  the high stop fills the cell. When both stops are the same number, the
+  bar is full. The color is one solid `rgb` hex value. A bar with no color
+  uses 638EC6. There is no gradient, border, axis, or separate negative
+  color. `minLength` and `maxLength` are not applied. A formula stop, a
+  theme color, more or fewer than two stops, a stop that falls, or a range
+  larger than 32 cells leaves that bar undrawn and does not count toward
+  the 4. The first bar that covers a cell wins. Hidden rows are already
+  omitted. Icon sets are still skipped. The bar is not written back. The
+  fill is not written back. A range larger than 32
   cells is skipped. The highlight is not written back and formulas do not
   use it. A selected cell can show a legacy comment from the worksheet
   comments part. At most 32 comments are read, each note is at most 256

@@ -642,6 +642,16 @@ pub struct SheetCell {
     pub fill_b: u8,
     /// True when a color scale painted this cell.
     pub has_fill: bool,
+    /// Data-bar length as a percent of the cell width, from 0 through 100.
+    pub bar_pct: u8,
+    /// Red channel of a data bar. Ignored when `has_bar` is false.
+    pub bar_r: u8,
+    /// Green channel of a data bar. Ignored when `has_bar` is false.
+    pub bar_g: u8,
+    /// Blue channel of a data bar. Ignored when `has_bar` is false.
+    pub bar_b: u8,
+    /// True when a data bar covers this cell.
+    pub has_bar: bool,
     /// Legacy cell comment shown in the preview. Empty when the cell has none.
     pub note: String,
     /// Columns covered by this cell, including itself.

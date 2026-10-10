@@ -10,6 +10,11 @@ component PreviewCell inherits Rectangle {
     in property <int> fill-r;
     in property <int> fill-g;
     in property <int> fill-b;
+    in property <bool> has-bar;
+    in property <int> bar-pct;
+    in property <int> bar-r;
+    in property <int> bar-g;
+    in property <int> bar-b;
     in property <bool> highlight;
     callback clicked();
 
@@ -22,6 +27,14 @@ component PreviewCell inherits Rectangle {
 
     cell-ta := TouchArea {
         clicked => { root.clicked(); }
+    }
+
+    if root.has-bar && root.bar-pct > 0 : Rectangle {
+        x: 1px;
+        y: 20%;
+        height: 60%;
+        width: root.bar-pct * 1%;
+        background: rgb(root.bar-r, root.bar-g, root.bar-b);
     }
 
     Text {
@@ -261,6 +274,11 @@ export component ViewerSheetView inherits Rectangle {
                         fill-g: cell.fill-g;
                         fill-b: cell.fill-b;
                         highlight: cell.highlight;
+                        has-bar: cell.has-bar;
+                        bar-pct: cell.bar-pct;
+                        bar-r: cell.bar-r;
+                        bar-g: cell.bar-g;
+                        bar-b: cell.bar-b;
                         clicked => {
                             root.sel-row = ri;
                             root.sel-col = ci;
@@ -300,6 +318,11 @@ export component ViewerSheetView inherits Rectangle {
                             fill-g: cell.fill-g;
                             fill-b: cell.fill-b;
                             highlight: cell.highlight;
+                        has-bar: cell.has-bar;
+                        bar-pct: cell.bar-pct;
+                        bar-r: cell.bar-r;
+                        bar-g: cell.bar-g;
+                        bar-b: cell.bar-b;
                             clicked => {
                                 root.sel-row = ri;
                                 root.sel-col = ci;
@@ -336,6 +359,11 @@ export component ViewerSheetView inherits Rectangle {
                                 fill-g: cell.fill-g;
                                 fill-b: cell.fill-b;
                                 highlight: cell.highlight;
+                        has-bar: cell.has-bar;
+                        bar-pct: cell.bar-pct;
+                        bar-r: cell.bar-r;
+                        bar-g: cell.bar-g;
+                        bar-b: cell.bar-b;
                                 clicked => {
                                     root.sel-row = ri;
                                     root.sel-col = ci;
@@ -378,6 +406,11 @@ export component ViewerSheetView inherits Rectangle {
                                 fill-g: cell.fill-g;
                                 fill-b: cell.fill-b;
                                 highlight: cell.highlight;
+                        has-bar: cell.has-bar;
+                        bar-pct: cell.bar-pct;
+                        bar-r: cell.bar-r;
+                        bar-g: cell.bar-g;
+                        bar-b: cell.bar-b;
                                 clicked => {
                                     root.sel-row = ri;
                                     root.sel-col = ci;
@@ -415,6 +448,11 @@ export component ViewerSheetView inherits Rectangle {
                                 fill-g: cell.fill-g;
                                 fill-b: cell.fill-b;
                                 highlight: cell.highlight;
+                        has-bar: cell.has-bar;
+                        bar-pct: cell.bar-pct;
+                        bar-r: cell.bar-r;
+                        bar-g: cell.bar-g;
+                        bar-b: cell.bar-b;
                                 clicked => {
                                     root.sel-row = ri;
                                     root.sel-col = ci;

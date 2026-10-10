@@ -13501,6 +13501,7 @@ fn render_sheets<R: Read + Seek>(
         );
         apply_highlights(&mut rows, &conditional_rules(&xml));
         apply_color_scales(&mut rows, &color_scales(&xml));
+        apply_data_bars(&mut rows, &data_bars(&xml));
         apply_notes(&mut rows, &load_sheet_notes(archive, path));
         apply_sheet_layout(&mut rows, &xml);
         if rows.is_empty() {
@@ -14368,6 +14369,167 @@ fn apply_color_scales(rows: &mut [Vec<SheetCell>], scales: &[ColorScale]) {
     }
 }
 
+const DATA_BAR_DEFAULT: (u8, u8, u8) = (0x63, 0x8E, 0xC6);
+
+struct DataBar {
+    cells: Vec<String>,
+    low: ScaleStop,
+    high: ScaleStop,
+    color: (u8, u8, u8),
+}
+
+fn data_bars(xml: &str) -> Vec<DataBar> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut bars = Vec::new();
+    let mut sqref = String::new();
+    let mut in_bar = false;
+    let mut rejected = false;
+    let mut stops = Vec::new();
+    let mut color = None;
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event) | Event::Empty(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "conditionalFormatting" {
+                    sqref = attr(&event, "sqref");
+                } else if name == "cfRule"
+                    && attr(&event, "type").eq_ignore_ascii_case("dataBar")
+                    && bars.len() < 4
+                {
+                    in_bar = true;
+                    rejected = false;
+                    stops.clear();
+                    color = None;
+                } else if in_bar && name == "cfvo" {
+                    if stops.len() >= 2 {
+                        rejected = true;
+                    } else if let Some(stop) =
+                        scale_stop(&attr(&event, "type"), &attr(&event, "val"))
+                    {
+                        stops.push(stop);
+                    } else {
+                        rejected = true;
+                    }
+                } else if in_bar && name == "color" {
+                    if color.is_some() {
+                        rejected = true;
+                    } else if let Some(rgb) = parse_rgb(&attr(&event, "rgb")) {
+                        color = Some(rgb);
+                    } else {
+                        rejected = true;
+                    }
+                }
+            }
+            Ok(Event::End(event)) => {
+                if local_name(event.name().as_ref()) == "cfRule" && in_bar {
+                    in_bar = false;
+                    if !rejected && stops.len() == 2 && bars.len() < 4 {
+                        let falling = match (&stops[0], &stops[1]) {
+                            (
+                                ScaleStop::Num(earlier) | ScaleStop::Percentile(earlier),
+                                ScaleStop::Num(later) | ScaleStop::Percentile(later),
+                            ) => *later + 1e-9 < *earlier,
+                            _ => false,
+                        };
+                        if !falling {
+                            if let Some(cells) = sqref_cells(&sqref) {
+                                let mut taken = stops.drain(..);
+                                let low = taken.next().unwrap_or(ScaleStop::Min);
+                                let high = taken.next().unwrap_or(ScaleStop::Max);
+                                bars.push(DataBar {
+                                    cells,
+                                    low,
+                                    high,
+                                    color: color.unwrap_or(DATA_BAR_DEFAULT),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    bars
+}
+
+fn stop_number(kind: &ScaleStop, sorted: &[f64]) -> Option<f64> {
+    let value = match kind {
+        ScaleStop::Min => sorted[0],
+        ScaleStop::Max => sorted[sorted.len() - 1],
+        ScaleStop::Num(number) => *number,
+        ScaleStop::Percentile(percent) => percentile_inc(sorted, *percent),
+    };
+    value.is_finite().then_some(value)
+}
+
+fn bar_percent(number: f64, low: f64, high: f64) -> u8 {
+    if (high - low).abs() < 1e-12 {
+        return 100;
+    }
+    let portion = ((number - low) / (high - low)).clamp(0.0, 1.0);
+    (portion * 100.0).round() as u8
+}
+
+fn apply_data_bars(rows: &mut [Vec<SheetCell>], bars: &[DataBar]) {
+    let mut numbers = std::collections::HashMap::new();
+    for row in rows.iter() {
+        for cell in row {
+            if let Some(number) = plain_preview_number(&cell.text) {
+                numbers.insert(cell.address.to_ascii_uppercase(), number);
+            }
+        }
+    }
+    for bar in bars {
+        let samples: Vec<f64> = bar
+            .cells
+            .iter()
+            .filter_map(|address| numbers.get(&address.to_ascii_uppercase()).copied())
+            .collect();
+        if samples.is_empty() {
+            continue;
+        }
+        let mut sorted = samples;
+        sorted.sort_by(f64::total_cmp);
+        let Some(low) = stop_number(&bar.low, &sorted) else {
+            continue;
+        };
+        let Some(high) = stop_number(&bar.high, &sorted) else {
+            continue;
+        };
+        if high + 1e-9 < low {
+            continue;
+        }
+        for row in rows.iter_mut() {
+            for cell in row.iter_mut() {
+                if cell.has_bar {
+                    continue;
+                }
+                let address = cell.address.to_ascii_uppercase();
+                if !bar
+                    .cells
+                    .iter()
+                    .any(|item| item.eq_ignore_ascii_case(&address))
+                {
+                    continue;
+                }
+                let Some(number) = numbers.get(&address).copied() else {
+                    continue;
+                };
+                cell.bar_pct = bar_percent(number, low, high);
+                cell.bar_r = bar.color.0;
+                cell.bar_g = bar.color.1;
+                cell.bar_b = bar.color.2;
+                cell.has_bar = true;
+            }
+        }
+    }
+}
+
 fn apply_highlights(rows: &mut [Vec<SheetCell>], rules: &[CfRule]) {
     let mut values = std::collections::HashMap::new();
     for row in rows.iter() {
@@ -14826,6 +14988,11 @@ fn place(row: &mut Vec<SheetCell>, col: usize, text: String, address: String) {
         fill_g: 0,
         fill_b: 0,
         has_fill: false,
+        bar_pct: 0,
+        bar_r: 0,
+        bar_g: 0,
+        bar_b: 0,
+        has_bar: false,
         note: String::new(),
         span: 1,
         covered: false,
@@ -15450,6 +15617,58 @@ mod tests {
         painted("D1", 255, 0, 0);
         for address in ["E1", "F1", "G1", "I1", "J1", "K1"] {
             assert!(!cell(address).has_fill, "{address} stays unpainted");
+        }
+    }
+
+    #[test]
+    fn sheet_preview_data_bar() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>8</v></c><c r="C1"><v>3</v></c><c r="D1"><v>25</v></c><c r="E1"><v>150</v></c><c r="F1"><v>-10</v></c><c r="G1"><v>4</v></c><c r="H1"><v>7</v></c><c r="I1"><v>5</v></c><c r="J1"><v>6</v></c><c r="K1"><v>-10</v></c><c r="L1"><v>-6</v></c><c r="M1"><v>-2</v></c><c r="N1" t="inlineStr"><is><t>x</t></is></c></row><row r="2"><c r="A2"><v>50</v></c></row><row r="3"><c r="A3"><v>100</v></c></row></sheetData><conditionalFormatting sqref="I1:I33"><cfRule type="dataBar"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FFFF0000"/></dataBar></cfRule></conditionalFormatting><conditionalFormatting sqref="H1"><cfRule type="dataBar"><dataBar><cfvo type="formula" val="0"/><cfvo type="max"/><color rgb="FFFF0000"/></dataBar></cfRule></conditionalFormatting><conditionalFormatting sqref="J1"><cfRule type="dataBar"><dataBar><cfvo type="min"/><cfvo type="max"/><color theme="4"/></dataBar></cfRule></conditionalFormatting><conditionalFormatting sqref="G1"><cfRule type="dataBar"><dataBar><cfvo type="num" val="10"/><cfvo type="num" val="0"/><color rgb="FFFF0000"/></dataBar></cfRule></conditionalFormatting><conditionalFormatting sqref="A1:A3"><cfRule type="dataBar"><dataBar><cfvo type="percentile" val="0"/><cfvo type="percentile" val="100"/><color rgb="FF0000FF"/></dataBar></cfRule><cfRule type="dataBar"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FFFF0000"/></dataBar></cfRule></conditionalFormatting><conditionalFormatting sqref="D1 E1 F1"><cfRule type="colorScale"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="FFFF0000"/><color rgb="FF00FF00"/></colorScale></cfRule><cfRule type="dataBar"><dataBar><cfvo type="num" val="0"/><cfvo type="num" val="100"/><color rgb="FF00FF00"/></dataBar></cfRule></conditionalFormatting><conditionalFormatting sqref="K1:M1 N1"><cfRule type="dataBar"><dataBar><cfvo type="min"/><cfvo type="max"/></dataBar></cfRule></conditionalFormatting><conditionalFormatting sqref="B1"><cfRule type="dataBar"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF112233"/></dataBar></cfRule></conditionalFormatting><conditionalFormatting sqref="C1"><cfRule type="iconSet"><iconSet><cfvo type="percent" val="0"/></iconSet></cfRule></conditionalFormatting></worksheet>"#,
+            ),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let cell = |address: &str| {
+            book.sheets[0]
+                .rows
+                .iter()
+                .flatten()
+                .find(|cell| cell.address == address)
+                .unwrap_or_else(|| panic!("missing {address}"))
+        };
+        let barred = |address: &str, pct: u8, red: u8, green: u8, blue: u8| {
+            let cell = cell(address);
+            assert!(cell.has_bar, "{address} should have a bar");
+            assert_eq!(
+                (cell.bar_pct, cell.bar_r, cell.bar_g, cell.bar_b),
+                (pct, red, green, blue),
+                "{address}"
+            );
+        };
+        barred("A1", 0, 0, 0, 255);
+        barred("A2", 50, 0, 0, 255);
+        barred("A3", 100, 0, 0, 255);
+        barred("D1", 25, 0, 255, 0);
+        barred("E1", 100, 0, 255, 0);
+        barred("F1", 0, 0, 255, 0);
+        assert!(cell("D1").has_fill, "a color scale still paints");
+        barred("K1", 0, 0x63, 0x8E, 0xC6);
+        barred("L1", 50, 0x63, 0x8E, 0xC6);
+        barred("M1", 100, 0x63, 0x8E, 0xC6);
+        for address in ["B1", "C1", "G1", "H1", "I1", "J1", "N1"] {
+            assert!(!cell(address).has_bar, "{address} stays without a bar");
         }
     }
 
