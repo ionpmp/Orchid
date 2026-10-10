@@ -126,8 +126,11 @@ release yet.
   cells is skipped. The highlight is not written back and formulas do not
   use it. A selected cell can show a legacy comment from the worksheet
   comments part. At most 32 comments are read, each note is at most 256
-  characters, and the author is ignored. Threaded comments are not read.
-  The note is not editable and is not written back. The preview reads at
+  characters, and the author is ignored. Threaded comments are read from
+  the threaded-comment part. At most 32 are read. Each note is at most 256
+  characters. Replies on the same cell are joined with a newline, then cut
+  to 256 characters. The person id is ignored. A legacy comment on the same
+  cell is the one shown. The note is not editable and is not written back. The preview reads at
   most 16 merged ranges. Each range covers at most 8 columns and 8 rows.
   The origin cell widens across those columns, and the other cells in the
   range are hidden. The row does not grow taller. Column widths come from

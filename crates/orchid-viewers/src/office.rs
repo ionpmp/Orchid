@@ -13727,6 +13727,7 @@ fn render_sheets<R: Read + Seek>(
         apply_highlights(&mut rows, &conditional_rules(&xml));
         apply_color_scales(&mut rows, &color_scales(&xml));
         apply_data_bars(&mut rows, &data_bars(&xml));
+        apply_notes(&mut rows, &load_threaded_notes(archive, path));
         apply_notes(&mut rows, &load_sheet_notes(archive, path));
         apply_sheet_layout(&mut rows, &xml);
         if rows.is_empty() {
@@ -14233,6 +14234,104 @@ fn comments_target(rels: &str) -> Option<String> {
         }
     }
     None
+}
+
+fn threaded_target(rels: &str) -> Option<String> {
+    let mut index = 0usize;
+    while let Some(at) = rels[index..].find("<Relationship ") {
+        let start = index + at;
+        let Some(end) = rels[start..].find('>') else {
+            break;
+        };
+        let tag = &rels[start..start + end];
+        index = start + end + 1;
+        let target = xml_attr(tag, "Target").unwrap_or_default();
+        let kind = xml_attr(tag, "Type").unwrap_or_default();
+        if !target.is_empty() && kind.to_ascii_lowercase().ends_with("/threadedcomment") {
+            return Some(target);
+        }
+    }
+    None
+}
+
+fn load_threaded_notes<R: Read + Seek>(
+    archive: &mut ZipArchive<R>,
+    path: &str,
+) -> Vec<(String, String)> {
+    let Some(rels_path) = rels_for(path) else {
+        return Vec::new();
+    };
+    let Some(rels) = read_entry(archive, &rels_path) else {
+        return Vec::new();
+    };
+    let Some(target) = threaded_target(&rels) else {
+        return Vec::new();
+    };
+    let Some(xml) = read_entry(archive, &join_target(path, &target)) else {
+        return Vec::new();
+    };
+    threaded_notes(&xml)
+}
+
+fn threaded_notes(xml: &str) -> Vec<(String, String)> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut notes: Vec<(String, String)> = Vec::new();
+    let mut reference = String::new();
+    let mut text = String::new();
+    let mut in_comment = false;
+    let mut in_text = false;
+    let mut count = 0u32;
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "threadedComment" && count < 32 {
+                    in_comment = true;
+                    in_text = false;
+                    reference = attr(&event, "ref");
+                    text.clear();
+                } else if in_comment && name == "text" {
+                    in_text = true;
+                }
+            }
+            Ok(Event::Text(event)) if in_text => {
+                text.push_str(&xml_text(event.as_ref()));
+            }
+            Ok(Event::GeneralRef(entity)) if in_text => {
+                text.push_str(entity_text(entity.as_ref()));
+            }
+            Ok(Event::End(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "text" {
+                    in_text = false;
+                } else if name == "threadedComment" && in_comment {
+                    in_comment = false;
+                    count += 1;
+                    let piece: String = text.chars().take(256).collect();
+                    let reference = reference.trim().to_ascii_uppercase();
+                    if reference.is_empty() || piece.is_empty() {
+                        continue;
+                    }
+                    if let Some((_, existing)) = notes
+                        .iter_mut()
+                        .find(|(item, _)| item.eq_ignore_ascii_case(&reference))
+                    {
+                        existing.push('\n');
+                        existing.push_str(&piece);
+                        *existing = existing.chars().take(256).collect();
+                    } else {
+                        notes.push((reference, piece));
+                    }
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    notes
 }
 
 fn load_sheet_notes<R: Read + Seek>(
@@ -16112,6 +16211,65 @@ mod tests {
         assert_eq!(cell("A1").note, "Hello & there");
         assert_eq!(cell("D1").note, "One two");
         assert!(cell("B1").note.is_empty(), "the 33rd comment is ignored");
+    }
+
+    #[test]
+    fn sheet_preview_threaded_comments() {
+        let long = "a".repeat(300);
+        let mut threaded = format!(
+            r#"<threadedComments><threadedComment ref="A1" personId="p1"><text>Later</text></threadedComment><threadedComment ref="B1" personId="p1"><text>One</text></threadedComment><threadedComment ref="B1" parentId="p1"><text>Two</text></threadedComment><threadedComment ref="C1"><text>{long}</text></threadedComment><threadedComment ref="E1"><text>Plain</text></threadedComment>"#
+        );
+        for index in 1..=27 {
+            threaded.push_str(&format!(
+                r#"<threadedComment ref="Z{index}"><text>skip</text></threadedComment>"#
+            ));
+        }
+        threaded.push_str(
+            r#"<threadedComment ref="D1"><text>Late</text></threadedComment></threadedComments>"#,
+        );
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/_rels/sheet1.xml.rels",
+                r#"<Relationships><Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/><Relationship Id="rId6" Type="http://schemas.microsoft.com/office/2017/10/relationships/threadedComment" Target="../threadedComments/threadedComment1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/comments1.xml",
+                r#"<comments><commentList><comment ref="A1"><text><t>Keep</t></text></comment></commentList></comments>"#,
+            ),
+            ("xl/threadedComments/threadedComment1.xml", &threaded),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c><c r="C1"><v>3</v></c><c r="D1"><v>4</v></c><c r="E1"><v>5</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let cell = |address: &str| {
+            book.sheets[0]
+                .rows
+                .iter()
+                .flatten()
+                .find(|cell| cell.address == address)
+                .unwrap_or_else(|| panic!("missing {address}"))
+        };
+        assert_eq!(cell("A1").note, "Keep");
+        assert_eq!(cell("B1").note, "One\nTwo");
+        assert_eq!(cell("C1").note, "a".repeat(256));
+        assert_eq!(cell("E1").note, "Plain");
+        assert!(
+            cell("D1").note.is_empty(),
+            "the 33rd threaded comment is ignored"
+        );
     }
 
     #[test]
