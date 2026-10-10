@@ -13297,6 +13297,63 @@ fn is_plain_number(text: &str) -> bool {
     true
 }
 
+fn split_count(text: &str, cap: u32) -> u32 {
+    let Some(number) = plain_preview_number(text) else {
+        return 0;
+    };
+    if number <= 0.0 {
+        return 0;
+    }
+    number.min(f64::from(cap)).trunc() as u32
+}
+
+fn pane_splits(event: &quick_xml::events::BytesStart<'_>) -> (u32, u32) {
+    let state = attr(event, "state");
+    if !state.eq_ignore_ascii_case("frozen") && !state.eq_ignore_ascii_case("frozenSplit") {
+        return (0, 0);
+    }
+    (
+        split_count(&attr(event, "ySplit"), 8),
+        split_count(&attr(event, "xSplit"), 4),
+    )
+}
+
+fn frozen_splits(xml: &str) -> (u32, u32) {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut in_view = false;
+    let mut saw_view = false;
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "sheetView" && !saw_view {
+                    in_view = true;
+                    saw_view = true;
+                } else if in_view && name == "pane" {
+                    return pane_splits(&event);
+                }
+            }
+            Ok(Event::Empty(event)) => {
+                let name = local_name(event.name().as_ref());
+                if in_view && name == "pane" {
+                    return pane_splits(&event);
+                }
+            }
+            Ok(Event::End(event)) => {
+                if local_name(event.name().as_ref()) == "sheetView" {
+                    in_view = false;
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    (0, 0)
+}
+
 fn render_sheets<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
 ) -> std::result::Result<SheetBook, String> {
@@ -13324,10 +13381,13 @@ fn render_sheets<R: Read + Seek>(
         if rows.is_empty() {
             continue;
         }
+        let (freeze_rows, freeze_cols) = frozen_splits(&xml);
         pages.push(SheetPage {
             name: name.clone(),
             rows,
             truncated,
+            freeze_rows,
+            freeze_cols,
         });
     }
     let shown = pages.len();
@@ -15153,6 +15213,68 @@ mod tests {
             "pear does not match the filter {addresses:?}"
         );
         assert!(!addresses.contains(&"D4"), "{addresses:?}");
+    }
+
+    #[test]
+    fn sheet_preview_frozen_panes() {
+        let sheet = |pane: &str| {
+            format!(
+                "<worksheet>{pane}<sheetData><row r=\"1\"><c r=\"A1\"><v>1</v></c><c r=\"B1\"><v>2</v></c></row><row r=\"2\"><c r=\"A2\"><v>3</v></c></row><row r=\"3\"><c r=\"A3\"><v>4</v></c></row></sheetData></worksheet>"
+            )
+        };
+        let frozen = sheet(
+            r#"<sheetViews><sheetView><pane xSplit="1" ySplit="2" state="frozen"/></sheetView></sheetViews>"#,
+        );
+        let split = sheet(
+            r#"<sheetViews><sheetView><pane xSplit="1" ySplit="2" state="split"/></sheetView></sheetViews>"#,
+        );
+        let clamp = sheet(
+            r#"<sheetViews><sheetView><pane xSplit="9" ySplit="20" state="frozenSplit"/></sheetView></sheetViews>"#,
+        );
+        let plain = sheet("");
+        let rows_only = sheet(
+            r#"<sheetViews><sheetView><pane ySplit="1" state="frozen"/></sheetView></sheetViews>"#,
+        );
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Frozen" sheetId="1" r:id="rId1"/><sheet name="Split" sheetId="2" r:id="rId2"/><sheet name="Clamp" sheetId="3" r:id="rId3"/><sheet name="Plain" sheetId="4" r:id="rId4"/><sheet name="Rows" sheetId="5" r:id="rId5"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Target="worksheets/sheet3.xml"/><Relationship Id="rId4" Target="worksheets/sheet4.xml"/><Relationship Id="rId5" Target="worksheets/sheet5.xml"/></Relationships>"#,
+            ),
+            ("xl/worksheets/sheet1.xml", frozen.as_str()),
+            ("xl/worksheets/sheet2.xml", split.as_str()),
+            ("xl/worksheets/sheet3.xml", clamp.as_str()),
+            ("xl/worksheets/sheet4.xml", plain.as_str()),
+            ("xl/worksheets/sheet5.xml", rows_only.as_str()),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        assert_eq!(book.sheets[0].name, "Frozen");
+        assert_eq!(
+            (book.sheets[0].freeze_rows, book.sheets[0].freeze_cols),
+            (2, 1)
+        );
+        assert_eq!(
+            (book.sheets[1].freeze_rows, book.sheets[1].freeze_cols),
+            (0, 0)
+        );
+        assert_eq!(
+            (book.sheets[2].freeze_rows, book.sheets[2].freeze_cols),
+            (8, 4)
+        );
+        assert_eq!(
+            (book.sheets[3].freeze_rows, book.sheets[3].freeze_cols),
+            (0, 0)
+        );
+        assert_eq!(
+            (book.sheets[4].freeze_rows, book.sheets[4].freeze_cols),
+            (1, 0)
+        );
     }
 
     #[test]

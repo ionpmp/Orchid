@@ -619,6 +619,10 @@ pub struct SheetPage {
     pub rows: Vec<Vec<SheetCell>>,
     /// `true` when rows or columns past the preview cap were dropped.
     pub truncated: bool,
+    /// Preview rows pinned from a frozen pane. `0` when the pane is not frozen.
+    pub freeze_rows: u32,
+    /// Preview columns pinned from a frozen pane. Clamped to 4.
+    pub freeze_cols: u32,
 }
 
 /// One cell in the sheet preview.

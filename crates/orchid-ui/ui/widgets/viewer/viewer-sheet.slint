@@ -1,6 +1,40 @@
 import { Theme } from "../../theme_global.slint";
 import { ViewerSheetModel } from "../../workspace/defs.slint";
 
+component PreviewCell inherits Rectangle {
+    in property <string> cell-text;
+    in property <bool> covered;
+    in property <int> width-px;
+    in property <bool> selected;
+    in property <bool> has-fill;
+    in property <int> fill-r;
+    in property <int> fill-g;
+    in property <int> fill-b;
+    in property <bool> highlight;
+    callback clicked();
+
+    visible: !root.covered;
+    min-width: root.covered ? 0px : root.width-px * 1px;
+    property <color> scale-fill: rgb(root.fill-r, root.fill-g, root.fill-b);
+    background: root.selected ? Theme.state-selected : root.has-fill ? root.scale-fill : root.highlight ? Theme.accent-muted : cell-ta.has-hover ? Theme.state-hover : Theme.surface-raised;
+    border-width: root.selected ? 1px : 0px;
+    border-color: Theme.accent-brand;
+
+    cell-ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    Text {
+        x: Theme.space-1;
+        width: parent.width - Theme.space-1 * 2;
+        text: root.cell-text;
+        color: Theme.text-primary;
+        font-size: Theme.font-size-sm;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
 export component ViewerSheetView inherits Rectangle {
     in property <ViewerSheetModel> model;
 
@@ -10,6 +44,8 @@ export component ViewerSheetView inherits Rectangle {
     property <int> sel-row: 0;
     property <int> sel-col: 0;
     property <int> sheet: min(root.sheet-index, max(root.model.sheets.length - 1, 0));
+    property <int> freeze-rows: root.model.sheets.length == 0 ? 0 : root.model.sheets[root.sheet].freeze-rows;
+    property <int> freeze-cols: root.model.sheets.length == 0 ? 0 : root.model.sheets[root.sheet].freeze-cols;
     property <string> cell-address: root.model.sheets[root.sheet].rows[root.sel-row].cells[root.sel-col].address;
     property <string> cell-text: root.model.sheets[root.sheet].rows[root.sel-row].cells[root.sel-col].text;
     property <string> cell-note: root.model.sheets[root.sheet].rows[root.sel-row].cells[root.sel-col].note;
@@ -201,7 +237,7 @@ export component ViewerSheetView inherits Rectangle {
             vertical-stretch: 1;
         }
 
-        if root.model.sheets.length > 0 : Flickable {
+        if root.model.sheets.length > 0 && root.freeze-rows == 0 && root.freeze-cols == 0 : Flickable {
             vertical-stretch: 1;
             viewport-height: grid.preferred-height;
             viewport-width: grid.preferred-width;
@@ -215,34 +251,180 @@ export component ViewerSheetView inherits Rectangle {
                     spacing: 1px;
                     alignment: start;
 
-                for cell[ci] in row.cells : Rectangle {
-                    visible: !cell.covered;
-                    min-width: cell.covered ? 0px : cell.width-px * 1px;
-                    property <color> scale-fill: rgb(cell.fill-r, cell.fill-g, cell.fill-b);
-                    background: ri == root.sel-row && ci == root.sel-col ? Theme.state-selected : cell.has-fill ? scale-fill : cell.highlight ? Theme.accent-muted : cell-ta.has-hover ? Theme.state-hover : Theme.surface-raised;
-                    border-width: ri == root.sel-row && ci == root.sel-col ? 1px : 0px;
-                    border-color: Theme.accent-brand;
-
-                    cell-ta := TouchArea {
+                    for cell[ci] in row.cells : PreviewCell {
+                        cell-text: cell.text;
+                        covered: cell.covered;
+                        width-px: cell.width-px;
+                        selected: ri == root.sel-row && ci == root.sel-col;
+                        has-fill: cell.has-fill;
+                        fill-r: cell.fill-r;
+                        fill-g: cell.fill-g;
+                        fill-b: cell.fill-b;
+                        highlight: cell.highlight;
                         clicked => {
                             root.sel-row = ri;
                             root.sel-col = ci;
                             keys.focus();
                         }
                     }
-
-                    Text {
-                        x: Theme.space-1;
-                        width: parent.width - Theme.space-1 * 2;
-                        text: cell.text;
-                        color: Theme.text-primary;
-                        font-size: Theme.font-size-sm;
-                        vertical-alignment: center;
-                        overflow: elide;
-                    }
                 }
             }
         }
+
+        if root.model.sheets.length > 0 && (root.freeze-rows > 0 || root.freeze-cols > 0) : VerticalLayout {
+            vertical-stretch: 1;
+            spacing: 0px;
+
+            if root.freeze-rows > 0 : HorizontalLayout {
+                spacing: 1px;
+                height: root.freeze-rows * Theme.row-height + max(root.freeze-rows - 1, 0) * 1px;
+
+                if root.freeze-cols > 0 : VerticalLayout {
+                    alignment: start;
+                    spacing: 1px;
+
+                    for row[ri] in root.model.sheets[root.sheet].rows : HorizontalLayout {
+                        visible: ri < root.freeze-rows;
+                        height: ri < root.freeze-rows ? Theme.row-height : 0px;
+                        spacing: 1px;
+                        alignment: start;
+
+                        for cell[ci] in row.cells : PreviewCell {
+                            visible: ri < root.freeze-rows && ci < root.freeze-cols && !cell.covered;
+                            cell-text: cell.text;
+                            covered: cell.covered;
+                            width-px: cell.width-px;
+                            selected: ri == root.sel-row && ci == root.sel-col;
+                            has-fill: cell.has-fill;
+                            fill-r: cell.fill-r;
+                            fill-g: cell.fill-g;
+                            fill-b: cell.fill-b;
+                            highlight: cell.highlight;
+                            clicked => {
+                                root.sel-row = ri;
+                                root.sel-col = ci;
+                                keys.focus();
+                            }
+                        }
+                    }
+                }
+
+                top-band := Flickable {
+                    horizontal-stretch: 1;
+                    viewport-x: body.viewport-x;
+                    viewport-height: top-grid.preferred-height;
+                    viewport-width: top-grid.preferred-width;
+
+                    top-grid := VerticalLayout {
+                        alignment: start;
+                        spacing: 1px;
+
+                        for row[ri] in root.model.sheets[root.sheet].rows : HorizontalLayout {
+                            visible: ri < root.freeze-rows;
+                            height: ri < root.freeze-rows ? Theme.row-height : 0px;
+                            spacing: 1px;
+                            alignment: start;
+
+                            for cell[ci] in row.cells : PreviewCell {
+                                visible: ri < root.freeze-rows && ci >= root.freeze-cols && !cell.covered;
+                                cell-text: cell.text;
+                                covered: cell.covered;
+                                width-px: cell.width-px;
+                                selected: ri == root.sel-row && ci == root.sel-col;
+                                has-fill: cell.has-fill;
+                                fill-r: cell.fill-r;
+                                fill-g: cell.fill-g;
+                                fill-b: cell.fill-b;
+                                highlight: cell.highlight;
+                                clicked => {
+                                    root.sel-row = ri;
+                                    root.sel-col = ci;
+                                    keys.focus();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                vertical-stretch: 1;
+                spacing: 1px;
+
+                if root.freeze-cols > 0 : left-band := Flickable {
+                    width: left-grid.preferred-width;
+                    viewport-y: body.viewport-y;
+                    viewport-height: left-grid.preferred-height;
+                    viewport-width: left-grid.preferred-width;
+
+                    left-grid := VerticalLayout {
+                        alignment: start;
+                        spacing: 1px;
+
+                        for row[ri] in root.model.sheets[root.sheet].rows : HorizontalLayout {
+                            visible: ri >= root.freeze-rows;
+                            height: ri >= root.freeze-rows ? Theme.row-height : 0px;
+                            spacing: 1px;
+                            alignment: start;
+
+                            for cell[ci] in row.cells : PreviewCell {
+                                visible: ri >= root.freeze-rows && ci < root.freeze-cols && !cell.covered;
+                                cell-text: cell.text;
+                                covered: cell.covered;
+                                width-px: cell.width-px;
+                                selected: ri == root.sel-row && ci == root.sel-col;
+                                has-fill: cell.has-fill;
+                                fill-r: cell.fill-r;
+                                fill-g: cell.fill-g;
+                                fill-b: cell.fill-b;
+                                highlight: cell.highlight;
+                                clicked => {
+                                    root.sel-row = ri;
+                                    root.sel-col = ci;
+                                    keys.focus();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                body := Flickable {
+                    horizontal-stretch: 1;
+                    vertical-stretch: 1;
+                    viewport-height: body-grid.preferred-height;
+                    viewport-width: body-grid.preferred-width;
+
+                    body-grid := VerticalLayout {
+                        alignment: start;
+                        spacing: 1px;
+
+                        for row[ri] in root.model.sheets[root.sheet].rows : HorizontalLayout {
+                            visible: ri >= root.freeze-rows;
+                            height: ri >= root.freeze-rows ? Theme.row-height : 0px;
+                            spacing: 1px;
+                            alignment: start;
+
+                            for cell[ci] in row.cells : PreviewCell {
+                                visible: ri >= root.freeze-rows && ci >= root.freeze-cols && !cell.covered;
+                                cell-text: cell.text;
+                                covered: cell.covered;
+                                width-px: cell.width-px;
+                                selected: ri == root.sel-row && ci == root.sel-col;
+                                has-fill: cell.has-fill;
+                                fill-r: cell.fill-r;
+                                fill-g: cell.fill-g;
+                                fill-b: cell.fill-b;
+                                highlight: cell.highlight;
+                                clicked => {
+                                    root.sel-row = ri;
+                                    root.sel-col = ci;
+                                    keys.focus();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if root.model.sheets[root.sheet].truncated : Text {

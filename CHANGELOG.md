@@ -120,6 +120,12 @@ release yet.
   range are hidden. The row does not grow taller. Column widths come from
   the worksheet `cols` list, clamped from 1 to 40 character units and drawn
   at 8 pixels per unit. A missing width stays 72 pixels. A merge or a width
+  is not written back. A frozen pane stays on screen while the rest of the
+  preview scrolls. The first `pane` in the first `sheetView` is used. Its
+  `state` must be `frozen` or `frozenSplit`. `ySplit` pins that many preview
+  rows, clamped to 8, and `xSplit` pins that many preview columns, clamped
+  to 4. A split that is not frozen pins nothing. Hidden rows are already
+  omitted, so the pinned rows are the first remaining preview rows. The pane
   is not written back. The preview can show a
   short list of number formats without changing the stored number. Percent
   is built-in format 9 or 10, or a custom format that is exactly `0%` or

@@ -793,6 +793,8 @@ fn build_sheet_model(
                 name: page.name.clone().into(),
                 rows: ModelRc::new(VecModel::from(rows)),
                 truncated: page.truncated,
+                freeze_rows: i32::try_from(page.freeze_rows).unwrap_or(0),
+                freeze_cols: i32::try_from(page.freeze_cols).unwrap_or(0),
             }
         })
         .collect();
