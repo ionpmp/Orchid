@@ -308,7 +308,7 @@ mod tests {
             ),
             (
                 "xl/worksheets/sheet1.xml",
-                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>11</v></c><c r="C1"><v>4</v></c><c r="E1"><v>1</v></c><c r="F1"><v>1</v></c><c r="G1"><v>5</v></c><c r="H1"><v>5</v></c><c r="I1"><v>4</v></c><c r="J1"><v>5</v></c><c r="M1"><v>1</v></c></row><row r="2"><c r="B2"><v>1</v></c><c r="D2"><v>1</v></c><c r="E2"><v>9</v></c><c r="F2"><v>9</v></c></row><row r="3"><c r="B3"><v>0</v></c></row></sheetData><conditionalFormatting sqref="D2"><cfRule type="expression"><formula>SUM(D2)&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="M1"><cfRule type="expression"><formula>M1&gt;0+1</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B2:B3"><cfRule type="expression"><formula>=B2&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="C1"><cfRule type="expression"><formula>A1&gt;10</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="E1:E2"><cfRule type="expression"><formula>E1&gt;5</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="F1:F2"><cfRule type="expression"><formula>$F$1&gt;5</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="G1"><cfRule type="expression"><formula>G1&gt;=5</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="H1"><cfRule type="expression"><formula>H1&lt;&gt;5</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="I1"><cfRule type="expression"><formula>I1&lt;=4</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="J1"><cfRule type="expression"><formula>J1=5</formula></cfRule></conditionalFormatting></worksheet>"#,
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>11</v></c><c r="C1"><v>4</v></c><c r="E1"><v>1</v></c><c r="F1"><v>1</v></c><c r="G1"><v>5</v></c><c r="H1"><v>5</v></c><c r="I1"><v>4</v></c><c r="J1"><v>5</v></c><c r="M1"><v>1</v></c></row><row r="2"><c r="B2"><v>1</v></c><c r="D2"><v>1</v></c><c r="E2"><v>9</v></c><c r="F2"><v>9</v></c></row><row r="3"><c r="B3"><v>0</v></c></row></sheetData><conditionalFormatting sqref="D2"><cfRule type="expression"><formula>SUM(D2)&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="M1"><cfRule type="expression"><formula>M1&gt;0+1</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B2:B3"><cfRule type="expression"><formula>=B2&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="C1"><cfRule type="expression"><formula>A1&gt;10</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="E1:E2"><cfRule type="expression"><formula>E1&gt;5</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="F1:F2"><cfRule type="expression"><formula>$F$1&gt;5</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="G1"><cfRule type="expression"><formula>G1&gt;=5</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="H1"><cfRule type="expression"><formula>H1&lt;&gt;5</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="I1"><cfRule type="expression"><formula>I1&lt;=4</formula></cfRule></conditionalFormatting></worksheet>"#,
             ),
         ]);
         let preview = render_office(&bytes, false).unwrap();
@@ -326,7 +326,7 @@ mod tests {
         assert!(cell("B2").highlight, "1 is greater than 0");
         assert!(!cell("B3").highlight, "0 is not greater than 0");
         assert!(cell("C1").highlight, "the rule reads A1");
-        assert!(!cell("D2").highlight, "a function is skipped");
+        assert!(cell("D2").highlight, "SUM(D2) is 1");
         assert!(!cell("E1").highlight);
         assert!(cell("E2").highlight, "the address shifts down one row");
         assert!(!cell("F1").highlight);
@@ -334,7 +334,6 @@ mod tests {
         assert!(cell("G1").highlight);
         assert!(!cell("H1").highlight);
         assert!(cell("I1").highlight);
-        assert!(cell("J1").highlight);
         assert!(
             !cell("M1").highlight,
             "arithmetic is not a plain comparison"
@@ -346,7 +345,7 @@ mod tests {
         let mut rules = String::new();
         for _ in 0..8 {
             rules.push_str(
-                r#"<conditionalFormatting sqref="A1"><cfRule type="expression"><formula>SUM(A1)&gt;0</formula></cfRule></conditionalFormatting>"#,
+                r#"<conditionalFormatting sqref="A1"><cfRule type="expression"><formula>PRODUCT(A1)&gt;0</formula></cfRule></conditionalFormatting>"#,
             );
         }
         let sheet = format!(
@@ -375,8 +374,51 @@ mod tests {
                 .find(|cell| cell.address == address)
                 .unwrap_or_else(|| panic!("missing {address}"))
         };
-        assert!(!cell("A1").highlight, "a function rule does not count");
+        assert!(
+            !cell("A1").highlight,
+            "PRODUCT is not one of the six functions"
+        );
         assert!(cell("N1").highlight, "skipped rules do not fill the 8");
+    }
+
+    #[test]
+    fn sheet_preview_function_formatting() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>0</v></c><c r="C1"><v>0</v></c><c r="D1"><v>0</v></c><c r="E1"><v>0</v></c><c r="F1"><v>-4</v></c><c r="G1"><v>0</v></c><c r="H1"><v>text</v></c><c r="I1"><v>0</v></c><c r="J1"><v>0</v></c><c r="K1"><v>2</v></c><c r="L1"><v>0</v></c></row><row r="2"><c r="A2"><v>3</v></c><c r="B2"><v>5</v></c><c r="L2"><v>5</v></c></row></sheetData><conditionalFormatting sqref="J1"><cfRule type="expression"><formula>AND(A1)&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="C1"><cfRule type="expression"><formula>SUM(A1:A2)&gt;3</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="D1"><cfRule type="expression"><formula>AVERAGE(A1:A2)&gt;1</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="E1"><cfRule type="expression"><formula>MIN(A1:A2)&gt;2</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="G1"><cfRule type="expression"><formula>MAX(A1:A2)&gt;2</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="I1"><cfRule type="expression"><formula>COUNT(A1:A2)=2</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="F1"><cfRule type="expression"><formula>ABS(F1)&gt;3</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="H1"><cfRule type="expression"><formula>SUM(H1)&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B2"><cfRule type="expression"><formula>SUM(L1)&gt;0</formula></cfRule></conditionalFormatting></worksheet>"#,
+            ),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let cell = |address: &str| {
+            book.sheets[0]
+                .rows
+                .iter()
+                .flatten()
+                .find(|cell| cell.address == address)
+                .unwrap_or_else(|| panic!("missing {address}"))
+        };
+        assert!(cell("C1").highlight, "1+3 is greater than 3");
+        assert!(cell("D1").highlight, "the average is 2");
+        assert!(!cell("E1").highlight, "the minimum is 1");
+        assert!(cell("G1").highlight, "the maximum is 3");
+        assert!(cell("I1").highlight, "both cells are numbers");
+        assert!(cell("F1").highlight, "the absolute value is 4");
+        assert!(!cell("H1").highlight, "text is not a number");
+        assert!(!cell("J1").highlight, "AND is not one of the six functions");
+        assert!(!cell("B1").highlight, "L1 is 0");
+        assert!(cell("B2").highlight, "the range shifts onto L2");
     }
 
     #[test]

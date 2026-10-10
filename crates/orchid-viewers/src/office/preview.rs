@@ -187,7 +187,7 @@ td{{border:1px solid #ccc;padding:4px 8px;vertical-align:top}}\
     )
 }
 
-
+#[derive(Clone, Copy)]
 enum CfOp {
     Gt,
     Lt,
@@ -197,15 +197,31 @@ enum CfOp {
     Ne,
 }
 
+#[derive(Clone, Copy)]
+enum CfFn {
+    Cell,
+    Sum,
+    Average,
+    Min,
+    Max,
+    Count,
+    Abs,
+}
+
 struct CfExpr {
     ref_col: u32,
     ref_row: u32,
     col_locked: bool,
     row_locked: bool,
+    end_col: u32,
+    end_row: u32,
+    end_col_locked: bool,
+    end_row_locked: bool,
     origin_col: u32,
     origin_row: u32,
     op: CfOp,
     threshold: f64,
+    func: CfFn,
 }
 
 enum CfKind {
@@ -392,39 +408,31 @@ fn compile_cf_expr(formula: &str, origin: &str) -> Option<CfExpr> {
     let text = text.strip_prefix('=').unwrap_or(text).trim_start();
     let bytes = text.as_bytes();
     let mut index = 0usize;
-    let col_locked = if bytes.get(index) == Some(&b'$') {
+    let func = cf_function_name(text, &mut index).unwrap_or(CfFn::Cell);
+    let (ref_col, ref_row, col_locked, row_locked) = cf_ref(text, &mut index)?;
+    let ranged = bytes.get(index) == Some(&b':');
+    if ranged && matches!(func, CfFn::Cell) {
+        return None;
+    }
+    let (end_col, end_row, end_col_locked, end_row_locked) = if ranged {
         index += 1;
-        true
+        cf_ref(text, &mut index)?
     } else {
-        false
+        (ref_col, ref_row, col_locked, row_locked)
     };
-    let col_start = index;
-    while bytes
-        .get(index)
-        .is_some_and(|byte| byte.is_ascii_alphabetic())
-    {
-        index += 1;
-    }
-    if index == col_start {
+    if matches!(func, CfFn::Abs) && (end_col != ref_col || end_row != ref_row) {
         return None;
     }
-    let ref_col = column_index(&text[col_start..index])?;
-    let row_locked = if bytes.get(index) == Some(&b'$') {
-        index += 1;
-        true
-    } else {
-        false
-    };
-    let row_start = index;
-    while bytes.get(index).is_some_and(|byte| byte.is_ascii_digit()) {
-        index += 1;
-    }
-    if index == row_start {
+    let height = u32::abs_diff(end_row, ref_row) + 1;
+    let width = u32::abs_diff(end_col, ref_col) + 1;
+    if height.saturating_mul(width) > 32 {
         return None;
     }
-    let ref_row = text[row_start..index].parse::<u32>().ok()?;
-    if ref_col == 0 || ref_row == 0 {
-        return None;
+    if !matches!(func, CfFn::Cell) {
+        if bytes.get(index) != Some(&b')') {
+            return None;
+        }
+        index += 1;
     }
     while bytes
         .get(index)
@@ -459,11 +467,127 @@ fn compile_cf_expr(formula: &str, origin: &str) -> Option<CfExpr> {
         ref_row,
         col_locked,
         row_locked,
+        end_col,
+        end_row,
+        end_col_locked,
+        end_row_locked,
         origin_col,
         origin_row,
         op,
         threshold,
+        func,
     })
+}
+
+fn cf_function_name(text: &str, index: &mut usize) -> Option<CfFn> {
+    let bytes = text.as_bytes();
+    let start = *index;
+    while bytes
+        .get(*index)
+        .is_some_and(|byte| byte.is_ascii_alphabetic())
+    {
+        *index += 1;
+    }
+    let name_end = *index;
+    while bytes
+        .get(*index)
+        .is_some_and(|byte| byte.is_ascii_whitespace())
+    {
+        *index += 1;
+    }
+    if name_end == start || bytes.get(*index) != Some(&b'(') {
+        *index = start;
+        return None;
+    }
+    let name = &text[start..name_end];
+    let func = if name.eq_ignore_ascii_case("SUM") {
+        CfFn::Sum
+    } else if name.eq_ignore_ascii_case("AVERAGE") {
+        CfFn::Average
+    } else if name.eq_ignore_ascii_case("MIN") {
+        CfFn::Min
+    } else if name.eq_ignore_ascii_case("MAX") {
+        CfFn::Max
+    } else if name.eq_ignore_ascii_case("COUNT") {
+        CfFn::Count
+    } else if name.eq_ignore_ascii_case("ABS") {
+        CfFn::Abs
+    } else {
+        return None;
+    };
+    *index += 1;
+    Some(func)
+}
+
+fn cf_ref(text: &str, index: &mut usize) -> Option<(u32, u32, bool, bool)> {
+    let bytes = text.as_bytes();
+    while bytes
+        .get(*index)
+        .is_some_and(|byte| byte.is_ascii_whitespace())
+    {
+        *index += 1;
+    }
+    let col_locked = if bytes.get(*index) == Some(&b'$') {
+        *index += 1;
+        true
+    } else {
+        false
+    };
+    let col_start = *index;
+    while bytes
+        .get(*index)
+        .is_some_and(|byte| byte.is_ascii_alphabetic())
+    {
+        *index += 1;
+    }
+    if *index == col_start {
+        return None;
+    }
+    let col = column_index(&text[col_start..*index])?;
+    let row_locked = if bytes.get(*index) == Some(&b'$') {
+        *index += 1;
+        true
+    } else {
+        false
+    };
+    let row_start = *index;
+    while bytes.get(*index).is_some_and(|byte| byte.is_ascii_digit()) {
+        *index += 1;
+    }
+    if *index == row_start {
+        return None;
+    }
+    let row = text[row_start..*index].parse::<u32>().ok()?;
+    if col == 0 || row == 0 {
+        return None;
+    }
+    Some((col, row, col_locked, row_locked))
+}
+
+fn shift_corner(
+    col: u32,
+    row: u32,
+    col_locked: bool,
+    row_locked: bool,
+    origin_col: u32,
+    origin_row: u32,
+    cell_col: u32,
+    cell_row: u32,
+) -> Option<(u32, u32)> {
+    let look_col = if col_locked {
+        i64::from(col)
+    } else {
+        i64::from(col) + i64::from(cell_col) - i64::from(origin_col)
+    };
+    let look_row = if row_locked {
+        i64::from(row)
+    } else {
+        i64::from(row) + i64::from(cell_row) - i64::from(origin_row)
+    };
+    if look_col < 1 || look_row < 1 || look_col > 16_384 || look_row > 1_048_576 {
+        return None;
+    }
+    Some((look_col as u32, look_row as u32))
 }
 
 fn expr_matches(
@@ -474,21 +598,53 @@ fn expr_matches(
     let Some((col, row)) = split_address(address) else {
         return false;
     };
-    let look_col = if expr.col_locked {
-        i64::from(expr.ref_col)
-    } else {
-        i64::from(expr.ref_col) + i64::from(col) - i64::from(expr.origin_col)
+    let Some((start_col, start_row)) = shift_corner(
+        expr.ref_col,
+        expr.ref_row,
+        expr.col_locked,
+        expr.row_locked,
+        expr.origin_col,
+        expr.origin_row,
+        col,
+        row,
+    ) else {
+        return false;
     };
-    let look_row = if expr.row_locked {
-        i64::from(expr.ref_row)
-    } else {
-        i64::from(expr.ref_row) + i64::from(row) - i64::from(expr.origin_row)
+    let Some((end_col, end_row)) = shift_corner(
+        expr.end_col,
+        expr.end_row,
+        expr.end_col_locked,
+        expr.end_row_locked,
+        expr.origin_col,
+        expr.origin_row,
+        col,
+        row,
+    ) else {
+        return false;
     };
-    if look_col < 1 || look_row < 1 || look_col > 16_384 || look_row > 1_048_576 {
+    let (left, right) = (start_col.min(end_col), start_col.max(end_col));
+    let (top, bottom) = (start_row.min(end_row), start_row.max(end_row));
+    if (right - left + 1).saturating_mul(bottom - top + 1) > 32 {
         return false;
     }
-    let key = format!("{}{look_row}", column_name(look_col as u32));
-    let Some(number) = values.get(&key).and_then(|text| plain_preview_number(text)) else {
+    let mut numbers = Vec::new();
+    for look_row in top..=bottom {
+        for look_col in left..=right {
+            let key = format!("{}{look_row}", column_name(look_col));
+            let Some(text) = values.get(&key).map(String::as_str) else {
+                continue;
+            };
+            if text.is_empty() {
+                continue;
+            }
+            match plain_preview_number(text) {
+                Some(number) => numbers.push(number),
+                None if matches!(expr.func, CfFn::Count) => {}
+                None => return false,
+            }
+        }
+    }
+    let Some(number) = cf_reduce(expr.func, &numbers) else {
         return false;
     };
     let gap = (number - expr.threshold).abs();
@@ -499,6 +655,35 @@ fn expr_matches(
         CfOp::Ge => number > expr.threshold || gap <= 1e-9,
         CfOp::Le => number < expr.threshold || gap <= 1e-9,
         CfOp::Ne => gap > 1e-9,
+    }
+}
+
+fn cf_reduce(func: CfFn, numbers: &[f64]) -> Option<f64> {
+    match func {
+        CfFn::Cell | CfFn::Abs => {
+            let number = *numbers.first()?;
+            if numbers.len() != 1 {
+                return None;
+            }
+            Some(if matches!(func, CfFn::Abs) {
+                number.abs()
+            } else {
+                number
+            })
+        }
+        CfFn::Count => Some(numbers.len() as f64),
+        CfFn::Sum => Some(numbers.iter().sum()),
+        CfFn::Average | CfFn::Min | CfFn::Max => {
+            if numbers.is_empty() {
+                return None;
+            }
+            match func {
+                CfFn::Average => Some(numbers.iter().sum::<f64>() / numbers.len() as f64),
+                CfFn::Min => numbers.iter().copied().reduce(f64::min),
+                CfFn::Max => numbers.iter().copied().reduce(f64::max),
+                _ => None,
+            }
+        }
     }
 }
 
@@ -1257,7 +1442,6 @@ fn style_preview_fmt(style: &str, formats: &[PreviewFmt]) -> PreviewFmt {
         .unwrap_or(PreviewFmt::General)
 }
 
-
 fn drop_hidden_rows(rows: &mut Vec<Vec<SheetCell>>, hidden: &std::collections::HashSet<u32>) {
     rows.retain(|row| {
         row.iter()
@@ -1656,7 +1840,6 @@ fn col_index(cell_ref: &str) -> usize {
     }
 }
 
-
 fn text_paragraphs(xml: &str) -> Vec<String> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
@@ -1716,4 +1899,3 @@ fn slide_number(name: &str) -> u32 {
 fn notes_for(slide_path: &str) -> String {
     format!("ppt/notesSlides/notesSlide{}.xml", slide_number(slide_path))
 }
-

@@ -94,12 +94,18 @@ release yet.
   `*`, `?`, and `~`. A pattern without those characters is an exact ASCII
   case-insensitive match, not a substring search. A pattern longer than 64
   characters, or cell text longer than 256 characters, is not a match. The
-  first matching rule wins. A formula rule is one comparison of a cell
-  address to a plain number, using `>`, `<`, `=`, `>=`, `<=`, or `<>`.
-  The address shifts from the first cell of the range, and `$` locks that
-  side. The compared value is that cell's preview text, read as a plain
-  number. A function, text, another sheet, or any other formula is skipped
-  and does not count toward the 8. A color scale is separate from those 8
+  first matching rule wins. A formula rule is one comparison to a plain
+  number, using `>`, `<`, `=`, `>=`, `<=`, or `<>`. The left side is one
+  cell address, or one call of `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, or
+  `ABS`. `SUM`, `AVERAGE`, `MIN`, `MAX`, and `COUNT` take one cell or one
+  range of at most 32 cells. `ABS` takes one cell. `$` locks the corner it
+  is written on, and an unlocked corner shifts from the first cell of the
+  highlighted range. A blank cell is skipped. Text in `SUM`, `AVERAGE`,
+  `MIN`, `MAX`, or `ABS` means the rule does not match. `COUNT` counts
+  numbers only. `SUM` or `COUNT` of no numbers is 0. `AVERAGE`, `MIN`, or
+  `MAX` of no numbers does not match. Another function, a nested call,
+  arithmetic, another sheet, or two functions is skipped and does not count
+  toward the 8. A color scale is separate from those 8
   rules. At most 4 scales are drawn. Each range is at most 32 cells. A scale
   has two or three stops: min, max, a number, or a percentile from 0 through
   100. The color is an `rgb` hex value, `RRGGBB` or `AARRGGBB`, blended in
