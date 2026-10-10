@@ -1039,14 +1039,21 @@ release yet.
   numeric criterion, the same kind `SUMIF` accepts. A row is kept when that
   criterion matches. No remaining number leaves the stored value. A rectangle
   is at most 256 rows, 16 columns, and 256 cells, and every cell must be a
-  finite number. A blank or text leaves the stored value. `SORT` then takes a
+  finite number. A blank leaves the stored value. Text leaves the stored
+  value unless that rectangle has exactly one text column and every other
+  cell is a finite number. `SORT` then takes a
   1-based column index and an optional order of 1 or -1. The omitted index is
   the first column. A negative index, 0, or an index past the rectangle leaves
   the stored value. Equal keys keep their original order. `FILTER` keeps that
   one criterion and writes each kept row across. A second criterion leaves the
   stored value. `UNIQUE` does not take a rectangle. `SORT` of one text column
   writes that text downward, ignoring ASCII case. A blank is skipped. A number
-  in that column leaves the stored value. `SORTBY(block, key, order)` sorts a
+  in that column leaves the stored value. `SORT` of that mixed rectangle
+  writes each reordered row, including the text. When the sort key is the
+  text column, the comparison ignores ASCII case. A numeric key sorts by
+  the number. A second text column, a column that mixes text and numbers,
+  or a blank leaves the stored value. `SORTBY` still does not write its
+  key. `SORTBY(block, key, order)` sorts a
   numeric block by one text column of the same height. The order is 1 or -1
   and defaults to 1. A blank or a number in the key leaves the stored value.
   There is no second key. `FILTER` can test that same text column with one

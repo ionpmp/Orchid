@@ -421,10 +421,16 @@ struct Spill {
     all_or_nothing: bool,
 }
 
+enum GridCell {
+    Num(f64),
+    Text(String),
+}
+
 enum TextSpill {
     Absent,
     Invalid,
     Parts(Vec<String>),
+    Grid { columns: u32, cells: Vec<GridCell> },
 }
 
 fn try_spill(formula: &str, env: &mut CalcEnv<'_>) -> Option<Spill> {
@@ -552,15 +558,25 @@ fn text_spill_call(formula: &str, env: &mut CalcEnv<'_>) -> TextSpill {
     parser.skip();
     if word.eq_ignore_ascii_case("SORT") && parser.bytes.get(parser.index) == Some(&b'(') {
         parser.index += 1;
-        let Some(parts) = parser.sort_text_column(env) else {
-            return TextSpill::Absent;
-        };
-        parser.skip();
-        return if parser.index == parser.bytes.len() {
-            TextSpill::Parts(parts)
-        } else {
-            TextSpill::Invalid
-        };
+        let after_open = parser.index;
+        if let Some(parts) = parser.sort_text_column(env) {
+            parser.skip();
+            return if parser.index == parser.bytes.len() {
+                TextSpill::Parts(parts)
+            } else {
+                TextSpill::Invalid
+            };
+        }
+        parser.index = after_open;
+        if let Some((columns, cells)) = parser.sort_mixed(env) {
+            parser.skip();
+            return if parser.index == parser.bytes.len() {
+                TextSpill::Grid { columns, cells }
+            } else {
+                TextSpill::Invalid
+            };
+        }
+        return TextSpill::Absent;
     }
     if !word.eq_ignore_ascii_case("TEXTSPLIT") || parser.bytes.get(parser.index) != Some(&b'(') {
         return TextSpill::Absent;
@@ -606,6 +622,63 @@ fn place_text_column(
         writes.push((address, text.clone()));
     }
     Some(writes)
+}
+
+fn place_mixed_grid(
+    origin: &str,
+    columns: u32,
+    grid: &[GridCell],
+    cells: &[SheetCellRef],
+    taken: &std::collections::HashSet<String>,
+    xml: &str,
+) -> Option<(Vec<String>, Vec<(usize, usize, String)>)> {
+    if columns == 0 || grid.is_empty() || !grid.len().is_multiple_of(columns as usize) {
+        return None;
+    }
+    let mut addresses = Vec::new();
+    let mut edits = Vec::new();
+    for (step, item) in grid.iter().enumerate() {
+        let row = step as u32 / columns;
+        let col = step as u32 % columns;
+        let address = if row == 0 && col == 0 {
+            origin.to_string()
+        } else {
+            shift_address(origin, row, col)?
+        };
+        if row > 0 || col > 0 {
+            let blocked = taken.contains(&address)
+                || cells
+                    .iter()
+                    .find(|cell| cell.address == address)
+                    .is_none_or(|cell| cell.formula.is_some() || cell.text_cell);
+            if blocked {
+                return None;
+            }
+        }
+        let target = cells.iter().find(|cell| cell.address == address)?;
+        match item {
+            GridCell::Text(text) => {
+                if !push_text_edit(&mut edits, target, xml, text) {
+                    return None;
+                }
+            }
+            GridCell::Num(number) => {
+                let rendered = format_calc(*number);
+                if rendered.is_empty() {
+                    return None;
+                }
+                if let Some((start, end)) = target.value_span {
+                    edits.push((start, end, rendered));
+                } else if let Some(at) = target.insert_at {
+                    edits.push((at, at, format!("<v>{rendered}</v>")));
+                } else {
+                    return None;
+                }
+            }
+        }
+        addresses.push(address);
+    }
+    Some((addresses, edits))
 }
 
 fn push_text_edit(
@@ -926,6 +999,20 @@ fn recalculate_sheet(
                 };
                 match text_spill_call(formula, &mut spill_env) {
                     TextSpill::Invalid => continue,
+                    TextSpill::Grid {
+                        columns,
+                        cells: grid,
+                    } => {
+                        if let Some((addresses, local)) =
+                            place_mixed_grid(&cell.address, columns, &grid, &cells, &spilled, xml)
+                        {
+                            for address in addresses {
+                                spilled.insert(address);
+                            }
+                            edits.extend(local);
+                        }
+                        continue;
+                    }
                     TextSpill::Parts(parts) => {
                         if let Some(writes) =
                             place_text_column(&cell.address, &parts, &cells, &spilled)
@@ -12318,6 +12405,109 @@ impl<'a> CalcParser<'a> {
         Some(values)
     }
 
+    fn sort_mixed(&mut self, env: &mut CalcEnv<'_>) -> Option<(u32, Vec<GridCell>)> {
+        let (addresses, rows, cols) = self.cell_block(env)?;
+        if rows < 1
+            || cols < 2
+            || rows > 256
+            || cols > 16
+            || rows.saturating_mul(cols) > 256
+            || addresses.len() != (rows * cols) as usize
+        {
+            return None;
+        }
+        self.skip();
+        let (index, descending) = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            (0u32, false)
+        } else {
+            self.require_comma()?;
+            let index = calc_num(self.compare(env)?)?;
+            if !index.is_finite() {
+                return None;
+            }
+            let index = index.trunc();
+            if index < 1.0 || index > f64::from(cols) {
+                return None;
+            }
+            self.skip();
+            let descending = if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                false
+            } else {
+                self.require_comma()?;
+                self.sort_order(env)?
+            };
+            (index as u32 - 1, descending)
+        };
+        let mut raw = Vec::with_capacity(addresses.len());
+        for address in &addresses {
+            raw.push(self.cell_value(address, env)?);
+        }
+        let mut text_column = None;
+        for col in 0..cols {
+            let mut saw_text = false;
+            let mut saw_num = false;
+            for row in 0..rows {
+                match &raw[(row * cols + col) as usize] {
+                    CalcValue::Text(text) if !text.is_empty() => saw_text = true,
+                    CalcValue::Num(number) if number.is_finite() => saw_num = true,
+                    _ => return None,
+                }
+            }
+            if saw_text == saw_num {
+                return None;
+            }
+            if saw_text {
+                if text_column.is_some() {
+                    return None;
+                }
+                text_column = Some(col);
+            }
+        }
+        let text_column = text_column?;
+        let key_is_text = index == text_column;
+        let mut order: Vec<u32> = (0..rows).collect();
+        order.sort_by(|left, right| {
+            let left_cell = &raw[(left * cols + index) as usize];
+            let right_cell = &raw[(right * cols + index) as usize];
+            let compared = if key_is_text {
+                let CalcValue::Text(left_text) = left_cell else {
+                    return std::cmp::Ordering::Equal;
+                };
+                let CalcValue::Text(right_text) = right_cell else {
+                    return std::cmp::Ordering::Equal;
+                };
+                left_text
+                    .to_ascii_lowercase()
+                    .cmp(&right_text.to_ascii_lowercase())
+            } else {
+                let CalcValue::Num(left_num) = left_cell else {
+                    return std::cmp::Ordering::Equal;
+                };
+                let CalcValue::Num(right_num) = right_cell else {
+                    return std::cmp::Ordering::Equal;
+                };
+                left_num.total_cmp(right_num)
+            };
+            if descending {
+                compared.reverse()
+            } else {
+                compared
+            }
+        });
+        let mut cells = Vec::with_capacity(raw.len());
+        for row in order {
+            for col in 0..cols {
+                match &raw[(row * cols + col) as usize] {
+                    CalcValue::Text(text) => cells.push(GridCell::Text(text.clone())),
+                    CalcValue::Num(number) => cells.push(GridCell::Num(*number)),
+                }
+            }
+        }
+        Some((cols, cells))
+    }
+
     fn sortby_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
         let (grid, rows, cols) = self.block_numbers(env)?;
         self.require_comma()?;
@@ -19603,6 +19793,75 @@ mod tests {
             sheet.contains(r#"<f>FILTER(A1:B3,C1:C3,1,1)</f><v>3</v>"#),
             "{sheet}"
         );
+    }
+
+    #[test]
+    fn set_sheet_cell_sorts_mixed() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>pear</t></is></c><c r="B1"><v>20</v></c><c r="C1" t="inlineStr"><is><t>x</t></is></c><c r="E1"><f>SORT(A1:B3)</f><v>0</v></c><c r="F1"><v>0</v></c><c r="H1"><f>SORT(A1:B3,2)</f><v>0</v></c><c r="I1"><v>0</v></c><c r="K1"><f>SORT(A1:B3,1,-1)</f><v>0</v></c><c r="L1"><v>0</v></c><c r="N1"><f>SORT(A1:C2)</f><v>4</v></c><c r="O1"><f>SORT(A1:B3)+1</f><v>5</v></c><c r="P1"><v>3</v></c><c r="Q1" t="inlineStr"><is><t>pear</t></is></c><c r="R1"><f>SORT(P1:Q2,2)</f><v>0</v></c><c r="S1"><v>0</v></c><c r="T1"><f>SORT(U1:V2)</f><v>6</v></c><c r="U1" t="inlineStr"><is><t>apple</t></is></c><c r="V1"><v>1</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>apple</t></is></c><c r="B2"><v>10</v></c><c r="C2" t="inlineStr"><is><t>y</t></is></c><c r="E2"><v>0</v></c><c r="F2"><v>0</v></c><c r="H2"><v>0</v></c><c r="I2"><v>0</v></c><c r="K2"><v>0</v></c><c r="L2"><v>0</v></c><c r="P2"><v>1</v></c><c r="Q2" t="inlineStr"><is><t>apple</t></is></c><c r="R2"><v>0</v></c><c r="S2"><v>0</v></c><c r="V2"><v>2</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>Pear</t></is></c><c r="B3"><v>30</v></c><c r="E3"><v>0</v></c><c r="F3"><v>0</v></c><c r="H3"><v>0</v></c><c r="I3"><v>0</v></c><c r="K3"><v>0</v></c><c r="L3"><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SORT(A1:B3)</f><is><t>apple</t></is>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="F1"><v>10</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="E2" t="inlineStr"><is><t>pear</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="F2"><v>20</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="E3" t="inlineStr"><is><t>Pear</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="F3"><v>30</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>SORT(A1:B3,2)</f><is><t>apple</t></is>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="I1"><v>10</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="H2" t="inlineStr"><is><t>pear</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="I2"><v>20</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>SORT(A1:B3,1,-1)</f><is><t>pear</t></is>"#)
+                || sheet.contains(r#"<f>SORT(A1:B3,1,-1)</f><is><t>Pear</t></is>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<c r="K3" t="inlineStr"><is><t>apple</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="L3"><v>10</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SORT(A1:C2)</f><v>4</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SORT(A1:B3)+1</f><v>5</v>"#), "{sheet}");
+        assert!(sheet.contains(r#"<f>SORT(P1:Q2,2)</f><v>1</v>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="S1" t="inlineStr"><is><t>apple</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="R2"><v>3</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<c r="S2" t="inlineStr"><is><t>pear</t></is></c>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<f>SORT(U1:V2)</f><v>6</v>"#), "{sheet}");
     }
 
     #[test]
