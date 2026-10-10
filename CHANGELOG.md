@@ -99,8 +99,17 @@ release yet.
   The address shifts from the first cell of the range, and `$` locks that
   side. The compared value is that cell's preview text, read as a plain
   number. A function, text, another sheet, or any other formula is skipped
-  and does not count toward the 8. Colors, data bars, and color scales are
-  still skipped and do not count toward the 8. A range larger than 32
+  and does not count toward the 8. A color scale is separate from those 8
+  rules. At most 4 scales are drawn. Each range is at most 32 cells. A scale
+  has two or three stops: min, max, a number, or a percentile from 0 through
+  100. The color is an `rgb` hex value, `RRGGBB` or `AARRGGBB`, blended in
+  RGB from the cell's preview text read as a plain number. A formula stop, a
+  theme color, more than three stops, a stop that falls, or a range larger
+  than 32 cells leaves that scale undrawn and does not count toward the 4.
+  The first scale that covers a cell wins. When every stop is the same
+  number, the first color is used. Hidden rows are already omitted, so they
+  are not part of min, max, or a percentile. Data bars and icon sets are
+  still skipped. The fill is not written back. A range larger than 32
   cells is skipped. The highlight is not written back and formulas do not
   use it. A selected cell can show a legacy comment from the worksheet
   comments part. At most 32 comments are read, each note is at most 256

@@ -630,6 +630,14 @@ pub struct SheetCell {
     pub address: String,
     /// Preview highlight from a matching conditional-formatting rule.
     pub highlight: bool,
+    /// Red channel of a color-scale fill. Ignored when `has_fill` is false.
+    pub fill_r: u8,
+    /// Green channel of a color-scale fill. Ignored when `has_fill` is false.
+    pub fill_g: u8,
+    /// Blue channel of a color-scale fill. Ignored when `has_fill` is false.
+    pub fill_b: u8,
+    /// True when a color scale painted this cell.
+    pub has_fill: bool,
     /// Legacy cell comment shown in the preview. Empty when the cell has none.
     pub note: String,
     /// Columns covered by this cell, including itself.

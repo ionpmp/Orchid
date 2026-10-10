@@ -13253,6 +13253,7 @@ fn render_sheets<R: Read + Seek>(
             &sheet_hidden_rows(&xml, &sheet_cells(&xml, &shared)),
         );
         apply_highlights(&mut rows, &conditional_rules(&xml));
+        apply_color_scales(&mut rows, &color_scales(&xml));
         apply_notes(&mut rows, &load_sheet_notes(archive, path));
         apply_sheet_layout(&mut rows, &xml);
         if rows.is_empty() {
@@ -13840,6 +13841,283 @@ fn apply_notes(rows: &mut [Vec<SheetCell>], notes: &[(String, String)]) {
     }
 }
 
+enum ScaleStop {
+    Min,
+    Max,
+    Num(f64),
+    Percentile(f64),
+}
+
+struct ColorScale {
+    cells: Vec<String>,
+    stops: Vec<(ScaleStop, (u8, u8, u8))>,
+}
+
+fn parse_rgb(text: &str) -> Option<(u8, u8, u8)> {
+    let text = text.trim();
+    let hex = if text.len() == 8 {
+        &text[2..]
+    } else if text.len() == 6 {
+        text
+    } else {
+        return None;
+    };
+    if !hex.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some((
+        u8::from_str_radix(&hex[0..2], 16).ok()?,
+        u8::from_str_radix(&hex[2..4], 16).ok()?,
+        u8::from_str_radix(&hex[4..6], 16).ok()?,
+    ))
+}
+
+fn scale_stop(kind: &str, value: &str) -> Option<ScaleStop> {
+    if kind.eq_ignore_ascii_case("min") {
+        Some(ScaleStop::Min)
+    } else if kind.eq_ignore_ascii_case("max") {
+        Some(ScaleStop::Max)
+    } else if kind.eq_ignore_ascii_case("num") {
+        Some(ScaleStop::Num(plain_preview_number(value)?))
+    } else if kind.eq_ignore_ascii_case("percentile") {
+        let number = plain_preview_number(value)?;
+        if (0.0..=100.0).contains(&number) {
+            Some(ScaleStop::Percentile(number))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+fn note_scale_part(
+    name: &str,
+    event: &quick_xml::events::BytesStart<'_>,
+    cfvos: &mut Vec<ScaleStop>,
+    colors: &mut Vec<(u8, u8, u8)>,
+    rejected: &mut bool,
+) {
+    if *rejected {
+        return;
+    }
+    if name == "cfvo" {
+        if cfvos.len() >= 3 {
+            *rejected = true;
+            return;
+        }
+        match scale_stop(&attr(event, "type"), &attr(event, "val")) {
+            Some(stop) => cfvos.push(stop),
+            None => *rejected = true,
+        }
+    } else if name == "color" {
+        if colors.len() >= 3 {
+            *rejected = true;
+            return;
+        }
+        match parse_rgb(&attr(event, "rgb")) {
+            Some(color) => colors.push(color),
+            None => *rejected = true,
+        }
+    }
+}
+
+fn color_scales(xml: &str) -> Vec<ColorScale> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut scales = Vec::new();
+    let mut sqref = String::new();
+    let mut in_scale = false;
+    let mut rejected = false;
+    let mut cfvos = Vec::new();
+    let mut colors = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "conditionalFormatting" {
+                    sqref = attr(&event, "sqref");
+                } else if name == "cfRule"
+                    && attr(&event, "type").eq_ignore_ascii_case("colorScale")
+                    && scales.len() < 4
+                {
+                    in_scale = true;
+                    rejected = false;
+                    cfvos.clear();
+                    colors.clear();
+                } else if in_scale {
+                    note_scale_part(&name, &event, &mut cfvos, &mut colors, &mut rejected);
+                }
+            }
+            Ok(Event::Empty(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "conditionalFormatting" {
+                    sqref = attr(&event, "sqref");
+                } else if in_scale {
+                    note_scale_part(&name, &event, &mut cfvos, &mut colors, &mut rejected);
+                }
+            }
+            Ok(Event::End(event)) => {
+                if local_name(event.name().as_ref()) == "cfRule" && in_scale {
+                    in_scale = false;
+                    if !rejected
+                        && cfvos.len() == colors.len()
+                        && (cfvos.len() == 2 || cfvos.len() == 3)
+                        && scales.len() < 4
+                    {
+                        let falling = {
+                            let mut previous = None;
+                            let mut falls = false;
+                            for stop in &cfvos {
+                                let value = match stop {
+                                    ScaleStop::Num(number) | ScaleStop::Percentile(number) => {
+                                        Some(*number)
+                                    }
+                                    ScaleStop::Min | ScaleStop::Max => None,
+                                };
+                                if let (Some(earlier), Some(later)) = (previous, value) {
+                                    if later + 1e-9 < earlier {
+                                        falls = true;
+                                    }
+                                }
+                                previous = value;
+                            }
+                            falls
+                        };
+                        if !falling {
+                            if let Some(cells) = sqref_cells(&sqref) {
+                                scales.push(ColorScale {
+                                    cells,
+                                    stops: cfvos.drain(..).zip(colors.drain(..)).collect(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    scales
+}
+
+fn percentile_inc(sorted: &[f64], percent: f64) -> f64 {
+    if sorted.len() == 1 {
+        return sorted[0];
+    }
+    let rank = percent / 100.0 * (sorted.len() - 1) as f64;
+    let low = rank.floor() as usize;
+    let high = rank.ceil() as usize;
+    let fraction = rank - low as f64;
+    sorted[low] * (1.0 - fraction) + sorted[high] * fraction
+}
+
+fn scale_color(value: f64, stops: &[(f64, (u8, u8, u8))]) -> (u8, u8, u8) {
+    if value <= stops[0].0 {
+        return stops[0].1;
+    }
+    if value >= stops[stops.len() - 1].0 {
+        return stops[stops.len() - 1].1;
+    }
+    for pair in stops.windows(2) {
+        let (low, low_color) = pair[0];
+        let (high, high_color) = pair[1];
+        if value > high {
+            continue;
+        }
+        if (high - low).abs() < 1e-12 {
+            return high_color;
+        }
+        let portion = (value - low) / (high - low);
+        let channel = |from: u8, to: u8| -> u8 {
+            (f64::from(from) + (f64::from(to) - f64::from(from)) * portion).round() as u8
+        };
+        return (
+            channel(low_color.0, high_color.0),
+            channel(low_color.1, high_color.1),
+            channel(low_color.2, high_color.2),
+        );
+    }
+    stops[stops.len() - 1].1
+}
+
+fn resolve_stops(
+    stops: &[(ScaleStop, (u8, u8, u8))],
+    numbers: &[f64],
+) -> Option<Vec<(f64, (u8, u8, u8))>> {
+    if numbers.is_empty() {
+        return None;
+    }
+    let mut sorted = numbers.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    let mut resolved = Vec::with_capacity(stops.len());
+    for (kind, color) in stops {
+        let value = match kind {
+            ScaleStop::Min => sorted[0],
+            ScaleStop::Max => sorted[sorted.len() - 1],
+            ScaleStop::Num(number) => *number,
+            ScaleStop::Percentile(percent) => percentile_inc(&sorted, *percent),
+        };
+        if !value.is_finite() {
+            return None;
+        }
+        resolved.push((value, *color));
+    }
+    for pair in resolved.windows(2) {
+        if pair[1].0 + 1e-9 < pair[0].0 {
+            return None;
+        }
+    }
+    Some(resolved)
+}
+
+fn apply_color_scales(rows: &mut [Vec<SheetCell>], scales: &[ColorScale]) {
+    let mut numbers = std::collections::HashMap::new();
+    for row in rows.iter() {
+        for cell in row {
+            if let Some(number) = plain_preview_number(&cell.text) {
+                numbers.insert(cell.address.to_ascii_uppercase(), number);
+            }
+        }
+    }
+    for scale in scales {
+        let samples: Vec<f64> = scale
+            .cells
+            .iter()
+            .filter_map(|address| numbers.get(&address.to_ascii_uppercase()).copied())
+            .collect();
+        let Some(stops) = resolve_stops(&scale.stops, &samples) else {
+            continue;
+        };
+        for row in rows.iter_mut() {
+            for cell in row.iter_mut() {
+                if cell.has_fill {
+                    continue;
+                }
+                let address = cell.address.to_ascii_uppercase();
+                if !scale
+                    .cells
+                    .iter()
+                    .any(|item| item.eq_ignore_ascii_case(&address))
+                {
+                    continue;
+                }
+                let Some(number) = numbers.get(&address).copied() else {
+                    continue;
+                };
+                let (red, green, blue) = scale_color(number, &stops);
+                cell.fill_r = red;
+                cell.fill_g = green;
+                cell.fill_b = blue;
+                cell.has_fill = true;
+            }
+        }
+    }
+}
+
 fn apply_highlights(rows: &mut [Vec<SheetCell>], rules: &[CfRule]) {
     let mut values = std::collections::HashMap::new();
     for row in rows.iter() {
@@ -14294,6 +14572,10 @@ fn place(row: &mut Vec<SheetCell>, col: usize, text: String, address: String) {
         text,
         address,
         highlight: false,
+        fill_r: 0,
+        fill_g: 0,
+        fill_b: 0,
+        has_fill: false,
         note: String::new(),
         span: 1,
         covered: false,
@@ -14806,6 +15088,57 @@ mod tests {
             "pear does not match the filter {addresses:?}"
         );
         assert!(!addresses.contains(&"D4"), "{addresses:?}");
+    }
+
+    #[test]
+    fn sheet_preview_color_scale() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="B1"><v>0</v></c><c r="C1"><v>25</v></c><c r="D1"><v>7</v></c><c r="E1"><v>3</v></c><c r="F1"><v>9</v></c><c r="G1"><v>4</v></c><c r="I1"><v>5</v></c><c r="J1"><v>6</v></c><c r="K1"><v>5</v></c></row><row r="2"><c r="A2"><v>50</v></c><c r="B2"><v>50</v></c></row><row r="3"><c r="A3"><v>100</v></c><c r="B3"><v>100</v></c></row></sheetData><conditionalFormatting sqref="I1:I33"><cfRule type="colorScale"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="FFFF0000"/><color rgb="FF00FF00"/></colorScale></cfRule></conditionalFormatting><conditionalFormatting sqref="E1"><cfRule type="colorScale"><colorScale><cfvo type="formula" val="0"/><cfvo type="max"/><color rgb="FFFF0000"/><color rgb="FF00FF00"/></colorScale></cfRule></conditionalFormatting><conditionalFormatting sqref="J1"><cfRule type="colorScale"><colorScale><cfvo type="min"/><cfvo type="max"/><color theme="4"/><color rgb="FF00FF00"/></colorScale></cfRule></conditionalFormatting><conditionalFormatting sqref="K1"><cfRule type="colorScale"><colorScale><cfvo type="num" val="10"/><cfvo type="num" val="0"/><color rgb="FFFF0000"/><color rgb="FF00FF00"/></colorScale></cfRule></conditionalFormatting><conditionalFormatting sqref="A1:A3"><cfRule type="cellIs" operator="greaterThan"><formula>-1</formula></cfRule><cfRule type="colorScale"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="FFFF0000"/><color rgb="FF00FF00"/></colorScale></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B3"><cfRule type="colorScale"><colorScale><cfvo type="min"/><cfvo type="percentile" val="50"/><cfvo type="max"/><color rgb="FFFF0000"/><color rgb="FFFFFF00"/><color rgb="FF00FF00"/></colorScale></cfRule></conditionalFormatting><conditionalFormatting sqref="C1"><cfRule type="colorScale"><colorScale><cfvo type="num" val="0"/><cfvo type="num" val="100"/><color rgb="FF0000"/><color rgb="0000FF"/></colorScale></cfRule></conditionalFormatting><conditionalFormatting sqref="D1"><cfRule type="colorScale"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="FFFF0000"/><color rgb="FF00FF00"/></colorScale></cfRule></conditionalFormatting><conditionalFormatting sqref="F1"><cfRule type="colorScale"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="FF0000FF"/><color rgb="FF0000FF"/></colorScale></cfRule></conditionalFormatting><conditionalFormatting sqref="G1"><cfRule type="dataBar"><dataBar><cfvo type="min"/><cfvo type="max"/></dataBar></cfRule></conditionalFormatting></worksheet>"#,
+            ),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let cell = |address: &str| {
+            book.sheets[0]
+                .rows
+                .iter()
+                .flatten()
+                .find(|cell| cell.address == address)
+                .unwrap_or_else(|| panic!("missing {address}"))
+        };
+        let painted = |address: &str, red: u8, green: u8, blue: u8| {
+            let cell = cell(address);
+            assert!(cell.has_fill, "{address} should be painted");
+            assert_eq!(
+                (cell.fill_r, cell.fill_g, cell.fill_b),
+                (red, green, blue),
+                "{address}"
+            );
+        };
+        painted("A1", 255, 0, 0);
+        painted("A2", 128, 128, 0);
+        painted("A3", 0, 255, 0);
+        assert!(cell("A1").highlight, "a comparison rule still highlights");
+        painted("B1", 255, 0, 0);
+        painted("B2", 255, 255, 0);
+        painted("B3", 0, 255, 0);
+        painted("C1", 191, 0, 64);
+        painted("D1", 255, 0, 0);
+        for address in ["E1", "F1", "G1", "I1", "J1", "K1"] {
+            assert!(!cell(address).has_fill, "{address} stays unpainted");
+        }
     }
 
     #[test]
@@ -18568,10 +18901,7 @@ mod tests {
             sheet.contains(r#"<f>FILTER(D1:E2,F1:F2,&quot;zz&quot;)</f><v>6</v>"#),
             "{sheet}"
         );
-        assert!(
-            sheet.contains(r#"<f>SORT(Q1:Q2)</f><v>4</v>"#),
-            "{sheet}"
-        );
+        assert!(sheet.contains(r#"<f>SORT(Q1:Q2)</f><v>4</v>"#), "{sheet}");
     }
 
     #[test]
