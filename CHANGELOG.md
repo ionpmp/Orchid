@@ -1087,7 +1087,15 @@ release yet.
   `XLOOKUP` return range must be the same length. A blank return cell is 0.
   The optional fourth argument is written when nothing matches. A fifth
   argument is the match mode. Without the fourth argument, or when `XMATCH`
-  finds nothing, the stored value remains.
+  finds nothing, the stored value remains. `XLOOKUP` can also return one
+  row when the formula is that one call. The keys are one column. The return
+  range has the same number of rows and 2 through 16 columns, and every value
+  in the matched row is a number. That row is written across existing value
+  cells. A text cell in the matched row, a horizontal key, or an expression
+  around the call leaves the stored value. A one-column return stays a single
+  value. On a miss, a numeric fourth argument is written into the formula
+  cell only, and the cells beside it stay as they were. A text fourth
+  argument, or no fourth argument, leaves the stored value.
   `LET` binds up to eight names, then calculates the last argument. A name
   starts with a letter or underscore and uses letters, digits, underscores, and
   dots. It must not look like a cell address. A later binding replaces an
