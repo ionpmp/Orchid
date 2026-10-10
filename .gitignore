@@ -74,6 +74,10 @@ third-party/mpv/**/include/
 Untitled
 Untitled.*
 *.scratch
+mail_check*.txt
+mail_test*.txt
+mail_err.json
+ui_check*.txt
 
 # ---------------------------------------------------------------------------
 # OS junk
