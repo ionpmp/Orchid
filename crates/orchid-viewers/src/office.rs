@@ -5376,8 +5376,21 @@ fn oddf_price(
     let early = shift_months(first_coupon, -f64::from(12 / frequency), false)?;
     let period = normal_period_days(early, first_coupon, basis, frequency)?;
     let odd_days = basis_days(issue, first_coupon, basis)?;
-    if odd_days <= 0.0 || odd_days > period + 1e-9 {
+    if odd_days <= 0.0 {
         return None;
+    }
+    if odd_days > period + 1e-9 {
+        return oddf_long_price(
+            settlement,
+            maturity,
+            issue,
+            first_coupon,
+            rate,
+            yld,
+            redemption,
+            frequency,
+            basis,
+        );
     }
     let next_days = basis_days(settlement, first_coupon, basis)?;
     let accrued = basis_days(issue, settlement, basis)?;
@@ -5398,6 +5411,118 @@ fn oddf_price(
         present += coupon / base.powf((index - 1) as f64 + frac);
     }
     let value = present - coupon * (accrued / period);
+    value.is_finite().then_some(value)
+}
+
+fn coupon_dates_back(origin: f64, stop: f64, frequency: i32, cap: usize) -> Option<Vec<f64>> {
+    let origin = origin.trunc();
+    let stop = stop.trunc();
+    if origin < 1.0 || stop < 1.0 || cap < 2 {
+        return None;
+    }
+    let (year, month, day) = excel_parts(origin)?;
+    let end_of_month = day == month_length(year, month)?;
+    let step = 12 / frequency;
+    let mut dates = Vec::new();
+    let mut cursor = origin;
+    loop {
+        dates.push(cursor);
+        if cursor <= stop {
+            break;
+        }
+        if dates.len() >= cap {
+            return None;
+        }
+        cursor = shift_months(cursor, -f64::from(step), end_of_month)?;
+    }
+    dates.reverse();
+    (dates.len() >= 2).then_some(dates)
+}
+
+fn oddf_long_price(
+    settlement: f64,
+    maturity: f64,
+    issue: f64,
+    first_coupon: f64,
+    rate: f64,
+    yld: f64,
+    redemption: f64,
+    frequency: i32,
+    basis: i32,
+) -> Option<f64> {
+    let near = coupon_dates_back(first_coupon, settlement, frequency, 9)?;
+    let previous = near[near.len() - 2];
+    let next = near[near.len() - 1];
+    if (next - first_coupon.trunc()).abs() > 0.5 {
+        return None;
+    }
+    let period = normal_period_days(previous, next, basis, frequency)?;
+    let accrued_before = basis_days(previous, settlement, basis)?;
+    let next_days = if basis == 2 || basis == 3 {
+        basis_days(settlement, next, basis)?
+    } else {
+        period - accrued_before
+    };
+    if next_days < 0.0 || period <= 0.0 {
+        return None;
+    }
+    let quasi_count = near.len() - 2;
+    let schedule = coupon_dates_back(maturity, first_coupon, frequency, 4_801)?;
+    if (schedule[0] - first_coupon.trunc()).abs() > 0.5 {
+        return None;
+    }
+    let coupons = schedule.len() - 1;
+    let span = coupon_dates_back(first_coupon, issue, frequency, 9)?;
+    if span.len() < 2 || span.len() > 9 {
+        return None;
+    }
+    let mut coupon_fraction = 0.0;
+    let mut accrued_fraction = 0.0;
+    for index in 0..span.len() - 1 {
+        let start = span[index];
+        let end = span[index + 1];
+        let length = if basis == 1 {
+            basis_days(start, end, 1)?
+        } else {
+            period
+        };
+        if length <= 0.0 {
+            return None;
+        }
+        let covered = if index == 0 {
+            if end < issue {
+                0.0
+            } else {
+                basis_days(issue, end, basis)?
+            }
+        } else {
+            length
+        };
+        let from = issue.max(start);
+        let to = settlement.min(end);
+        let accrued = if to > from {
+            basis_days(from, to, basis)?
+        } else {
+            0.0
+        };
+        coupon_fraction += covered / length;
+        accrued_fraction += accrued / length;
+    }
+    let per_yield = yld / f64::from(frequency);
+    if per_yield <= -1.0 {
+        return None;
+    }
+    let coupon = 100.0 * rate / f64::from(frequency);
+    let base = 1.0 + per_yield;
+    let frac = next_days / period;
+    let mut present = redemption / base.powf(quasi_count as f64 + coupons as f64 + frac);
+    present += coupon * coupon_fraction / base.powf(quasi_count as f64 + frac);
+    let first_regular = quasi_count + 1;
+    let last_regular = quasi_count + coupons;
+    for index in first_regular..=last_regular {
+        present += coupon / base.powf(index as f64 + frac);
+    }
+    let value = present - accrued_fraction * coupon;
     value.is_finite().then_some(value)
 }
 
@@ -19325,7 +19450,7 @@ mod tests {
             ),
             (
                 "xl/worksheets/sheet1.xml",
-                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>ODDFPRICE(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,10,15),DATE(2009,3,1),0.0785,0.0625,100,2,1)</f><v>0</v></c><c r="B1"><f>ODDFYIELD(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,10,15),DATE(2009,3,1),0.0785,113.597717474079,100,2,1)</f><v>0</v></c><c r="C1"><f>ODDLPRICE(DATE(2008,2,7),DATE(2008,6,15),DATE(2007,10,15),0.0375,0.0405,100,2,0)</f><v>0</v></c><c r="D1"><f>ODDLYIELD(DATE(2008,2,7),DATE(2008,6,15),DATE(2007,10,15),0.0375,99.8782860147213,100,2,0)</f><v>0</v></c><c r="E1"><f>ODDFPRICE(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,1,15),DATE(2009,3,1),0.0785,0.0625,100,2,1)</f><v>4</v></c><c r="F1"><f>ODDLPRICE(DATE(2008,2,7),DATE(2008,6,15),DATE(2007,1,15),0.0375,0.0405,100,2,0)</f><v>5</v></c><c r="Z1"><v>0</v></c></row></sheetData></worksheet>"#,
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><f>ODDFPRICE(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,10,15),DATE(2009,3,1),0.0785,0.0625,100,2,1)</f><v>0</v></c><c r="B1"><f>ODDFYIELD(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,10,15),DATE(2009,3,1),0.0785,113.597717474079,100,2,1)</f><v>0</v></c><c r="C1"><f>ODDLPRICE(DATE(2008,2,7),DATE(2008,6,15),DATE(2007,10,15),0.0375,0.0405,100,2,0)</f><v>0</v></c><c r="D1"><f>ODDLYIELD(DATE(2008,2,7),DATE(2008,6,15),DATE(2007,10,15),0.0375,99.8782860147213,100,2,0)</f><v>0</v></c><c r="E1"><f>ODDFPRICE(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,1,15),DATE(2009,3,1),0.0785,0.0625,100,2,1)</f><v>4</v></c><c r="F1"><f>ODDLPRICE(DATE(2008,2,7),DATE(2008,6,15),DATE(2007,1,15),0.0375,0.0405,100,2,0)</f><v>5</v></c><c r="G1"><f>ODDFPRICE(DATE(2008,11,11),DATE(2021,3,1),DATE(2004,1,15),DATE(2009,3,1),0.0785,0.0625,100,2,1)</f><v>6</v></c><c r="H1"><f>ODDFPRICE(DATE(2007,5,1),DATE(2014,10,31),DATE(2007,3,24),DATE(2007,10,31),0,0.01,100,2,1)</f><v>0</v></c><c r="I1"><f>ODDFYIELD(DATE(2007,5,1),DATE(2014,10,31),DATE(2007,3,24),DATE(2007,10,31),0,92.7942029404091,100,2,1)</f><v>0</v></c><c r="J1"><f>ODDFYIELD(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,1,15),DATE(2009,3,1),0.0785,113.4889408396105,100,2,1)</f><v>0</v></c><c r="Z1"><v>0</v></c></row></sheetData></worksheet>"#,
             ),
         ]);
         let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
@@ -19357,13 +19482,37 @@ mod tests {
         );
         assert!(
             sheet.contains(
-                r#"<f>ODDFPRICE(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,1,15),DATE(2009,3,1),0.0785,0.0625,100,2,1)</f><v>4</v>"#
+                r#"<f>ODDFPRICE(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,1,15),DATE(2009,3,1),0.0785,0.0625,100,2,1)</f><v>113.48894084</v>"#
             ),
             "{sheet}"
         );
         assert!(
             sheet.contains(
                 r#"<f>ODDLPRICE(DATE(2008,2,7),DATE(2008,6,15),DATE(2007,1,15),0.0375,0.0405,100,2,0)</f><v>5</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>ODDFPRICE(DATE(2008,11,11),DATE(2021,3,1),DATE(2004,1,15),DATE(2009,3,1),0.0785,0.0625,100,2,1)</f><v>6</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>ODDFPRICE(DATE(2007,5,1),DATE(2014,10,31),DATE(2007,3,24),DATE(2007,10,31),0,0.01,100,2,1)</f><v>92.79420294</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>ODDFYIELD(DATE(2007,5,1),DATE(2014,10,31),DATE(2007,3,24),DATE(2007,10,31),0,92.7942029404091,100,2,1)</f><v>0.01</v>"#
+            ),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(
+                r#"<f>ODDFYIELD(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,1,15),DATE(2009,3,1),0.0785,113.4889408396105,100,2,1)</f><v>0.0625</v>"#
             ),
             "{sheet}"
         );

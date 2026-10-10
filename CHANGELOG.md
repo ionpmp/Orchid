@@ -940,12 +940,15 @@ release yet.
   2, or 4. Any other basis or frequency leaves the stored value. There is no
   odd coupon inside `PRICE` or `YIELD`. `ODDFPRICE` and `ODDFYIELD` price a
   short first period: issue, then settlement, then the first coupon, then
-  maturity, and the first coupon must land on the maturity schedule. The odd
-  span must be no longer than one normal period; a longer first period leaves
-  the stored value. `ODDLPRICE` and `ODDLYIELD` price the last period from the
+  maturity, and the first coupon must land on the maturity schedule. A longer
+  first period is split into at most 8 quasi-coupon periods. The end-of-month
+  schedule is kept when the first coupon is the last day of its month. More
+  than 8 quasi-coupon periods leaves the stored value. `ODDLPRICE` and
+  `ODDLYIELD` price the last period from the
   last interest date through maturity. That span may be up to two normal
   periods. A yield below 0 leaves the stored value. The published short first
-  price is 113.59771747 and the published long last price is 99.87828601.
+  price is 113.59771747, the published zero-coupon long first price is
+  92.79420294, and the published long last price is 99.87828601.
   Settlement on or after
   maturity leaves the stored value. `YIELD` takes at most 40 Newton steps,
   starting from the coupon rate, or from 0.05 when the coupon is 0. A yield
