@@ -70,6 +70,8 @@ struct ManagedEngineInner {
     #[allow(dead_code)]
     crypto_store: Arc<ChunkStore>,
     deduplicator: Arc<Deduplicator>,
+    /// Held so managed-folder providers stay registered for the engine lifetime.
+    #[allow(dead_code)]
     registry: Arc<FsProviderRegistry>,
     bus: Arc<orchid_core::EventBus>,
     watcher: Arc<FileWatcher>,
@@ -486,11 +488,4 @@ async fn file_matches(path: &std::path::Path, hash: &[u8; 32], size: u64) -> boo
         .await
         .ok()
         .is_some_and(|got| got == *hash)
-}
-
-// For compile-time access to the registry field even if we don't use it in
-// this minimal MVP.
-#[allow(dead_code)]
-fn _registry_field(inner: &ManagedEngineInner) -> &FsProviderRegistry {
-    &inner.registry
 }

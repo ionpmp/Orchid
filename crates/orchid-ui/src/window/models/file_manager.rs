@@ -2,7 +2,6 @@
 
 use orchid_i18n::LocaleManager;
 use slint::{Image, Model, ModelRc, SharedString, VecModel};
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use uuid::Uuid;

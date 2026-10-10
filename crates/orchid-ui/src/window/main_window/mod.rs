@@ -90,7 +90,7 @@ mod wire;
 mod workspace;
 
 pub use workspace::build_empty_workspace_model;
-pub(super) use workspace::{next_untitled_document_path, next_untitled_docx_path};
+pub(super) use workspace::next_untitled_docx_path;
 
 use canvas::ResizeInteraction;
 
@@ -1373,7 +1373,7 @@ impl MainWindowController {
         self.window
             .window()
             .on_winit_window_event(move |_winit_window, event| {
-                use slint::winit_030::{winit::event::WindowEvent, EventResult};
+use slint::winit_030::{ winit::event::WindowEvent, EventResult };
                 match event {
                     WindowEvent::CursorMoved { position, .. } => {
                         if let Some(c) = tw.upgrade() {
@@ -1396,7 +1396,7 @@ impl MainWindowController {
                     }
                     WindowEvent::KeyboardInput { event, .. } => {
                         use slint::winit_030::winit::event::ElementState;
-                        use slint::winit_030::winit::keyboard::{Key, NamedKey};
+use slint::winit_030::winit::keyboard::{ Key, NamedKey };
                         if event.state == ElementState::Pressed {
                             if let Some(c) = tw.upgrade() {
                                 if c.palette.read().visible

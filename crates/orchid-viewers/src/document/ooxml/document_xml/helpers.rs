@@ -1,25 +1,8 @@
 //! Shared OOXML helpers for `word/document.xml`.
 
-#![allow(unused_imports)]
+use quick_xml::events::BytesStart;
 
-use std::collections::HashMap;
-use std::io::Cursor;
-
-use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
-use quick_xml::reader::Reader;
-use quick_xml::writer::Writer;
-
-use crate::document::model::{
-    Alignment, Block, Bookmark, CellImage, CommentRange, DocField, Document, Hyperlink,
-    ImageFormat, InlineImage, LineSpacingRule, ListKind, OpaqueXmlNode, PageSetup, Paragraph, Run,
-    RunStyle, SectionBreakType, Table, TableCell, TableRow, VMerge, CELL_BORDER_BOTTOM,
-    CELL_BORDER_LEFT, CELL_BORDER_RIGHT, CELL_BORDER_TOP,
-};
-use crate::document::ooxml::numbering::NumberingDefs;
-use crate::document::ooxml::styles::StyleDefaults;
-use crate::error::{Result, ViewerError};
-
-use super::Relationships;
+use crate::document::model::{Alignment, ImageFormat, InlineImage};
 
 /// Resolve a document relationship target to a package part path under `word/`.
 #[must_use]

@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use crate::error::{Result, ViewerError};
+use crate::error::Result;
 use crate::text::buffer::TextBuffer;
 
 /// Save `buffer` back to `path`.
@@ -14,7 +14,7 @@ use crate::text::buffer::TextBuffer;
 /// # Errors
 ///
 /// Propagates [`orchid_fs::FsError`] on any provider failure, and
-/// [`ViewerError::TextDecode`] when encoding the buffer fails.
+/// [`crate::error::ViewerError::TextDecode`] when encoding the buffer fails.
 pub async fn save_text(
     path: &orchid_fs::FsPath,
     registry: Arc<orchid_fs::FsProviderRegistry>,
@@ -35,10 +35,4 @@ fn tmp_path_for(path: &orchid_fs::FsPath) -> Result<orchid_fs::FsPath> {
     let raw = path.as_str();
     let with_suffix = format!("{raw}.orchid-save");
     Ok(orchid_fs::FsPath::new(with_suffix)?)
-}
-
-// Keep the unused import quiet on builds that elide the tracing calls.
-#[allow(dead_code)]
-fn _touch() -> Option<ViewerError> {
-    None
 }

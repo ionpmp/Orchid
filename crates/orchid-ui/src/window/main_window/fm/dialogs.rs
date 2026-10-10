@@ -1,39 +1,24 @@
 //! File-manager handlers for [`MainWindowController`].
 
-#![allow(unused_imports)]
-
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::Instant;
 
 use secrecy::ExposeSecret;
 use slint::Model;
 use slint::ModelRc;
 use slint::SharedString;
-use slint::VecModel;
-use tracing::{debug, warn};
+use tracing::warn;
 use uuid::Uuid;
 
-use orchid_storage::LifecycleState;
-use orchid_widgets::layout::PixelBounds;
-use orchid_widgets::{CreateWidgetRequest, WidgetPayload};
-
-use crate::slint_generated::{
-    FmConfirmDialog, FmConflictDialog, FmPassphraseState, FmPathSuggest, FmRenameState, FmTagState,
-    WidgetFrameModel,
-};
-use crate::window::errors::{fm_localized_error, is_passphrase_retryable};
+use crate::slint_generated::FmRenameState;
+use crate::window::errors::is_passphrase_retryable;
 use crate::window::models::{
-    build_context_menu, build_managed_policy_state, empty_confirm_dialog, empty_conflict_dialog,
-    empty_context_menu, empty_find_state, empty_fm_overlays, empty_managed_policy_state,
-    empty_passphrase_state, empty_rename_state, empty_tag_state, fm_grid_rebase_slack,
-    fm_grid_visible_range, fm_grid_window, fm_list_visible_range, fm_list_window,
-    fm_passphrase_dialog_labels, fm_window_covers, patch_fm_selection, sync_fm_path_suggestions,
-    FileManagerOverlays, FmViewport, FM_LIST_REBASE_SLACK,
+    build_context_menu, empty_confirm_dialog, empty_conflict_dialog, empty_context_menu,
+    empty_find_state, empty_managed_policy_state, empty_passphrase_state, empty_rename_state,
+    empty_tag_state,
 };
 use crate::window::spawn;
 
-use super::super::{open_file_associations, open_with_application_picker, MainWindowController};
+use super::super::MainWindowController;
 use super::{default_fm_overlays, parse_select_filter_commit};
 
 impl MainWindowController {

@@ -1170,7 +1170,3 @@ fn build_search_index_scope(
     };
     (scope, roots)
 }
-
-// Keep the import graph obvious for maintainers.
-#[allow(dead_code)]
-fn _require_uierror_visibility(_: UiError) {}

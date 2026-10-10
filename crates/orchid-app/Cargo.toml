@@ -1,6 +1,6 @@
 [package]
 name = "orchid-app"
-description = "Orchid desktop application: wires every workspace crate together and owns the main loop."
+description = "Orchid desktop application: owns the main loop and boots the UI."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -20,14 +20,7 @@ tokio = { workspace = true }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
-orchid-core.workspace = true
 orchid-storage.workspace = true
-orchid-crypto.workspace = true
-orchid-fs.workspace = true
-orchid-search.workspace = true
-orchid-terminal.workspace = true
-orchid-viewers.workspace = true
-orchid-widgets.workspace = true
 orchid-i18n.workspace = true
 orchid-ui.workspace = true
 

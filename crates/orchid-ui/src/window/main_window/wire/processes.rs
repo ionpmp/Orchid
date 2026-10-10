@@ -1,20 +1,9 @@
 //! Processes widget callbacks.
 
-#![allow(unused_imports)]
-
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
-use std::time::Instant;
 
-use slint::ComponentHandle;
-use tracing::warn;
-use uuid::Uuid;
 
-use crate::error::Result;
-use crate::slint_generated::{NotificationGlobal, ShortcutBindings};
-use crate::window::errors::{ui_localized_error, viewer_localized_error};
-use crate::window::main_window::{MainWindowController, PasswordCopyKind};
-use crate::window::spawn;
+use crate::window::main_window::MainWindowController;
 
 impl MainWindowController {
     pub(super) fn wire_processes(self: &Arc<Self>, t: &Weak<Self>) {
