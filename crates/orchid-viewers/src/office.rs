@@ -12773,12 +12773,23 @@ impl<'a> CalcParser<'a> {
         let lookup = self.compare(env)?;
         self.require_comma()?;
         let (keys, key_rows, key_cols) = self.cell_block(env)?;
-        if key_cols != 1 || key_rows == 0 || key_rows > 256 || keys.len() != key_rows as usize {
+        let column_keys =
+            key_cols == 1 && key_rows > 0 && key_rows <= 256 && keys.len() == key_rows as usize;
+        let row_keys =
+            key_rows == 1 && key_cols >= 2 && key_cols <= 256 && keys.len() == key_cols as usize;
+        if !column_keys && !row_keys {
             return None;
         }
         self.require_comma()?;
         let (block, rows, cols) = self.cell_block(env)?;
-        if cols < 2 || cols > 16 || rows != key_rows || block.len() != (rows * cols) as usize {
+        if block.len() != (rows * cols) as usize {
+            return None;
+        }
+        if column_keys {
+            if cols < 2 || cols > 16 || rows != key_rows {
+                return None;
+            }
+        } else if rows < 2 || rows > 16 || cols != key_cols {
             return None;
         }
         self.skip();
@@ -12814,18 +12825,42 @@ impl<'a> CalcParser<'a> {
                 _ => None,
             },
             LookupHit::At(index) => {
-                let start = index * cols as usize;
-                let mut values = Vec::with_capacity(cols as usize);
-                for address in &block[start..start + cols as usize] {
-                    match self.cell_value(address, env) {
-                        Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
-                        None => values.push(0.0),
-                        _ => return None,
+                let mut values = Vec::new();
+                let width = if column_keys {
+                    let start = index * cols as usize;
+                    let end = start + cols as usize;
+                    if end > block.len() {
+                        return None;
                     }
-                }
+                    for address in &block[start..end] {
+                        match self.cell_value(address, env) {
+                            Some(CalcValue::Num(number)) if number.is_finite() => {
+                                values.push(number)
+                            }
+                            None => values.push(0.0),
+                            _ => return None,
+                        }
+                    }
+                    cols
+                } else {
+                    if index >= cols as usize {
+                        return None;
+                    }
+                    for row in 0..rows as usize {
+                        let address = &block[row * cols as usize + index];
+                        match self.cell_value(address, env) {
+                            Some(CalcValue::Num(number)) if number.is_finite() => {
+                                values.push(number)
+                            }
+                            None => values.push(0.0),
+                            _ => return None,
+                        }
+                    }
+                    1
+                };
                 Some(Spill {
                     values,
-                    columns: cols,
+                    columns: width,
                     all_or_nothing: true,
                 })
             }
@@ -19510,6 +19545,58 @@ mod tests {
             "{sheet}"
         );
         assert!(sheet.contains(r#"<c r="O1"><v>0</v></c>"#), "{sheet}");
+    }
+
+    #[test]
+    fn set_sheet_cell_xlookup_column() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>apple</t></is></c><c r="B1" t="inlineStr"><is><t>pear</t></is></c><c r="C1" t="inlineStr"><is><t>plum</t></is></c><c r="E1"><f>XLOOKUP(&quot;pear&quot;,A1:C1,A2:C4)</f><v>0</v></c><c r="F1"><f>XLOOKUP(&quot;nope&quot;,A1:C1,A2:C4,9)</f><v>0</v></c><c r="G1"><f>XLOOKUP(&quot;nope&quot;,A1:C1,A2:C4)</f><v>6</v></c><c r="H1"><f>XLOOKUP(&quot;pear&quot;,A1:C1,A2:C4)+1</f><v>5</v></c><c r="I1"><f>XLOOKUP(&quot;pear&quot;,A1:C1,A5:C5)</f><v>0</v></c><c r="J1"><f>XLOOKUP(&quot;plum&quot;,A1:C1,A2:C4)</f><v>3</v></c><c r="K1"><f>XLOOKUP(&quot;a*&quot;,A1:C1,A2:C4,7,1)</f><v>11</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>1</v></c><c r="B2"><v>10</v></c><c r="C2" t="inlineStr"><is><t>x</t></is></c><c r="E2"><v>0</v></c><c r="F2"><v>4</v></c></row><row r="3"><c r="A3"><v>2</v></c><c r="B3"><v>20</v></c><c r="C3"><v>8</v></c><c r="E3"><v>0</v></c></row><row r="4"><c r="A4"><v>3</v></c><c r="B4"><v>30</v></c><c r="C4"><v>9</v></c></row><row r="5"><c r="A5"><v>4</v></c><c r="B5"><v>40</v></c><c r="C5"><v>50</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(&quot;pear&quot;,A1:C1,A2:C4)</f><v>10</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="E2"><v>20</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="E3"><v>30</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(&quot;nope&quot;,A1:C1,A2:C4,9)</f><v>9</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="F2"><v>4</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(&quot;nope&quot;,A1:C1,A2:C4)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(&quot;pear&quot;,A1:C1,A2:C4)+1</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(&quot;pear&quot;,A1:C1,A5:C5)</f><v>40</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(&quot;plum&quot;,A1:C1,A2:C4)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(&quot;a*&quot;,A1:C1,A2:C4,7,1)</f><v>11</v>"#),
+            "{sheet}"
+        );
     }
 
     #[test]

@@ -1120,11 +1120,16 @@ release yet.
   row when the formula is that one call. The keys are one column. The return
   range has the same number of rows and 2 through 16 columns, and every value
   in the matched row is a number. That row is written across existing value
-  cells. A text cell in the matched row, a horizontal key, or an expression
-  around the call leaves the stored value. A one-column return stays a single
-  value. On a miss, a numeric fourth argument is written into the formula
-  cell only, and the cells beside it stay as they were. A text fourth
-  argument, or no fourth argument, leaves the stored value.
+  cells. A text cell in the matched row, or an expression around the call,
+  leaves the stored value. A one-column return stays a single value.
+  `XLOOKUP` can also return one column when the keys are one row of at least
+  two cells. The return range has the same number of columns and 2 through
+  16 rows, and every value in the matched column is a number. That column is
+  written downward into existing value cells. A text cell in the matched
+  column leaves the stored value. A one-row return stays a single value.
+  On a miss, a numeric fourth argument is written into
+  the formula cell only, and the cells beside or below it stay as they were.
+  A text fourth argument, or no fourth argument, leaves the stored value.
   `LET` binds up to eight names, then calculates the last argument. A name
   starts with a letter or underscore and uses letters, digits, underscores, and
   dots. It must not look like a cell address. A later binding replaces an
