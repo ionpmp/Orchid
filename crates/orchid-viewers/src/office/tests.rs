@@ -4288,6 +4288,53 @@ mod tests {
     }
 
     #[test]
+    fn set_sheet_cell_sortby_second_key() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1"><v>3</v></c><c r="B1"><v>10</v></c><c r="C1" t="inlineStr"><is><t>pear</t></is></c><c r="D1"><v>2</v></c><c r="E1"><f>SORTBY(A1:B3,C1:C3,D1:D3)</f><v>0</v></c><c r="F1"><v>0</v></c><c r="G1"><f>SORTBY(A1:B3,C1:C3,1,D1:D3,-1)</f><v>0</v></c><c r="H1"><v>0</v></c><c r="I1"><f>SORTBY(A1:B3,C1:C3,D1:D3,A1:A3)</f><v>6</v></c><c r="K1"><f>SORTBY(A1:B2,C1:C2,L1:L2)</f><v>4</v></c><c r="L1"><v>1</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2"><v>1</v></c><c r="B2"><v>20</v></c><c r="C2" t="inlineStr"><is><t>apple</t></is></c><c r="D2"><v>9</v></c><c r="E2"><v>0</v></c><c r="F2"><v>0</v></c><c r="G2"><v>0</v></c><c r="H2"><v>0</v></c><c r="L2" t="inlineStr"><is><t>x</t></is></c></row><row r="3"><c r="A3"><v>5</v></c><c r="B3"><v>30</v></c><c r="C3" t="inlineStr"><is><t>pear</t></is></c><c r="D3"><v>1</v></c><c r="E3"><v>0</v></c><c r="F3"><v>0</v></c><c r="G3"><v>0</v></c><c r="H3"><v>0</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>SORTBY(A1:B3,C1:C3,D1:D3)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="F1"><v>20</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="E2"><v>5</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="F2"><v>30</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="E3"><v>3</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="F3"><v>10</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>SORTBY(A1:B3,C1:C3,1,D1:D3,-1)</f><v>1</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="H1"><v>20</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="G2"><v>3</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="H2"><v>10</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="G3"><v>5</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="H3"><v>30</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>SORTBY(A1:B3,C1:C3,D1:D3,A1:A3)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>SORTBY(A1:B2,C1:C2,L1:L2)</f><v>4</v>"#),
+            "{sheet}"
+        );
+    }
+
+    #[test]
     fn set_sheet_cell_sorts_text() {
         let bytes = zip_bytes(&[
             (

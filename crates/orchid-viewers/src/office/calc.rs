@@ -4212,6 +4212,11 @@ enum XlookupRect {
     Spill(Spill),
 }
 
+enum SortByKey {
+    Text(Vec<String>),
+    Number(Vec<f64>),
+}
+
 fn exact_lookup(lookup: &CalcValue, cell: Option<&CalcValue>) -> bool {
     match (lookup, cell) {
         (CalcValue::Num(left), Some(CalcValue::Num(right))) => {
@@ -12247,8 +12252,13 @@ impl<'a> CalcParser<'a> {
     }
 
     fn sort_order(&mut self, env: &mut CalcEnv<'_>) -> Option<bool> {
-        let order = calc_num(self.compare(env)?)?;
+        let descending = self.sort_order_value(env)?;
         self.close_paren()?;
+        Some(descending)
+    }
+
+    fn sort_order_value(&mut self, env: &mut CalcEnv<'_>) -> Option<bool> {
+        let order = calc_num(self.compare(env)?)?;
         if !order.is_finite() {
             return None;
         }
@@ -12256,6 +12266,89 @@ impl<'a> CalcParser<'a> {
             1.0 => Some(false),
             -1.0 => Some(true),
             _ => None,
+        }
+    }
+
+    fn starts_sort_key(&self) -> bool {
+        matches!(
+            self.bytes.get(self.index),
+            Some(b'$' | b'A'..=b'Z' | b'a'..=b'z')
+        )
+    }
+
+    fn sortby_second(
+        &mut self,
+        env: &mut CalcEnv<'_>,
+        rows: u32,
+    ) -> Option<(bool, Option<(SortByKey, bool)>)> {
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some((false, None));
+        }
+        self.require_comma()?;
+        let saved = self.index;
+        self.skip();
+        if self.starts_sort_key() {
+            self.index = saved;
+            let key = self.extra_sort_key(env, rows)?;
+            let descending = self.following_sort_order(env)?;
+            return Some((false, Some((key, descending))));
+        }
+        self.index = saved;
+        let descending = self.sort_order_value(env)?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some((descending, None));
+        }
+        self.require_comma()?;
+        let saved = self.index;
+        self.skip();
+        if !self.starts_sort_key() {
+            return None;
+        }
+        self.index = saved;
+        let key = self.extra_sort_key(env, rows)?;
+        let second = self.following_sort_order(env)?;
+        Some((descending, Some((key, second))))
+    }
+
+    fn following_sort_order(&mut self, env: &mut CalcEnv<'_>) -> Option<bool> {
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(false);
+        }
+        self.require_comma()?;
+        let saved = self.index;
+        self.skip();
+        if self.starts_sort_key() {
+            return None;
+        }
+        self.index = saved;
+        self.sort_order(env)
+    }
+
+    fn extra_sort_key(&mut self, env: &mut CalcEnv<'_>, rows: u32) -> Option<SortByKey> {
+        let (cells, key_rows, key_cols) = self.cell_block(env)?;
+        if key_cols != 1 || key_rows != rows || cells.len() != rows as usize {
+            return None;
+        }
+        let mut texts = Vec::new();
+        let mut numbers = Vec::new();
+        for address in &cells {
+            match self.cell_value(address, env) {
+                Some(CalcValue::Text(text)) if !text.is_empty() => texts.push(text),
+                Some(CalcValue::Num(number)) if number.is_finite() => numbers.push(number),
+                _ => return None,
+            }
+        }
+        if texts.len() == cells.len() {
+            Some(SortByKey::Text(texts))
+        } else if numbers.len() == cells.len() {
+            Some(SortByKey::Number(numbers))
+        } else {
+            None
         }
     }
 
@@ -12405,13 +12498,7 @@ impl<'a> CalcParser<'a> {
             return None;
         }
         self.skip();
-        let descending = if self.bytes.get(self.index) == Some(&b')') {
-            self.index += 1;
-            false
-        } else {
-            self.require_comma()?;
-            self.sort_order(env)?
-        };
+        let (descending, second) = self.sortby_second(env, rows)?;
         let mut texts = Vec::with_capacity(keys.len());
         for address in keys {
             match self.cell_value(&address, env) {
@@ -12424,7 +12511,26 @@ impl<'a> CalcParser<'a> {
             let compared = texts[*left as usize]
                 .to_ascii_lowercase()
                 .cmp(&texts[*right as usize].to_ascii_lowercase());
-            if descending {
+            let compared = if descending {
+                compared.reverse()
+            } else {
+                compared
+            };
+            if compared != std::cmp::Ordering::Equal {
+                return compared;
+            }
+            let Some((key, second_descending)) = &second else {
+                return std::cmp::Ordering::Equal;
+            };
+            let compared = match key {
+                SortByKey::Text(values) => values[*left as usize]
+                    .to_ascii_lowercase()
+                    .cmp(&values[*right as usize].to_ascii_lowercase()),
+                SortByKey::Number(values) => {
+                    values[*left as usize].total_cmp(&values[*right as usize])
+                }
+            };
+            if *second_descending {
                 compared.reverse()
             } else {
                 compared

@@ -1070,11 +1070,14 @@ release yet.
   writes each reordered row, including the text. When the sort key is the
   text column, the comparison ignores ASCII case. A numeric key sorts by
   the number. A second text column, a column that mixes text and numbers,
-  or a blank leaves the stored value. `SORTBY` still does not write its
+  or a blank leaves the stored value.   `SORTBY` still does not write its
   key. `SORTBY(block, key, order)` sorts a
   numeric block by one text column of the same height. The order is 1 or -1
-  and defaults to 1. A blank or a number in the key leaves the stored value.
-  There is no second key. `FILTER` can test that same text column with one
+  and defaults to 1. A blank or a number in that first key leaves the stored
+  value. A second key may follow, with its own order of 1 or -1. That key is
+  one column of the same height and is either all text or all finite numbers.
+  Text ignores ASCII case. A blank, a mixed column, or a third key leaves the
+  stored value. Equal keys keep their original order. `FILTER` can test that same text column with one
   text criterion, including one `*` `?` `~` pattern, the same way `SUMIF`
   does. The rows it writes stay numeric. `TAKE`, `DROP`, and `CHOOSECOLS` are recalculated only when the formula
   is that one call. The source is one block of numbers, at most 256 rows
