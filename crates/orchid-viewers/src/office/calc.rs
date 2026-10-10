@@ -1,0 +1,13701 @@
+// Formula evaluation and write-back for one workbook sheet.
+
+/// Replace one cell's stored value and return the new package.
+///
+/// A formula cell is left unchanged. After a value edit, simple formulas on
+/// that sheet (`+`, `-`, `*`, `/`, comparisons, parentheses, cell references,
+/// `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `IF`, `ROUND`, `ABS`, `INT`,
+/// `&`, `CONCAT`, `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, and `LOWER`) are
+/// written back. A number stays in `<v>`. Text is written as an inline
+/// string. Length and slices count Unicode scalar values. An unsupported
+/// formula keeps its previous value. Other zip parts, including drawings,
+/// are copied through.
+pub(crate) fn set_sheet_cell(
+    bytes: &[u8],
+    sheet_name: &str,
+    address: &str,
+    text: &str,
+) -> std::result::Result<Vec<u8>, String> {
+    let address = address.trim().to_ascii_uppercase();
+    if !is_cell_address(&address) {
+        return Err("viewer-sheet-bad-address".into());
+    }
+    if text.len() > 32_768 {
+        return Err("viewer-sheet-too-long".into());
+    }
+    let mut archive =
+        ZipArchive::new(Cursor::new(bytes.to_vec())).map_err(|err| err.to_string())?;
+    let sheets = sheet_entries(&mut archive);
+    let path = sheets
+        .iter()
+        .find(|(name, _)| name == sheet_name)
+        .map(|(_, path)| path.clone())
+        .ok_or_else(|| "viewer-sheet-missing-sheet".to_string())?;
+    let xml =
+        read_entry(&mut archive, &path).ok_or_else(|| "viewer-sheet-unreadable".to_string())?;
+    let shared =
+        shared_strings(&read_entry(&mut archive, "xl/sharedStrings.xml").unwrap_or_default());
+    let mut other_sheets = Vec::new();
+    for (name, sheet_path) in &sheets {
+        if sheet_path == &path {
+            continue;
+        }
+        if let Some(body) = read_entry(&mut archive, sheet_path) {
+            other_sheets.push((name.to_ascii_lowercase(), body));
+        }
+    }
+    let xml = replace_cell_xml(&xml, &address, text)?;
+    let workbook = read_entry(&mut archive, "xl/workbook.xml").unwrap_or_default();
+    let date1904 = workbook_date1904(&workbook);
+    let sheet_key = sheet_name.to_ascii_lowercase();
+    let sheet_order: Vec<String> = sheets
+        .iter()
+        .map(|(name, _)| name.to_ascii_lowercase())
+        .collect();
+    let mut names = workbook_names(&workbook, &sheet_order);
+    names.tables = workbook_tables(&mut archive, &sheets);
+    let iteration = workbook_iteration(&workbook);
+    let mut bodies = std::collections::HashMap::new();
+    bodies.insert(sheet_key.clone(), xml.clone());
+    let mut foreign = std::collections::HashMap::new();
+    foreign.insert(sheet_key.clone(), stored_sheet(&xml, &shared));
+    for (name, body) in &other_sheets {
+        bodies.insert(name.clone(), body.clone());
+        foreign.insert(name.clone(), stored_sheet(body, &shared));
+    }
+    if let Some((count, delta)) = iteration {
+        foreign = iterate_sheets(
+            &bodies,
+            &shared,
+            &foreign,
+            &names,
+            &sheet_order,
+            date1904,
+            count,
+            delta,
+        );
+    } else {
+        for name in &sheet_order {
+            let Some(body) = bodies.get(name) else {
+                continue;
+            };
+            let passed = pass_sheet_once(
+                body,
+                &shared,
+                &foreign,
+                &names,
+                &sheet_order,
+                name,
+                date1904,
+            );
+            foreign.insert(name.clone(), passed);
+        }
+    }
+    let xml = recalculate_sheet(
+        &xml,
+        &shared,
+        &foreign,
+        &names,
+        &sheet_order,
+        &sheet_key,
+        date1904,
+        iteration,
+    );
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut out = zip::ZipWriter::new(&mut cursor);
+        let mut archive =
+            ZipArchive::new(Cursor::new(bytes.to_vec())).map_err(|err| err.to_string())?;
+        for index in 0..archive.len() {
+            let file = archive.by_index(index).map_err(|err| err.to_string())?;
+            let name = file.name().to_string();
+            if name == path {
+                out.start_file(name, zip::write::SimpleFileOptions::default())
+                    .map_err(|err| err.to_string())?;
+                out.write_all(xml.as_bytes())
+                    .map_err(|err| err.to_string())?;
+            } else {
+                out.raw_copy_file(file).map_err(|err| err.to_string())?;
+            }
+        }
+        out.finish().map_err(|err| err.to_string())?;
+    }
+    Ok(cursor.into_inner())
+}
+
+fn is_cell_address(address: &str) -> bool {
+    let mut letters = 0usize;
+    let mut digits = 0usize;
+    for ch in address.chars() {
+        if ch.is_ascii_alphabetic() {
+            if digits > 0 || letters >= 3 {
+                return false;
+            }
+            letters += 1;
+        } else if ch.is_ascii_digit() {
+            if letters == 0 || digits >= 7 {
+                return false;
+            }
+            digits += 1;
+        } else {
+            return false;
+        }
+    }
+    letters > 0 && digits > 0
+}
+
+fn replace_cell_xml(xml: &str, address: &str, text: &str) -> std::result::Result<String, String> {
+    let (start, end) = find_cell(xml, address)?;
+    let element = &xml[start..end];
+    if element_has_formula(element) {
+        return Err("viewer-sheet-formula".into());
+    }
+    let mut out = String::with_capacity(xml.len() + text.len());
+    out.push_str(&xml[..start]);
+    out.push_str(&cell_element(address, text));
+    out.push_str(&xml[end..]);
+    Ok(out)
+}
+
+fn find_cell(xml: &str, address: &str) -> std::result::Result<(usize, usize), String> {
+    let bytes = xml.as_bytes();
+    let mut index = 0usize;
+    while index + 2 < bytes.len() {
+        if bytes[index] == b'<' && bytes[index + 1] == b'c' {
+            let boundary = bytes[index + 2];
+            if matches!(boundary, b' ' | b'>' | b'/') {
+                let Some(tag_end) = xml[index..].find('>') else {
+                    break;
+                };
+                let open_end = index + tag_end + 1;
+                let open = &xml[index..open_end];
+                if cell_ref_matches(open, address) {
+                    if open.ends_with("/>") {
+                        return Ok((index, open_end));
+                    }
+                    let Some(close) = xml[open_end..].find("</c>") else {
+                        return Err("viewer-sheet-broken".into());
+                    };
+                    return Ok((index, open_end + close + 4));
+                }
+                index = open_end;
+                continue;
+            }
+        }
+        index += 1;
+    }
+    Err("viewer-sheet-missing-cell".into())
+}
+
+fn cell_ref_matches(open_tag: &str, address: &str) -> bool {
+    open_tag.contains(&format!("r=\"{address}\"")) || open_tag.contains(&format!("r='{address}'"))
+}
+
+fn element_has_formula(element: &str) -> bool {
+    element.contains("<f>") || element.contains("<f ") || element.contains("<f/>")
+}
+
+struct SheetCellRef {
+    address: String,
+    formula: Option<String>,
+    value: Option<f64>,
+    text: Option<String>,
+    value_span: Option<(usize, usize)>,
+    insert_at: Option<usize>,
+    open_span: (usize, usize),
+    text_cell: bool,
+}
+
+struct Spill {
+    values: Vec<f64>,
+    columns: u32,
+    all_or_nothing: bool,
+}
+
+enum GridCell {
+    Num(f64),
+    Text(String),
+}
+
+enum TextSpill {
+    Absent,
+    Invalid,
+    Parts(Vec<String>),
+    Grid { columns: u32, cells: Vec<GridCell> },
+}
+
+fn try_spill(formula: &str, env: &mut CalcEnv<'_>) -> Option<Spill> {
+    let mut parser = CalcParser {
+        bytes: formula.as_bytes(),
+        index: 0,
+    };
+    parser.skip();
+    let word = parser.word()?;
+    parser.skip();
+    if parser.bytes.get(parser.index) != Some(&b'(') {
+        return None;
+    }
+    let name = word.to_ascii_uppercase();
+    if !matches!(
+        name.as_str(),
+        "FREQUENCY"
+            | "LINEST"
+            | "TREND"
+            | "GROWTH"
+            | "LOGEST"
+            | "MODE.MULT"
+            | "SORT"
+            | "SORTBY"
+            | "UNIQUE"
+            | "FILTER"
+            | "TAKE"
+            | "DROP"
+            | "CHOOSECOLS"
+            | "CHOOSEROWS"
+            | "HSTACK"
+            | "VSTACK"
+            | "WHATIF"
+            | "XLOOKUP"
+    ) {
+        return None;
+    }
+    parser.index += 1;
+    let spill = match name.as_str() {
+        "FREQUENCY" => parser.frequency_spill(env)?,
+        "MODE.MULT" => parser.mode_mult_spill(env)?,
+        "LINEST" => parser.linest_spill(env)?,
+        "TREND" => parser.trend_spill(env)?,
+        "GROWTH" => parser.growth_spill(env)?,
+        "LOGEST" => parser.logest_spill(env)?,
+        "SORT" => parser.sort_spill(env)?,
+        "SORTBY" => parser.sortby_spill(env)?,
+        "UNIQUE" => parser.unique_spill(env)?,
+        "FILTER" => parser.filter_spill(env)?,
+        "TAKE" => parser.take_spill(env)?,
+        "DROP" => parser.drop_spill(env)?,
+        "CHOOSECOLS" => parser.choosecols_spill(env)?,
+        "CHOOSEROWS" => parser.chooserows_spill(env)?,
+        "HSTACK" => parser.hstack_spill(env)?,
+        "VSTACK" => parser.vstack_spill(env)?,
+        "WHATIF" => parser.whatif_spill(env)?,
+        "XLOOKUP" => parser.xlookup_spill(env)?,
+        _ => return None,
+    };
+    parser.skip();
+    if parser.index == parser.bytes.len() {
+        Some(spill)
+    } else {
+        None
+    }
+}
+
+fn place_spill(
+    origin: &str,
+    spill: &Spill,
+    cells: &[SheetCellRef],
+    taken: &std::collections::HashSet<String>,
+) -> Option<Vec<(String, f64)>> {
+    if spill.columns == 0 {
+        return None;
+    }
+    let mut writes = Vec::new();
+    for (step, value) in spill.values.iter().enumerate() {
+        let row = step as u32 / spill.columns;
+        let col = step as u32 % spill.columns;
+        let address = if row == 0 && col == 0 {
+            origin.to_string()
+        } else {
+            let Some(shifted) = shift_address(origin, row, col) else {
+                if spill.all_or_nothing {
+                    return None;
+                }
+                break;
+            };
+            shifted
+        };
+        if row > 0 || col > 0 {
+            let blocked = taken.contains(&address)
+                || cells
+                    .iter()
+                    .find(|cell| cell.address == address)
+                    .is_none_or(|cell| cell.formula.is_some() || cell.text_cell);
+            if blocked {
+                if spill.all_or_nothing {
+                    return None;
+                }
+                break;
+            }
+        }
+        writes.push((address, *value));
+    }
+    if spill.all_or_nothing && writes.len() != spill.values.len() {
+        None
+    } else if writes.is_empty() {
+        None
+    } else {
+        Some(writes)
+    }
+}
+
+fn text_spill_call(formula: &str, env: &mut CalcEnv<'_>) -> TextSpill {
+    let mut parser = CalcParser {
+        bytes: formula.as_bytes(),
+        index: 0,
+    };
+    parser.skip();
+    let Some(word) = parser.word() else {
+        return TextSpill::Absent;
+    };
+    parser.skip();
+    if word.eq_ignore_ascii_case("SORT") && parser.bytes.get(parser.index) == Some(&b'(') {
+        parser.index += 1;
+        let after_open = parser.index;
+        if let Some(parts) = parser.sort_text_column(env) {
+            parser.skip();
+            return if parser.index == parser.bytes.len() {
+                TextSpill::Parts(parts)
+            } else {
+                TextSpill::Invalid
+            };
+        }
+        parser.index = after_open;
+        if let Some((columns, cells)) = parser.sort_mixed(env) {
+            parser.skip();
+            return if parser.index == parser.bytes.len() {
+                TextSpill::Grid { columns, cells }
+            } else {
+                TextSpill::Invalid
+            };
+        }
+        return TextSpill::Absent;
+    }
+    if !word.eq_ignore_ascii_case("TEXTSPLIT") || parser.bytes.get(parser.index) != Some(&b'(') {
+        return TextSpill::Absent;
+    }
+    parser.index += 1;
+    let Some(parts) = parser.text_split_call(env) else {
+        return TextSpill::Invalid;
+    };
+    parser.skip();
+    if parser.index == parser.bytes.len() {
+        TextSpill::Parts(parts)
+    } else {
+        TextSpill::Invalid
+    }
+}
+
+fn place_text_column(
+    origin: &str,
+    parts: &[String],
+    cells: &[SheetCellRef],
+    taken: &std::collections::HashSet<String>,
+) -> Option<Vec<(String, String)>> {
+    if parts.is_empty() || parts.len() > 256 {
+        return None;
+    }
+    let mut writes = Vec::new();
+    for (step, text) in parts.iter().enumerate() {
+        let address = if step == 0 {
+            origin.to_string()
+        } else {
+            shift_address(origin, step as u32, 0)?
+        };
+        if step > 0 {
+            let blocked = taken.contains(&address)
+                || cells
+                    .iter()
+                    .find(|cell| cell.address == address)
+                    .is_none_or(|cell| cell.formula.is_some() || cell.text_cell);
+            if blocked {
+                return None;
+            }
+        }
+        writes.push((address, text.clone()));
+    }
+    Some(writes)
+}
+
+fn place_mixed_grid(
+    origin: &str,
+    columns: u32,
+    grid: &[GridCell],
+    cells: &[SheetCellRef],
+    taken: &std::collections::HashSet<String>,
+    xml: &str,
+) -> Option<(Vec<String>, Vec<(usize, usize, String)>)> {
+    if columns == 0 || grid.is_empty() || !grid.len().is_multiple_of(columns as usize) {
+        return None;
+    }
+    let mut addresses = Vec::new();
+    let mut edits = Vec::new();
+    for (step, item) in grid.iter().enumerate() {
+        let row = step as u32 / columns;
+        let col = step as u32 % columns;
+        let address = if row == 0 && col == 0 {
+            origin.to_string()
+        } else {
+            shift_address(origin, row, col)?
+        };
+        if row > 0 || col > 0 {
+            let blocked = taken.contains(&address)
+                || cells
+                    .iter()
+                    .find(|cell| cell.address == address)
+                    .is_none_or(|cell| cell.formula.is_some() || cell.text_cell);
+            if blocked {
+                return None;
+            }
+        }
+        let target = cells.iter().find(|cell| cell.address == address)?;
+        match item {
+            GridCell::Text(text) => {
+                if !push_text_edit(&mut edits, target, xml, text) {
+                    return None;
+                }
+            }
+            GridCell::Num(number) => {
+                let rendered = format_calc(*number);
+                if rendered.is_empty() {
+                    return None;
+                }
+                if let Some((start, end)) = target.value_span {
+                    edits.push((start, end, rendered));
+                } else if let Some(at) = target.insert_at {
+                    edits.push((at, at, format!("<v>{rendered}</v>")));
+                } else {
+                    return None;
+                }
+            }
+        }
+        addresses.push(address);
+    }
+    Some((addresses, edits))
+}
+
+fn push_text_edit(
+    edits: &mut Vec<(usize, usize, String)>,
+    cell: &SheetCellRef,
+    xml: &str,
+    text: &str,
+) -> bool {
+    let inline = format!("<is><t>{}</t></is>", escape(text));
+    let (open_start, open_end) = cell.open_span;
+    let Some(open) = open_tag_inline(&xml[open_start..open_end]) else {
+        return false;
+    };
+    edits.push((open_start, open_end, open));
+    if let Some((start, end)) = cell.value_span {
+        edits.push((start.saturating_sub(3), end + 4, inline));
+        true
+    } else if let Some(at) = cell.insert_at {
+        edits.push((at, at, inline));
+        true
+    } else {
+        false
+    }
+}
+
+fn find_delim(chars: &[char], delim: &[char], instance: usize) -> Option<usize> {
+    if delim.is_empty() || instance == 0 || instance > 16 || chars.len() > 1024 || delim.len() > 64
+    {
+        return None;
+    }
+    let mut found = 0usize;
+    let mut index = 0usize;
+    while index + delim.len() <= chars.len() {
+        if chars[index..index + delim.len()] == delim[..] {
+            found += 1;
+            if found == instance {
+                return Some(index);
+            }
+            index += delim.len();
+            continue;
+        }
+        index += 1;
+    }
+    None
+}
+
+fn text_before(text: &str, delim: &str, instance: usize) -> Option<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let delim: Vec<char> = delim.chars().collect();
+    let at = find_delim(&chars, &delim, instance)?;
+    Some(chars[..at].iter().collect())
+}
+
+fn text_after(text: &str, delim: &str, instance: usize) -> Option<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let delim_chars: Vec<char> = delim.chars().collect();
+    let at = find_delim(&chars, &delim_chars, instance)?;
+    Some(chars[at + delim_chars.len()..].iter().collect())
+}
+
+fn split_column(text: &str, delim: &str) -> Option<Vec<String>> {
+    let chars: Vec<char> = text.chars().collect();
+    let delim: Vec<char> = delim.chars().collect();
+    if delim.is_empty() || chars.len() > 1024 || delim.len() > 64 {
+        return None;
+    }
+    let mut parts = Vec::new();
+    let mut start = 0usize;
+    let mut index = 0usize;
+    while index + delim.len() <= chars.len() {
+        if chars[index..index + delim.len()] == delim[..] {
+            parts.push(chars[start..index].iter().collect());
+            if parts.len() > 16 {
+                return None;
+            }
+            index += delim.len();
+            start = index;
+            continue;
+        }
+        index += 1;
+    }
+    parts.push(chars[start..].iter().collect());
+    if parts.is_empty() || parts.len() > 16 {
+        None
+    } else {
+        Some(parts)
+    }
+}
+
+fn finite_cell(value: Option<CalcValue>) -> Option<f64> {
+    match value {
+        Some(CalcValue::Num(number)) if number.is_finite() => Some(number),
+        _ => None,
+    }
+}
+
+fn goal_seek_newton(env: &mut CalcEnv<'_>, formula: &str, input: &str, target: f64) -> Option<f64> {
+    if !target.is_finite() {
+        return None;
+    }
+    let mut guess = match env.literals.get(input) {
+        Some(number) if number.is_finite() => *number,
+        _ => 0.0,
+    };
+    for _ in 0..40 {
+        let value = whatif_number(env, formula, &[(input, guess)])?;
+        let residual = value - target;
+        if residual.abs() <= 1e-7 * (1.0 + target.abs()) {
+            return guess.is_finite().then_some(guess);
+        }
+        let step = guess.abs().max(1.0) * 1e-6;
+        let right = whatif_number(env, formula, &[(input, guess + step)])?;
+        let slope = (right - value) / step;
+        if !slope.is_finite() || slope.abs() < 1e-12 {
+            return None;
+        }
+        let delta = residual / slope;
+        if !delta.is_finite() {
+            return None;
+        }
+        guess -= delta;
+        if !guess.is_finite() || guess.abs() > 1e12 {
+            return None;
+        }
+    }
+    let value = whatif_number(env, formula, &[(input, guess)])?;
+    if (value - target).abs() <= 1e-7 * (1.0 + target.abs()) && guess.is_finite() {
+        Some(guess)
+    } else {
+        None
+    }
+}
+
+fn whatif_number(env: &mut CalcEnv<'_>, formula: &str, pairs: &[(&str, f64)]) -> Option<f64> {
+    let mut formulas = env.formulas.clone();
+    let mut literals = env.literals.clone();
+    let mut texts = env.texts.clone();
+    for (cell, number) in pairs {
+        formulas.remove(*cell);
+        literals.insert((*cell).to_string(), *number);
+        texts.remove(*cell);
+    }
+    let mut visiting = env.visiting.clone();
+    match eval_formula(
+        formula,
+        &formulas,
+        &literals,
+        &texts,
+        env.foreign,
+        env.names,
+        env.sheet_order,
+        env.sheet,
+        env.date1904,
+        env.previous,
+        false,
+        &mut visiting,
+        env.hidden_rows,
+    )? {
+        CalcValue::Num(number) if number.is_finite() => Some(number),
+        _ => None,
+    }
+}
+
+fn span_count(value: f64) -> Option<i64> {
+    if !value.is_finite() {
+        return None;
+    }
+    let value = value.trunc();
+    if value < -256.0 || value > 256.0 {
+        return None;
+    }
+    Some(value as i64)
+}
+
+fn take_bounds(size: u32, count: i64) -> Option<(u32, u32)> {
+    if count == 0 {
+        return None;
+    }
+    let kept = u32::try_from(count.unsigned_abs()).ok()?;
+    if kept == 0 || kept > size {
+        return None;
+    }
+    if count > 0 {
+        Some((0, kept))
+    } else {
+        Some((size - kept, kept))
+    }
+}
+
+fn drop_bounds(size: u32, count: i64) -> Option<(u32, u32)> {
+    if count == 0 {
+        return Some((0, size));
+    }
+    let dropped = u32::try_from(count.unsigned_abs()).ok()?;
+    if dropped >= size {
+        return None;
+    }
+    if count > 0 {
+        Some((dropped, size - dropped))
+    } else {
+        Some((0, size - dropped))
+    }
+}
+
+fn choose_index(size: u32, index: i64) -> Option<u32> {
+    if index > 0 {
+        let index = u32::try_from(index).ok()?;
+        (1..=size).contains(&index).then_some(index - 1)
+    } else if index < 0 {
+        let index = i64::from(size) + index;
+        u32::try_from(index).ok().filter(|index| *index < size)
+    } else {
+        None
+    }
+}
+
+fn slice_block(
+    values: &[f64],
+    cols: u32,
+    row0: u32,
+    height: u32,
+    col0: u32,
+    width: u32,
+) -> Vec<f64> {
+    let mut out = Vec::with_capacity((height * width) as usize);
+    for row in row0..row0 + height {
+        for col in col0..col0 + width {
+            out.push(values[(row * cols + col) as usize]);
+        }
+    }
+    out
+}
+
+fn shift_address(address: &str, down: u32, right: u32) -> Option<String> {
+    let (col, row) = split_address(address)?;
+    let col = col.checked_add(right)?;
+    let row = row.checked_add(down)?;
+    if row == 0 || row > 9_999_999 {
+        return None;
+    }
+    let name = column_name(col);
+    if name.len() > 3 || name.is_empty() {
+        return None;
+    }
+    Some(format!("{name}{row}"))
+}
+
+fn recalculate_sheet(
+    xml: &str,
+    shared: &[String],
+    foreign: &std::collections::HashMap<String, ForeignSheet>,
+    names: &NameBook,
+    sheet_order: &[String],
+    sheet: &str,
+    date1904: bool,
+    iteration: Option<(u32, f64)>,
+) -> String {
+    let cells = sheet_cells(xml, shared);
+    let hidden = sheet_hidden_rows(xml, &cells);
+    let mut literals = std::collections::HashMap::<String, f64>::new();
+    let mut texts = std::collections::HashMap::<String, String>::new();
+    let mut formulas = std::collections::HashMap::<String, String>::new();
+    for cell in &cells {
+        if let Some(formula) = &cell.formula {
+            formulas.insert(cell.address.clone(), formula.clone());
+        } else if cell.text_cell {
+            if let Some(text) = &cell.text {
+                texts.insert(cell.address.clone(), text.clone());
+            }
+        } else if let Some(value) = cell.value {
+            literals.insert(cell.address.clone(), value);
+        }
+    }
+    let pass_count = iteration.map(|(count, _)| count).unwrap_or(1);
+    let delta = iteration.map(|(_, delta)| delta).unwrap_or(0.0);
+    let iterate = iteration.is_some();
+    let mut previous = std::collections::HashMap::<String, f64>::new();
+    if iterate {
+        for cell in &cells {
+            if cell.formula.is_some() {
+                if let Some(value) = cell.value.filter(|value| value.is_finite()) {
+                    previous.insert(cell.address.clone(), value);
+                }
+            }
+        }
+    }
+    let mut edits = Vec::new();
+    for _pass in 0..pass_count {
+        edits.clear();
+        let mut spilled = std::collections::HashSet::<String>::new();
+        let mut next = std::collections::HashMap::<String, f64>::new();
+        let mut settled = true;
+        for cell in &cells {
+            let Some(formula) = &cell.formula else {
+                continue;
+            };
+            if cell.text_cell {
+                continue;
+            }
+            let mut visiting = std::collections::HashSet::new();
+            visiting.insert(cell.address.clone());
+            {
+                let mut spill_env = CalcEnv {
+                    formulas: &formulas,
+                    literals: &literals,
+                    texts: &texts,
+                    foreign,
+                    names,
+                    sheet_order,
+                    sheet,
+                    date1904,
+                    previous: &previous,
+                    iterate,
+                    visiting: &mut visiting,
+                    let_names: std::collections::HashMap::new(),
+                    hide_book_names: false,
+                    hidden_rows: &hidden,
+                };
+                match text_spill_call(formula, &mut spill_env) {
+                    TextSpill::Invalid => continue,
+                    TextSpill::Grid {
+                        columns,
+                        cells: grid,
+                    } => {
+                        if let Some((addresses, local)) =
+                            place_mixed_grid(&cell.address, columns, &grid, &cells, &spilled, xml)
+                        {
+                            for address in addresses {
+                                spilled.insert(address);
+                            }
+                            edits.extend(local);
+                        }
+                        continue;
+                    }
+                    TextSpill::Parts(parts) => {
+                        if let Some(writes) =
+                            place_text_column(&cell.address, &parts, &cells, &spilled)
+                        {
+                            let mut local = Vec::new();
+                            let mut ok = true;
+                            for (address, text) in &writes {
+                                let Some(target) =
+                                    cells.iter().find(|item| item.address == *address)
+                                else {
+                                    ok = false;
+                                    break;
+                                };
+                                if !push_text_edit(&mut local, target, xml, text) {
+                                    ok = false;
+                                    break;
+                                }
+                            }
+                            if ok {
+                                for (address, _) in &writes {
+                                    spilled.insert(address.clone());
+                                }
+                                edits.extend(local);
+                            }
+                        }
+                        continue;
+                    }
+                    TextSpill::Absent => {}
+                }
+                if let Some(spill) = try_spill(formula, &mut spill_env) {
+                    if let Some(writes) = place_spill(&cell.address, &spill, &cells, &spilled) {
+                        for (address, number) in writes {
+                            spilled.insert(address.clone());
+                            let Some(target) = cells.iter().find(|item| item.address == address)
+                            else {
+                                continue;
+                            };
+                            let rendered = format_calc(number);
+                            if rendered.is_empty() {
+                                continue;
+                            }
+                            if let Some((start, end)) = target.value_span {
+                                edits.push((start, end, rendered));
+                            } else if let Some(at) = target.insert_at {
+                                edits.push((at, at, format!("<v>{rendered}</v>")));
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
+            let Some(value) = eval_formula(
+                formula,
+                &formulas,
+                &literals,
+                &texts,
+                foreign,
+                names,
+                sheet_order,
+                sheet,
+                date1904,
+                &previous,
+                iterate,
+                &mut visiting,
+                &hidden,
+            ) else {
+                continue;
+            };
+            match value {
+                CalcValue::Num(number) => {
+                    if iterate && number.is_finite() {
+                        let old = previous.get(&cell.address).copied().unwrap_or(0.0);
+                        if (number - old).abs() > delta {
+                            settled = false;
+                        }
+                        next.insert(cell.address.clone(), number);
+                    }
+                    let rendered = format_calc(number);
+                    if rendered.is_empty() {
+                        continue;
+                    }
+                    if let Some((start, end)) = cell.value_span {
+                        edits.push((start, end, rendered));
+                    } else if let Some(at) = cell.insert_at {
+                        edits.push((at, at, format!("<v>{rendered}</v>")));
+                    }
+                }
+                CalcValue::Text(text) => {
+                    let inline = format!("<is><t>{}</t></is>", escape(&text));
+                    let (open_start, open_end) = cell.open_span;
+                    let Some(open) = open_tag_inline(&xml[open_start..open_end]) else {
+                        continue;
+                    };
+                    edits.push((open_start, open_end, open));
+                    if let Some((start, end)) = cell.value_span {
+                        edits.push((start.saturating_sub(3), end + 4, inline));
+                    } else if let Some(at) = cell.insert_at {
+                        edits.push((at, at, inline));
+                    }
+                }
+            }
+        }
+        if !iterate || settled {
+            break;
+        }
+        previous = next;
+    }
+    edits.sort_by(|a, b| b.0.cmp(&a.0));
+    let mut out = xml.to_string();
+    for (start, end, text) in edits {
+        out.replace_range(start..end, &text);
+    }
+    out
+}
+
+fn iterate_sheets(
+    bodies: &std::collections::HashMap<String, String>,
+    shared: &[String],
+    foreign: &std::collections::HashMap<String, ForeignSheet>,
+    names: &NameBook,
+    sheet_order: &[String],
+    date1904: bool,
+    count: u32,
+    delta: f64,
+) -> std::collections::HashMap<String, ForeignSheet> {
+    let mut current = foreign.clone();
+    for _ in 0..count {
+        let mut next = current.clone();
+        let mut settled = true;
+        for name in sheet_order {
+            let Some(body) = bodies.get(name) else {
+                continue;
+            };
+            let passed =
+                pass_sheet_once(body, shared, &current, names, sheet_order, name, date1904);
+            if !sheet_close(current.get(name), &passed, delta) {
+                settled = false;
+            }
+            next.insert(name.clone(), passed);
+        }
+        current = next;
+        if settled {
+            break;
+        }
+    }
+    current
+}
+
+fn sheet_close(before: Option<&ForeignSheet>, after: &ForeignSheet, delta: f64) -> bool {
+    let Some(before) = before else {
+        return false;
+    };
+    let mut keys = std::collections::HashSet::<String>::new();
+    keys.extend(before.literals.keys().cloned());
+    keys.extend(after.literals.keys().cloned());
+    keys.iter().all(|key| {
+        let left = before.literals.get(key).copied().unwrap_or(0.0);
+        let right = after.literals.get(key).copied().unwrap_or(0.0);
+        (left - right).abs() <= delta
+    })
+}
+
+fn pass_sheet_once(
+    xml: &str,
+    shared: &[String],
+    foreign: &std::collections::HashMap<String, ForeignSheet>,
+    names: &NameBook,
+    sheet_order: &[String],
+    sheet: &str,
+    date1904: bool,
+) -> ForeignSheet {
+    let cells = sheet_cells(xml, shared);
+    let hidden = sheet_hidden_rows(xml, &cells);
+    let mut book = stored_sheet(xml, shared);
+    let formulas = std::collections::HashMap::new();
+    let literals = book.literals.clone();
+    let texts = book.texts.clone();
+    let previous = std::collections::HashMap::new();
+    let mut counted = 0usize;
+    for cell in &cells {
+        if counted >= 4096 {
+            break;
+        }
+        let Some(formula) = &cell.formula else {
+            continue;
+        };
+        if cell.text_cell {
+            continue;
+        }
+        counted += 1;
+        let mut visiting = std::collections::HashSet::new();
+        let Some(value) = eval_formula(
+            formula,
+            &formulas,
+            &literals,
+            &texts,
+            foreign,
+            names,
+            sheet_order,
+            sheet,
+            date1904,
+            &previous,
+            false,
+            &mut visiting,
+            &hidden,
+        ) else {
+            continue;
+        };
+        match value {
+            CalcValue::Num(number) if number.is_finite() => {
+                book.texts.remove(&cell.address);
+                book.literals.insert(cell.address.clone(), number);
+            }
+            CalcValue::Text(text) => {
+                book.literals.remove(&cell.address);
+                book.texts.insert(cell.address.clone(), text);
+            }
+            CalcValue::Num(_) => {}
+        }
+    }
+    book
+}
+
+fn stored_sheet(xml: &str, shared: &[String]) -> ForeignSheet {
+    let mut literals = std::collections::HashMap::new();
+    let mut texts = std::collections::HashMap::new();
+    for cell in sheet_cells(xml, shared) {
+        if cell.formula.is_some() {
+            if let Some(value) = cell.value {
+                literals.insert(cell.address, value);
+            }
+            continue;
+        }
+        if cell.text_cell {
+            if let Some(text) = cell.text {
+                texts.insert(cell.address, text);
+            }
+        } else if let Some(value) = cell.value {
+            literals.insert(cell.address, value);
+        }
+    }
+    ForeignSheet { literals, texts }
+}
+
+fn sheet_cells(xml: &str, shared: &[String]) -> Vec<SheetCellRef> {
+    let bytes = xml.as_bytes();
+    let mut cells = Vec::new();
+    let mut slots = Vec::new();
+    let mut index = 0usize;
+    while index + 2 < bytes.len() {
+        if bytes[index] == b'<' && bytes[index + 1] == b'c' {
+            let boundary = bytes[index + 2];
+            if matches!(boundary, b' ' | b'>' | b'/') {
+                let Some(tag_end) = xml[index..].find('>') else {
+                    break;
+                };
+                let open_end = index + tag_end + 1;
+                let open = &xml[index..open_end];
+                let address = cell_address_from_tag(open);
+                if open.ends_with("/>") {
+                    index = open_end;
+                    continue;
+                }
+                let Some(close) = xml[open_end..].find("</c>") else {
+                    break;
+                };
+                let end = open_end + close + 4;
+                if let Some(address) = address {
+                    let body = &xml[open_end..open_end + close];
+                    let slot = formula_slot(body);
+                    let formula = match &slot {
+                        FormulaSlot::Plain(text) | FormulaSlot::Master { text, .. } => {
+                            Some(text.clone())
+                        }
+                        FormulaSlot::None | FormulaSlot::Follower(_) => None,
+                    };
+                    let value_span = value_span(xml, open_end, open_end + close);
+                    let text_cell = open.contains("t=\"s\"")
+                        || open.contains("t=\"str\"")
+                        || open.contains("t=\"inlineStr\"");
+                    let value = if text_cell {
+                        None
+                    } else {
+                        value_span.and_then(|(start, end)| xml[start..end].parse::<f64>().ok())
+                    };
+                    let text = if open.contains("t=\"s\"") {
+                        value_span.and_then(|(start, end)| {
+                            let index = xml[start..end].trim().parse::<usize>().ok()?;
+                            shared.get(index).cloned()
+                        })
+                    } else if text_cell {
+                        inline_text(body)
+                    } else {
+                        None
+                    };
+                    cells.push(SheetCellRef {
+                        address,
+                        formula,
+                        value,
+                        text,
+                        value_span,
+                        insert_at: Some(open_end + close),
+                        open_span: (index, open_end),
+                        text_cell,
+                    });
+                    slots.push(slot);
+                }
+                index = end;
+                continue;
+            }
+        }
+        index += 1;
+    }
+    expand_shared_formulas(&mut cells, &slots);
+    cells
+}
+
+enum FormulaSlot {
+    None,
+    Plain(String),
+    Master { si: u32, text: String },
+    Follower(u32),
+}
+
+fn formula_slot(body: &str) -> FormulaSlot {
+    let Some(start) = body.find("<f") else {
+        return FormulaSlot::None;
+    };
+    let Some(boundary) = body.as_bytes().get(start + 2).copied() else {
+        return FormulaSlot::None;
+    };
+    if !matches!(boundary, b'>' | b' ' | b'/') {
+        return FormulaSlot::None;
+    }
+    let Some(rel) = body[start..].find('>') else {
+        return FormulaSlot::None;
+    };
+    let tag = &body[start..start + rel + 1];
+    let shared = tag.contains("t=\"shared\"") || tag.contains("t='shared'");
+    if tag.ends_with("/>") {
+        let Some(si) = formula_si(tag) else {
+            return FormulaSlot::None;
+        };
+        if shared {
+            return FormulaSlot::Follower(si);
+        }
+        return FormulaSlot::None;
+    }
+    if tag.contains("t=") && !shared {
+        return FormulaSlot::None;
+    }
+    let inner = start + rel + 1;
+    let Some(close) = body[inner..].find("</f>") else {
+        return FormulaSlot::None;
+    };
+    let text = unescape_xml(body[inner..inner + close].trim());
+    let text = text.strip_prefix('=').unwrap_or(&text).trim();
+    if text.is_empty() {
+        return FormulaSlot::None;
+    }
+    if shared {
+        let Some(si) = formula_si(tag) else {
+            return FormulaSlot::None;
+        };
+        return FormulaSlot::Master {
+            si,
+            text: text.to_string(),
+        };
+    }
+    FormulaSlot::Plain(text.to_string())
+}
+
+fn formula_si(tag: &str) -> Option<u32> {
+    xml_attr(tag, "si")?.parse().ok()
+}
+
+fn expand_shared_formulas(cells: &mut [SheetCellRef], slots: &[FormulaSlot]) {
+    let mut masters = std::collections::HashMap::<u32, (String, String)>::new();
+    for (cell, slot) in cells.iter().zip(slots.iter()) {
+        if let FormulaSlot::Master { si, text } = slot {
+            masters
+                .entry(*si)
+                .or_insert_with(|| (cell.address.clone(), text.clone()));
+        }
+    }
+    for (cell, slot) in cells.iter_mut().zip(slots.iter()) {
+        let FormulaSlot::Follower(si) = slot else {
+            continue;
+        };
+        let Some((origin, text)) = masters.get(si) else {
+            continue;
+        };
+        if let Some(shifted) = shift_formula_between(origin, &cell.address, text) {
+            cell.formula = Some(shifted);
+        }
+    }
+}
+
+fn shift_formula_between(origin: &str, target: &str, formula: &str) -> Option<String> {
+    let (origin_col, origin_row) = split_address(origin)?;
+    let (target_col, target_row) = split_address(target)?;
+    let dcol = target_col as i32 - origin_col as i32;
+    let drow = target_row as i32 - origin_row as i32;
+    shift_formula(formula, dcol, drow)
+}
+
+fn shift_formula(formula: &str, dcol: i32, drow: i32) -> Option<String> {
+    if dcol == 0 && drow == 0 {
+        return Some(formula.to_string());
+    }
+    let chars: Vec<char> = formula.chars().collect();
+    let mut index = 0usize;
+    let mut out = String::new();
+    while index < chars.len() {
+        if chars[index] == '"' {
+            out.push('"');
+            index += 1;
+            while index < chars.len() {
+                out.push(chars[index]);
+                if chars[index] == '"' {
+                    index += 1;
+                    if chars.get(index) == Some(&'"') {
+                        out.push('"');
+                        index += 1;
+                        continue;
+                    }
+                    break;
+                }
+                index += 1;
+            }
+            continue;
+        }
+        if chars[index] == '\'' {
+            out.push('\'');
+            index += 1;
+            while index < chars.len() {
+                out.push(chars[index]);
+                if chars[index] == '\'' {
+                    index += 1;
+                    if chars.get(index) == Some(&'\'') {
+                        out.push('\'');
+                        index += 1;
+                        continue;
+                    }
+                    break;
+                }
+                index += 1;
+            }
+            continue;
+        }
+        if let Some((end, shifted)) = shift_ref_at(&chars, index, dcol, drow) {
+            let shifted = shifted?;
+            out.push_str(&shifted);
+            index = end;
+            continue;
+        }
+        out.push(chars[index]);
+        index += 1;
+    }
+    Some(out)
+}
+
+fn shift_ref_at(
+    chars: &[char],
+    index: usize,
+    dcol: i32,
+    drow: i32,
+) -> Option<(usize, Option<String>)> {
+    let mut cursor = index;
+    let mut prefix = String::new();
+    if chars
+        .get(cursor)
+        .is_some_and(|ch| ch.is_ascii_alphabetic() || *ch == '_')
+    {
+        let start = cursor;
+        while cursor < chars.len()
+            && (chars[cursor].is_ascii_alphanumeric()
+                || chars[cursor] == '_'
+                || chars[cursor] == '.')
+        {
+            cursor += 1;
+        }
+        if chars.get(cursor) == Some(&'!') {
+            prefix.extend(chars[start..=cursor].iter());
+            cursor += 1;
+        } else {
+            cursor = index;
+        }
+    }
+    let Some(refer) = parse_cell_ref(chars, cursor) else {
+        return None;
+    };
+    let shifted = shift_cell_ref(&refer, dcol, drow);
+    Some((refer.end, shifted.map(|cell| format!("{prefix}{cell}"))))
+}
+
+struct CellRefParts {
+    end: usize,
+    col_abs: bool,
+    col: u32,
+    row_abs: bool,
+    row: u32,
+}
+
+fn parse_cell_ref(chars: &[char], index: usize) -> Option<CellRefParts> {
+    let mut cursor = index;
+    let col_abs = if chars.get(cursor) == Some(&'$') {
+        cursor += 1;
+        true
+    } else {
+        false
+    };
+    let col_start = cursor;
+    while cursor < chars.len() && chars[cursor].is_ascii_alphabetic() && cursor - col_start < 3 {
+        cursor += 1;
+    }
+    if cursor == col_start || chars.get(cursor).is_some_and(|ch| ch.is_ascii_alphabetic()) {
+        return None;
+    }
+    let letters: String = chars[col_start..cursor].iter().collect();
+    let row_abs = if chars.get(cursor) == Some(&'$') {
+        cursor += 1;
+        true
+    } else {
+        false
+    };
+    let row_start = cursor;
+    while cursor < chars.len() && chars[cursor].is_ascii_digit() && cursor - row_start < 7 {
+        cursor += 1;
+    }
+    if cursor == row_start
+        || chars
+            .get(cursor)
+            .is_some_and(|ch| ch.is_ascii_alphanumeric())
+    {
+        return None;
+    }
+    let row = chars[row_start..cursor]
+        .iter()
+        .collect::<String>()
+        .parse::<u32>()
+        .ok()?;
+    if row == 0 {
+        return None;
+    }
+    Some(CellRefParts {
+        end: cursor,
+        col_abs,
+        col: column_index(&letters)?,
+        row_abs,
+        row,
+    })
+}
+
+fn shift_cell_ref(refer: &CellRefParts, dcol: i32, drow: i32) -> Option<String> {
+    let col = if refer.col_abs {
+        refer.col
+    } else {
+        let next = refer.col as i32 + dcol;
+        if !(1..=16_384).contains(&next) {
+            return None;
+        }
+        next as u32
+    };
+    let row = if refer.row_abs {
+        refer.row
+    } else {
+        let next = refer.row as i32 + drow;
+        if !(1..=9_999_999).contains(&next) {
+            return None;
+        }
+        next as u32
+    };
+    let mut out = String::new();
+    if refer.col_abs {
+        out.push('$');
+    }
+    out.push_str(&column_name(col));
+    if refer.row_abs {
+        out.push('$');
+    }
+    out.push_str(&row.to_string());
+    Some(out)
+}
+
+fn cell_address_from_tag(open: &str) -> Option<String> {
+    for mark in ["r=\"", "r='"] {
+        let Some(start) = open.find(mark) else {
+            continue;
+        };
+        let rest = &open[start + mark.len()..];
+        let end = rest.find(['"', '\'']).unwrap_or(rest.len());
+        let address = rest[..end].trim().to_ascii_uppercase();
+        if is_cell_address(&address) {
+            return Some(address);
+        }
+    }
+    None
+}
+
+fn value_span(xml: &str, from: usize, to: usize) -> Option<(usize, usize)> {
+    let body = &xml[from..to];
+    let start = body.find("<v>")?;
+    let rest = &body[start + 3..];
+    let end = rest.find("</v>")?;
+    Some((from + start + 3, from + start + 3 + end))
+}
+
+fn stdev_excel(args: &[f64], sample: bool) -> Option<f64> {
+    if args.iter().any(|number| !number.is_finite()) {
+        return None;
+    }
+    let count = args.len();
+    if sample {
+        if count < 2 {
+            return None;
+        }
+    } else if count == 0 {
+        return None;
+    }
+    let mean = args.iter().sum::<f64>() / count as f64;
+    let squared = args
+        .iter()
+        .map(|number| {
+            let delta = number - mean;
+            delta * delta
+        })
+        .sum::<f64>();
+    let denom = if sample {
+        (count - 1) as f64
+    } else {
+        count as f64
+    };
+    let value = (squared / denom).sqrt();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn var_excel(args: &[f64], sample: bool) -> Option<f64> {
+    if args.iter().any(|number| !number.is_finite()) {
+        return None;
+    }
+    let count = args.len();
+    if sample {
+        if count < 2 {
+            return None;
+        }
+    } else if count == 0 {
+        return None;
+    }
+    let mean = args.iter().sum::<f64>() / count as f64;
+    let squared = args
+        .iter()
+        .map(|number| {
+            let delta = number - mean;
+            delta * delta
+        })
+        .sum::<f64>();
+    let denom = if sample {
+        (count - 1) as f64
+    } else {
+        count as f64
+    };
+    let value = squared / denom;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn avedev_excel(args: &[f64]) -> Option<f64> {
+    if args.is_empty() || args.iter().any(|number| !number.is_finite()) {
+        return None;
+    }
+    let mean = args.iter().sum::<f64>() / args.len() as f64;
+    let value = args.iter().map(|number| (number - mean).abs()).sum::<f64>() / args.len() as f64;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn devsq_excel(args: &[f64]) -> Option<f64> {
+    if args.is_empty() || args.iter().any(|number| !number.is_finite()) {
+        return None;
+    }
+    let mean = args.iter().sum::<f64>() / args.len() as f64;
+    let value = args
+        .iter()
+        .map(|number| {
+            let delta = number - mean;
+            delta * delta
+        })
+        .sum::<f64>();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn geomean_excel(args: &[f64]) -> Option<f64> {
+    if args.is_empty()
+        || args
+            .iter()
+            .any(|number| !number.is_finite() || *number <= 0.0)
+    {
+        return None;
+    }
+    let sum_ln = args.iter().map(|number| number.ln()).sum::<f64>();
+    let value = (sum_ln / args.len() as f64).exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn harmean_excel(args: &[f64]) -> Option<f64> {
+    if args.is_empty()
+        || args
+            .iter()
+            .any(|number| !number.is_finite() || *number <= 0.0)
+    {
+        return None;
+    }
+    let reciprocals = args.iter().map(|number| 1.0 / number).sum::<f64>();
+    if !reciprocals.is_finite() || reciprocals == 0.0 {
+        return None;
+    }
+    let value = args.len() as f64 / reciprocals;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn slope_excel(pairs: &[(f64, f64)]) -> Option<f64> {
+    if pairs.len() < 2 {
+        return None;
+    }
+    let count = pairs.len() as f64;
+    let mean_y = pairs.iter().map(|(y, _)| *y).sum::<f64>() / count;
+    let mean_x = pairs.iter().map(|(_, x)| *x).sum::<f64>() / count;
+    let mut numerator = 0.0;
+    let mut denominator = 0.0;
+    for (y, x) in pairs {
+        let dx = x - mean_x;
+        let dy = y - mean_y;
+        numerator += dx * dy;
+        denominator += dx * dx;
+    }
+    if !numerator.is_finite() || !denominator.is_finite() || denominator == 0.0 {
+        return None;
+    }
+    let value = numerator / denominator;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn log_pairs(pairs: Vec<(f64, f64)>) -> Option<Vec<(f64, f64)>> {
+    let mut logged = Vec::new();
+    for (y_value, x_value) in pairs {
+        if y_value <= 0.0 {
+            return None;
+        }
+        let y_value = y_value.ln();
+        if !y_value.is_finite() {
+            return None;
+        }
+        logged.push((y_value, x_value));
+    }
+    Some(logged)
+}
+
+fn intercept_excel(pairs: &[(f64, f64)]) -> Option<f64> {
+    let slope = slope_excel(pairs)?;
+    let count = pairs.len() as f64;
+    let mean_y = pairs.iter().map(|(y, _)| *y).sum::<f64>() / count;
+    let mean_x = pairs.iter().map(|(_, x)| *x).sum::<f64>() / count;
+    let value = mean_y - slope * mean_x;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn linest_stats(pairs: &[(f64, f64)]) -> Option<Vec<f64>> {
+    if pairs.len() < 3 || pairs.len() > 256 {
+        return None;
+    }
+    let slope = slope_excel(pairs)?;
+    let intercept = intercept_excel(pairs)?;
+    let count = pairs.len() as f64;
+    let mean_y = pairs.iter().map(|(y, _)| *y).sum::<f64>() / count;
+    let mean_x = pairs.iter().map(|(_, x)| *x).sum::<f64>() / count;
+    let mut ssx = 0.0;
+    let mut ssresid = 0.0;
+    let mut sstotal = 0.0;
+    for (y, x) in pairs {
+        let dx = x - mean_x;
+        ssx += dx * dx;
+        let error = y - (intercept + slope * x);
+        ssresid += error * error;
+        let dy = y - mean_y;
+        sstotal += dy * dy;
+    }
+    let df = count - 2.0;
+    if !ssx.is_finite() || !ssresid.is_finite() || !sstotal.is_finite() || ssx == 0.0 || df <= 0.0 {
+        return None;
+    }
+    if ssresid.abs() <= 1e-9 * sstotal.max(1.0) || sstotal == 0.0 {
+        return None;
+    }
+    let mut ssreg = sstotal - ssresid;
+    if ssreg.abs() <= 1e-9 * sstotal.max(1.0) {
+        ssreg = 0.0;
+    }
+    if ssreg < 0.0 {
+        return None;
+    }
+    let sey = (ssresid / df).sqrt();
+    let se_slope = sey / ssx.sqrt();
+    let se_intercept = sey * (1.0 / count + mean_x * mean_x / ssx).sqrt();
+    let r2 = 1.0 - ssresid / sstotal;
+    let f_stat = ssreg * df / ssresid;
+    let values = vec![
+        slope,
+        intercept,
+        se_slope,
+        se_intercept,
+        r2,
+        sey,
+        f_stat,
+        df,
+        ssreg,
+        ssresid,
+    ];
+    if values.iter().all(|value| value.is_finite()) {
+        Some(values)
+    } else {
+        None
+    }
+}
+
+fn correl_excel(pairs: &[(f64, f64)]) -> Option<f64> {
+    if pairs.len() < 2 {
+        return None;
+    }
+    let count = pairs.len() as f64;
+    let mean_y = pairs.iter().map(|(y, _)| *y).sum::<f64>() / count;
+    let mean_x = pairs.iter().map(|(_, x)| *x).sum::<f64>() / count;
+    let mut numerator = 0.0;
+    let mut sum_x = 0.0;
+    let mut sum_y = 0.0;
+    for (y, x) in pairs {
+        let dx = x - mean_x;
+        let dy = y - mean_y;
+        numerator += dx * dy;
+        sum_x += dx * dx;
+        sum_y += dy * dy;
+    }
+    if !numerator.is_finite()
+        || !sum_x.is_finite()
+        || !sum_y.is_finite()
+        || sum_x == 0.0
+        || sum_y == 0.0
+    {
+        return None;
+    }
+    let value = numerator / (sum_x * sum_y).sqrt();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn rsq_excel(pairs: &[(f64, f64)]) -> Option<f64> {
+    let correl = correl_excel(pairs)?;
+    let value = correl * correl;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn forecast_excel(x_value: f64, pairs: &[(f64, f64)]) -> Option<f64> {
+    if !x_value.is_finite() {
+        return None;
+    }
+    let slope = slope_excel(pairs)?;
+    let intercept = intercept_excel(pairs)?;
+    let value = intercept + slope * x_value;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn steyx_excel(pairs: &[(f64, f64)]) -> Option<f64> {
+    if pairs.len() < 3 {
+        return None;
+    }
+    let slope = slope_excel(pairs)?;
+    let intercept = intercept_excel(pairs)?;
+    let mut residual = 0.0;
+    for (y, x) in pairs {
+        let delta = y - (intercept + slope * x);
+        residual += delta * delta;
+    }
+    let value = (residual / (pairs.len() - 2) as f64).sqrt();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn covariance_excel(pairs: &[(f64, f64)], sample: bool) -> Option<f64> {
+    if pairs.len() < 2 {
+        return None;
+    }
+    let count = pairs.len() as f64;
+    let mean_y = pairs.iter().map(|(y, _)| *y).sum::<f64>() / count;
+    let mean_x = pairs.iter().map(|(_, x)| *x).sum::<f64>() / count;
+    let mut numerator = 0.0;
+    for (y, x) in pairs {
+        numerator += (y - mean_y) * (x - mean_x);
+    }
+    if !numerator.is_finite() {
+        return None;
+    }
+    let denom = if sample {
+        (pairs.len() - 1) as f64
+    } else {
+        count
+    };
+    let value = numerator / denom;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn rank_excel(number: f64, values: &[f64], ascending: bool) -> Option<f64> {
+    if !number.is_finite() || !values.iter().any(|value| (value - number).abs() < 1e-9) {
+        return None;
+    }
+    let ahead = values
+        .iter()
+        .filter(|value| {
+            if ascending {
+                **value + 1e-9 < number
+            } else {
+                **value > number + 1e-9
+            }
+        })
+        .count();
+    Some((ahead + 1) as f64)
+}
+
+fn rank_avg_excel(number: f64, values: &[f64], ascending: bool) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let mut ahead = 0.0;
+    let mut ties = 0.0;
+    for value in values {
+        if (value - number).abs() < 1e-9 {
+            ties += 1.0;
+        } else if ascending {
+            if *value + 1e-9 < number {
+                ahead += 1.0;
+            }
+        } else if *value > number + 1e-9 {
+            ahead += 1.0;
+        }
+    }
+    if ties == 0.0 {
+        return None;
+    }
+    let value: f64 = ahead + (ties + 1.0) / 2.0;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn percentile_inc_excel(values: &mut [f64], k: f64) -> Option<f64> {
+    if values.is_empty() || !k.is_finite() || !(0.0..=1.0).contains(&k) {
+        return None;
+    }
+    values.sort_by(|left, right| left.total_cmp(right));
+    if values.len() == 1 {
+        return Some(values[0]);
+    }
+    let index = k * (values.len() - 1) as f64;
+    let lower = index.floor() as usize;
+    let upper = index.ceil() as usize;
+    if lower == upper || upper >= values.len() {
+        return values.get(lower).copied();
+    }
+    let fraction = index - lower as f64;
+    let value = values[lower] + fraction * (values[upper] - values[lower]);
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn percentile_exc_excel(values: &mut [f64], k: f64) -> Option<f64> {
+    if values.is_empty() || !k.is_finite() || k <= 0.0 || k >= 1.0 {
+        return None;
+    }
+    values.sort_by(|left, right| left.total_cmp(right));
+    let count = values.len() as f64;
+    let mut rank = k * (count + 1.0);
+    if !rank.is_finite() {
+        return None;
+    }
+    if (rank - 1.0).abs() < 1e-9 {
+        rank = 1.0;
+    } else if (rank - count).abs() < 1e-9 {
+        rank = count;
+    }
+    if rank < 1.0 || rank > count {
+        return None;
+    }
+    let lower = rank.floor() as usize;
+    let upper = rank.ceil() as usize;
+    if lower == 0 || upper > values.len() {
+        return None;
+    }
+    if lower == upper {
+        return Some(values[lower - 1]);
+    }
+    let fraction = rank - lower as f64;
+    let value = values[lower - 1] + fraction * (values[upper - 1] - values[lower - 1]);
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn modes_excel(values: &[f64]) -> Option<Vec<f64>> {
+    if values.is_empty() || values.len() > 256 {
+        return None;
+    }
+    let mut best_count = 1usize;
+    let mut modes = Vec::new();
+    for (index, value) in values.iter().enumerate() {
+        if values[..index]
+            .iter()
+            .any(|earlier| (earlier - value).abs() < 1e-9)
+        {
+            continue;
+        }
+        let count = values
+            .iter()
+            .filter(|other| (*other - value).abs() < 1e-9)
+            .count();
+        if count > best_count {
+            best_count = count;
+            modes.clear();
+            modes.push(*value);
+        } else if count == best_count && count > 1 {
+            modes.push(*value);
+        }
+    }
+    if modes.is_empty() || modes.len() > 16 {
+        None
+    } else {
+        Some(modes)
+    }
+}
+
+fn mode_excel(values: &[f64]) -> Option<f64> {
+    let mut best_count = 1usize;
+    let mut best = None;
+    for value in values {
+        let count = values
+            .iter()
+            .filter(|other| (**other - *value).abs() < 1e-9)
+            .count();
+        if count > best_count {
+            best_count = count;
+            best = Some(*value);
+        }
+    }
+    best
+}
+
+fn percent_rank_inc(values: &mut [f64], x_value: f64) -> Option<f64> {
+    if values.len() < 2 || !x_value.is_finite() {
+        return None;
+    }
+    values.sort_by(|left, right| left.total_cmp(right));
+    let last = values.len() - 1;
+    if x_value < values[0] - 1e-9 || x_value > values[last] + 1e-9 {
+        return None;
+    }
+    let span = last as f64;
+    if let Some(index) = values
+        .iter()
+        .position(|value| (value - x_value).abs() < 1e-9)
+    {
+        return Some(index as f64 / span);
+    }
+    let upper = values.iter().position(|value| *value > x_value)?;
+    if upper == 0 {
+        return None;
+    }
+    let lower = upper - 1;
+    let gap = values[upper] - values[lower];
+    if gap == 0.0 {
+        return None;
+    }
+    let fraction = (x_value - values[lower]) / gap;
+    let value = (lower as f64 + fraction) / span;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn percent_rank_exc(values: &mut [f64], x_value: f64) -> Option<f64> {
+    if values.is_empty() || !x_value.is_finite() {
+        return None;
+    }
+    values.sort_by(|left, right| left.total_cmp(right));
+    let last = values.len() - 1;
+    if x_value < values[0] - 1e-9 || x_value > values[last] + 1e-9 {
+        return None;
+    }
+    let span = (values.len() + 1) as f64;
+    if let Some(index) = values
+        .iter()
+        .position(|value| (*value - x_value).abs() < 1e-9)
+    {
+        return Some((index as f64 + 1.0) / span);
+    }
+    let upper = values.iter().position(|value| *value > x_value)?;
+    if upper == 0 {
+        return None;
+    }
+    let lower = upper - 1;
+    let gap = values[upper] - values[lower];
+    if gap == 0.0 {
+        return None;
+    }
+    let fraction = (x_value - values[lower]) / gap;
+    let value = (lower as f64 + 1.0 + fraction) / span;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn standardize_excel(x_value: f64, mean: f64, scale: f64) -> Option<f64> {
+    if !x_value.is_finite() || !mean.is_finite() || !scale.is_finite() || scale <= 0.0 {
+        return None;
+    }
+    let value = (x_value - mean) / scale;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn skew_excel(args: &[f64], population: bool) -> Option<f64> {
+    if args.len() < 3 || args.iter().any(|number| !number.is_finite()) {
+        return None;
+    }
+    let count = args.len() as f64;
+    let mean = args.iter().sum::<f64>() / count;
+    let mut square = 0.0;
+    for number in args {
+        let delta = number - mean;
+        square += delta * delta;
+    }
+    if !square.is_finite() {
+        return None;
+    }
+    let denom = if population { count } else { count - 1.0 };
+    let scale = (square / denom).sqrt();
+    if scale == 0.0 || !scale.is_finite() {
+        return None;
+    }
+    let mut cubes = 0.0;
+    for number in args {
+        let zed = (number - mean) / scale;
+        cubes += zed * zed * zed;
+    }
+    if !cubes.is_finite() {
+        return None;
+    }
+    let value = if population {
+        cubes / count
+    } else {
+        cubes * count / ((count - 1.0) * (count - 2.0))
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn kurt_excel(args: &[f64]) -> Option<f64> {
+    if args.len() < 4 || args.iter().any(|number| !number.is_finite()) {
+        return None;
+    }
+    let count = args.len() as f64;
+    let mean = args.iter().sum::<f64>() / count;
+    let mut square = 0.0;
+    for number in args {
+        let delta = number - mean;
+        square += delta * delta;
+    }
+    if !square.is_finite() {
+        return None;
+    }
+    let scale = (square / (count - 1.0)).sqrt();
+    if scale == 0.0 || !scale.is_finite() {
+        return None;
+    }
+    let mut fourth = 0.0;
+    for number in args {
+        let zed = (number - mean) / scale;
+        let square_zed = zed * zed;
+        fourth += square_zed * square_zed;
+    }
+    if !fourth.is_finite() {
+        return None;
+    }
+    let lead = count * (count + 1.0) / ((count - 1.0) * (count - 2.0) * (count - 3.0));
+    let adjust = 3.0 * (count - 1.0) * (count - 1.0) / ((count - 2.0) * (count - 3.0));
+    let value = lead * fourth - adjust;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn trimmean_excel(values: &mut [f64], percent: f64) -> Option<f64> {
+    if values.is_empty()
+        || !percent.is_finite()
+        || percent < 0.0
+        || percent >= 1.0
+        || values.iter().any(|number| !number.is_finite())
+    {
+        return None;
+    }
+    values.sort_by(|left, right| left.total_cmp(right));
+    let drop = (percent * values.len() as f64 / 2.0).floor() as usize;
+    if drop.saturating_mul(2) >= values.len() {
+        return None;
+    }
+    let end = values.len() - drop;
+    let sum = values[drop..end].iter().sum::<f64>();
+    let value = sum / (end - drop) as f64;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn fisher_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() || number <= -1.0 || number >= 1.0 {
+        return None;
+    }
+    let value = number.atanh();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn fisher_inv_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = number.tanh();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn sqrt_pi_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() || number < 0.0 {
+        return None;
+    }
+    let value = (number * std::f64::consts::PI).sqrt();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn sum_pair_excel(pairs: &[(f64, f64)], kind: u8) -> Option<f64> {
+    let mut acc = 0.0;
+    for (left, right) in pairs {
+        let term = if kind == 0 {
+            left * left - right * right
+        } else if kind == 1 {
+            left * left + right * right
+        } else {
+            let delta = left - right;
+            delta * delta
+        };
+        if !term.is_finite() {
+            return None;
+        }
+        acc += term;
+        if !acc.is_finite() {
+            return None;
+        }
+    }
+    Some(acc)
+}
+
+fn gestep_excel(number: f64, step: f64) -> Option<f64> {
+    if !number.is_finite() || !step.is_finite() {
+        return None;
+    }
+    Some(if number >= step { 1.0 } else { 0.0 })
+}
+
+fn delta_excel(left: f64, right: f64) -> Option<f64> {
+    if !left.is_finite() || !right.is_finite() {
+        return None;
+    }
+    Some(if left == right { 1.0 } else { 0.0 })
+}
+
+fn multinomial_excel(args: &[f64]) -> Option<f64> {
+    if args.is_empty()
+        || args
+            .iter()
+            .any(|number| !number.is_finite() || *number < 0.0 || *number >= 1_000_000.0)
+    {
+        return None;
+    }
+    let mut whole = Vec::with_capacity(args.len());
+    let mut total = 0u64;
+    for number in args {
+        let value = number.trunc() as u64;
+        total = total.checked_add(value)?;
+        if total >= 1_000_000 {
+            return None;
+        }
+        whole.push(value);
+    }
+    let mut acc = 1.0;
+    let mut cursor = 0u64;
+    for count in whole {
+        for index in 1..=count {
+            cursor += 1;
+            acc *= cursor as f64;
+            acc /= index as f64;
+            if !acc.is_finite() {
+                return None;
+            }
+        }
+    }
+    if acc < 1e15 {
+        Some(acc.round())
+    } else {
+        Some(acc)
+    }
+}
+
+fn format_calc(value: f64) -> String {
+    if !value.is_finite() {
+        return String::new();
+    }
+    if (value - value.round()).abs() < 1e-9 && value.abs() < 1e15 {
+        return format!("{}", value.round() as i64);
+    }
+    let text = format!("{value:.8}");
+    text.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+fn eval_formula(
+    formula: &str,
+    formulas: &std::collections::HashMap<String, String>,
+    literals: &std::collections::HashMap<String, f64>,
+    texts: &std::collections::HashMap<String, String>,
+    foreign: &std::collections::HashMap<String, ForeignSheet>,
+    names: &NameBook,
+    sheet_order: &[String],
+    sheet: &str,
+    date1904: bool,
+    previous: &std::collections::HashMap<String, f64>,
+    iterate: bool,
+    visiting: &mut std::collections::HashSet<String>,
+    hidden_rows: &std::collections::HashSet<u32>,
+) -> Option<CalcValue> {
+    let mut parser = CalcParser {
+        bytes: formula.as_bytes(),
+        index: 0,
+    };
+    let mut env = CalcEnv {
+        formulas,
+        literals,
+        texts,
+        foreign,
+        names,
+        sheet_order,
+        sheet,
+        date1904,
+        previous,
+        iterate,
+        visiting,
+        let_names: std::collections::HashMap::new(),
+        hide_book_names: false,
+        hidden_rows,
+    };
+    let value = parser.compare(&mut env)?;
+    parser.skip();
+    if parser.index == parser.bytes.len() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn kept_calc(value: CalcValue) -> Option<CalcValue> {
+    match value {
+        CalcValue::Num(number) if number.is_finite() => Some(CalcValue::Num(number)),
+        CalcValue::Num(_) => None,
+        text @ CalcValue::Text(_) => Some(text),
+    }
+}
+
+fn values_match(left: &CalcValue, right: &CalcValue) -> bool {
+    match (left, right) {
+        (CalcValue::Num(left), CalcValue::Num(right)) => {
+            left.is_finite() && right.is_finite() && (left - right).abs() < 1e-9
+        }
+        (CalcValue::Text(left), CalcValue::Text(right)) => left == right,
+        _ => false,
+    }
+}
+
+fn eval_slice(bytes: &[u8], env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+    let mut parser = CalcParser { bytes, index: 0 };
+    let value = parser.compare(env)?;
+    parser.skip();
+    if parser.index == parser.bytes.len() {
+        kept_calc(value)
+    } else {
+        None
+    }
+}
+
+/// Splits the arguments of the call whose opening `(` is already consumed.
+/// Returns each argument's byte range and the index just past the closing `)`.
+fn split_top_args(bytes: &[u8], start: usize) -> Option<(Vec<(usize, usize)>, usize)> {
+    let mut index = start;
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut arg_start = start;
+    let mut args = Vec::new();
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if in_string {
+            if byte == b'"' {
+                if bytes.get(index + 1) == Some(&b'"') {
+                    index += 2;
+                    continue;
+                }
+                in_string = false;
+            }
+            index += 1;
+            continue;
+        }
+        match byte {
+            b'"' => in_string = true,
+            b'(' => depth += 1,
+            b')' if depth == 0 => {
+                args.push((arg_start, index));
+                return Some((args, index + 1));
+            }
+            b')' => depth -= 1,
+            b',' if depth == 0 => {
+                args.push((arg_start, index));
+                index += 1;
+                arg_start = index;
+                continue;
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    None
+}
+
+#[derive(Clone)]
+enum CalcValue {
+    Num(f64),
+    Text(String),
+}
+
+struct CalcEnv<'a> {
+    formulas: &'a std::collections::HashMap<String, String>,
+    literals: &'a std::collections::HashMap<String, f64>,
+    texts: &'a std::collections::HashMap<String, String>,
+    foreign: &'a std::collections::HashMap<String, ForeignSheet>,
+    names: &'a NameBook,
+    sheet_order: &'a [String],
+    sheet: &'a str,
+    date1904: bool,
+    previous: &'a std::collections::HashMap<String, f64>,
+    iterate: bool,
+    visiting: &'a mut std::collections::HashSet<String>,
+    let_names: std::collections::HashMap<String, CalcValue>,
+    hide_book_names: bool,
+    hidden_rows: &'a std::collections::HashSet<u32>,
+}
+
+#[derive(Clone)]
+struct DefinedRef {
+    sheet: String,
+    cells: Vec<String>,
+    rows: u32,
+    cols: u32,
+    formula: Option<String>,
+}
+
+enum NameArg {
+    Absent,
+    Cells(Vec<String>),
+    Invalid,
+}
+
+enum RefCall {
+    Absent,
+    Cells(Vec<String>),
+    Invalid,
+}
+
+enum ArrayConst {
+    Absent,
+    Invalid,
+    Values(Vec<CalcValue>),
+}
+
+#[derive(Clone)]
+struct ForeignSheet {
+    literals: std::collections::HashMap<String, f64>,
+    texts: std::collections::HashMap<String, String>,
+}
+
+fn calc_num(value: CalcValue) -> Option<f64> {
+    match value {
+        CalcValue::Num(number) => Some(number),
+        CalcValue::Text(_) => None,
+    }
+}
+
+fn calc_text(value: &CalcValue) -> String {
+    match value {
+        CalcValue::Num(number) => format_calc(*number),
+        CalcValue::Text(text) => text.clone(),
+    }
+}
+
+fn round_excel(value: f64, digits: f64) -> Option<f64> {
+    if !value.is_finite() || !digits.is_finite() {
+        return None;
+    }
+    let places = digits.trunc();
+    if places < -10.0 || places > 10.0 {
+        return None;
+    }
+    let scale = 10f64.powi(places as i32);
+    if !scale.is_finite() {
+        return None;
+    }
+    let scaled = value * scale;
+    if !scaled.is_finite() {
+        return None;
+    }
+    Some(scaled.round() / scale)
+}
+
+fn math_step_excel(number: f64, significance: f64, mode: f64, floor: bool) -> Option<f64> {
+    if !number.is_finite() || !significance.is_finite() || !mode.is_finite() {
+        return None;
+    }
+    if significance == 0.0 {
+        return Some(0.0);
+    }
+    let step = significance.abs();
+    if !step.is_finite() {
+        return None;
+    }
+    let quotient = number / step;
+    if !quotient.is_finite() {
+        return None;
+    }
+    let away = mode != 0.0 && number < 0.0;
+    let scaled = if floor == away {
+        quotient.ceil()
+    } else {
+        quotient.floor()
+    };
+    let value = scaled * step;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn finite_positive_log(number: f64) -> Option<f64> {
+    if number.is_finite() && number > 0.0 {
+        let value = number.ln();
+        if value.is_finite() {
+            Some(value)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+fn log_base(number: f64, base: f64) -> Option<f64> {
+    if !base.is_finite() || base <= 0.0 || base == 1.0 {
+        return None;
+    }
+    let value = finite_positive_log(number)? / base.ln();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn exp_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = number.exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn fact_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() || number < 0.0 || number >= 171.0 {
+        return None;
+    }
+    let count = number.trunc() as u32;
+    let mut acc = 1.0;
+    for step in 2..=count {
+        acc *= f64::from(step);
+        if !acc.is_finite() {
+            return None;
+        }
+    }
+    Some(acc)
+}
+
+fn fact_double_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() || number < 0.0 || number >= 301.0 {
+        return None;
+    }
+    let mut count = number.trunc() as u32;
+    let mut acc = 1.0;
+    while count > 1 {
+        acc *= f64::from(count);
+        if !acc.is_finite() {
+            return None;
+        }
+        count -= 2;
+    }
+    Some(acc)
+}
+
+fn poisson_excel(x_value: f64, mean: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite()
+        || !mean.is_finite()
+        || x_value < 0.0
+        || mean < 0.0
+        || x_value >= 171.0
+        || mean >= 700.0
+    {
+        return None;
+    }
+    let count = x_value.trunc() as u32;
+    let mut term = (-mean).exp();
+    if !term.is_finite() {
+        return None;
+    }
+    if !cumulative {
+        for step in 1..=count {
+            term *= mean / f64::from(step);
+            if !term.is_finite() {
+                return None;
+            }
+        }
+        return Some(term);
+    }
+    let mut sum = term;
+    for step in 1..=count {
+        term *= mean / f64::from(step);
+        if !term.is_finite() {
+            return None;
+        }
+        sum += term;
+        if !sum.is_finite() {
+            return None;
+        }
+    }
+    Some(sum)
+}
+
+fn binom_dist_excel(
+    successes: f64,
+    trials: f64,
+    probability: f64,
+    cumulative: bool,
+) -> Option<f64> {
+    if !successes.is_finite()
+        || !trials.is_finite()
+        || !probability.is_finite()
+        || successes < 0.0
+        || trials < 0.0
+        || probability < 0.0
+        || probability > 1.0
+        || trials >= 171.0
+    {
+        return None;
+    }
+    let k = successes.trunc() as u32;
+    let n = trials.trunc() as u32;
+    if k > n {
+        return None;
+    }
+    if probability == 0.0 {
+        let point = if k == 0 { 1.0 } else { 0.0 };
+        return Some(if cumulative { 1.0 } else { point });
+    }
+    if probability == 1.0 {
+        let point = if k == n { 1.0 } else { 0.0 };
+        return Some(if cumulative {
+            if k == n {
+                1.0
+            } else {
+                0.0
+            }
+        } else {
+            point
+        });
+    }
+    let mut term = (1.0 - probability).powi(n as i32);
+    if !term.is_finite() || term == 0.0 {
+        return None;
+    }
+    let ratio = probability / (1.0 - probability);
+    if !cumulative {
+        for step in 0..k {
+            term *= f64::from(n - step) / f64::from(step + 1) * ratio;
+            if !term.is_finite() {
+                return None;
+            }
+        }
+        return Some(term);
+    }
+    let mut sum = term;
+    for step in 0..k {
+        term *= f64::from(n - step) / f64::from(step + 1) * ratio;
+        if !term.is_finite() {
+            return None;
+        }
+        sum += term;
+        if !sum.is_finite() {
+            return None;
+        }
+    }
+    Some(sum)
+}
+
+fn expon_dist_excel(x_value: f64, lambda: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite() || !lambda.is_finite() || x_value < 0.0 || lambda <= 0.0 {
+        return None;
+    }
+    let exponent = -lambda * x_value;
+    if !exponent.is_finite() {
+        return None;
+    }
+    let decay = exponent.exp();
+    if !decay.is_finite() {
+        return None;
+    }
+    let value = if cumulative {
+        1.0 - decay
+    } else {
+        lambda * decay
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn negbinom_dist_excel(
+    failures: f64,
+    successes: f64,
+    probability: f64,
+    cumulative: bool,
+) -> Option<f64> {
+    if !failures.is_finite()
+        || !successes.is_finite()
+        || !probability.is_finite()
+        || failures < 0.0
+        || successes < 1.0
+        || failures >= 171.0
+        || successes >= 171.0
+        || !(probability > 0.0 && probability < 1.0)
+    {
+        return None;
+    }
+    let failures = failures.trunc() as u32;
+    let successes = successes.trunc() as u32;
+    let mut term = probability.powi(successes as i32);
+    if term == 0.0 || !term.is_finite() {
+        return None;
+    }
+    let mut sum = term;
+    let miss = 1.0 - probability;
+    let mut count = 0u32;
+    while count < failures {
+        term *= f64::from(count + successes) / f64::from(count + 1) * miss;
+        if !term.is_finite() {
+            return None;
+        }
+        sum += term;
+        if !sum.is_finite() {
+            return None;
+        }
+        count += 1;
+    }
+    let value = if cumulative { sum } else { term };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn hypgeom_dist_excel(
+    sample_s: f64,
+    number_sample: f64,
+    population_s: f64,
+    number_pop: f64,
+    cumulative: bool,
+) -> Option<f64> {
+    if !sample_s.is_finite()
+        || !number_sample.is_finite()
+        || !population_s.is_finite()
+        || !number_pop.is_finite()
+        || sample_s < 0.0
+        || number_sample < 0.0
+        || population_s < 0.0
+        || number_pop < 0.0
+        || sample_s >= 171.0
+        || number_sample >= 171.0
+        || population_s >= 171.0
+        || number_pop >= 171.0
+    {
+        return None;
+    }
+    let drawn = sample_s.trunc() as u32;
+    let sample = number_sample.trunc() as u32;
+    let marked = population_s.trunc() as u32;
+    let population = number_pop.trunc() as u32;
+    if sample > population || marked > population || drawn > sample || drawn > marked {
+        return None;
+    }
+    let plain = population - marked;
+    if sample - drawn > plain {
+        return None;
+    }
+    let denom = combin_excel(f64::from(population), f64::from(sample))?;
+    if denom == 0.0 {
+        return None;
+    }
+    let low = if cumulative {
+        sample.saturating_sub(plain)
+    } else {
+        drawn
+    };
+    let mut sum = 0.0;
+    let mut count = low;
+    while count <= drawn {
+        let ways = combin_excel(f64::from(marked), f64::from(count))?
+            * combin_excel(f64::from(plain), f64::from(sample - count))?;
+        if !ways.is_finite() {
+            return None;
+        }
+        sum += ways / denom;
+        if !sum.is_finite() {
+            return None;
+        }
+        count += 1;
+    }
+    if sum.is_finite() {
+        Some(sum)
+    } else {
+        None
+    }
+}
+
+fn weibull_dist_excel(x_value: f64, alpha: f64, beta: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite()
+        || !alpha.is_finite()
+        || !beta.is_finite()
+        || x_value < 0.0
+        || alpha <= 0.0
+        || beta <= 0.0
+    {
+        return None;
+    }
+    let ratio = x_value / beta;
+    if !ratio.is_finite() {
+        return None;
+    }
+    let shape = ratio.powf(alpha);
+    if !shape.is_finite() {
+        return None;
+    }
+    let decay = (-shape).exp();
+    if !decay.is_finite() {
+        return None;
+    }
+    let value = if cumulative {
+        1.0 - decay
+    } else if x_value == 0.0 && alpha < 1.0 {
+        return None;
+    } else {
+        let power = ratio.powf(alpha - 1.0);
+        if !power.is_finite() {
+            return None;
+        }
+        (alpha / beta) * power * decay
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn ln_gamma_lanczos(number: f64) -> Option<f64> {
+    const COEFFS: [f64; 9] = [
+        0.99999999999980993,
+        676.5203681218851,
+        -1259.1392167224028,
+        771.32342877765313,
+        -176.61502916214059,
+        12.507343278686905,
+        -0.13857109526572012,
+        9.9843695780195716e-6,
+        1.5056327351493116e-7,
+    ];
+    let shifted = number - 1.0;
+    let mut acc = COEFFS[0];
+    let mut index = 1.0;
+    for coeff in COEFFS.iter().skip(1) {
+        acc += coeff / (shifted + index);
+        index += 1.0;
+    }
+    if !acc.is_finite() || acc <= 0.0 {
+        return None;
+    }
+    let base = shifted + 7.5;
+    if !base.is_finite() || base <= 0.0 {
+        return None;
+    }
+    let value =
+        0.5 * (2.0 * std::f64::consts::PI).ln() + (shifted + 0.5) * base.ln() - base + acc.ln();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn factorial_below(number: f64) -> Option<f64> {
+    if !(number > 0.0 && number < 171.0 && number.fract() == 0.0) {
+        return None;
+    }
+    let count = number as u32;
+    let mut acc = 1.0;
+    let mut step = 2u32;
+    while step < count {
+        acc *= f64::from(step);
+        if !acc.is_finite() {
+            return None;
+        }
+        step += 1;
+    }
+    Some(acc)
+}
+
+fn ln_gamma_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() || number <= 0.0 {
+        return None;
+    }
+    if let Some(fact) = factorial_below(number) {
+        return if fact > 0.0 { Some(fact.ln()) } else { None };
+    }
+    let value = if number < 0.5 {
+        let sine = (number * std::f64::consts::PI).sin();
+        if sine <= 0.0 || !sine.is_finite() {
+            return None;
+        }
+        std::f64::consts::PI.ln() - sine.ln() - ln_gamma_lanczos(1.0 - number)?
+    } else {
+        ln_gamma_lanczos(number)?
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn gamma_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    if number.fract() == 0.0 {
+        if number <= 0.0 || number > 170.0 {
+            return None;
+        }
+        return factorial_below(number);
+    }
+    if number > 0.0 {
+        let value = ln_gamma_excel(number)?.exp();
+        return if value.is_finite() { Some(value) } else { None };
+    }
+    let sine = (number * std::f64::consts::PI).sin();
+    if sine == 0.0 || !sine.is_finite() {
+        return None;
+    }
+    let denom = sine * gamma_excel(1.0 - number)?;
+    if denom == 0.0 || !denom.is_finite() {
+        return None;
+    }
+    let value = std::f64::consts::PI / denom;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn gamma_cdf_series(shape: f64, x_value: f64) -> Option<f64> {
+    if x_value == 0.0 {
+        return Some(0.0);
+    }
+    let log_prefix = -x_value + shape * x_value.ln() - ln_gamma_excel(shape)?;
+    if !log_prefix.is_finite() {
+        return None;
+    }
+    let mut term = 1.0 / shape;
+    if !term.is_finite() {
+        return None;
+    }
+    let mut sum = term;
+    let mut settled = false;
+    let mut step = 0.0;
+    while step < 200.0 {
+        step += 1.0;
+        term *= x_value / (shape + step);
+        if !term.is_finite() {
+            return None;
+        }
+        sum += term;
+        if !sum.is_finite() {
+            return None;
+        }
+        let scale = if sum.abs() > 1.0 { sum.abs() } else { 1.0 };
+        if term.abs() <= 1e-12 * scale {
+            settled = true;
+            break;
+        }
+    }
+    if !settled {
+        return None;
+    }
+    let value = log_prefix.exp() * sum;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn gamma_dist_excel(x_value: f64, alpha: f64, beta: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite()
+        || !alpha.is_finite()
+        || !beta.is_finite()
+        || x_value < 0.0
+        || alpha <= 0.0
+        || beta <= 0.0
+    {
+        return None;
+    }
+    if cumulative {
+        if x_value == 0.0 {
+            return Some(0.0);
+        }
+        let lambda = x_value / beta;
+        if !lambda.is_finite() {
+            return None;
+        }
+        if alpha.fract() == 0.0 {
+            let mass = poisson_excel(alpha - 1.0, lambda, true)?;
+            let value = 1.0 - mass;
+            return if value.is_finite() { Some(value) } else { None };
+        }
+        return gamma_cdf_series(alpha, lambda);
+    }
+    if x_value == 0.0 {
+        if alpha < 1.0 {
+            return None;
+        }
+        if alpha > 1.0 {
+            return Some(0.0);
+        }
+        let value = 1.0 / beta;
+        return if value.is_finite() { Some(value) } else { None };
+    }
+    let log_pdf = (alpha - 1.0) * x_value.ln()
+        - (x_value / beta)
+        - alpha * beta.ln()
+        - ln_gamma_excel(alpha)?;
+    if !log_pdf.is_finite() {
+        return None;
+    }
+    let value = log_pdf.exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn binom_inv_excel(trials: f64, probability: f64, alpha: f64) -> Option<f64> {
+    if !trials.is_finite()
+        || !probability.is_finite()
+        || !alpha.is_finite()
+        || trials < 0.0
+        || trials >= 171.0
+        || !(probability > 0.0 && probability < 1.0)
+        || !(alpha > 0.0 && alpha < 1.0)
+    {
+        return None;
+    }
+    let trials = trials.trunc() as u32;
+    let mut count = 0u32;
+    while count <= trials {
+        let cdf = binom_dist_excel(f64::from(count), f64::from(trials), probability, true)?;
+        if cdf >= alpha {
+            return Some(f64::from(count));
+        }
+        count += 1;
+    }
+    None
+}
+
+fn chisq_dist_excel(x_value: f64, degrees: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite() || !degrees.is_finite() || x_value < 0.0 || degrees < 1.0 {
+        return None;
+    }
+    let degrees = degrees.trunc();
+    if degrees < 1.0 {
+        return None;
+    }
+    gamma_dist_excel(x_value, degrees / 2.0, 2.0, cumulative)
+}
+
+fn chisq_rt_excel(x_value: f64, degrees: f64) -> Option<f64> {
+    let value = 1.0 - chisq_dist_excel(x_value, degrees, true)?;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn chisq_test_stat(pairs: &[(f64, f64)]) -> Option<f64> {
+    if pairs.is_empty() {
+        return None;
+    }
+    let mut sum = 0.0;
+    for (actual, expected) in pairs {
+        if !actual.is_finite() || !expected.is_finite() || *expected <= 0.0 {
+            return None;
+        }
+        let delta = actual - expected;
+        sum += delta * delta / expected;
+        if !sum.is_finite() {
+            return None;
+        }
+    }
+    Some(sum)
+}
+
+fn invert_unit_cdf(probability: f64, mut cdf: impl FnMut(f64) -> Option<f64>) -> Option<f64> {
+    if !probability.is_finite() || probability <= 0.0 || probability >= 1.0 {
+        return None;
+    }
+    let mut low = 0.0;
+    let mut high = 1.0;
+    loop {
+        let value = cdf(high)?;
+        if value >= probability {
+            break;
+        }
+        if high >= 1.0e6 {
+            return None;
+        }
+        high *= 2.0;
+    }
+    for _ in 0..80 {
+        let mid = (low + high) / 2.0;
+        let value = cdf(mid)?;
+        if value < probability {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    if format_calc(low) != format_calc(high) {
+        return None;
+    }
+    let value = (low + high) / 2.0;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn gamma_inv_excel(probability: f64, alpha: f64, beta: f64) -> Option<f64> {
+    if !alpha.is_finite() || !beta.is_finite() || alpha <= 0.0 || beta <= 0.0 {
+        return None;
+    }
+    invert_unit_cdf(probability, |x_value| {
+        gamma_dist_excel(x_value, alpha, beta, true)
+    })
+}
+
+fn chisq_inv_excel(probability: f64, degrees: f64) -> Option<f64> {
+    if !degrees.is_finite() || degrees < 1.0 {
+        return None;
+    }
+    let degrees = degrees.trunc();
+    if degrees < 1.0 {
+        return None;
+    }
+    invert_unit_cdf(probability, |x_value| {
+        chisq_dist_excel(x_value, degrees, true)
+    })
+}
+
+fn chisq_inv_rt_excel(probability: f64, degrees: f64) -> Option<f64> {
+    if !probability.is_finite() || probability <= 0.0 || probability >= 1.0 {
+        return None;
+    }
+    chisq_inv_excel(1.0 - probability, degrees)
+}
+
+fn norms_dist_excel(x_value: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite() {
+        return None;
+    }
+    if !cumulative {
+        let exponent = -0.5 * x_value * x_value;
+        if !exponent.is_finite() {
+            return None;
+        }
+        let value = exponent.exp() / (2.0 * std::f64::consts::PI).sqrt();
+        return if value.is_finite() { Some(value) } else { None };
+    }
+    if x_value == 0.0 {
+        return Some(0.5);
+    }
+    let half = 0.5 * x_value * x_value;
+    if !half.is_finite() {
+        return None;
+    }
+    let tail = gamma_cdf_series(0.5, half)?;
+    let value = if x_value > 0.0 {
+        0.5 * (1.0 + tail)
+    } else {
+        0.5 * (1.0 - tail)
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn norm_dist_excel(x_value: f64, mean: f64, scale: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite() || !mean.is_finite() || !scale.is_finite() || scale <= 0.0 {
+        return None;
+    }
+    let z = (x_value - mean) / scale;
+    if !z.is_finite() {
+        return None;
+    }
+    let value = norms_dist_excel(z, cumulative)?;
+    if cumulative {
+        return Some(value);
+    }
+    let density = value / scale;
+    if density.is_finite() {
+        Some(density)
+    } else {
+        None
+    }
+}
+
+fn norms_inv_excel(probability: f64) -> Option<f64> {
+    if !probability.is_finite() || probability <= 0.0 || probability >= 1.0 {
+        return None;
+    }
+    if (probability - 0.5).abs() < 1e-12 {
+        return Some(0.0);
+    }
+    let (target, sign) = if probability > 0.5 {
+        (probability, 1.0)
+    } else {
+        (1.0 - probability, -1.0)
+    };
+    let mut low = 0.0;
+    let mut high = 1.0;
+    loop {
+        let cdf = norms_dist_excel(high, true)?;
+        if cdf >= target {
+            break;
+        }
+        if high >= 8.0 {
+            return None;
+        }
+        high *= 2.0;
+    }
+    for _ in 0..60 {
+        let mid = (low + high) / 2.0;
+        let cdf = norms_dist_excel(mid, true)?;
+        if cdf < target {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    let value = sign * ((low + high) / 2.0);
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn norm_inv_excel(probability: f64, mean: f64, scale: f64) -> Option<f64> {
+    if !mean.is_finite() || !(scale > 0.0) || !scale.is_finite() {
+        return None;
+    }
+    let value = mean + scale * norms_inv_excel(probability)?;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn lognorm_inv_excel(probability: f64, mean: f64, scale: f64) -> Option<f64> {
+    if !mean.is_finite() || !scale.is_finite() || scale <= 0.0 {
+        return None;
+    }
+    let value = (mean + scale * norms_inv_excel(probability)?).exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn confidence_norm_excel(alpha: f64, stdev: f64, size: f64) -> Option<f64> {
+    if !alpha.is_finite()
+        || alpha <= 0.0
+        || alpha >= 1.0
+        || !stdev.is_finite()
+        || stdev <= 0.0
+        || !size.is_finite()
+    {
+        return None;
+    }
+    let count = size.trunc();
+    if count < 1.0 {
+        return None;
+    }
+    let z = norms_inv_excel(1.0 - alpha / 2.0)?;
+    let value = z * stdev / count.sqrt();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn erf_excel(x_value: f64) -> Option<f64> {
+    if !x_value.is_finite() {
+        return None;
+    }
+    if x_value == 0.0 {
+        return Some(0.0);
+    }
+    let square = x_value * x_value;
+    if !square.is_finite() {
+        return None;
+    }
+    let magnitude = gamma_cdf_series(0.5, square)?;
+    let value = if x_value > 0.0 { magnitude } else { -magnitude };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn lognorm_dist_excel(x_value: f64, mean: f64, scale: f64, cumulative: bool) -> Option<f64> {
+    if !x_value.is_finite()
+        || !mean.is_finite()
+        || !scale.is_finite()
+        || x_value <= 0.0
+        || scale <= 0.0
+    {
+        return None;
+    }
+    let z = (x_value.ln() - mean) / scale;
+    if !z.is_finite() {
+        return None;
+    }
+    let value = norms_dist_excel(z, cumulative)?;
+    if cumulative {
+        return Some(value);
+    }
+    let density = value / (x_value * scale);
+    if density.is_finite() {
+        Some(density)
+    } else {
+        None
+    }
+}
+
+fn binom_range_excel(trials: f64, probability: f64, low: f64, high: f64) -> Option<f64> {
+    if !trials.is_finite()
+        || !low.is_finite()
+        || !high.is_finite()
+        || trials < 0.0
+        || trials >= 171.0
+        || low < 0.0
+        || high < 0.0
+    {
+        return None;
+    }
+    let limit = trials.trunc();
+    let low = low.trunc();
+    let high = high.trunc();
+    if low > limit || high > limit || high < low {
+        return None;
+    }
+    let mut sum = 0.0;
+    let mut count = low;
+    while count <= high {
+        sum += binom_dist_excel(count, trials, probability, false)?;
+        if !sum.is_finite() {
+            return None;
+        }
+        count += 1.0;
+    }
+    Some(sum)
+}
+
+fn z_test_excel(values: &[f64], target: f64, sigma: Option<f64>) -> Option<f64> {
+    if values.is_empty() || values.iter().any(|value| !value.is_finite()) || !target.is_finite() {
+        return None;
+    }
+    let count = values.len() as f64;
+    let mean = values.iter().sum::<f64>() / count;
+    let scale = match sigma {
+        Some(sigma) => {
+            if !sigma.is_finite() || sigma <= 0.0 {
+                return None;
+            }
+            sigma
+        }
+        None => stdev_excel(values, true)?,
+    };
+    if scale == 0.0 {
+        return None;
+    }
+    let z = (mean - target) / (scale / count.sqrt());
+    if !z.is_finite() {
+        return None;
+    }
+    let value = 1.0 - norms_dist_excel(z, true)?;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn prob_excel(pairs: &[(f64, f64)], lower: f64, upper: f64) -> Option<f64> {
+    if pairs.is_empty() || !lower.is_finite() || !upper.is_finite() || upper < lower {
+        return None;
+    }
+    let mut sum = 0.0;
+    for (x_value, probability) in pairs {
+        if !x_value.is_finite() || !probability.is_finite() || *probability < 0.0 {
+            return None;
+        }
+        if *x_value >= lower && *x_value <= upper {
+            sum += *probability;
+        }
+    }
+    if sum.is_finite() {
+        Some(sum)
+    } else {
+        None
+    }
+}
+
+fn series_sum_excel(x_value: f64, first: f64, step: f64, coefficients: &[f64]) -> Option<f64> {
+    if !x_value.is_finite() || !first.is_finite() || !step.is_finite() {
+        return None;
+    }
+    let mut sum = 0.0;
+    for (index, coefficient) in coefficients.iter().enumerate() {
+        if !coefficient.is_finite() {
+            return None;
+        }
+        let power = first + (index as f64) * step;
+        if !power.is_finite() {
+            return None;
+        }
+        let term = coefficient * x_value.powf(power);
+        if !term.is_finite() {
+            return None;
+        }
+        sum += term;
+    }
+    if sum.is_finite() {
+        Some(sum)
+    } else {
+        None
+    }
+}
+
+fn civil_to_unix(year: i32, month: i32, day: i32) -> i64 {
+    let y = year as i64 - if month <= 2 { 1 } else { 0 };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = (y - era * 400) as u64;
+    let mp = if month > 2 { month - 3 } else { month + 9 };
+    let doy = (153 * mp as u64 + 2) / 5 + day as u64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe as i64 - 719468
+}
+
+fn unix_to_civil(days: i64) -> (i32, i32, i32) {
+    let z = days + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if month <= 2 { y + 1 } else { y };
+    (year as i32, month as i32, day as i32)
+}
+
+fn excel_normalize_month(mut year: i32, month: i32) -> Option<(i32, i32)> {
+    if year < 0 || year > 9999 {
+        return None;
+    }
+    if year < 1900 {
+        year += 1900;
+    }
+    let zero = month as i64 - 1;
+    let year_delta = if zero >= 0 {
+        zero / 12
+    } else {
+        (zero - 11) / 12
+    };
+    let month0 = zero - year_delta * 12;
+    let year = year as i64 + year_delta;
+    if !(1900..=9999).contains(&year) {
+        return None;
+    }
+    Some((year as i32, month0 as i32 + 1))
+}
+
+fn workbook_date1904(xml: &str) -> bool {
+    xml.contains("date1904=\"1\"") || xml.contains("date1904=\"true\"")
+}
+
+fn workbook_iteration(xml: &str) -> Option<(u32, f64)> {
+    let start = xml.find("<calcPr ")?;
+    let end = start + xml[start..].find('>')?;
+    let tag = &xml[start..=end];
+    let flag = xml_attr(tag, "iterate")?;
+    if flag != "1" && !flag.eq_ignore_ascii_case("true") {
+        return None;
+    }
+    let count = xml_attr(tag, "iterateCount")
+        .and_then(|text| text.parse::<u32>().ok())
+        .unwrap_or(100)
+        .clamp(1, 100);
+    let delta = xml_attr(tag, "iterateDelta")
+        .and_then(|text| text.parse::<f64>().ok())
+        .filter(|delta| delta.is_finite() && *delta >= 0.0)
+        .unwrap_or(0.001)
+        .min(1.0);
+    Some((count, delta))
+}
+
+struct NameBook {
+    global: std::collections::HashMap<String, DefinedRef>,
+    local: std::collections::HashMap<(String, String), DefinedRef>,
+    tables: std::collections::HashMap<(String, String), DefinedRef>,
+}
+
+impl NameBook {
+    fn get(&self, sheet: &str, name: &str) -> Option<&DefinedRef> {
+        self.local
+            .get(&(sheet.to_string(), name.to_string()))
+            .or_else(|| self.global.get(name))
+    }
+}
+
+fn workbook_names(xml: &str, sheet_order: &[String]) -> NameBook {
+    let mut names = NameBook {
+        global: std::collections::HashMap::new(),
+        local: std::collections::HashMap::new(),
+        tables: std::collections::HashMap::new(),
+    };
+    let mut index = 0usize;
+    while let Some(at) = xml[index..].find("<definedName ") {
+        let start = index + at;
+        let Some(tag_rel) = xml[start..].find('>') else {
+            break;
+        };
+        let tag = &xml[start..start + tag_rel];
+        let empty = tag.ends_with('/');
+        let body_start = start + tag_rel + 1;
+        if empty {
+            index = body_start;
+            continue;
+        }
+        let Some(name) = xml_attr(tag, "name") else {
+            index = body_start;
+            continue;
+        };
+        let Some(close) = xml[body_start..].find("</definedName>") else {
+            break;
+        };
+        let body = &xml[body_start..body_start + close];
+        index = body_start + close + "</definedName>".len();
+        let name = unescape_xml(&name);
+        let count = name.chars().count();
+        if count == 0
+            || count > 255
+            || is_cell_address(&name)
+            || name
+                .chars()
+                .any(|ch| !(ch.is_ascii_alphanumeric() || ch == '_' || ch == '.'))
+        {
+            continue;
+        }
+        let refer = if let Some(refer) = parse_defined_ref(&body) {
+            refer
+        } else if let Some(formula) = absolute_sheet_formula(body) {
+            DefinedRef {
+                sheet: String::new(),
+                cells: Vec::new(),
+                rows: 0,
+                cols: 0,
+                formula: Some(formula),
+            }
+        } else {
+            continue;
+        };
+        let key = name.to_ascii_lowercase();
+        if let Some(raw) = xml_attr(tag, "localSheetId") {
+            let Ok(id) = raw.parse::<usize>() else {
+                continue;
+            };
+            let Some(owner) = sheet_order.get(id) else {
+                continue;
+            };
+            names.local.insert((owner.clone(), key), refer);
+        } else {
+            names.global.insert(key, refer);
+        }
+    }
+    names
+}
+
+fn workbook_tables<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    sheets: &[(String, String)],
+) -> std::collections::HashMap<(String, String), DefinedRef> {
+    let mut tables = std::collections::HashMap::new();
+    for (sheet, path) in sheets {
+        let Some(rels_path) = rels_for(path) else {
+            continue;
+        };
+        let Some(rels) = read_entry(archive, &rels_path) else {
+            continue;
+        };
+        for target in table_targets(&rels) {
+            let part = join_target(path, &target);
+            let Some(xml) = read_entry(archive, &part) else {
+                continue;
+            };
+            load_table(&xml, &sheet.to_ascii_lowercase(), &mut tables);
+        }
+    }
+    tables
+}
+
+fn rels_for(path: &str) -> Option<String> {
+    let (dir, file) = path.rsplit_once('/')?;
+    Some(format!("{dir}/_rels/{file}.rels"))
+}
+
+fn join_target(base_file: &str, target: &str) -> String {
+    let target = target.replace('\\', "/");
+    if target.starts_with('/') || target.starts_with("xl/") {
+        return target.trim_start_matches('/').to_string();
+    }
+    let dir = base_file.rsplit_once('/').map(|(dir, _)| dir).unwrap_or("");
+    let mut parts: Vec<&str> = dir.split('/').filter(|part| !part.is_empty()).collect();
+    for part in target.split('/') {
+        if part == ".." {
+            parts.pop();
+        } else if !part.is_empty() && part != "." {
+            parts.push(part);
+        }
+    }
+    parts.join("/")
+}
+
+fn table_targets(rels: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut index = 0usize;
+    while let Some(at) = rels[index..].find("<Relationship ") {
+        let start = index + at;
+        let Some(end) = rels[start..].find('>') else {
+            break;
+        };
+        let tag = &rels[start..start + end];
+        index = start + end + 1;
+        let target = xml_attr(tag, "Target").unwrap_or_default();
+        let kind = xml_attr(tag, "Type").unwrap_or_default();
+        if target.is_empty() {
+            continue;
+        }
+        if kind.ends_with("/table") || target.to_ascii_lowercase().contains("/tables/") {
+            out.push(target);
+        }
+    }
+    out
+}
+
+fn load_table(
+    xml: &str,
+    sheet: &str,
+    tables: &mut std::collections::HashMap<(String, String), DefinedRef>,
+) {
+    let Some(tag) = first_tag(xml, "table") else {
+        return;
+    };
+    let Some(name) = xml_attr(tag, "name").or_else(|| xml_attr(tag, "displayName")) else {
+        return;
+    };
+    let name = unescape_xml(&name);
+    let count = name.chars().count();
+    if count == 0
+        || count > 255
+        || is_cell_address(&name)
+        || name
+            .chars()
+            .any(|ch| !(ch.is_ascii_alphanumeric() || ch == '_' || ch == '.'))
+    {
+        return;
+    }
+    let Some(refer) = xml_attr(tag, "ref") else {
+        return;
+    };
+    let Some((col_start, _col_end, row_start, row_end)) = table_bounds(&refer) else {
+        return;
+    };
+    let header = xml_attr(tag, "headerRowCount")
+        .and_then(|text| text.parse::<u32>().ok())
+        .unwrap_or(1);
+    let totals = xml_attr(tag, "totalsRowCount")
+        .and_then(|text| text.parse::<u32>().ok())
+        .unwrap_or(0);
+    if header != 1 || totals > 1 {
+        return;
+    }
+    let data_start = row_start.saturating_add(header);
+    let Some(data_end) = row_end.checked_sub(totals) else {
+        return;
+    };
+    if data_start == 0 || data_start > data_end {
+        return;
+    }
+    let width = _col_end - col_start + 1;
+    let mut columns = Vec::new();
+    let mut index = 0usize;
+    while let Some(at) = xml[index..].find("<tableColumn ") {
+        let start = index + at;
+        let Some(end) = xml[start..].find('>') else {
+            break;
+        };
+        let column_tag = &xml[start..start + end];
+        index = start + end + 1;
+        let Some(column) = xml_attr(column_tag, "name") else {
+            continue;
+        };
+        columns.push(unescape_xml(&column));
+    }
+    for (offset, column) in columns.iter().enumerate() {
+        if offset as u32 >= width {
+            break;
+        }
+        let column = column.trim();
+        if column.is_empty()
+            || column.chars().count() > 255
+            || column.contains('[')
+            || column.contains(']')
+            || column.starts_with('#')
+        {
+            continue;
+        }
+        let col = col_start + offset as u32;
+        let mut cells = Vec::new();
+        for row in data_start..=data_end {
+            cells.push(format!("{}{row}", column_name(col)));
+            if cells.len() > 4096 {
+                cells.clear();
+                break;
+            }
+        }
+        if cells.is_empty() {
+            continue;
+        }
+        let rows = cells.len() as u32;
+        tables.insert(
+            (name.to_ascii_lowercase(), column.to_ascii_lowercase()),
+            DefinedRef {
+                sheet: sheet.to_string(),
+                cells,
+                rows,
+                cols: 1,
+                formula: None,
+            },
+        );
+    }
+}
+
+fn first_tag<'a>(xml: &'a str, local: &str) -> Option<&'a str> {
+    let mut index = 0usize;
+    while let Some(at) = xml[index..].find('<') {
+        let start = index + at;
+        let Some(end) = xml[start..].find('>') else {
+            return None;
+        };
+        let tag = &xml[start..start + end];
+        index = start + end + 1;
+        let head = tag.trim_start_matches('<').trim_start_matches('/');
+        let head = head.split_whitespace().next().unwrap_or("");
+        let found = head.rsplit(':').next().unwrap_or(head);
+        if found == local {
+            return Some(tag);
+        }
+    }
+    None
+}
+
+fn table_bounds(refer: &str) -> Option<(u32, u32, u32, u32)> {
+    let (start, end) = refer.split_once(':')?;
+    let (c1, r1) = split_address(start.trim())?;
+    let (c2, r2) = split_address(end.trim())?;
+    Some((c1.min(c2), c1.max(c2), r1.min(r2), r1.max(r2)))
+}
+
+fn xml_attr(tag: &str, key: &str) -> Option<String> {
+    let needle = format!("{key}=\"");
+    let start = tag.find(&needle)? + needle.len();
+    let rest = &tag[start..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+fn parse_defined_ref(text: &str) -> Option<DefinedRef> {
+    let text = unescape_xml(text.trim());
+    if text.contains('[') || text.contains(',') {
+        return None;
+    }
+    let mut parser = CalcParser {
+        bytes: text.as_bytes(),
+        index: 0,
+    };
+    parser.skip();
+    if parser.bytes.get(parser.index) == Some(&b'=') {
+        parser.index += 1;
+        parser.skip();
+    }
+    let sheet = if parser.bytes.get(parser.index) == Some(&b'\'') {
+        parser.quoted_sheet()?
+    } else {
+        parser.word()?
+    };
+    if sheet.is_empty() || sheet.chars().count() > 31 {
+        return None;
+    }
+    parser.skip();
+    if parser.bytes.get(parser.index) != Some(&b'!') {
+        return None;
+    }
+    parser.index += 1;
+    let start = parser.cell_token()?;
+    parser.skip();
+    let (cells, rows, cols) = if parser.bytes.get(parser.index) == Some(&b':') {
+        parser.index += 1;
+        let end = parser.cell_token()?;
+        let (c1, r1) = split_address(&start)?;
+        let (c2, r2) = split_address(&end)?;
+        let cells = cells_in_range(&start, &end)?;
+        (cells, r1.abs_diff(r2) + 1, c1.abs_diff(c2) + 1)
+    } else {
+        (vec![start.to_ascii_uppercase()], 1, 1)
+    };
+    parser.skip();
+    if parser.index != parser.bytes.len() || cells.is_empty() {
+        return None;
+    }
+    Some(DefinedRef {
+        sheet: sheet.to_ascii_lowercase(),
+        cells,
+        rows,
+        cols,
+        formula: None,
+    })
+}
+
+fn absolute_sheet_formula(text: &str) -> Option<String> {
+    let text = unescape_xml(text.trim());
+    let text = text.strip_prefix('=').unwrap_or(&text).trim();
+    if text.is_empty() || text.chars().count() > 256 || text.contains('[') {
+        return None;
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let mut index = 0usize;
+    while index < chars.len() {
+        if chars[index] == '"' || chars[index] == '\'' {
+            let quote = chars[index];
+            index += 1;
+            while index < chars.len() {
+                if chars[index] == quote {
+                    index += 1;
+                    if chars.get(index) == Some(&quote) {
+                        index += 1;
+                        continue;
+                    }
+                    break;
+                }
+                index += 1;
+            }
+            continue;
+        }
+        if let Some(refer) = parse_cell_ref(&chars, index) {
+            if !refer.col_abs || !refer.row_abs || index == 0 || chars[index - 1] != '!' {
+                return None;
+            }
+            index = refer.end;
+            continue;
+        }
+        index += 1;
+    }
+    Some(text.to_string())
+}
+
+fn eval_name_formula(formula: &str, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+    let names = NameBook {
+        global: std::collections::HashMap::new(),
+        local: std::collections::HashMap::new(),
+        tables: std::collections::HashMap::new(),
+    };
+    eval_formula(
+        formula,
+        env.formulas,
+        env.literals,
+        env.texts,
+        env.foreign,
+        &names,
+        env.sheet_order,
+        env.sheet,
+        env.date1904,
+        env.previous,
+        env.iterate,
+        env.visiting,
+        env.hidden_rows,
+    )
+}
+
+fn named_addresses(defined: &DefinedRef, env: &CalcEnv<'_>) -> Vec<String> {
+    if defined.sheet == env.sheet {
+        defined.cells.clone()
+    } else {
+        defined
+            .cells
+            .iter()
+            .map(|cell| format!("{}!{cell}", defined.sheet))
+            .collect()
+    }
+}
+
+fn as_1900(serial: f64, date1904: bool) -> Option<f64> {
+    shift_serial(serial, date1904, 1462.0)
+}
+
+fn as_weekday_serial(serial: f64, date1904: bool) -> Option<f64> {
+    shift_serial(serial, date1904, 1461.0)
+}
+
+fn from_1900(serial: f64, date1904: bool) -> Option<f64> {
+    unshift_serial(serial, date1904, 1462.0)
+}
+
+fn from_weekday_serial(serial: f64, date1904: bool) -> Option<f64> {
+    unshift_serial(serial, date1904, 1461.0)
+}
+
+fn shift_serial(serial: f64, date1904: bool, shift: f64) -> Option<f64> {
+    if !serial.is_finite() {
+        return None;
+    }
+    let shifted = if date1904 { serial + shift } else { serial };
+    if (0.0..=2_958_465.0).contains(&shifted) {
+        Some(shifted)
+    } else {
+        None
+    }
+}
+
+fn unshift_serial(serial: f64, date1904: bool, shift: f64) -> Option<f64> {
+    if !serial.is_finite() {
+        return None;
+    }
+    let shifted = if date1904 { serial - shift } else { serial };
+    if (0.0..=2_958_465.0).contains(&shifted) {
+        Some(shifted)
+    } else {
+        None
+    }
+}
+
+fn date_excel(year: f64, month: f64, day: f64) -> Option<f64> {
+    if !year.is_finite() || !month.is_finite() || !day.is_finite() {
+        return None;
+    }
+    if !(year >= 0.0 && year <= 9999.0) || month.abs() >= 1.0e9 || day.abs() >= 1.0e9 {
+        return None;
+    }
+    let (year, month) = excel_normalize_month(year.trunc() as i32, month.trunc() as i32)?;
+    let day = day.trunc() as i64;
+    let serial = if year == 1900 && month == 2 && day >= 29 {
+        60 + (day - 29)
+    } else {
+        let unix = civil_to_unix(year, month, 1) + (day - 1);
+        let epoch = civil_to_unix(1899, 12, 30);
+        let mut serial = unix - epoch;
+        if unix < civil_to_unix(1900, 3, 1) {
+            serial -= 1;
+        }
+        serial
+    };
+    if (0..=2_958_465).contains(&serial) {
+        Some(serial as f64)
+    } else {
+        None
+    }
+}
+
+fn excel_parts(serial: f64) -> Option<(i32, i32, i32)> {
+    if !serial.is_finite() || serial < 0.0 || serial > 2_958_465.0 {
+        return None;
+    }
+    let serial = serial.trunc() as i64;
+    if serial == 0 {
+        return Some((1900, 1, 0));
+    }
+    if serial == 60 {
+        return Some((1900, 2, 29));
+    }
+    let epoch = civil_to_unix(1899, 12, 30);
+    let unix = if serial < 60 {
+        epoch + serial + 1
+    } else {
+        epoch + serial
+    };
+    Some(unix_to_civil(unix))
+}
+
+fn base_digit(byte: u8) -> Option<u32> {
+    match byte {
+        b'0'..=b'9' => Some(u32::from(byte - b'0')),
+        b'A'..=b'Z' => Some(u32::from(byte - b'A') + 10),
+        b'a'..=b'z' => Some(u32::from(byte - b'a') + 10),
+        _ => None,
+    }
+}
+
+fn format_base(mut number: u64, radix: u32, width: Option<usize>) -> Option<String> {
+    if !(2..=36).contains(&radix) {
+        return None;
+    }
+    let alphabet = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let mut chars = Vec::new();
+    if number == 0 {
+        chars.push(b'0');
+    } else {
+        while number > 0 {
+            let rem = (number % u64::from(radix)) as usize;
+            chars.push(alphabet[rem]);
+            number /= u64::from(radix);
+        }
+        chars.reverse();
+    }
+    if let Some(width) = width {
+        if chars.len() > width {
+            return None;
+        }
+        let pad = width - chars.len();
+        let mut padded = vec![b'0'; pad];
+        padded.append(&mut chars);
+        chars = padded;
+    }
+    String::from_utf8(chars).ok()
+}
+
+fn complement_text(number: f64, radix: u32, bits: u32, places: Option<f64>) -> Option<String> {
+    if !number.is_finite() || bits == 0 || bits >= 64 {
+        return None;
+    }
+    let number = number.trunc();
+    let sign = 1u64 << (bits - 1);
+    let min = -(sign as f64);
+    let max = (sign - 1) as f64;
+    if number < min || number > max {
+        return None;
+    }
+    let width = match places {
+        None => None,
+        Some(places) => {
+            if !places.is_finite() {
+                return None;
+            }
+            let places = places.trunc();
+            if !(1.0..=10.0).contains(&places) {
+                return None;
+            }
+            Some(places as usize)
+        }
+    };
+    if number < 0.0 {
+        if width.is_some_and(|width| width != 10) {
+            return None;
+        }
+        let unsigned = (number as i128) + (1i128 << bits);
+        return format_base(unsigned as u64, radix, Some(10));
+    }
+    format_base(number as u64, radix, width)
+}
+
+fn from_complement(text: &str, radix: u32, bits: u32) -> Option<f64> {
+    if text.is_empty() || text.len() > 10 || bits == 0 || bits >= 64 || !(2..=36).contains(&radix) {
+        return None;
+    }
+    let mut value: u64 = 0;
+    for byte in text.bytes() {
+        let digit = base_digit(byte)?;
+        if digit >= radix {
+            return None;
+        }
+        value = value
+            .checked_mul(u64::from(radix))?
+            .checked_add(u64::from(digit))?;
+    }
+    let full = 1u64 << bits;
+    let sign = 1u64 << (bits - 1);
+    if text.len() == 10 && value >= sign {
+        Some((value as i128 - full as i128) as f64)
+    } else if value < full {
+        Some(value as f64)
+    } else {
+        None
+    }
+}
+
+fn base_excel(number: f64, radix: f64, min_length: Option<f64>) -> Option<String> {
+    if !number.is_finite() || !radix.is_finite() || number < 0.0 || number >= (1u64 << 53) as f64 {
+        return None;
+    }
+    let radix = radix.trunc();
+    if !(2.0..=36.0).contains(&radix) {
+        return None;
+    }
+    let width = match min_length {
+        None => None,
+        Some(length) => {
+            if !length.is_finite() {
+                return None;
+            }
+            let length = length.trunc();
+            if !(0.0..=255.0).contains(&length) {
+                return None;
+            }
+            Some(length as usize)
+        }
+    };
+    format_base(number.trunc() as u64, radix as u32, width)
+}
+
+fn decimal_excel(text: &str, radix: f64) -> Option<f64> {
+    if !radix.is_finite() || text.is_empty() || text.len() > 255 {
+        return None;
+    }
+    let radix = radix.trunc();
+    if !(2.0..=36.0).contains(&radix) {
+        return None;
+    }
+    let mut value: u64 = 0;
+    let limit = 1u64 << 53;
+    for byte in text.bytes() {
+        let digit = base_digit(byte)?;
+        if (digit as f64) >= radix {
+            return None;
+        }
+        value = value
+            .checked_mul(radix as u64)?
+            .checked_add(u64::from(digit))?;
+        if value >= limit {
+            return None;
+        }
+    }
+    Some(value as f64)
+}
+
+fn bessel_excel(x: f64, order: f64, modified: bool) -> Option<f64> {
+    if !x.is_finite() || !order.is_finite() || order < 0.0 || order > 40.0 || x.abs() >= 40.0 {
+        return None;
+    }
+    let n = order.trunc() as u32;
+    if x == 0.0 {
+        return Some(if n == 0 { 1.0 } else { 0.0 });
+    }
+    let half = x / 2.0;
+    let mut term = 1.0;
+    for k in 1..=n {
+        term *= half / f64::from(k);
+        if !term.is_finite() {
+            return None;
+        }
+    }
+    let mut sum = 0.0;
+    let half_sq = half * half;
+    for k in 0..200 {
+        if !term.is_finite() {
+            return None;
+        }
+        sum += term;
+        let step = half_sq / (f64::from(k + 1) * f64::from(n + k + 1));
+        term *= if modified { step } else { -step };
+        if term.abs() <= 1e-16 * sum.abs().max(1.0) {
+            return if sum.is_finite() { Some(sum) } else { None };
+        }
+    }
+    None
+}
+
+fn mdeterm_excel(values: &[f64], n: usize) -> Option<f64> {
+    if n == 0 || n > 10 || values.len() != n * n {
+        return None;
+    }
+    let mut matrix = values.to_vec();
+    let mut det = 1.0;
+    for col in 0..n {
+        let mut pivot = col;
+        let mut best = matrix[col * n + col].abs();
+        for row in (col + 1)..n {
+            let value = matrix[row * n + col].abs();
+            if value > best {
+                best = value;
+                pivot = row;
+            }
+        }
+        if best <= 1e-12 {
+            return Some(0.0);
+        }
+        if pivot != col {
+            for index in 0..n {
+                matrix.swap(col * n + index, pivot * n + index);
+            }
+            det = -det;
+        }
+        let pivot_value = matrix[col * n + col];
+        det *= pivot_value;
+        if !det.is_finite() {
+            return None;
+        }
+        for row in (col + 1)..n {
+            let factor = matrix[row * n + col] / pivot_value;
+            for index in col..n {
+                matrix[row * n + index] -= factor * matrix[col * n + index];
+            }
+        }
+    }
+    if det.is_finite() {
+        Some(det)
+    } else {
+        None
+    }
+}
+
+fn let_name_ok(name: &str) -> bool {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return false;
+    }
+    name.chars().count() <= 255
+        && !is_cell_address(name)
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '.')
+}
+
+enum LookupHit {
+    At(usize),
+    Miss,
+    Bad,
+}
+
+fn exact_lookup(lookup: &CalcValue, cell: Option<&CalcValue>) -> bool {
+    match (lookup, cell) {
+        (CalcValue::Num(left), Some(CalcValue::Num(right))) => {
+            left.is_finite() && right.is_finite() && left == right
+        }
+        (CalcValue::Text(left), Some(CalcValue::Text(right))) => text_pattern(left, right),
+        _ => false,
+    }
+}
+
+fn text_pattern(pattern: &str, text: &str) -> bool {
+    if !pattern.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
+        return pattern.eq_ignore_ascii_case(text);
+    }
+    let pattern: Vec<char> = pattern.chars().collect();
+    let text: Vec<char> = text.chars().collect();
+    if pattern.len() > 64 || text.len() > 256 {
+        return false;
+    }
+    wildcard_match(&pattern, &text)
+}
+
+fn wildcard_match(pattern: &[char], text: &[char]) -> bool {
+    if pattern.is_empty() {
+        return text.is_empty();
+    }
+    if pattern[0] == '~' {
+        return pattern.len() > 1
+            && !text.is_empty()
+            && pattern[1].eq_ignore_ascii_case(&text[0])
+            && wildcard_match(&pattern[2..], &text[1..]);
+    }
+    if pattern[0] == '?' {
+        return !text.is_empty() && wildcard_match(&pattern[1..], &text[1..]);
+    }
+    if pattern[0] == '*' {
+        let mut rest = &pattern[1..];
+        while rest.first() == Some(&'*') {
+            rest = &rest[1..];
+        }
+        if rest.is_empty() {
+            return true;
+        }
+        for start in 0..=text.len() {
+            if wildcard_match(rest, &text[start..]) {
+                return true;
+            }
+        }
+        return false;
+    }
+    !text.is_empty()
+        && pattern[0].eq_ignore_ascii_case(&text[0])
+        && wildcard_match(&pattern[1..], &text[1..])
+}
+
+fn lookup_cmp(lookup: &CalcValue, cell: Option<&CalcValue>) -> Option<std::cmp::Ordering> {
+    match (lookup, cell) {
+        (CalcValue::Num(left), Some(CalcValue::Num(right)))
+            if left.is_finite() && right.is_finite() =>
+        {
+            Some(left.total_cmp(right))
+        }
+        (CalcValue::Text(left), Some(CalcValue::Text(right))) => {
+            Some(left.to_ascii_lowercase().cmp(&right.to_ascii_lowercase()))
+        }
+        _ => None,
+    }
+}
+
+fn approximate_index(
+    keys: &[Option<CalcValue>],
+    lookup: &CalcValue,
+    descending: bool,
+) -> Option<usize> {
+    let mut found = None;
+    for (index, cell) in keys.iter().enumerate() {
+        let Some(order) = lookup_cmp(lookup, cell.as_ref()) else {
+            break;
+        };
+        let keep = if descending {
+            order != std::cmp::Ordering::Greater
+        } else {
+            order != std::cmp::Ordering::Less
+        };
+        if keep {
+            found = Some(index);
+        } else {
+            break;
+        }
+    }
+    found
+}
+
+fn beta_fraction(a: f64, b: f64, x: f64) -> Option<f64> {
+    const STEPS: i32 = 200;
+    let tiny = 1e-30;
+    let qab = a + b;
+    let qap = a + 1.0;
+    let qam = a - 1.0;
+    let mut c = 1.0;
+    let mut d = 1.0 - qab * x / qap;
+    if d.abs() < tiny {
+        d = tiny;
+    }
+    d = 1.0 / d;
+    let mut h = d;
+    for m in 1..=STEPS {
+        let m = f64::from(m);
+        let twice = 2.0 * m;
+        let mut aa = m * (b - m) * x / ((qam + twice) * (a + twice));
+        d = 1.0 + aa * d;
+        if d.abs() < tiny {
+            d = tiny;
+        }
+        c = 1.0 + aa / c;
+        if c.abs() < tiny {
+            c = tiny;
+        }
+        d = 1.0 / d;
+        h *= d * c;
+        aa = -(a + m) * (qab + m) * x / ((a + twice) * (qap + twice));
+        d = 1.0 + aa * d;
+        if d.abs() < tiny {
+            d = tiny;
+        }
+        c = 1.0 + aa / c;
+        if c.abs() < tiny {
+            c = tiny;
+        }
+        d = 1.0 / d;
+        let delta = d * c;
+        h *= delta;
+        if !h.is_finite() {
+            return None;
+        }
+        if (delta - 1.0).abs() < 1e-12 {
+            return Some(h);
+        }
+    }
+    None
+}
+
+fn beta_cdf(x: f64, alpha: f64, beta: f64) -> Option<f64> {
+    if !x.is_finite() || !alpha.is_finite() || !beta.is_finite() || alpha <= 0.0 || beta <= 0.0 {
+        return None;
+    }
+    if !(0.0..=1.0).contains(&x) {
+        return None;
+    }
+    if x == 0.0 || x == 1.0 {
+        return Some(x);
+    }
+    let ln_beta = ln_gamma_excel(alpha)? + ln_gamma_excel(beta)? - ln_gamma_excel(alpha + beta)?;
+    let front = (-ln_beta + alpha * x.ln() + beta * (1.0 - x).ln()).exp();
+    if !front.is_finite() {
+        return None;
+    }
+    let value = if x < (alpha + 1.0) / (alpha + beta + 2.0) {
+        front * beta_fraction(alpha, beta, x)? / alpha
+    } else {
+        1.0 - front * beta_fraction(beta, alpha, 1.0 - x)? / beta
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn beta_pdf(x: f64, alpha: f64, beta: f64) -> Option<f64> {
+    if !x.is_finite() || !alpha.is_finite() || !beta.is_finite() || alpha <= 0.0 || beta <= 0.0 {
+        return None;
+    }
+    if !(0.0..=1.0).contains(&x) {
+        return None;
+    }
+    let ln_beta = ln_gamma_excel(alpha)? + ln_gamma_excel(beta)? - ln_gamma_excel(alpha + beta)?;
+    if x == 0.0 {
+        if alpha > 1.0 {
+            return Some(0.0);
+        }
+        if alpha == 1.0 {
+            let value = (-ln_beta).exp();
+            return if value.is_finite() { Some(value) } else { None };
+        }
+        return None;
+    }
+    if x == 1.0 {
+        if beta > 1.0 {
+            return Some(0.0);
+        }
+        if beta == 1.0 {
+            let value = (-ln_beta).exp();
+            return if value.is_finite() { Some(value) } else { None };
+        }
+        return None;
+    }
+    let value = ((alpha - 1.0) * x.ln() + (beta - 1.0) * (1.0 - x).ln() - ln_beta).exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn t_cdf(x: f64, df: f64) -> Option<f64> {
+    if !x.is_finite() || !df.is_finite() || df <= 0.0 {
+        return None;
+    }
+    let z = df / (df + x * x);
+    if !z.is_finite() {
+        return None;
+    }
+    let tail = 0.5 * beta_cdf(z, df / 2.0, 0.5)?;
+    let value = if x >= 0.0 { 1.0 - tail } else { tail };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn t_pdf(x: f64, df: f64) -> Option<f64> {
+    if !x.is_finite() || !df.is_finite() || df <= 0.0 {
+        return None;
+    }
+    let ln = ln_gamma_excel((df + 1.0) / 2.0)?
+        - ln_gamma_excel(df / 2.0)?
+        - 0.5 * (df * std::f64::consts::PI).ln();
+    let base = 1.0 + (x * x) / df;
+    if base <= 0.0 || !ln.is_finite() {
+        return None;
+    }
+    let value = (ln - ((df + 1.0) / 2.0) * base.ln()).exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn f_cdf(x: f64, df1: f64, df2: f64) -> Option<f64> {
+    if !x.is_finite() || !df1.is_finite() || !df2.is_finite() || x < 0.0 || df1 <= 0.0 || df2 <= 0.0
+    {
+        return None;
+    }
+    if x == 0.0 {
+        return Some(0.0);
+    }
+    let z = (df1 * x) / (df1 * x + df2);
+    if !z.is_finite() {
+        return None;
+    }
+    beta_cdf(z, df1 / 2.0, df2 / 2.0)
+}
+
+fn f_pdf(x: f64, df1: f64, df2: f64) -> Option<f64> {
+    if !x.is_finite() || !df1.is_finite() || !df2.is_finite() || x < 0.0 || df1 <= 0.0 || df2 <= 0.0
+    {
+        return None;
+    }
+    if x == 0.0 {
+        if df1 > 2.0 {
+            return Some(0.0);
+        }
+        if df1 != 2.0 {
+            return None;
+        }
+    }
+    let ln = ln_gamma_excel((df1 + df2) / 2.0)?
+        - ln_gamma_excel(df1 / 2.0)?
+        - ln_gamma_excel(df2 / 2.0)?
+        + (df1 / 2.0) * df1.ln()
+        + (df2 / 2.0) * df2.ln()
+        + if x == 0.0 {
+            0.0
+        } else {
+            (df1 / 2.0 - 1.0) * x.ln()
+        }
+        - ((df1 + df2) / 2.0) * (df2 + df1 * x).ln();
+    let value = ln.exp();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn student_tail(stat: f64, df: f64, tails: f64) -> Option<f64> {
+    if !stat.is_finite() || !df.is_finite() || df <= 0.0 || !tails.is_finite() {
+        return None;
+    }
+    let tails = tails.trunc();
+    if tails != 1.0 && tails != 2.0 {
+        return None;
+    }
+    let upper = 1.0 - t_cdf(stat.abs(), df)?;
+    let value = if tails == 1.0 {
+        upper
+    } else {
+        (2.0 * upper).min(1.0)
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn mean_sample_var(values: &[f64]) -> Option<(f64, f64, f64)> {
+    let variance = var_excel(values, true)?;
+    let count = values.len() as f64;
+    let mean = values.iter().sum::<f64>() / count;
+    if mean.is_finite() {
+        Some((mean, variance, count))
+    } else {
+        None
+    }
+}
+
+fn paired_t_test(diffs: &[f64], tails: f64) -> Option<f64> {
+    let (mean, variance, count) = mean_sample_var(diffs)?;
+    if variance <= 0.0 {
+        return None;
+    }
+    let stat = mean / (variance.sqrt() / count.sqrt());
+    student_tail(stat, count - 1.0, tails)
+}
+
+fn t_test_excel(left: &[f64], right: &[f64], tails: f64, kind: f64) -> Option<f64> {
+    if !kind.is_finite() {
+        return None;
+    }
+    let kind = kind.trunc();
+    let (mean_left, var_left, n_left) = mean_sample_var(left)?;
+    let (mean_right, var_right, n_right) = mean_sample_var(right)?;
+    if kind == 2.0 {
+        let df = n_left + n_right - 2.0;
+        if df <= 0.0 {
+            return None;
+        }
+        let pooled = ((n_left - 1.0) * var_left + (n_right - 1.0) * var_right) / df;
+        if pooled <= 0.0 {
+            return None;
+        }
+        let stat = (mean_left - mean_right) / (pooled * (1.0 / n_left + 1.0 / n_right)).sqrt();
+        return student_tail(stat, df, tails);
+    }
+    if kind == 3.0 {
+        let left_term = var_left / n_left;
+        let right_term = var_right / n_right;
+        let se2 = left_term + right_term;
+        if se2 <= 0.0 || n_left <= 1.0 || n_right <= 1.0 {
+            return None;
+        }
+        let df = (se2 * se2)
+            / (left_term.powi(2) / (n_left - 1.0) + right_term.powi(2) / (n_right - 1.0));
+        let stat = (mean_left - mean_right) / se2.sqrt();
+        return student_tail(stat, df, tails);
+    }
+    None
+}
+
+fn f_test_excel(left: &[f64], right: &[f64]) -> Option<f64> {
+    let (_, var_left, n_left) = mean_sample_var(left)?;
+    let (_, var_right, n_right) = mean_sample_var(right)?;
+    if var_left <= 0.0 || var_right <= 0.0 {
+        return None;
+    }
+    let cdf = f_cdf(var_left / var_right, n_left - 1.0, n_right - 1.0)?;
+    let value = (2.0 * cdf.min(1.0 - cdf)).min(1.0);
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn t_quantile(probability: f64, df: f64) -> Option<f64> {
+    if !(probability > 0.5 && probability < 1.0) || !df.is_finite() || df <= 0.0 {
+        return None;
+    }
+    let mut high = 1.0;
+    while t_cdf(high, df)? < probability {
+        high *= 2.0;
+        if high > 1.0e8 {
+            return None;
+        }
+    }
+    let mut low = 0.0;
+    for _ in 0..80 {
+        let mid = (low + high) / 2.0;
+        if t_cdf(mid, df)? < probability {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    let value = (low + high) / 2.0;
+    if value.is_finite() && high - low <= 1e-10 * value.abs().max(1.0) {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn confidence_t_excel(alpha: f64, stdev: f64, size: f64) -> Option<f64> {
+    if !alpha.is_finite() || !stdev.is_finite() || !size.is_finite() {
+        return None;
+    }
+    if !(alpha > 0.0 && alpha < 1.0) || stdev <= 0.0 {
+        return None;
+    }
+    let size = size.trunc();
+    if !(2.0..=1.0e6).contains(&size) {
+        return None;
+    }
+    let critical = t_quantile(1.0 - alpha / 2.0, size - 1.0)?;
+    let value = critical * stdev / size.sqrt();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn period_type(value: f64) -> Option<f64> {
+    if !value.is_finite() {
+        return None;
+    }
+    Some(if value.trunc() == 0.0 { 0.0 } else { 1.0 })
+}
+
+fn annuity_pow(rate: f64, nper: f64) -> Option<f64> {
+    if !rate.is_finite() || !nper.is_finite() || nper <= 0.0 || nper > 1.0e6 || rate <= -1.0 {
+        return None;
+    }
+    let value = (1.0 + rate).powf(nper);
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn pmt_excel(rate: f64, nper: f64, pv: f64, fv: f64, typ: f64) -> Option<f64> {
+    if !pv.is_finite() || !fv.is_finite() {
+        return None;
+    }
+    let typ = period_type(typ)?;
+    if rate == 0.0 {
+        if nper <= 0.0 || nper > 1.0e6 {
+            return None;
+        }
+        let value = -(pv + fv) / nper;
+        return if value.is_finite() { Some(value) } else { None };
+    }
+    let factor = annuity_pow(rate, nper)?;
+    let value = -(pv * factor + fv) * rate / ((1.0 + rate * typ) * (factor - 1.0));
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn fv_excel(rate: f64, nper: f64, pmt: f64, pv: f64, typ: f64) -> Option<f64> {
+    if !pmt.is_finite() || !pv.is_finite() {
+        return None;
+    }
+    let typ = period_type(typ)?;
+    if rate == 0.0 {
+        if nper <= 0.0 || nper > 1.0e6 {
+            return None;
+        }
+        let value = -pv - pmt * nper;
+        return if value.is_finite() { Some(value) } else { None };
+    }
+    let factor = annuity_pow(rate, nper)?;
+    let value = -pv * factor - pmt * (1.0 + rate * typ) * (factor - 1.0) / rate;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn pv_excel(rate: f64, nper: f64, pmt: f64, fv: f64, typ: f64) -> Option<f64> {
+    if !pmt.is_finite() || !fv.is_finite() {
+        return None;
+    }
+    let typ = period_type(typ)?;
+    if rate == 0.0 {
+        if nper <= 0.0 || nper > 1.0e6 {
+            return None;
+        }
+        let value = -fv - pmt * nper;
+        return if value.is_finite() { Some(value) } else { None };
+    }
+    let factor = annuity_pow(rate, nper)?;
+    let value = -(fv + pmt * (1.0 + rate * typ) * (factor - 1.0) / rate) / factor;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn nper_excel(rate: f64, pmt: f64, pv: f64, fv: f64, typ: f64) -> Option<f64> {
+    if !rate.is_finite() || !pmt.is_finite() || !pv.is_finite() || !fv.is_finite() || rate <= -1.0 {
+        return None;
+    }
+    let typ = period_type(typ)?;
+    if rate == 0.0 {
+        if pmt == 0.0 {
+            return None;
+        }
+        let value = -(pv + fv) / pmt;
+        return if value.is_finite() && value > 0.0 {
+            Some(value)
+        } else {
+            None
+        };
+    }
+    let payment = pmt * (1.0 + rate * typ);
+    let numerator = payment - fv * rate;
+    let denominator = payment + pv * rate;
+    if denominator == 0.0 || numerator / denominator <= 0.0 || (1.0 + rate) <= 0.0 {
+        return None;
+    }
+    let value = (numerator / denominator).ln() / (1.0 + rate).ln();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn rate_balance(rate: f64, nper: f64, pmt: f64, pv: f64, fv: f64, typ: f64) -> Option<f64> {
+    if rate.abs() < 1e-12 {
+        let value = pv + pmt * nper + fv;
+        return if value.is_finite() { Some(value) } else { None };
+    }
+    let factor = annuity_pow(rate, nper)?;
+    let value = pv * factor + pmt * (1.0 + rate * typ) * (factor - 1.0) / rate + fv;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn rate_excel(nper: f64, pmt: f64, pv: f64, fv: f64, typ: f64, guess: f64) -> Option<f64> {
+    if !nper.is_finite()
+        || !pmt.is_finite()
+        || !pv.is_finite()
+        || !fv.is_finite()
+        || !guess.is_finite()
+    {
+        return None;
+    }
+    let typ = period_type(typ)?;
+    if nper <= 0.0 || nper > 1.0e6 || guess <= -1.0 {
+        return None;
+    }
+    let mut rate = guess;
+    for _ in 0..40 {
+        let step = 1e-6 * rate.abs().max(1.0);
+        let value = rate_balance(rate, nper, pmt, pv, fv, typ)?;
+        let shifted = rate_balance(rate + step, nper, pmt, pv, fv, typ)?;
+        let slope = (shifted - value) / step;
+        if slope.abs() < 1e-14 {
+            return None;
+        }
+        let next = rate - value / slope;
+        if !next.is_finite() || next <= -1.0 {
+            return None;
+        }
+        if (next - rate).abs() <= 1e-8 * next.abs().max(1.0) {
+            return Some(next);
+        }
+        rate = next;
+    }
+    None
+}
+
+fn npv_excel(rate: f64, values: &[f64]) -> Option<f64> {
+    if !rate.is_finite() || rate <= -1.0 || values.is_empty() || values.len() > 4096 {
+        return None;
+    }
+    if values.iter().any(|value| !value.is_finite()) {
+        return None;
+    }
+    let mut total = 0.0;
+    let mut discount = 1.0 + rate;
+    for value in values {
+        total += value / discount;
+        discount *= 1.0 + rate;
+        if !discount.is_finite() {
+            return None;
+        }
+    }
+    if total.is_finite() {
+        Some(total)
+    } else {
+        None
+    }
+}
+
+fn irr_excel(values: &[f64], guess: f64) -> Option<f64> {
+    if !guess.is_finite() || guess <= -1.0 || values.len() < 2 || values.len() > 128 {
+        return None;
+    }
+    if values.iter().any(|value| !value.is_finite()) {
+        return None;
+    }
+    let mut rate = guess;
+    for _ in 0..40 {
+        let mut total = 0.0;
+        let mut slope = 0.0;
+        let mut discount = 1.0;
+        for (index, value) in values.iter().enumerate() {
+            total += value / discount;
+            if index > 0 {
+                slope += -((index as f64) * value) / (discount * (1.0 + rate));
+            }
+            discount *= 1.0 + rate;
+            if !discount.is_finite() {
+                return None;
+            }
+        }
+        if slope.abs() < 1e-14 || !total.is_finite() {
+            return None;
+        }
+        let next = rate - total / slope;
+        if !next.is_finite() || next <= -1.0 {
+            return None;
+        }
+        if (next - rate).abs() <= 1e-8 * next.abs().max(1.0) {
+            return Some(next);
+        }
+        rate = next;
+    }
+    None
+}
+
+fn ipmt_excel(rate: f64, per: f64, nper: f64, pv: f64, fv: f64, typ: f64) -> Option<f64> {
+    if !per.is_finite() {
+        return None;
+    }
+    let per = per.trunc();
+    if per < 1.0 || per > nper {
+        return None;
+    }
+    let payment = pmt_excel(rate, nper, pv, fv, typ)?;
+    let typ = period_type(typ)?;
+    if rate == 0.0 || (typ == 1.0 && per == 1.0) {
+        return Some(0.0);
+    }
+    let balance = if per == 1.0 {
+        -pv
+    } else {
+        fv_excel(rate, per - 1.0, payment, pv, typ)?
+    };
+    let value = balance * rate;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn ppmt_excel(rate: f64, per: f64, nper: f64, pv: f64, fv: f64, typ: f64) -> Option<f64> {
+    let interest = ipmt_excel(rate, per, nper, pv, fv, typ)?;
+    let payment = pmt_excel(rate, nper, pv, fv, typ)?;
+    let value = payment - interest;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn cumulative_payment(
+    rate: f64,
+    nper: f64,
+    pv: f64,
+    start: f64,
+    end: f64,
+    typ: f64,
+    principal: bool,
+) -> Option<f64> {
+    if !start.is_finite() || !end.is_finite() {
+        return None;
+    }
+    let start = start.trunc();
+    let end = end.trunc();
+    if start < 1.0 || end < start || end > nper || end - start > 10_000.0 {
+        return None;
+    }
+    let mut total = 0.0;
+    let mut period = start;
+    while period <= end {
+        let part = if principal {
+            ppmt_excel(rate, period, nper, pv, 0.0, typ)?
+        } else {
+            ipmt_excel(rate, period, nper, pv, 0.0, typ)?
+        };
+        total += part;
+        if !total.is_finite() {
+            return None;
+        }
+        period += 1.0;
+    }
+    Some(total)
+}
+
+fn xnpv_excel(rate: f64, values: &[f64], dates: &[f64]) -> Option<f64> {
+    if !rate.is_finite()
+        || rate <= -1.0
+        || values.is_empty()
+        || values.len() > 128
+        || values.len() != dates.len()
+    {
+        return None;
+    }
+    let base = dates[0];
+    if dates.iter().any(|date| *date < base) {
+        return None;
+    }
+    let mut total = 0.0;
+    for (value, date) in values.iter().zip(dates) {
+        let years = (date - base) / 365.0;
+        let discount = (1.0 + rate).powf(years);
+        if !discount.is_finite() || discount == 0.0 {
+            return None;
+        }
+        total += value / discount;
+    }
+    if total.is_finite() {
+        Some(total)
+    } else {
+        None
+    }
+}
+
+fn xirr_excel(values: &[f64], dates: &[f64], guess: f64) -> Option<f64> {
+    if !guess.is_finite()
+        || guess <= -1.0
+        || values.len() < 2
+        || values.len() > 128
+        || values.len() != dates.len()
+        || !values.iter().any(|value| *value > 0.0)
+        || !values.iter().any(|value| *value < 0.0)
+    {
+        return None;
+    }
+    let base = dates[0];
+    let mut previous = base;
+    for date in &dates[1..] {
+        if *date < previous {
+            return None;
+        }
+        previous = *date;
+    }
+    if (dates[dates.len() - 1] - base).abs() < 1e-9 {
+        return None;
+    }
+    let times: Vec<f64> = dates.iter().map(|date| (date - base) / 365.0).collect();
+    let mut rate = guess;
+    for _ in 0..40 {
+        let mut total = 0.0;
+        let mut slope = 0.0;
+        for (value, time) in values.iter().zip(&times) {
+            let discount = (1.0 + rate).powf(*time);
+            let next = (1.0 + rate).powf(time + 1.0);
+            if !discount.is_finite() || !next.is_finite() || discount == 0.0 || next == 0.0 {
+                return None;
+            }
+            total += value / discount;
+            slope += value * (-time) / next;
+        }
+        if slope.abs() < 1e-14 || !total.is_finite() {
+            return None;
+        }
+        let next = rate - total / slope;
+        if !next.is_finite() || next <= -1.0 {
+            return None;
+        }
+        if (next - rate).abs() <= 1e-8 * next.abs().max(1.0) {
+            return Some(next);
+        }
+        rate = next;
+    }
+    None
+}
+
+fn mirr_excel(values: &[f64], finance: f64, reinvest: f64) -> Option<f64> {
+    if !finance.is_finite()
+        || !reinvest.is_finite()
+        || finance <= -1.0
+        || reinvest <= -1.0
+        || values.len() < 2
+        || values.len() > 128
+    {
+        return None;
+    }
+    let mut positive = 0.0;
+    let mut negative = 0.0;
+    let mut has_positive = false;
+    let mut has_negative = false;
+    for (index, value) in values.iter().enumerate() {
+        if *value > 0.0 {
+            has_positive = true;
+            let discount = (1.0 + reinvest).powf(index as f64);
+            if !discount.is_finite() || discount == 0.0 {
+                return None;
+            }
+            positive += value / discount;
+        } else if *value < 0.0 {
+            has_negative = true;
+            let discount = (1.0 + finance).powf(index as f64);
+            if !discount.is_finite() || discount == 0.0 {
+                return None;
+            }
+            negative += value / discount;
+        }
+    }
+    if !has_positive || !has_negative || !positive.is_finite() || !negative.is_finite() {
+        return None;
+    }
+    let ratio = positive.abs() / negative.abs();
+    let value = ratio.powf(1.0 / (values.len() as f64 - 1.0)) * (1.0 + reinvest) - 1.0;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+struct CouponSpan {
+    accrued_days: f64,
+    next_days: f64,
+    period_days: f64,
+    coupons: u32,
+}
+
+fn days360_us(start: f64, end: f64) -> Option<f64> {
+    let (y1, m1, mut d1) = excel_parts(start)?;
+    let (y2, m2, mut d2) = excel_parts(end)?;
+    if d1 == 31 {
+        d1 = 30;
+    }
+    if d2 == 31 && d1 == 30 {
+        d2 = 30;
+    }
+    Some(f64::from((y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1)))
+}
+
+fn days360_eu(start: f64, end: f64) -> Option<f64> {
+    let (y1, m1, mut d1) = excel_parts(start)?;
+    let (y2, m2, mut d2) = excel_parts(end)?;
+    if d1 == 31 {
+        d1 = 30;
+    }
+    if d2 == 31 {
+        d2 = 30;
+    }
+    Some(f64::from((y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1)))
+}
+
+fn coupon_span(settlement: f64, maturity: f64, frequency: i32, basis: i32) -> Option<CouponSpan> {
+    if !(1.0..=2_958_465.0).contains(&settlement)
+        || !(1.0..=2_958_465.0).contains(&maturity)
+        || settlement >= maturity
+    {
+        return None;
+    }
+    let step = 12 / frequency;
+    let mut cursor = maturity;
+    let mut coupons = 0u32;
+    let (next, prev) = loop {
+        if coupons >= 4_800 {
+            return None;
+        }
+        coupons += 1;
+        let earlier = shift_months(cursor, -f64::from(step), false)?;
+        if earlier >= cursor {
+            return None;
+        }
+        if earlier <= settlement {
+            break (cursor, earlier);
+        }
+        cursor = earlier;
+    };
+    let (accrued_days, next_days, period_days) = match basis {
+        0 => (
+            days360_us(prev, settlement)?,
+            days360_us(settlement, next)?,
+            360.0 / f64::from(frequency),
+        ),
+        1 => (settlement - prev, next - settlement, next - prev),
+        2 => (
+            settlement - prev,
+            next - settlement,
+            360.0 / f64::from(frequency),
+        ),
+        3 => (
+            settlement - prev,
+            next - settlement,
+            365.0 / f64::from(frequency),
+        ),
+        4 => (
+            days360_eu(prev, settlement)?,
+            days360_eu(settlement, next)?,
+            360.0 / f64::from(frequency),
+        ),
+        _ => return None,
+    };
+    if accrued_days < 0.0 || next_days <= 0.0 {
+        return None;
+    }
+    Some(CouponSpan {
+        accrued_days,
+        next_days,
+        period_days,
+        coupons,
+    })
+}
+
+fn bond_frequency(frequency: f64) -> Option<i32> {
+    if !frequency.is_finite() {
+        return None;
+    }
+    match frequency.trunc() as i32 {
+        frequency @ (1 | 2 | 4) => Some(frequency),
+        _ => None,
+    }
+}
+
+fn bond_serial(serial: f64, date1904: bool) -> Option<f64> {
+    let serial = as_1900(serial, date1904)?;
+    if (1.0..=2_958_465.0).contains(&serial) {
+        Some(serial.trunc())
+    } else {
+        None
+    }
+}
+
+fn price_excel(
+    settlement: f64,
+    maturity: f64,
+    rate: f64,
+    yld: f64,
+    redemption: f64,
+    frequency: i32,
+    basis: i32,
+) -> Option<f64> {
+    if !rate.is_finite()
+        || !yld.is_finite()
+        || !redemption.is_finite()
+        || rate < 0.0
+        || redemption < 0.0
+    {
+        return None;
+    }
+    let span = coupon_span(settlement, maturity, frequency, basis)?;
+    let per_yield = yld / f64::from(frequency);
+    if per_yield <= -1.0 {
+        return None;
+    }
+    let coupon = 100.0 * rate / f64::from(frequency);
+    let frac = span.next_days / span.period_days;
+    let base = 1.0 + per_yield;
+    let mut present = 0.0;
+    for k in 1..=span.coupons {
+        let time = (k - 1) as f64 + frac;
+        present += coupon / base.powf(time);
+    }
+    let last = (span.coupons - 1) as f64 + frac;
+    present += redemption / base.powf(last);
+    let accrued = coupon * (span.accrued_days / span.period_days);
+    let value = present - accrued;
+    value.is_finite().then_some(value)
+}
+
+fn basis_days(start: f64, end: f64, basis: i32) -> Option<f64> {
+    if end < start {
+        return None;
+    }
+    match basis {
+        0 => days360_us(start, end),
+        4 => days360_eu(start, end),
+        1 | 2 | 3 => Some(end - start),
+        _ => None,
+    }
+}
+
+fn normal_period_days(start: f64, end: f64, basis: i32, frequency: i32) -> Option<f64> {
+    let days = match basis {
+        1 => end - start,
+        0 | 2 | 4 => 360.0 / f64::from(frequency),
+        3 => 365.0 / f64::from(frequency),
+        _ => return None,
+    };
+    (days > 0.0).then_some(days)
+}
+
+fn coupons_until(first: f64, maturity: f64, frequency: i32) -> Option<u32> {
+    let step = 12 / frequency;
+    let mut cursor = first;
+    let mut count = 1u32;
+    loop {
+        if (cursor - maturity).abs() < 0.5 {
+            return Some(count);
+        }
+        if cursor > maturity || count > 4_800 {
+            return None;
+        }
+        cursor = shift_months(cursor, f64::from(step), false)?;
+        count += 1;
+    }
+}
+
+fn oddf_price(
+    settlement: f64,
+    maturity: f64,
+    issue: f64,
+    first_coupon: f64,
+    rate: f64,
+    yld: f64,
+    redemption: f64,
+    frequency: i32,
+    basis: i32,
+) -> Option<f64> {
+    if !rate.is_finite()
+        || !yld.is_finite()
+        || !redemption.is_finite()
+        || rate < 0.0
+        || yld < 0.0
+        || redemption <= 0.0
+        || !(issue < settlement && settlement < first_coupon && first_coupon < maturity)
+    {
+        return None;
+    }
+    let early = shift_months(first_coupon, -f64::from(12 / frequency), false)?;
+    let period = normal_period_days(early, first_coupon, basis, frequency)?;
+    let odd_days = basis_days(issue, first_coupon, basis)?;
+    if odd_days <= 0.0 {
+        return None;
+    }
+    if odd_days > period + 1e-9 {
+        return oddf_long_price(
+            settlement,
+            maturity,
+            issue,
+            first_coupon,
+            rate,
+            yld,
+            redemption,
+            frequency,
+            basis,
+        );
+    }
+    let next_days = basis_days(settlement, first_coupon, basis)?;
+    let accrued = basis_days(issue, settlement, basis)?;
+    if next_days <= 0.0 || accrued < 0.0 {
+        return None;
+    }
+    let coupons = coupons_until(first_coupon, maturity, frequency)?;
+    let per_yield = yld / f64::from(frequency);
+    if per_yield <= -1.0 {
+        return None;
+    }
+    let coupon = 100.0 * rate / f64::from(frequency);
+    let base = 1.0 + per_yield;
+    let frac = next_days / period;
+    let mut present = redemption / base.powf((coupons - 1) as f64 + frac);
+    present += coupon * (odd_days / period) / base.powf(frac);
+    for index in 2..=coupons {
+        present += coupon / base.powf((index - 1) as f64 + frac);
+    }
+    let value = present - coupon * (accrued / period);
+    value.is_finite().then_some(value)
+}
+
+fn coupon_dates_back(origin: f64, stop: f64, frequency: i32, cap: usize) -> Option<Vec<f64>> {
+    let origin = origin.trunc();
+    let stop = stop.trunc();
+    if origin < 1.0 || stop < 1.0 || cap < 2 {
+        return None;
+    }
+    let (year, month, day) = excel_parts(origin)?;
+    let end_of_month = day == month_length(year, month)?;
+    let step = 12 / frequency;
+    let mut dates = Vec::new();
+    let mut cursor = origin;
+    loop {
+        dates.push(cursor);
+        if cursor <= stop {
+            break;
+        }
+        if dates.len() >= cap {
+            return None;
+        }
+        cursor = shift_months(cursor, -f64::from(step), end_of_month)?;
+    }
+    dates.reverse();
+    (dates.len() >= 2).then_some(dates)
+}
+
+fn oddf_long_price(
+    settlement: f64,
+    maturity: f64,
+    issue: f64,
+    first_coupon: f64,
+    rate: f64,
+    yld: f64,
+    redemption: f64,
+    frequency: i32,
+    basis: i32,
+) -> Option<f64> {
+    let near = coupon_dates_back(first_coupon, settlement, frequency, 9)?;
+    let previous = near[near.len() - 2];
+    let next = near[near.len() - 1];
+    if (next - first_coupon.trunc()).abs() > 0.5 {
+        return None;
+    }
+    let period = normal_period_days(previous, next, basis, frequency)?;
+    let accrued_before = basis_days(previous, settlement, basis)?;
+    let next_days = if basis == 2 || basis == 3 {
+        basis_days(settlement, next, basis)?
+    } else {
+        period - accrued_before
+    };
+    if next_days < 0.0 || period <= 0.0 {
+        return None;
+    }
+    let quasi_count = near.len() - 2;
+    let schedule = coupon_dates_back(maturity, first_coupon, frequency, 4_801)?;
+    if (schedule[0] - first_coupon.trunc()).abs() > 0.5 {
+        return None;
+    }
+    let coupons = schedule.len() - 1;
+    let span = coupon_dates_back(first_coupon, issue, frequency, 9)?;
+    if span.len() < 2 || span.len() > 9 {
+        return None;
+    }
+    let mut coupon_fraction = 0.0;
+    let mut accrued_fraction = 0.0;
+    for index in 0..span.len() - 1 {
+        let start = span[index];
+        let end = span[index + 1];
+        let length = if basis == 1 {
+            basis_days(start, end, 1)?
+        } else {
+            period
+        };
+        if length <= 0.0 {
+            return None;
+        }
+        let covered = if index == 0 {
+            if end < issue {
+                0.0
+            } else {
+                basis_days(issue, end, basis)?
+            }
+        } else {
+            length
+        };
+        let from = issue.max(start);
+        let to = settlement.min(end);
+        let accrued = if to > from {
+            basis_days(from, to, basis)?
+        } else {
+            0.0
+        };
+        coupon_fraction += covered / length;
+        accrued_fraction += accrued / length;
+    }
+    let per_yield = yld / f64::from(frequency);
+    if per_yield <= -1.0 {
+        return None;
+    }
+    let coupon = 100.0 * rate / f64::from(frequency);
+    let base = 1.0 + per_yield;
+    let frac = next_days / period;
+    let mut present = redemption / base.powf(quasi_count as f64 + coupons as f64 + frac);
+    present += coupon * coupon_fraction / base.powf(quasi_count as f64 + frac);
+    let first_regular = quasi_count + 1;
+    let last_regular = quasi_count + coupons;
+    for index in first_regular..=last_regular {
+        present += coupon / base.powf(index as f64 + frac);
+    }
+    let value = present - accrued_fraction * coupon;
+    value.is_finite().then_some(value)
+}
+
+fn oddl_price(
+    settlement: f64,
+    maturity: f64,
+    last_interest: f64,
+    rate: f64,
+    yld: f64,
+    redemption: f64,
+    frequency: i32,
+    basis: i32,
+) -> Option<f64> {
+    if !rate.is_finite()
+        || !yld.is_finite()
+        || !redemption.is_finite()
+        || rate < 0.0
+        || yld < 0.0
+        || redemption <= 0.0
+        || !(last_interest < settlement && settlement < maturity)
+    {
+        return None;
+    }
+    let early = shift_months(maturity, -f64::from(12 / frequency), false)?;
+    let period = normal_period_days(early, maturity, basis, frequency)?;
+    let odd_days = basis_days(last_interest, maturity, basis)?;
+    let next_days = basis_days(settlement, maturity, basis)?;
+    let accrued = basis_days(last_interest, settlement, basis)?;
+    if odd_days <= 0.0 || next_days <= 0.0 || accrued < 0.0 || odd_days > period * 2.0 + 1e-6 {
+        return None;
+    }
+    let per_yield = yld / f64::from(frequency);
+    let coupon = 100.0 * rate / f64::from(frequency);
+    let denom = 1.0 + per_yield * (next_days / period);
+    if denom <= 0.0 {
+        return None;
+    }
+    let value = (redemption + coupon * odd_days / period) / denom - coupon * accrued / period;
+    value.is_finite().then_some(value)
+}
+
+fn odd_yield(price: f64, frequency: i32, quote: impl Fn(f64) -> Option<f64>) -> Option<f64> {
+    if !price.is_finite() || price <= 0.0 {
+        return None;
+    }
+    let mut yld = 0.05;
+    for _ in 0..40 {
+        let value = quote(yld)?;
+        let step = 1e-6 * yld.abs().max(1.0);
+        let above = quote(yld + step)?;
+        let slope = (above - value) / step;
+        if !slope.is_finite() || slope.abs() < 1e-12 {
+            return None;
+        }
+        let next = yld - (value - price) / slope;
+        if !next.is_finite() || next < 0.0 || next <= f64::from(-frequency) {
+            return None;
+        }
+        if (next - yld).abs() <= 1e-8 * next.abs().max(1.0) {
+            return Some(next);
+        }
+        yld = next;
+    }
+    None
+}
+
+fn yield_excel(
+    settlement: f64,
+    maturity: f64,
+    rate: f64,
+    price: f64,
+    redemption: f64,
+    frequency: i32,
+    basis: i32,
+) -> Option<f64> {
+    if !price.is_finite() || price <= 0.0 {
+        return None;
+    }
+    let mut yld = if rate > 0.0 { rate } else { 0.05 };
+    for _ in 0..40 {
+        let quote = price_excel(
+            settlement, maturity, rate, yld, redemption, frequency, basis,
+        )?;
+        let step = 1e-6 * yld.abs().max(1.0);
+        let above = price_excel(
+            settlement,
+            maturity,
+            rate,
+            yld + step,
+            redemption,
+            frequency,
+            basis,
+        )?;
+        let slope = (above - quote) / step;
+        if !slope.is_finite() || slope.abs() < 1e-12 {
+            return None;
+        }
+        let next = yld - (quote - price) / slope;
+        if !next.is_finite() || next <= f64::from(-frequency) {
+            return None;
+        }
+        if (next - yld).abs() <= 1e-8 * next.abs().max(1.0) {
+            return Some(next);
+        }
+        yld = next;
+    }
+    None
+}
+
+fn duration_excel(
+    settlement: f64,
+    maturity: f64,
+    rate: f64,
+    yld: f64,
+    frequency: i32,
+    basis: i32,
+) -> Option<f64> {
+    if !rate.is_finite() || !yld.is_finite() || rate < 0.0 {
+        return None;
+    }
+    let span = coupon_span(settlement, maturity, frequency, basis)?;
+    let per_yield = yld / f64::from(frequency);
+    if per_yield <= -1.0 {
+        return None;
+    }
+    let coupon = 100.0 * rate / f64::from(frequency);
+    let frac = span.next_days / span.period_days;
+    let base = 1.0 + per_yield;
+    let mut weighted = 0.0;
+    let mut present = 0.0;
+    for k in 1..=span.coupons {
+        let time = (k - 1) as f64 + frac;
+        let cash = if k == span.coupons {
+            coupon + 100.0
+        } else {
+            coupon
+        };
+        let value = cash / base.powf(time);
+        weighted += time * value;
+        present += value;
+    }
+    if present == 0.0 || !present.is_finite() || !weighted.is_finite() {
+        return None;
+    }
+    let years = (weighted / present) / f64::from(frequency);
+    years.is_finite().then_some(years)
+}
+
+fn convert_excel(number: f64, from: &str, to: &str) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    if is_temperature(from) && is_temperature(to) {
+        let kelvin = to_kelvin(from, number)?;
+        if kelvin < 0.0 {
+            return None;
+        }
+        return from_kelvin(to, kelvin);
+    }
+    let (left_kind, left_factor) = linear_unit(from)?;
+    let (right_kind, right_factor) = linear_unit(to)?;
+    if left_kind != right_kind || right_factor == 0.0 {
+        return None;
+    }
+    let value = number * left_factor / right_factor;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn is_temperature(unit: &str) -> bool {
+    matches!(unit, "C" | "F" | "K")
+}
+
+fn to_kelvin(unit: &str, number: f64) -> Option<f64> {
+    let value = match unit {
+        "C" => number + 273.15,
+        "F" => (number - 32.0) * 5.0 / 9.0 + 273.15,
+        "K" => number,
+        _ => return None,
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn from_kelvin(unit: &str, kelvin: f64) -> Option<f64> {
+    let value = match unit {
+        "C" => kelvin - 273.15,
+        "F" => (kelvin - 273.15) * 9.0 / 5.0 + 32.0,
+        "K" => kelvin,
+        _ => return None,
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn linear_unit(unit: &str) -> Option<(&'static str, f64)> {
+    Some(match unit {
+        "m" => ("length", 1.0),
+        "cm" => ("length", 0.01),
+        "mm" => ("length", 0.001),
+        "km" => ("length", 1000.0),
+        "in" => ("length", 0.0254),
+        "ft" => ("length", 0.3048),
+        "yd" => ("length", 0.9144),
+        "mi" => ("length", 1609.344),
+        "g" => ("mass", 1.0),
+        "kg" => ("mass", 1000.0),
+        "mg" => ("mass", 0.001),
+        "lbm" => ("mass", 453.59237),
+        "ozm" => ("mass", 28.349523125),
+        "sec" => ("time", 1.0),
+        "mn" => ("time", 60.0),
+        "hr" => ("time", 3600.0),
+        "day" => ("time", 86_400.0),
+        "yr" => ("time", 365.25 * 86_400.0),
+        _ => return None,
+    })
+}
+
+fn text_excel(value: CalcValue, format: &str, date1904: bool) -> Option<CalcValue> {
+    if format.is_empty() || format.len() > 64 {
+        return None;
+    }
+    let sections = split_format_sections(format)?;
+    let (section, value) = match value {
+        CalcValue::Text(_) => {
+            if sections.len() != 1 {
+                return None;
+            }
+            (sections[0], value)
+        }
+        CalcValue::Num(number) => {
+            if !number.is_finite() {
+                return None;
+            }
+            if sections.len() == 1 {
+                (sections[0], CalcValue::Num(number))
+            } else if number > 0.0 {
+                (sections[0], CalcValue::Num(number))
+            } else if number < 0.0 {
+                (
+                    sections.get(1).copied().unwrap_or(sections[0]),
+                    CalcValue::Num(number.abs()),
+                )
+            } else if sections.len() >= 3 {
+                (sections[2], CalcValue::Num(number))
+            } else {
+                (sections[0], CalcValue::Num(number))
+            }
+        }
+    };
+    if sections.iter().any(|section| {
+        let unquoted = unquoted_format(section).unwrap_or_default();
+        (unquoted.contains('[') || unquoted.contains(']')) && !is_elapsed_token(&unquoted)
+    }) {
+        return None;
+    }
+    if section.is_empty() {
+        return limited_text(String::new());
+    }
+    if section == "@" {
+        let text = match value {
+            CalcValue::Text(text) => text,
+            CalcValue::Num(number) => format_calc(number),
+        };
+        return limited_text(text);
+    }
+    let unquoted = unquoted_format(section)?;
+    if unquoted.is_empty() {
+        return quoted_literals(section).and_then(limited_text);
+    }
+    if unquoted.contains('[') || unquoted.contains(']') {
+        let CalcValue::Num(number) = value else {
+            return None;
+        };
+        return format_elapsed(number, &unquoted).and_then(limited_text);
+    }
+    let date = unquoted.chars().any(|ch| {
+        matches!(
+            ch,
+            'y' | 'Y' | 'd' | 'D' | 'm' | 'M' | 'h' | 'H' | 's' | 'S'
+        )
+    });
+    let number_code = unquoted
+        .chars()
+        .any(|ch| matches!(ch, '0' | '#' | '%' | '.'));
+    if date && number_code {
+        return None;
+    }
+    if date {
+        let CalcValue::Num(number) = value else {
+            return None;
+        };
+        let serial = as_1900(number, date1904)?;
+        return format_excel_date(serial, section).and_then(limited_text);
+    }
+    let CalcValue::Num(number) = value else {
+        return None;
+    };
+    format_excel_number(number, section).and_then(limited_text)
+}
+
+fn split_format_sections(format: &str) -> Option<Vec<&str>> {
+    let mut sections = Vec::new();
+    let mut start = 0usize;
+    let mut quoted = false;
+    for (index, ch) in format.char_indices() {
+        if ch == '"' {
+            quoted = !quoted;
+            continue;
+        }
+        if ch == ';' && !quoted {
+            sections.push(&format[start..index]);
+            start = index + ch.len_utf8();
+        }
+    }
+    if quoted || sections.len() >= 3 {
+        return None;
+    }
+    sections.push(&format[start..]);
+    if sections.is_empty() || sections.len() > 3 {
+        return None;
+    }
+    Some(sections)
+}
+
+fn quoted_literals(format: &str) -> Option<String> {
+    let chars: Vec<char> = format.chars().collect();
+    let mut index = 0usize;
+    let mut out = String::new();
+    let mut saw = false;
+    while index < chars.len() {
+        if chars[index] != '"' {
+            return None;
+        }
+        index += 1;
+        let start = index;
+        while index < chars.len() && chars[index] != '"' {
+            index += 1;
+        }
+        if index >= chars.len() {
+            return None;
+        }
+        out.extend(chars[start..index].iter());
+        saw = true;
+        index += 1;
+    }
+    saw.then_some(out)
+}
+
+fn unquoted_format(format: &str) -> Option<String> {
+    let chars: Vec<char> = format.chars().collect();
+    let mut index = 0usize;
+    let mut out = String::new();
+    while index < chars.len() {
+        if chars[index] == '"' {
+            index += 1;
+            while index < chars.len() && chars[index] != '"' {
+                index += 1;
+            }
+            if index >= chars.len() {
+                return None;
+            }
+            index += 1;
+            continue;
+        }
+        out.push(chars[index]);
+        index += 1;
+    }
+    Some(out)
+}
+
+fn limited_text(text: String) -> Option<CalcValue> {
+    if text.chars().count() > 32_767 {
+        None
+    } else {
+        Some(CalcValue::Text(text))
+    }
+}
+
+fn is_subtotal_formula(formula: &str) -> bool {
+    let text = formula.trim_start();
+    text.len() >= 9 && text.as_bytes()[8] == b'(' && text[..8].eq_ignore_ascii_case("SUBTOTAL")
+}
+
+fn is_elapsed_token(format: &str) -> bool {
+    matches!(
+        format.trim().to_ascii_lowercase().as_str(),
+        "[h]" | "[hh]" | "[m]" | "[mm]" | "[h]:mm" | "[hh]:mm" | "[h]:mm:ss" | "[hh]:mm:ss"
+    )
+}
+
+fn elapsed_digits(number: f64, scale: f64, width: usize) -> Option<String> {
+    let whole = (number.abs() * scale).round();
+    if !whole.is_finite() || whole >= 1e15 {
+        return None;
+    }
+    let digits = format!("{}", whole as u64);
+    Some(if width > digits.len() {
+        format!("{digits:0>width$}")
+    } else {
+        digits
+    })
+}
+
+fn elapsed_clock(number: f64, pad_hours: bool, with_seconds: bool) -> Option<String> {
+    let total = if with_seconds {
+        (number.abs() * 86_400.0).round()
+    } else {
+        (number.abs() * 1_440.0).round()
+    };
+    if !total.is_finite() || total >= 1e15 {
+        return None;
+    }
+    let total = total as u64;
+    let (hours, minutes, seconds) = if with_seconds {
+        (total / 3_600, (total % 3_600) / 60, total % 60)
+    } else {
+        (total / 60, total % 60, 0)
+    };
+    let hours = if pad_hours {
+        format!("{hours:02}")
+    } else {
+        hours.to_string()
+    };
+    if with_seconds {
+        Some(format!("{hours}:{minutes:02}:{seconds:02}"))
+    } else {
+        Some(format!("{hours}:{minutes:02}"))
+    }
+}
+
+fn format_elapsed(number: f64, format: &str) -> Option<String> {
+    if !is_elapsed_token(format) {
+        return None;
+    }
+    if !number.is_finite() || number.abs() >= 1_000_000.0 {
+        return None;
+    }
+    let body = match format.trim().to_ascii_lowercase().as_str() {
+        "[h]" => elapsed_digits(number, 24.0, 0)?,
+        "[hh]" => elapsed_digits(number, 24.0, 2)?,
+        "[m]" => elapsed_digits(number, 24.0 * 60.0, 0)?,
+        "[mm]" => elapsed_digits(number, 24.0 * 60.0, 2)?,
+        "[h]:mm" => elapsed_clock(number, false, false)?,
+        "[hh]:mm" => elapsed_clock(number, true, false)?,
+        "[h]:mm:ss" => elapsed_clock(number, false, true)?,
+        "[hh]:mm:ss" => elapsed_clock(number, true, true)?,
+        _ => return None,
+    };
+    Some(if number < 0.0 {
+        format!("-{body}")
+    } else {
+        body
+    })
+}
+
+fn display_hour(hours: u32, twelve: bool) -> u32 {
+    if !twelve {
+        return hours;
+    }
+    match hours {
+        0 => 12,
+        13..=23 => hours - 12,
+        _ => hours,
+    }
+}
+
+fn meridian_text(hours: u32, upper: bool, short: bool) -> String {
+    let pm = hours >= 12;
+    let text = if short {
+        if pm {
+            "P"
+        } else {
+            "A"
+        }
+    } else if pm {
+        "PM"
+    } else {
+        "AM"
+    };
+    if upper {
+        text.to_string()
+    } else {
+        text.to_ascii_lowercase()
+    }
+}
+
+fn excel_month_name(month: i32, long: bool) -> Option<&'static str> {
+    const LONG: [&str; 12] = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ];
+    const SHORT: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let index = usize::try_from(month).ok()?.checked_sub(1)?;
+    if long {
+        LONG.get(index)
+    } else {
+        SHORT.get(index)
+    }
+    .copied()
+}
+
+fn excel_weekday_name(serial: f64, long: bool) -> Option<&'static str> {
+    const LONG: [&str; 7] = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    ];
+    const SHORT: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    let code = weekday_code(serial.trunc() as i64, 1)? as usize;
+    let index = code.checked_sub(1)?;
+    if long {
+        LONG.get(index)
+    } else {
+        SHORT.get(index)
+    }
+    .copied()
+}
+
+fn clock_parts(serial: f64) -> (u32, u32, u32) {
+    let fraction = serial - serial.trunc();
+    let mut seconds = if fraction.is_finite() && fraction > 0.0 {
+        (fraction * 86_400.0).round() as i64
+    } else {
+        0
+    };
+    if !(0..86_400).contains(&seconds) {
+        seconds = 0;
+    }
+    let hours = (seconds / 3600) as u32;
+    let minutes = ((seconds % 3600) / 60) as u32;
+    let secs = (seconds % 60) as u32;
+    (hours, minutes, secs)
+}
+
+fn minutes_here(rest: &str, last_was_hour: bool) -> bool {
+    if last_was_hour {
+        return true;
+    }
+    let chars: Vec<char> = rest.chars().collect();
+    let mut index = 0usize;
+    while index < chars.len() && chars[index] == 'm' {
+        index += 1;
+    }
+    while index < chars.len() && matches!(chars[index], ':' | ' ' | '.' | '-' | '/') {
+        index += 1;
+    }
+    chars.get(index) == Some(&'s')
+}
+
+fn format_excel_date(serial: f64, format: &str) -> Option<String> {
+    let (year, month, day) = excel_parts(serial)?;
+    let (hours, minutes, seconds) = clock_parts(serial);
+    let twelve = unquoted_format(format).is_some_and(|text| {
+        let lower = text.to_ascii_lowercase();
+        lower.contains("am/pm")
+            || lower.contains("a/p")
+            || lower.contains("am")
+            || lower.contains("pm")
+    });
+    let chars: Vec<char> = format.chars().collect();
+    let mut index = 0usize;
+    let mut out = String::new();
+    let mut saw_token = false;
+    let mut last_was_hour = false;
+    while index < chars.len() {
+        if chars[index] == '"' {
+            index += 1;
+            let start = index;
+            while index < chars.len() && chars[index] != '"' {
+                index += 1;
+            }
+            if index >= chars.len() {
+                return None;
+            }
+            out.extend(chars[start..index].iter());
+            index += 1;
+            continue;
+        }
+        let rest: String = chars[index..]
+            .iter()
+            .collect::<String>()
+            .to_ascii_lowercase();
+        let (token, text) = if rest.starts_with("yyyy") {
+            ("yyyy", format!("{year:04}"))
+        } else if rest.starts_with("yy") {
+            ("yy", format!("{:02}", year.rem_euclid(100)))
+        } else if rest.starts_with("mmmm") {
+            ("mmmm", excel_month_name(month, true)?.to_string())
+        } else if rest.starts_with("mmm") {
+            ("mmm", excel_month_name(month, false)?.to_string())
+        } else if rest.starts_with("mm") && minutes_here(&rest, last_was_hour) {
+            ("mm", format!("{minutes:02}"))
+        } else if rest.starts_with('m') && minutes_here(&rest, last_was_hour) {
+            ("m", minutes.to_string())
+        } else if rest.starts_with("mm") {
+            ("mm", format!("{month:02}"))
+        } else if rest.starts_with('m') {
+            ("m", month.to_string())
+        } else if rest.starts_with("hh") {
+            let hour = display_hour(hours, twelve);
+            ("hh", format!("{hour:02}"))
+        } else if rest.starts_with('h') {
+            let hour = display_hour(hours, twelve);
+            ("h", hour.to_string())
+        } else if rest.starts_with("am/pm") {
+            (
+                "am/pm",
+                meridian_text(hours, chars[index].is_uppercase(), false),
+            )
+        } else if rest.starts_with("a/p") {
+            (
+                "a/p",
+                meridian_text(hours, chars[index].is_uppercase(), true),
+            )
+        } else if rest.starts_with("am") || rest.starts_with("pm") {
+            (
+                "am",
+                meridian_text(hours, chars[index].is_uppercase(), false),
+            )
+        } else if rest.starts_with("ss") {
+            ("ss", format!("{seconds:02}"))
+        } else if rest.starts_with('s') {
+            ("s", seconds.to_string())
+        } else if rest.starts_with("dddd") {
+            ("dddd", excel_weekday_name(serial, true)?.to_string())
+        } else if rest.starts_with("ddd") {
+            ("ddd", excel_weekday_name(serial, false)?.to_string())
+        } else if rest.starts_with("dd") {
+            ("dd", format!("{day:02}"))
+        } else if rest.starts_with('d') {
+            ("d", day.to_string())
+        } else if matches!(chars[index], '-' | '/' | '.' | ' ' | ':') {
+            out.push(chars[index]);
+            index += 1;
+            continue;
+        } else {
+            return None;
+        };
+        last_was_hour = token.starts_with('h');
+        saw_token = true;
+        index += token.len();
+        out.push_str(&text);
+    }
+    if saw_token {
+        Some(out)
+    } else {
+        None
+    }
+}
+
+fn format_excel_number(number: f64, format: &str) -> Option<String> {
+    if !number.is_finite() || number.abs() >= 1e15 {
+        return None;
+    }
+    let chars: Vec<char> = format.chars().collect();
+    let mut index = 0usize;
+    let mut prefix = String::new();
+    let mut suffix = String::new();
+    let mut pattern = false;
+    let mut after = false;
+    let mut int_zeros = 0usize;
+    let mut frac_zeros = 0usize;
+    let mut frac_places = 0usize;
+    let mut thousands = false;
+    let mut percent = false;
+    let mut dotted = false;
+    let mut saw_placeholder = false;
+    while index < chars.len() {
+        let ch = chars[index];
+        if ch == '"' {
+            index += 1;
+            let start = index;
+            while index < chars.len() && chars[index] != '"' {
+                index += 1;
+            }
+            if index >= chars.len() {
+                return None;
+            }
+            let literal: String = chars[start..index].iter().collect();
+            index += 1;
+            if pattern || after {
+                after = true;
+                suffix.push_str(&literal);
+            } else {
+                prefix.push_str(&literal);
+            }
+            continue;
+        }
+        if after {
+            if ch == '%' && !percent {
+                percent = true;
+                suffix.push('%');
+                index += 1;
+                continue;
+            }
+            return None;
+        }
+        match ch {
+            '#' | '0' => {
+                pattern = true;
+                saw_placeholder = true;
+                if dotted {
+                    frac_places += 1;
+                    if ch == '0' {
+                        frac_zeros += 1;
+                    }
+                } else if ch == '0' {
+                    int_zeros += 1;
+                }
+            }
+            ',' => {
+                if !pattern || dotted {
+                    return None;
+                }
+                thousands = true;
+            }
+            '.' => {
+                if dotted {
+                    return None;
+                }
+                pattern = true;
+                dotted = true;
+            }
+            '%' => {
+                if percent {
+                    return None;
+                }
+                percent = true;
+                after = true;
+                suffix.push('%');
+            }
+            _ => return None,
+        }
+        index += 1;
+    }
+    if !saw_placeholder || int_zeros > 16 || frac_places > 8 {
+        return None;
+    }
+    let scaled_number = if percent { number * 100.0 } else { number };
+    if !scaled_number.is_finite() || scaled_number.abs() >= 1e15 {
+        return None;
+    }
+    let scale = 10f64.powi(frac_places as i32);
+    let scaled = (scaled_number.abs() * scale).round();
+    if !scaled.is_finite() {
+        return None;
+    }
+    let mut frac = if frac_places == 0 {
+        0.0
+    } else {
+        scaled % scale
+    };
+    let mut int_part = if frac_places == 0 {
+        scaled
+    } else {
+        (scaled / scale).floor()
+    };
+    if frac_places > 0 && (frac - scale).abs() < 1e-6 {
+        int_part += 1.0;
+        frac = 0.0;
+    }
+    if int_part >= 1e15 {
+        return None;
+    }
+    let mut int_text = format!("{}", int_part as i64);
+    if int_text.len() < int_zeros {
+        int_text = format!("{int_text:0>int_zeros$}");
+    }
+    if thousands {
+        int_text = group_thousands(&int_text);
+    }
+    let mut out = String::new();
+    if scaled_number < 0.0 && (int_part > 0.0 || frac > 0.0 || frac_places > 0) {
+        out.push('-');
+    }
+    out.push_str(&prefix);
+    out.push_str(&int_text);
+    if frac_places > 0 {
+        let frac_text = format!("{frac_digits:0>frac_places$}", frac_digits = frac as i64);
+        let mut keep = frac_places;
+        while keep > frac_zeros && frac_text.as_bytes()[keep - 1] == b'0' {
+            keep -= 1;
+        }
+        if keep > 0 {
+            out.push('.');
+            out.push_str(&frac_text[..keep]);
+        }
+    }
+    out.push_str(&suffix);
+    Some(out)
+}
+
+fn group_thousands(digits: &str) -> String {
+    let mut out = String::new();
+    for (index, ch) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn weekday_code(serial: i64, kind: i64) -> Option<f64> {
+    if !(0..=2_958_465).contains(&serial) {
+        return None;
+    }
+    let value = match kind {
+        1 => {
+            let day = (serial + 1) % 7;
+            if day == 0 {
+                7
+            } else {
+                day
+            }
+        }
+        2 => {
+            let day = serial % 7;
+            if day == 0 {
+                7
+            } else {
+                day
+            }
+        }
+        3 => (serial - 1).rem_euclid(7),
+        _ => return None,
+    };
+    Some(value as f64)
+}
+
+fn month_length(year: i32, month: i32) -> Option<i32> {
+    let serial = date_excel(f64::from(year), f64::from(month) + 1.0, 0.0)?;
+    let (_, _, day) = excel_parts(serial)?;
+    if day <= 0 {
+        None
+    } else {
+        Some(day)
+    }
+}
+
+fn shift_months(serial: f64, months: f64, end_of_month: bool) -> Option<f64> {
+    if !serial.is_finite() || !months.is_finite() || serial < 1.0 || serial > 2_958_465.0 {
+        return None;
+    }
+    if months.abs() > 120_000.0 {
+        return None;
+    }
+    let (year, month, day) = excel_parts(serial.trunc())?;
+    let (year, month) = excel_normalize_month(year, month + months.trunc() as i32)?;
+    let length = month_length(year, month)?;
+    let day = if end_of_month {
+        length
+    } else {
+        day.min(length)
+    };
+    date_excel(f64::from(year), f64::from(month), f64::from(day))
+}
+
+fn datedif_excel(start: f64, end: f64, unit: &str) -> Option<f64> {
+    if !start.is_finite() || !end.is_finite() || start < 1.0 || end < start || end > 2_958_465.0 {
+        return None;
+    }
+    let start = start.trunc();
+    let end = end.trunc();
+    let (sy, sm, sd) = excel_parts(start)?;
+    let (ey, em, ed) = excel_parts(end)?;
+    let unit = unit.to_ascii_uppercase();
+    let value = match unit.as_str() {
+        "D" => end - start,
+        "Y" => {
+            let mut years = ey - sy;
+            if (em, ed) < (sm, sd) {
+                years -= 1;
+            }
+            f64::from(years)
+        }
+        "M" => {
+            let mut months = (ey - sy) * 12 + (em - sm);
+            if ed < sd {
+                months -= 1;
+            }
+            f64::from(months)
+        }
+        "YM" => {
+            let mut months = em - sm;
+            if ed < sd {
+                months -= 1;
+            }
+            if months < 0 {
+                months += 12;
+            }
+            f64::from(months)
+        }
+        "MD" => {
+            if ed >= sd {
+                f64::from(ed - sd)
+            } else {
+                let previous = if em == 1 { 12 } else { em - 1 };
+                let year = if em == 1 { ey - 1 } else { ey };
+                let length = month_length(year, previous)?;
+                f64::from(length - sd + ed)
+            }
+        }
+        "YD" => {
+            let mut anchor = date_excel(f64::from(ey), f64::from(sm), f64::from(sd))?;
+            if anchor > end {
+                anchor = date_excel(f64::from(ey - 1), f64::from(sm), f64::from(sd))?;
+            }
+            end - anchor
+        }
+        _ => return None,
+    };
+    if value.is_finite() && value >= 0.0 {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+const WEEKEND_SAT_SUN: [bool; 7] = [false, false, false, false, false, true, true];
+
+fn weekday_mon0(serial: i64) -> usize {
+    let day = serial.rem_euclid(7);
+    let day = if day == 0 { 7 } else { day };
+    (day - 1) as usize
+}
+
+fn is_workday_serial(serial: i64) -> bool {
+    !WEEKEND_SAT_SUN[weekday_mon0(serial)]
+}
+
+fn weekend_mask(text: &str) -> Option<[bool; 7]> {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() != 7 {
+        return None;
+    }
+    let mut mask = [false; 7];
+    for (index, ch) in chars.iter().enumerate() {
+        match ch {
+            '0' => {}
+            '1' => mask[index] = true,
+            _ => return None,
+        }
+    }
+    if mask.iter().all(|bit| *bit) {
+        None
+    } else {
+        Some(mask)
+    }
+}
+
+fn networkdays_excel(start: f64, end: f64, holidays: &[f64]) -> Option<f64> {
+    if !start.is_finite() || !end.is_finite() {
+        return None;
+    }
+    let mut start = start.trunc() as i64;
+    let mut end = end.trunc() as i64;
+    let sign = if start <= end { 1.0 } else { -1.0 };
+    if start > end {
+        std::mem::swap(&mut start, &mut end);
+    }
+    if start < 0 || end > 2_958_465 || end - start > 100_000 {
+        return None;
+    }
+    let mut count = 0.0;
+    for day in start..=end {
+        if is_workday_serial(day) && !holiday_hit(day, holidays) {
+            count += 1.0;
+        }
+    }
+    Some(sign * count)
+}
+
+fn holiday_hit(day: i64, holidays: &[f64]) -> bool {
+    holidays.iter().any(|holiday| holiday.trunc() as i64 == day)
+}
+
+fn workday_excel(start: f64, days: f64, holidays: &[f64], weekend: &[bool; 7]) -> Option<f64> {
+    if !start.is_finite() || !days.is_finite() || start < 0.0 || start > 2_958_465.0 {
+        return None;
+    }
+    let days = days.trunc();
+    if days.abs() > 10_000.0 {
+        return None;
+    }
+    if days == 0.0 {
+        return Some(start.trunc());
+    }
+    let step: i64 = if days > 0.0 { 1 } else { -1 };
+    let mut left = days.abs() as i64;
+    let mut day = start.trunc() as i64;
+    let mut guard = 0i64;
+    while left > 0 {
+        day += step;
+        guard += 1;
+        if guard > 20_000 || !(0..=2_958_465).contains(&day) {
+            return None;
+        }
+        if !weekend[weekday_mon0(day)] && !holiday_hit(day, holidays) {
+            left -= 1;
+        }
+    }
+    Some(day as f64)
+}
+
+fn trig_excel(number: f64, kind: &str) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = match kind {
+        "SIN" => number.sin(),
+        "COS" => number.cos(),
+        "TAN" => number.tan(),
+        _ => return None,
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn reciprocal_trig_excel(number: f64, kind: &str) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = match kind {
+        "SEC" => {
+            let denominator = number.cos();
+            if denominator == 0.0 {
+                return None;
+            }
+            1.0 / denominator
+        }
+        "CSC" => {
+            let denominator = number.sin();
+            if denominator == 0.0 {
+                return None;
+            }
+            1.0 / denominator
+        }
+        "COT" => {
+            let denominator = number.sin();
+            if denominator == 0.0 {
+                return None;
+            }
+            number.cos() / denominator
+        }
+        _ => return None,
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn radians_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = number * std::f64::consts::PI / 180.0;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn degrees_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = number * 180.0 / std::f64::consts::PI;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn asin_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() || !(-1.0..=1.0).contains(&number) {
+        return None;
+    }
+    let value = number.asin();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn acos_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() || !(-1.0..=1.0).contains(&number) {
+        return None;
+    }
+    let value = number.acos();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn atan_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = number.atan();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn hyper_excel(number: f64, kind: &str) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = match kind {
+        "SINH" => number.sinh(),
+        "COSH" => number.cosh(),
+        "TANH" => number.tanh(),
+        _ => return None,
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn inverse_hyper_excel(number: f64, kind: &str) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = match kind {
+        "ASINH" => number.asinh(),
+        "ACOSH" => {
+            if number < 1.0 {
+                return None;
+            }
+            number.acosh()
+        }
+        "ATANH" => {
+            if number <= -1.0 || number >= 1.0 {
+                return None;
+            }
+            number.atanh()
+        }
+        _ => return None,
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn reciprocal_hyper_excel(number: f64, kind: &str) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let base = match kind {
+        "SECH" => number.cosh(),
+        "CSCH" => number.sinh(),
+        "COTH" => number.tanh(),
+        _ => return None,
+    };
+    if base == 0.0 || !base.is_finite() {
+        return None;
+    }
+    let value = 1.0 / base;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn acot_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    let value = if number == 0.0 {
+        std::f64::consts::PI / 2.0
+    } else if number > 0.0 {
+        (1.0 / number).atan()
+    } else {
+        (1.0 / number).atan() + std::f64::consts::PI
+    };
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn acoth_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() || number.abs() <= 1.0 {
+        return None;
+    }
+    let value = (1.0 / number).atanh();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn combin_excel(n: f64, k: f64) -> Option<f64> {
+    if !n.is_finite() || !k.is_finite() || n < 0.0 || k < 0.0 || n >= 1_000_000.0 {
+        return None;
+    }
+    let n = n.trunc() as u64;
+    let k = k.trunc() as u64;
+    if k > n {
+        return None;
+    }
+    let k = k.min(n - k);
+    let mut acc = 1.0;
+    for index in 0..k {
+        acc *= (n - index) as f64;
+        acc /= (index + 1) as f64;
+        if !acc.is_finite() {
+            return None;
+        }
+    }
+    if acc < 1e15 {
+        Some(acc.round())
+    } else {
+        Some(acc)
+    }
+}
+
+fn combina_excel(n: f64, k: f64) -> Option<f64> {
+    if !n.is_finite()
+        || !k.is_finite()
+        || n < 0.0
+        || k < 0.0
+        || n >= 1_000_000.0
+        || k >= 1_000_000.0
+    {
+        return None;
+    }
+    let n = n.trunc();
+    let k = k.trunc();
+    if k == 0.0 {
+        return Some(1.0);
+    }
+    if n == 0.0 {
+        return Some(0.0);
+    }
+    combin_excel(n + k - 1.0, k)
+}
+
+fn count_pair(n: f64, k: f64) -> Option<(u64, u64)> {
+    if !n.is_finite()
+        || !k.is_finite()
+        || n < 0.0
+        || k < 0.0
+        || n >= 1_000_000.0
+        || k >= 1_000_000.0
+    {
+        return None;
+    }
+    Some((n.trunc() as u64, k.trunc() as u64))
+}
+
+fn round_count(acc: f64) -> Option<f64> {
+    if !acc.is_finite() {
+        return None;
+    }
+    if acc < 1e15 {
+        Some(acc.round())
+    } else {
+        Some(acc)
+    }
+}
+
+fn permut_excel(n: f64, k: f64) -> Option<f64> {
+    let (n, k) = count_pair(n, k)?;
+    if k > n {
+        return None;
+    }
+    let mut acc = 1.0;
+    for index in 0..k {
+        acc *= (n - index) as f64;
+        if !acc.is_finite() {
+            return None;
+        }
+    }
+    round_count(acc)
+}
+
+fn permutationa_excel(n: f64, k: f64) -> Option<f64> {
+    let (n, k) = count_pair(n, k)?;
+    if k == 0 {
+        return Some(1.0);
+    }
+    if n == 0 {
+        return Some(0.0);
+    }
+    let mut acc = 1.0;
+    for _ in 0..k {
+        acc *= n as f64;
+        if !acc.is_finite() {
+            return None;
+        }
+    }
+    round_count(acc)
+}
+
+fn ranked_excel(values: &mut [f64], rank: f64, small: bool) -> Option<f64> {
+    if values.is_empty()
+        || !rank.is_finite()
+        || rank < 1.0
+        || rank > values.len() as f64
+        || values.iter().any(|number| !number.is_finite())
+    {
+        return None;
+    }
+    let rank = rank.trunc() as usize;
+    if rank < 1 || rank > values.len() {
+        return None;
+    }
+    values.sort_by(|left, right| left.total_cmp(right));
+    let index = if small { rank - 1 } else { values.len() - rank };
+    Some(values[index])
+}
+
+fn atan2_excel(x_coord: f64, y_coord: f64) -> Option<f64> {
+    if !x_coord.is_finite() || !y_coord.is_finite() || (x_coord == 0.0 && y_coord == 0.0) {
+        return None;
+    }
+    let value = y_coord.atan2(x_coord);
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn round_directed(value: f64, digits: f64, away: bool) -> Option<f64> {
+    if !value.is_finite() || !digits.is_finite() {
+        return None;
+    }
+    let places = digits.trunc();
+    if !(-10.0..=10.0).contains(&places) {
+        return None;
+    }
+    let scale = 10f64.powi(places as i32);
+    if !scale.is_finite() {
+        return None;
+    }
+    let scaled = value * scale;
+    if !scaled.is_finite() {
+        return None;
+    }
+    let rounded = if away {
+        if scaled >= 0.0 {
+            scaled.ceil()
+        } else {
+            scaled.floor()
+        }
+    } else {
+        scaled.trunc()
+    };
+    let result = rounded / scale;
+    if result.is_finite() {
+        Some(result)
+    } else {
+        None
+    }
+}
+
+fn power_excel(base: f64, exponent: f64) -> Option<f64> {
+    if !base.is_finite() || !exponent.is_finite() {
+        return None;
+    }
+    if base < 0.0 && exponent.fract() != 0.0 {
+        return None;
+    }
+    let value = base.powf(exponent);
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn mod_excel(number: f64, divisor: f64) -> Option<f64> {
+    if !number.is_finite() || !divisor.is_finite() || divisor == 0.0 {
+        return None;
+    }
+    let quotient = (number / divisor).floor();
+    let value = number - divisor * quotient;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn sign_excel(number: f64) -> Option<f64> {
+    if !number.is_finite() {
+        return None;
+    }
+    if number == 0.0 {
+        Some(0.0)
+    } else if number > 0.0 {
+        Some(1.0)
+    } else {
+        Some(-1.0)
+    }
+}
+
+fn quotient_excel(number: f64, divisor: f64) -> Option<f64> {
+    if !number.is_finite()
+        || !divisor.is_finite()
+        || divisor == 0.0
+        || number.abs() >= 1e15
+        || divisor.abs() >= 1e15
+    {
+        return None;
+    }
+    let value = (number / divisor).trunc();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+/// Round away from zero. `odd` selects the next odd integer; otherwise the next even one.
+fn even_odd_excel(number: f64, odd: bool) -> Option<f64> {
+    if !number.is_finite() || number.abs() >= 1e15 {
+        return None;
+    }
+    let sign = if number < 0.0 { -1.0 } else { 1.0 };
+    let mut magnitude = number.abs().ceil();
+    let even_magnitude = magnitude % 2.0 == 0.0;
+    if odd == even_magnitude {
+        magnitude += 1.0;
+    }
+    let value = sign * magnitude;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn parity_excel(number: f64, odd: bool) -> Option<f64> {
+    if !number.is_finite() || number.abs() >= 1e15 {
+        return None;
+    }
+    let is_odd = number.trunc() as i64 % 2 != 0;
+    Some(if is_odd == odd { 1.0 } else { 0.0 })
+}
+
+fn bit_whole(number: f64) -> Option<u64> {
+    if !number.is_finite() || number < 0.0 || number >= 281_474_976_710_656.0 {
+        return None;
+    }
+    Some(number.trunc() as u64)
+}
+
+fn bit_excel(left: f64, right: f64, and: bool, xor: bool) -> Option<f64> {
+    let left = bit_whole(left)?;
+    let right = bit_whole(right)?;
+    let value = if and {
+        left & right
+    } else if xor {
+        left ^ right
+    } else {
+        left | right
+    };
+    Some(value as f64)
+}
+
+fn bit_shift(number: f64, shift: f64, right: bool) -> Option<f64> {
+    let number = bit_whole(number)?;
+    if !shift.is_finite() || shift.trunc().abs() > 53.0 {
+        return None;
+    }
+    let mut places = shift.trunc() as i64;
+    if right {
+        places = -places;
+    }
+    let value = if places >= 0 {
+        if places >= 48 && number != 0 {
+            return None;
+        }
+        let shifted = number.checked_shl(places as u32)?;
+        if shifted >= 281_474_976_710_656 {
+            return None;
+        }
+        shifted
+    } else {
+        number >> ((-places) as u32)
+    };
+    Some(value as f64)
+}
+
+fn mround_excel(number: f64, multiple: f64) -> Option<f64> {
+    if !number.is_finite()
+        || !multiple.is_finite()
+        || number.abs() >= 1e15
+        || multiple.abs() >= 1e15
+    {
+        return None;
+    }
+    if multiple == 0.0 {
+        return if number == 0.0 { Some(0.0) } else { None };
+    }
+    if number == 0.0 {
+        return Some(0.0);
+    }
+    if number.signum() != multiple.signum() {
+        return None;
+    }
+    let steps = (number / multiple).abs();
+    let value = steps.round() * multiple.abs() * number.signum();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn step_multiple(number: f64, significance: f64, away: bool) -> Option<f64> {
+    if !number.is_finite()
+        || !significance.is_finite()
+        || number.abs() >= 1e15
+        || significance.abs() >= 1e15
+    {
+        return None;
+    }
+    if significance == 0.0 {
+        return if away { Some(0.0) } else { None };
+    }
+    if number == 0.0 {
+        return Some(0.0);
+    }
+    if number.signum() != significance.signum() {
+        return None;
+    }
+    let steps = (number / significance).abs();
+    let rounded = if away { steps.ceil() } else { steps.floor() };
+    let value = rounded * significance.abs() * number.signum();
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn roman_excel(number: f64) -> Option<String> {
+    if !number.is_finite() {
+        return None;
+    }
+    let number = number.trunc();
+    if number < 1.0 || number > 3999.0 {
+        return None;
+    }
+    let mut remaining = number as i32;
+    let glyphs = [
+        (1000, "M"),
+        (900, "CM"),
+        (500, "D"),
+        (400, "CD"),
+        (100, "C"),
+        (90, "XC"),
+        (50, "L"),
+        (40, "XL"),
+        (10, "X"),
+        (9, "IX"),
+        (5, "V"),
+        (4, "IV"),
+        (1, "I"),
+    ];
+    let mut out = String::new();
+    for (value, glyph) in glyphs {
+        while remaining >= value {
+            out.push_str(glyph);
+            remaining -= value;
+        }
+    }
+    Some(out)
+}
+
+fn arabic_excel(text: &str) -> Option<f64> {
+    if text.is_empty() || text.len() > 15 || !text.bytes().all(|byte| byte.is_ascii_alphabetic()) {
+        return None;
+    }
+    let upper = text.to_ascii_uppercase();
+    let mut number = 1i32;
+    while number <= 3999 {
+        let roman = roman_excel(f64::from(number))?;
+        if roman == upper {
+            return Some(f64::from(number));
+        }
+        number += 1;
+    }
+    None
+}
+
+fn code_excel(text: &str) -> Option<f64> {
+    text.chars().next().map(|ch| u32::from(ch) as f64)
+}
+
+fn char_excel(code: f64) -> Option<String> {
+    if !code.is_finite() || code < 1.0 || code > 0x10_FFFF as f64 {
+        return None;
+    }
+    let code = code.trunc() as u32;
+    char::from_u32(code).map(|ch| ch.to_string())
+}
+
+fn clean_excel(text: &str) -> String {
+    text.chars().filter(|ch| u32::from(*ch) >= 32).collect()
+}
+
+fn proper_excel(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut word_start = true;
+    for ch in text.chars() {
+        if ch.is_alphabetic() {
+            if word_start {
+                out.extend(ch.to_uppercase());
+            } else {
+                out.extend(ch.to_lowercase());
+            }
+            word_start = false;
+        } else {
+            out.push(ch);
+            word_start = true;
+        }
+    }
+    out
+}
+
+fn text_join(delim: &str, ignore_empty: bool, parts: &[String]) -> Option<String> {
+    let mut out = String::new();
+    let mut count = 0usize;
+    let mut started = false;
+    for part in parts {
+        if ignore_empty && part.is_empty() {
+            continue;
+        }
+        if started {
+            for ch in delim.chars() {
+                count += 1;
+                if count > 32_767 {
+                    return None;
+                }
+                out.push(ch);
+            }
+        }
+        started = true;
+        for ch in part.chars() {
+            count += 1;
+            if count > 32_767 {
+                return None;
+            }
+            out.push(ch);
+        }
+    }
+    Some(out)
+}
+
+fn note_presence(value: &CalcValue, present: &mut f64, blank: &mut f64) -> Option<()> {
+    match value {
+        CalcValue::Num(number) if number.is_finite() => *present += 1.0,
+        CalcValue::Num(_) => return None,
+        CalcValue::Text(text) if text.is_empty() => *blank += 1.0,
+        CalcValue::Text(_) => *present += 1.0,
+    }
+    Some(())
+}
+
+fn gcd_u64(mut left: u64, mut right: u64) -> u64 {
+    while right != 0 {
+        let next = left % right;
+        left = right;
+        right = next;
+    }
+    left
+}
+
+fn whole_arg(number: f64) -> Option<u64> {
+    if !number.is_finite() || number < 0.0 || number >= 1e15 {
+        return None;
+    }
+    Some(number.trunc() as u64)
+}
+
+fn gcd_excel(args: &[f64]) -> Option<f64> {
+    if args.is_empty() {
+        return None;
+    }
+    let mut acc = 0u64;
+    for number in args {
+        acc = gcd_u64(acc, whole_arg(*number)?);
+    }
+    Some(acc as f64)
+}
+
+fn lcm_excel(args: &[f64]) -> Option<f64> {
+    if args.is_empty() {
+        return None;
+    }
+    let mut acc = 1u64;
+    for number in args {
+        let next = whole_arg(*number)?;
+        if next == 0 || acc == 0 {
+            return Some(0.0);
+        }
+        let divisor = gcd_u64(acc, next);
+        acc = acc / divisor * next;
+        if acc as f64 >= 1e15 {
+            return None;
+        }
+    }
+    Some(acc as f64)
+}
+
+fn text_count(count: f64) -> Option<usize> {
+    if !count.is_finite() || count < 0.0 || count > 32_767.0 {
+        return None;
+    }
+    Some(count.trunc() as usize)
+}
+
+fn slice_text(text: &str, start: usize, count: f64) -> Option<String> {
+    let count = text_count(count)?;
+    Some(text.chars().skip(start).take(count).collect())
+}
+
+fn slice_mid(text: &str, start: f64, count: f64) -> Option<String> {
+    if !start.is_finite() || start < 1.0 || start > 32_767.0 {
+        return None;
+    }
+    let start = (start.trunc() as usize).saturating_sub(1);
+    slice_text(text, start, count)
+}
+
+/// Excel `TRIM`: drop leading and trailing U+0020 and collapse inner runs of that space.
+fn trim_spaces(text: &str) -> String {
+    let mut out = String::new();
+    let mut gap = false;
+    let mut started = false;
+    for ch in text.chars() {
+        if ch == ' ' {
+            if started {
+                gap = true;
+            }
+        } else {
+            if gap {
+                out.push(' ');
+                gap = false;
+            }
+            started = true;
+            out.push(ch);
+        }
+    }
+    out
+}
+
+fn substitute_text(text: &str, old: &str, new: &str, instance: Option<f64>) -> Option<String> {
+    if old.is_empty() {
+        return None;
+    }
+    let nth = match instance {
+        None => None,
+        Some(number) => {
+            let count = text_count(number)?;
+            if count < 1 {
+                return None;
+            }
+            Some(count)
+        }
+    };
+    let Some(nth) = nth else {
+        return Some(text.replace(old, new));
+    };
+    let mut seen = 0usize;
+    let mut rest = text;
+    let mut out = String::new();
+    while let Some(at) = rest.find(old) {
+        seen += 1;
+        if seen == nth {
+            out.push_str(&rest[..at]);
+            out.push_str(new);
+            out.push_str(&rest[at + old.len()..]);
+            return Some(out);
+        }
+        let next = at + old.len();
+        out.push_str(&rest[..next]);
+        rest = &rest[next..];
+    }
+    Some(text.to_string())
+}
+
+fn search_wildcard(haystack: &str, needle: &str, start: f64) -> Option<f64> {
+    if needle.is_empty() || !start.is_finite() || start < 1.0 || start > 32_767.0 {
+        return None;
+    }
+    let hay: Vec<char> = haystack.chars().collect();
+    let pattern: Vec<char> = needle.chars().collect();
+    if pattern.len() > 64 || hay.len() > 256 {
+        return None;
+    }
+    let start = (start.trunc() as usize).saturating_sub(1);
+    if start > hay.len() {
+        return None;
+    }
+    for index in start..=hay.len() {
+        if wildcard_prefix(&pattern, &hay[index..]) {
+            return Some((index + 1) as f64);
+        }
+    }
+    None
+}
+
+fn wildcard_prefix(pattern: &[char], text: &[char]) -> bool {
+    if pattern.is_empty() {
+        return true;
+    }
+    if pattern[0] == '~' {
+        return pattern.len() > 1
+            && !text.is_empty()
+            && pattern[1].eq_ignore_ascii_case(&text[0])
+            && wildcard_prefix(&pattern[2..], &text[1..]);
+    }
+    if pattern[0] == '?' {
+        return !text.is_empty() && wildcard_prefix(&pattern[1..], &text[1..]);
+    }
+    if pattern[0] == '*' {
+        let mut rest = &pattern[1..];
+        while rest.first() == Some(&'*') {
+            rest = &rest[1..];
+        }
+        if rest.is_empty() {
+            return true;
+        }
+        for start in 0..=text.len() {
+            if wildcard_prefix(rest, &text[start..]) {
+                return true;
+            }
+        }
+        return false;
+    }
+    !text.is_empty()
+        && pattern[0].eq_ignore_ascii_case(&text[0])
+        && wildcard_prefix(&pattern[1..], &text[1..])
+}
+
+fn find_scalar(haystack: &str, needle: &str, start: f64, ignore_ascii_case: bool) -> Option<f64> {
+    if needle.is_empty() || !start.is_finite() || start < 1.0 || start > 32_767.0 {
+        return None;
+    }
+    let start = (start.trunc() as usize).saturating_sub(1);
+    let hay: Vec<char> = haystack.chars().collect();
+    let ned: Vec<char> = needle.chars().collect();
+    if start > hay.len() || ned.len() > hay.len().saturating_sub(start) {
+        return None;
+    }
+    let last = hay.len() - ned.len();
+    for index in start..=last {
+        let matched = hay[index..index + ned.len()]
+            .iter()
+            .zip(&ned)
+            .all(|(left, right)| {
+                if ignore_ascii_case {
+                    left.eq_ignore_ascii_case(right)
+                } else {
+                    left == right
+                }
+            });
+        if matched {
+            return Some((index + 1) as f64);
+        }
+    }
+    None
+}
+
+fn rept_text(text: &str, count: f64) -> Option<String> {
+    let count = text_count(count)?;
+    if text.is_empty() || count == 0 {
+        return Some(String::new());
+    }
+    let chars = text.chars().count();
+    if chars.saturating_mul(count) > 32_767 {
+        return None;
+    }
+    Some(text.repeat(count))
+}
+
+fn replace_span(text: &str, start: f64, count: f64, new: &str) -> Option<String> {
+    if !start.is_finite() || start < 1.0 || start > 32_767.0 {
+        return None;
+    }
+    let count = text_count(count)?;
+    let chars: Vec<char> = text.chars().collect();
+    let from = (start.trunc() as usize).saturating_sub(1);
+    if from > chars.len() {
+        return None;
+    }
+    let to = (from + count).min(chars.len());
+    let mut out = String::new();
+    out.extend(chars[..from].iter());
+    out.push_str(new);
+    out.extend(chars[to..].iter());
+    if out.chars().count() > 32_767 {
+        return None;
+    }
+    Some(out)
+}
+
+fn value_excel(text: &str) -> Option<f64> {
+    let text = text.trim_matches(' ');
+    if text.is_empty() {
+        return None;
+    }
+    let bytes = text.as_bytes();
+    let (sign, digits) = match bytes.first() {
+        Some(b'+') => (1.0, &bytes[1..]),
+        Some(b'-') => (-1.0, &bytes[1..]),
+        _ => (1.0, bytes),
+    };
+    if digits.is_empty() || !digits.iter().any(u8::is_ascii_digit) {
+        return None;
+    }
+    let mut saw_dot = false;
+    for byte in digits {
+        if *byte == b'.' {
+            if saw_dot {
+                return None;
+            }
+            saw_dot = true;
+            continue;
+        }
+        if !byte.is_ascii_digit() {
+            return None;
+        }
+    }
+    let parsed = std::str::from_utf8(digits).ok()?.parse::<f64>().ok()?;
+    if !parsed.is_finite() {
+        return None;
+    }
+    let value = sign * parsed;
+    if value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+#[derive(Clone, Copy)]
+enum CriterionOp {
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+}
+
+fn criterion_op(text: &str) -> Option<(CriterionOp, &str)> {
+    let text = text.trim_matches(' ');
+    for (prefix, op) in [
+        (">=", CriterionOp::Ge),
+        ("<=", CriterionOp::Le),
+        ("<>", CriterionOp::Ne),
+        (">", CriterionOp::Gt),
+        ("<", CriterionOp::Lt),
+        ("=", CriterionOp::Eq),
+    ] {
+        if let Some(rest) = text.strip_prefix(prefix) {
+            return Some((op, rest));
+        }
+    }
+    None
+}
+
+fn number_matches(cell: f64, op: CriterionOp, target: f64) -> bool {
+    let same = (cell - target).abs() < 1e-9;
+    match op {
+        CriterionOp::Eq => same,
+        CriterionOp::Ne => !same,
+        CriterionOp::Gt => !same && cell > target,
+        CriterionOp::Lt => !same && cell < target,
+        CriterionOp::Ge => same || cell > target,
+        CriterionOp::Le => same || cell < target,
+    }
+}
+
+fn header_label(value: Option<&CalcValue>) -> Option<String> {
+    let CalcValue::Text(text) = value? else {
+        return None;
+    };
+    let text = text.trim();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text.to_ascii_lowercase())
+    }
+}
+
+struct IfHits {
+    numbers: Vec<f64>,
+    count: f64,
+}
+
+fn criterion_is_wildcard(criteria: &CalcValue) -> bool {
+    let CalcValue::Text(text) = criteria else {
+        return false;
+    };
+    let text = text.trim_matches(' ');
+    if let Some((op, rest)) = criterion_op(text) {
+        if value_excel(rest).is_some() || !matches!(op, CriterionOp::Eq | CriterionOp::Ne) {
+            return false;
+        }
+        return rest.chars().any(|ch| matches!(ch, '*' | '?' | '~'));
+    }
+    text.chars().any(|ch| matches!(ch, '*' | '?' | '~'))
+}
+
+fn wildcard_holds(cell: Option<&CalcValue>, pattern: &str, want_match: bool) -> Option<bool> {
+    if pattern.chars().count() > 64 {
+        return None;
+    }
+    match cell {
+        Some(CalcValue::Text(value)) => {
+            if value.chars().count() > 256 {
+                return None;
+            }
+            let same = text_pattern(pattern, value);
+            Some(if want_match { same } else { !same })
+        }
+        _ => Some(!want_match),
+    }
+}
+
+fn criterion_holds(cell: Option<&CalcValue>, criteria: &CalcValue) -> Option<bool> {
+    match criteria {
+        CalcValue::Num(target) if target.is_finite() => {
+            let Some(CalcValue::Num(number)) = cell else {
+                return Some(false);
+            };
+            Some(number.is_finite() && number_matches(*number, CriterionOp::Eq, *target))
+        }
+        CalcValue::Num(_) => None,
+        CalcValue::Text(text) => {
+            let text = text.trim_matches(' ');
+            if let Some((op, rest)) = criterion_op(text) {
+                if let Some(target) = value_excel(rest) {
+                    let Some(CalcValue::Num(number)) = cell else {
+                        return Some(false);
+                    };
+                    return Some(number.is_finite() && number_matches(*number, op, target));
+                }
+                if !matches!(op, CriterionOp::Eq | CriterionOp::Ne) {
+                    return None;
+                }
+                if rest.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
+                    return wildcard_holds(
+                        cell,
+                        rest.trim_matches(' '),
+                        matches!(op, CriterionOp::Eq),
+                    );
+                }
+                let rest = rest.trim_matches(' ');
+                let same = matches!(cell, Some(CalcValue::Text(value)) if value.eq_ignore_ascii_case(rest));
+                return Some(if matches!(op, CriterionOp::Eq) {
+                    same
+                } else {
+                    !same
+                });
+            }
+            if text.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
+                return wildcard_holds(cell, text, true);
+            }
+            Some(matches!(cell, Some(CalcValue::Text(value)) if value.eq_ignore_ascii_case(text)))
+        }
+    }
+}
+
+fn compile_criterion(criteria: &CalcValue) -> Option<(CriterionOp, f64)> {
+    match criteria {
+        CalcValue::Num(target) if target.is_finite() => Some((CriterionOp::Eq, *target)),
+        CalcValue::Num(_) => None,
+        CalcValue::Text(text) => {
+            let (op, rest) = criterion_op(text)?;
+            Some((op, value_excel(rest)?))
+        }
+    }
+}
+
+fn open_tag_inline(open: &str) -> Option<String> {
+    if open.contains("t=") {
+        return None;
+    }
+    let end = open.rfind('>')?;
+    let mut out = String::new();
+    out.push_str(&open[..end]);
+    out.push_str(" t=\"inlineStr\">");
+    Some(out)
+}
+
+fn inline_text(body: &str) -> Option<String> {
+    let start = if let Some(at) = body.find("<t>") {
+        at + 3
+    } else {
+        let at = body.find("<t ")?;
+        let rest = &body[at..];
+        let close = rest.find('>')?;
+        at + close + 1
+    };
+    let rest = &body[start..];
+    let end = rest.find("</t>")?;
+    Some(unescape_xml(&rest[..end]))
+}
+
+fn unescape_xml(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find('&') {
+        out.push_str(&rest[..at]);
+        rest = &rest[at..];
+        let Some(end) = rest.find(';') else {
+            out.push_str(rest);
+            return out;
+        };
+        match &rest[..=end] {
+            "&amp;" => out.push('&'),
+            "&lt;" => out.push('<'),
+            "&gt;" => out.push('>'),
+            "&quot;" => out.push('"'),
+            "&apos;" => out.push('\''),
+            _ => {
+                out.push('&');
+                rest = &rest[1..];
+                continue;
+            }
+        }
+        rest = &rest[end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+struct CalcParser<'a> {
+    bytes: &'a [u8],
+    index: usize,
+}
+
+enum CmpOp {
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+}
+
+impl<'a> CalcParser<'a> {
+    fn skip(&mut self) {
+        while self
+            .bytes
+            .get(self.index)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            self.index += 1;
+        }
+    }
+
+    fn compare(&mut self, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+        let left = self.join(env)?;
+        self.skip();
+        let Some(op) = self.cmp_op() else {
+            return Some(left);
+        };
+        let right = self.join(env)?;
+        let left = calc_num(left)?;
+        let right = calc_num(right)?;
+        let same = (left - right).abs() < 1e-9;
+        let flag = match op {
+            CmpOp::Eq => same,
+            CmpOp::Ne => !same,
+            CmpOp::Lt => left < right && !same,
+            CmpOp::Gt => left > right && !same,
+            CmpOp::Le => left < right || same,
+            CmpOp::Ge => left > right || same,
+        };
+        Some(CalcValue::Num(if flag { 1.0 } else { 0.0 }))
+    }
+
+    fn join(&mut self, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+        let mut value = self.expr(env)?;
+        loop {
+            self.skip();
+            if self.bytes.get(self.index) != Some(&b'&') {
+                break;
+            }
+            self.index += 1;
+            let right = self.expr(env)?;
+            value = CalcValue::Text(format!("{}{}", calc_text(&value), calc_text(&right)));
+        }
+        Some(value)
+    }
+
+    fn cmp_op(&mut self) -> Option<CmpOp> {
+        match self.bytes.get(self.index).copied() {
+            Some(b'=') => {
+                self.index += 1;
+                Some(CmpOp::Eq)
+            }
+            Some(b'<') => {
+                self.index += 1;
+                if self.bytes.get(self.index) == Some(&b'>') {
+                    self.index += 1;
+                    Some(CmpOp::Ne)
+                } else if self.bytes.get(self.index) == Some(&b'=') {
+                    self.index += 1;
+                    Some(CmpOp::Le)
+                } else {
+                    Some(CmpOp::Lt)
+                }
+            }
+            Some(b'>') => {
+                self.index += 1;
+                if self.bytes.get(self.index) == Some(&b'=') {
+                    self.index += 1;
+                    Some(CmpOp::Ge)
+                } else {
+                    Some(CmpOp::Gt)
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn expr(&mut self, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+        let mut value = self.term(env)?;
+        loop {
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b'+') => {
+                    self.index += 1;
+                    let right = self.term(env)?;
+                    value = CalcValue::Num(calc_num(value)? + calc_num(right)?);
+                }
+                Some(b'-') => {
+                    self.index += 1;
+                    let right = self.term(env)?;
+                    value = CalcValue::Num(calc_num(value)? - calc_num(right)?);
+                }
+                _ => break,
+            }
+        }
+        Some(value)
+    }
+
+    fn term(&mut self, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+        let mut value = self.factor(env)?;
+        loop {
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b'*') => {
+                    self.index += 1;
+                    let right = self.factor(env)?;
+                    value = CalcValue::Num(calc_num(value)? * calc_num(right)?);
+                }
+                Some(b'/') => {
+                    self.index += 1;
+                    let right = calc_num(self.factor(env)?)?;
+                    if right == 0.0 {
+                        return None;
+                    }
+                    value = CalcValue::Num(calc_num(value)? / right);
+                }
+                _ => break,
+            }
+        }
+        Some(value)
+    }
+
+    fn factor(&mut self, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b'+') {
+            self.index += 1;
+            return self.factor(env);
+        }
+        if self.bytes.get(self.index) == Some(&b'-') {
+            self.index += 1;
+            return Some(CalcValue::Num(-calc_num(self.factor(env)?)?));
+        }
+        if self.bytes.get(self.index) == Some(&b'(') {
+            self.index += 1;
+            let value = self.compare(env)?;
+            self.skip();
+            if self.bytes.get(self.index) != Some(&b')') {
+                return None;
+            }
+            self.index += 1;
+            return Some(value);
+        }
+        if self.bytes.get(self.index) == Some(&b'"') {
+            return self.quoted().map(CalcValue::Text);
+        }
+        if self
+            .bytes
+            .get(self.index)
+            .is_some_and(|byte| byte.is_ascii_digit() || *byte == b'.')
+        {
+            return self.number().map(CalcValue::Num);
+        }
+        if self.bytes.get(self.index) == Some(&b'\'') {
+            let name = self.quoted_sheet()?;
+            return self.foreign_cell(&name, env);
+        }
+        let word_at = self.index;
+        let word = self.word()?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b'[') {
+            self.index = word_at;
+            let Some(defined) = self.take_table(env) else {
+                return None;
+            };
+            if defined.cells.len() != 1 {
+                return None;
+            }
+            let address = named_addresses(&defined, env);
+            return self.cell_value(address.first()?, env);
+        }
+        if self.bytes.get(self.index) == Some(&b'(') {
+            self.index += 1;
+            if word.eq_ignore_ascii_case("INDIRECT") || word.eq_ignore_ascii_case("OFFSET") {
+                let cells = if word.eq_ignore_ascii_case("INDIRECT") {
+                    self.indirect_cells(env)?
+                } else {
+                    self.offset_cells(env)?
+                };
+                if cells.len() != 1 {
+                    return None;
+                }
+                return self.cell_value(cells.first()?, env);
+            }
+            if word.eq_ignore_ascii_case("LET") {
+                return self.let_call(env);
+            }
+            if word.eq_ignore_ascii_case("IF") {
+                let cond = calc_num(self.compare(env)?)?;
+                if !cond.is_finite() {
+                    return None;
+                }
+                self.require_comma()?;
+                let yes = self.compare(env)?;
+                self.require_comma()?;
+                let no = self.compare(env)?;
+                self.close_paren()?;
+                let chosen = if cond != 0.0 { yes } else { no };
+                return match chosen {
+                    CalcValue::Num(number) if number.is_finite() => Some(CalcValue::Num(number)),
+                    CalcValue::Num(_) => None,
+                    CalcValue::Text(text) => limited_text(text),
+                };
+            }
+            if word.eq_ignore_ascii_case("IFERROR") {
+                let (args, end) = split_top_args(self.bytes, self.index)?;
+                if args.len() != 2 {
+                    return None;
+                }
+                let first = args[0];
+                let second = args[1];
+                self.index = end;
+                if let Some(value) = eval_slice(&self.bytes[first.0..first.1], env) {
+                    return Some(value);
+                }
+                return eval_slice(&self.bytes[second.0..second.1], env);
+            }
+            if word.eq_ignore_ascii_case("CHOOSE") {
+                let (args, end) = split_top_args(self.bytes, self.index)?;
+                self.index = end;
+                if args.len() < 2 || args.len() > 255 {
+                    return None;
+                }
+                let index = args[0];
+                let index = calc_num(eval_slice(&self.bytes[index.0..index.1], env)?)?;
+                if !index.is_finite() {
+                    return None;
+                }
+                let index = index.trunc() as i64;
+                if index < 1 || index as usize >= args.len() {
+                    return None;
+                }
+                let chosen = args[index as usize];
+                return eval_slice(&self.bytes[chosen.0..chosen.1], env);
+            }
+            if word.eq_ignore_ascii_case("SWITCH") {
+                let (args, end) = split_top_args(self.bytes, self.index)?;
+                self.index = end;
+                if args.len() < 3 || args.len() > 255 {
+                    return None;
+                }
+                let expr_at = args[0];
+                let expr = eval_slice(&self.bytes[expr_at.0..expr_at.1], env)?;
+                let default_at = if args.len() % 2 == 0 {
+                    Some(args.len() - 1)
+                } else {
+                    None
+                };
+                let pair_end = default_at.unwrap_or(args.len());
+                let mut pair = 1usize;
+                while pair + 1 < pair_end {
+                    let match_at = args[pair];
+                    let matched = eval_slice(&self.bytes[match_at.0..match_at.1], env)?;
+                    if values_match(&expr, &matched) {
+                        let result = args[pair + 1];
+                        return eval_slice(&self.bytes[result.0..result.1], env);
+                    }
+                    pair += 2;
+                }
+                let Some(default_at) = default_at else {
+                    return None;
+                };
+                let default = args[default_at];
+                return eval_slice(&self.bytes[default.0..default.1], env);
+            }
+            if word.eq_ignore_ascii_case("IFS") {
+                let (args, end) = split_top_args(self.bytes, self.index)?;
+                self.index = end;
+                if args.is_empty() || args.len() > 254 || args.len() % 2 == 1 {
+                    return None;
+                }
+                let mut pair = 0usize;
+                while pair + 1 < args.len() {
+                    let cond_at = args[pair];
+                    let cond = eval_slice(&self.bytes[cond_at.0..cond_at.1], env)?;
+                    let Some(number) = calc_num(cond) else {
+                        return None;
+                    };
+                    if !number.is_finite() {
+                        return None;
+                    }
+                    if number != 0.0 {
+                        let result = args[pair + 1];
+                        return eval_slice(&self.bytes[result.0..result.1], env);
+                    }
+                    pair += 2;
+                }
+                return None;
+            }
+            if word.eq_ignore_ascii_case("ABS") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return Some(CalcValue::Num(number.abs()));
+            }
+            if word.eq_ignore_ascii_case("INT") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !number.is_finite() {
+                    return None;
+                }
+                return Some(CalcValue::Num(number.floor()));
+            }
+            if word.eq_ignore_ascii_case("SQRT") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if number < 0.0 || !number.is_finite() {
+                    return None;
+                }
+                let value = number.sqrt();
+                if !value.is_finite() {
+                    return None;
+                }
+                return Some(CalcValue::Num(value));
+            }
+            if word.eq_ignore_ascii_case("FISHER") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return fisher_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("FISHERINV") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return fisher_inv_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SQRTPI") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return sqrt_pi_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("LN") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return finite_positive_log(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("LOG10") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return log_base(number, 10.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("LOG") {
+                let number = calc_num(self.compare(env)?)?;
+                let base = self.optional_number(env, 10.0)?;
+                return log_base(number, base).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("EXP") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return exp_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("FACT") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return fact_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("FACTDOUBLE") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return fact_double_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("POISSON") || word.eq_ignore_ascii_case("POISSON.DIST") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let mean = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let flag = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !flag.is_finite() {
+                    return None;
+                }
+                return poisson_excel(x_value, mean, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("BINOM.DIST") || word.eq_ignore_ascii_case("BINOMDIST") {
+                let successes = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let trials = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let flag = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !flag.is_finite() {
+                    return None;
+                }
+                return binom_dist_excel(successes, trials, probability, flag != 0.0)
+                    .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("EXPON.DIST") || word.eq_ignore_ascii_case("EXPONDIST") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let lambda = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let flag = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !flag.is_finite() {
+                    return None;
+                }
+                return expon_dist_excel(x_value, lambda, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NEGBINOM.DIST")
+                || word.eq_ignore_ascii_case("NEGBINOMDIST")
+            {
+                let legacy = word.eq_ignore_ascii_case("NEGBINOMDIST");
+                let failures = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let successes = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let probability = calc_num(self.compare(env)?)?;
+                let cumulative = if legacy {
+                    self.close_paren()?;
+                    false
+                } else {
+                    self.require_comma()?;
+                    let flag = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    if !flag.is_finite() {
+                        return None;
+                    }
+                    flag != 0.0
+                };
+                return negbinom_dist_excel(failures, successes, probability, cumulative)
+                    .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("HYPGEOM.DIST") || word.eq_ignore_ascii_case("HYPGEOMDIST")
+            {
+                let legacy = word.eq_ignore_ascii_case("HYPGEOMDIST");
+                let sample_s = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let number_sample = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let population_s = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let number_pop = calc_num(self.compare(env)?)?;
+                let cumulative = if legacy {
+                    self.close_paren()?;
+                    false
+                } else {
+                    self.require_comma()?;
+                    let flag = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    if !flag.is_finite() {
+                        return None;
+                    }
+                    flag != 0.0
+                };
+                return hypgeom_dist_excel(
+                    sample_s,
+                    number_sample,
+                    population_s,
+                    number_pop,
+                    cumulative,
+                )
+                .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("WEIBULL.DIST") || word.eq_ignore_ascii_case("WEIBULL") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let alpha = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let beta = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let flag = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !flag.is_finite() {
+                    return None;
+                }
+                return weibull_dist_excel(x_value, alpha, beta, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("GAMMALN") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return ln_gamma_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("GAMMA") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return gamma_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("GAMMA.DIST") || word.eq_ignore_ascii_case("GAMMADIST") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let alpha = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let beta = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let flag = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !flag.is_finite() {
+                    return None;
+                }
+                return gamma_dist_excel(x_value, alpha, beta, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("GAMMA.INV") || word.eq_ignore_ascii_case("GAMMAINV") {
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let alpha = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let beta = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return gamma_inv_excel(probability, alpha, beta).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("BINOM.INV") || word.eq_ignore_ascii_case("CRITBINOM") {
+                let trials = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let alpha = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return binom_inv_excel(trials, probability, alpha).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CHISQ.DIST.RT") || word.eq_ignore_ascii_case("CHIDIST") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let degrees = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return chisq_rt_excel(x_value, degrees).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CHISQ.DIST") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let degrees = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let flag = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !flag.is_finite() {
+                    return None;
+                }
+                return chisq_dist_excel(x_value, degrees, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CHISQ.INV.RT") || word.eq_ignore_ascii_case("CHIINV") {
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let degrees = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return chisq_inv_rt_excel(probability, degrees).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CHISQ.INV") {
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let degrees = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return chisq_inv_excel(probability, degrees).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CHISQ.TEST") || word.eq_ignore_ascii_case("CHITEST") {
+                let (actual, rows, cols) = self.cell_block(env)?;
+                self.require_comma()?;
+                let (expected, expected_rows, expected_cols) = self.cell_block(env)?;
+                self.close_paren()?;
+                if rows != expected_rows || cols != expected_cols {
+                    return None;
+                }
+                let degrees = if rows == 1 {
+                    cols.saturating_sub(1)
+                } else if cols == 1 {
+                    rows.saturating_sub(1)
+                } else {
+                    rows.saturating_sub(1)
+                        .saturating_mul(cols.saturating_sub(1))
+                };
+                if degrees < 1 {
+                    return None;
+                }
+                let mut pairs = Vec::new();
+                for (actual_address, expected_address) in actual.iter().zip(expected) {
+                    let Some(CalcValue::Num(actual_n)) = self.cell_value(actual_address, env)
+                    else {
+                        return None;
+                    };
+                    let Some(CalcValue::Num(expected_n)) = self.cell_value(&expected_address, env)
+                    else {
+                        return None;
+                    };
+                    pairs.push((actual_n, expected_n));
+                }
+                let stat = chisq_test_stat(&pairs)?;
+                return chisq_rt_excel(stat, f64::from(degrees)).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NORM.S.DIST") || word.eq_ignore_ascii_case("NORMSDIST") {
+                let legacy = word.eq_ignore_ascii_case("NORMSDIST");
+                let x_value = calc_num(self.compare(env)?)?;
+                let cumulative = if legacy {
+                    self.close_paren()?;
+                    true
+                } else {
+                    self.require_comma()?;
+                    let flag = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    if !flag.is_finite() {
+                        return None;
+                    }
+                    flag != 0.0
+                };
+                return norms_dist_excel(x_value, cumulative).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NORM.DIST") || word.eq_ignore_ascii_case("NORMDIST") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let mean = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let scale = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let flag = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !flag.is_finite() {
+                    return None;
+                }
+                return norm_dist_excel(x_value, mean, scale, flag != 0.0).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NORM.S.INV") || word.eq_ignore_ascii_case("NORMSINV") {
+                let probability = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return norms_inv_excel(probability).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NORM.INV") || word.eq_ignore_ascii_case("NORMINV") {
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let mean = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let scale = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return norm_inv_excel(probability, mean, scale).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("LOGNORM.INV") || word.eq_ignore_ascii_case("LOGINV") {
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let mean = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let scale = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return lognorm_inv_excel(probability, mean, scale).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CONFIDENCE.NORM")
+                || word.eq_ignore_ascii_case("CONFIDENCE")
+            {
+                let alpha = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let stdev = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let size = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return confidence_norm_excel(alpha, stdev, size).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ERF") {
+                let lower = calc_num(self.compare(env)?)?;
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    return erf_excel(lower).map(CalcValue::Num);
+                }
+                self.require_comma()?;
+                let upper = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                let value = erf_excel(upper)? - erf_excel(lower)?;
+                return if value.is_finite() {
+                    Some(CalcValue::Num(value))
+                } else {
+                    None
+                };
+            }
+            if word.eq_ignore_ascii_case("ERFC") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                let value = 1.0 - erf_excel(number)?;
+                return if value.is_finite() {
+                    Some(CalcValue::Num(value))
+                } else {
+                    None
+                };
+            }
+            if word.eq_ignore_ascii_case("GAUSS") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                let value = norms_dist_excel(number, true)? - 0.5;
+                return if value.is_finite() {
+                    Some(CalcValue::Num(value))
+                } else {
+                    None
+                };
+            }
+            if word.eq_ignore_ascii_case("PHI") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return norms_dist_excel(number, false).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("LOGNORM.DIST") || word.eq_ignore_ascii_case("LOGNORMDIST")
+            {
+                let legacy = word.eq_ignore_ascii_case("LOGNORMDIST");
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let mean = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let scale = calc_num(self.compare(env)?)?;
+                let cumulative = if legacy {
+                    self.close_paren()?;
+                    true
+                } else {
+                    self.require_comma()?;
+                    let flag = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    if !flag.is_finite() {
+                        return None;
+                    }
+                    flag != 0.0
+                };
+                return lognorm_dist_excel(x_value, mean, scale, cumulative).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("BINOM.DIST.RANGE") {
+                let trials = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let probability = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let low = calc_num(self.compare(env)?)?;
+                self.skip();
+                let high = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    low
+                } else {
+                    self.require_comma()?;
+                    let high = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    high
+                };
+                return binom_range_excel(trials, probability, low, high).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("Z.TEST") || word.eq_ignore_ascii_case("ZTEST") {
+                let addresses = self.cell_range(env)?;
+                self.require_comma()?;
+                let target = calc_num(self.compare(env)?)?;
+                self.skip();
+                let sigma = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    None
+                } else {
+                    self.require_comma()?;
+                    let sigma = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    Some(sigma)
+                };
+                let mut values = Vec::new();
+                for address in addresses {
+                    if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                        if value.is_finite() {
+                            values.push(value);
+                        }
+                    }
+                }
+                return z_test_excel(&values, target, sigma).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PROB") {
+                let xs = self.cell_range(env)?;
+                self.require_comma()?;
+                let probabilities = self.cell_range(env)?;
+                if xs.len() != probabilities.len() {
+                    return None;
+                }
+                self.require_comma()?;
+                let lower = calc_num(self.compare(env)?)?;
+                self.skip();
+                let upper = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    lower
+                } else {
+                    self.require_comma()?;
+                    let upper = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    upper
+                };
+                let mut pairs = Vec::new();
+                for (x_address, probability_address) in xs.iter().zip(probabilities) {
+                    let Some(CalcValue::Num(x_value)) = self.cell_value(x_address, env) else {
+                        continue;
+                    };
+                    let Some(CalcValue::Num(probability)) =
+                        self.cell_value(&probability_address, env)
+                    else {
+                        continue;
+                    };
+                    if x_value.is_finite() && probability.is_finite() {
+                        pairs.push((x_value, probability));
+                    }
+                }
+                return prob_excel(&pairs, lower, upper).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SERIESSUM") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let first = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let step = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let addresses = self.cell_range(env)?;
+                self.close_paren()?;
+                let mut coefficients = Vec::new();
+                for address in addresses {
+                    match self.cell_value(&address, env) {
+                        None => coefficients.push(0.0),
+                        Some(CalcValue::Num(value)) if value.is_finite() => {
+                            coefficients.push(value);
+                        }
+                        _ => return None,
+                    }
+                }
+                return series_sum_excel(x_value, first, step, &coefficients).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SIN")
+                || word.eq_ignore_ascii_case("COS")
+                || word.eq_ignore_ascii_case("TAN")
+            {
+                let kind = word.to_ascii_uppercase();
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return trig_excel(number, &kind).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SEC")
+                || word.eq_ignore_ascii_case("CSC")
+                || word.eq_ignore_ascii_case("COT")
+            {
+                let kind = word.to_ascii_uppercase();
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return reciprocal_trig_excel(number, &kind).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("RADIANS") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return radians_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("DEGREES") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return degrees_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ASIN") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return asin_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ACOS") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return acos_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ATAN2") {
+                let x_coord = calc_num(self.compare(env)?)?;
+                let y_coord = self.comma_number(env)?;
+                return atan2_excel(x_coord, y_coord).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ATAN") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return atan_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SINH")
+                || word.eq_ignore_ascii_case("COSH")
+                || word.eq_ignore_ascii_case("TANH")
+            {
+                let kind = word.to_ascii_uppercase();
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return hyper_excel(number, &kind).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ASINH")
+                || word.eq_ignore_ascii_case("ACOSH")
+                || word.eq_ignore_ascii_case("ATANH")
+            {
+                let kind = word.to_ascii_uppercase();
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return inverse_hyper_excel(number, &kind).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SECH")
+                || word.eq_ignore_ascii_case("CSCH")
+                || word.eq_ignore_ascii_case("COTH")
+            {
+                let kind = word.to_ascii_uppercase();
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return reciprocal_hyper_excel(number, &kind).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ACOT") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return acot_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ACOTH") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return acoth_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("COMBIN") {
+                let n = calc_num(self.compare(env)?)?;
+                let k = self.comma_number(env)?;
+                return combin_excel(n, k).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("COMBINA") {
+                let n = calc_num(self.compare(env)?)?;
+                let k = self.comma_number(env)?;
+                return combina_excel(n, k).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PERMUTATIONA") {
+                let n = calc_num(self.compare(env)?)?;
+                let k = self.comma_number(env)?;
+                return permutationa_excel(n, k).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PERMUT") {
+                let n = calc_num(self.compare(env)?)?;
+                let k = self.comma_number(env)?;
+                return permut_excel(n, k).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("POWER") {
+                let base = calc_num(self.compare(env)?)?;
+                let exponent = self.comma_number(env)?;
+                return power_excel(base, exponent).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("MOD") {
+                let number = calc_num(self.compare(env)?)?;
+                let divisor = self.comma_number(env)?;
+                return mod_excel(number, divisor).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PI") {
+                self.close_paren()?;
+                return Some(CalcValue::Num(std::f64::consts::PI));
+            }
+            if word.eq_ignore_ascii_case("SIGN") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return sign_excel(number).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("GESTEP") {
+                let number = calc_num(self.compare(env)?)?;
+                let step = self.optional_number(env, 0.0)?;
+                return gestep_excel(number, step).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("DELTA") {
+                let number = calc_num(self.compare(env)?)?;
+                let other = self.optional_number(env, 0.0)?;
+                return delta_excel(number, other).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("QUOTIENT") {
+                let number = calc_num(self.compare(env)?)?;
+                let divisor = self.comma_number(env)?;
+                return quotient_excel(number, divisor).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("EVEN") || word.eq_ignore_ascii_case("ODD") {
+                let odd = word.eq_ignore_ascii_case("ODD");
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return even_odd_excel(number, odd).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ROUND") {
+                let number = calc_num(self.compare(env)?)?;
+                self.skip();
+                if self.bytes.get(self.index) != Some(&b',') {
+                    return None;
+                }
+                self.index += 1;
+                let digits = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return round_excel(number, digits).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ROUNDUP") || word.eq_ignore_ascii_case("ROUNDDOWN") {
+                let away = word.eq_ignore_ascii_case("ROUNDUP");
+                let number = calc_num(self.compare(env)?)?;
+                let digits = self.comma_number(env)?;
+                return round_directed(number, digits, away).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("TRUNC") {
+                let number = calc_num(self.compare(env)?)?;
+                let digits = self.optional_number(env, 0.0)?;
+                return round_directed(number, digits, false).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ISEVEN") || word.eq_ignore_ascii_case("ISODD") {
+                let odd = word.eq_ignore_ascii_case("ISODD");
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return parity_excel(number, odd).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CODE") || word.eq_ignore_ascii_case("UNICODE") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return code_excel(&text).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CHAR") || word.eq_ignore_ascii_case("UNICHAR") {
+                let code = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return char_excel(code).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("CLEAN") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Text(clean_excel(&text)));
+            }
+            if word.eq_ignore_ascii_case("PROPER") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Text(proper_excel(&text)));
+            }
+            if word.eq_ignore_ascii_case("CEILING") || word.eq_ignore_ascii_case("FLOOR") {
+                let away = word.eq_ignore_ascii_case("CEILING");
+                let number = calc_num(self.compare(env)?)?;
+                let significance = self.comma_number(env)?;
+                return step_multiple(number, significance, away).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("MROUND") {
+                let number = calc_num(self.compare(env)?)?;
+                let multiple = self.comma_number(env)?;
+                return mround_excel(number, multiple).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("DSUM")
+                || word.eq_ignore_ascii_case("DAVERAGE")
+                || word.eq_ignore_ascii_case("DCOUNT")
+                || word.eq_ignore_ascii_case("DCOUNTA")
+                || word.eq_ignore_ascii_case("DMIN")
+                || word.eq_ignore_ascii_case("DMAX")
+            {
+                return self.database(env, &word).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SUMIF") {
+                return self.sum_if(env).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("COUNTIF") || word.eq_ignore_ascii_case("COUNTIFS") {
+                let matched = self.if_hits(env)?;
+                return Some(CalcValue::Num(matched.count));
+            }
+            if word.eq_ignore_ascii_case("AVERAGEIF") {
+                let matched = self.if_hits(env)?;
+                if matched.numbers.is_empty() {
+                    return None;
+                }
+                let average = matched.numbers.iter().sum::<f64>() / matched.numbers.len() as f64;
+                if !average.is_finite() {
+                    return None;
+                }
+                return Some(CalcValue::Num(average));
+            }
+            if word.eq_ignore_ascii_case("SUMPRODUCT") {
+                return self.sum_product(env).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SUMX2MY2")
+                || word.eq_ignore_ascii_case("SUMX2PY2")
+                || word.eq_ignore_ascii_case("SUMXMY2")
+            {
+                let kind = if word.eq_ignore_ascii_case("SUMX2PY2") {
+                    1
+                } else if word.eq_ignore_ascii_case("SUMXMY2") {
+                    2
+                } else {
+                    0
+                };
+                let pairs = self.paired_ranges(env)?;
+                return sum_pair_excel(&pairs, kind).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SLOPE") {
+                let pairs = self.paired_ranges(env)?;
+                return slope_excel(&pairs).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("INTERCEPT") {
+                let pairs = self.paired_ranges(env)?;
+                return intercept_excel(&pairs).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CORREL") || word.eq_ignore_ascii_case("PEARSON") {
+                let pairs = self.paired_ranges(env)?;
+                return correl_excel(&pairs).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("RSQ") {
+                let pairs = self.paired_ranges(env)?;
+                return rsq_excel(&pairs).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("FORECAST") || word.eq_ignore_ascii_case("FORECAST.LINEAR")
+            {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let pairs = self.paired_ranges(env)?;
+                return forecast_excel(x_value, &pairs).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("STEYX") {
+                let pairs = self.paired_ranges(env)?;
+                return steyx_excel(&pairs).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("COVARIANCE.P")
+                || word.eq_ignore_ascii_case("COVAR")
+                || word.eq_ignore_ascii_case("COVARIANCE.S")
+            {
+                let sample = word.eq_ignore_ascii_case("COVARIANCE.S");
+                let pairs = self.paired_ranges(env)?;
+                return covariance_excel(&pairs, sample).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("RANK") || word.eq_ignore_ascii_case("RANK.EQ") {
+                return self.rank_call(env, false).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("RANK.AVG") {
+                return self.rank_call(env, true).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PERCENTILE")
+                || word.eq_ignore_ascii_case("PERCENTILE.INC")
+            {
+                return self.percentile_call(env).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PERCENTILE.EXC") {
+                return self.percentile_exc_call(env).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("QUARTILE") || word.eq_ignore_ascii_case("QUARTILE.INC") {
+                return self.quartile_call(env).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("QUARTILE.EXC") {
+                return self.quartile_exc_call(env).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("MODE") || word.eq_ignore_ascii_case("MODE.SNGL") {
+                return self.mode_call(env).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PERCENTRANK")
+                || word.eq_ignore_ascii_case("PERCENTRANK.INC")
+            {
+                return self.percent_rank_call(env).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PERCENTRANK.EXC") {
+                return self.percent_rank_exc_call(env).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("STANDARDIZE") {
+                let x_value = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let mean = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let scale = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return standardize_excel(x_value, mean, scale).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("MINIFS") || word.eq_ignore_ascii_case("MAXIFS") {
+                let max = word.eq_ignore_ascii_case("MAXIFS");
+                let matched = self.ifs_values(env)?;
+                let value = if matched.is_empty() {
+                    0.0
+                } else if max {
+                    matched.into_iter().fold(f64::MIN, f64::max)
+                } else {
+                    matched.into_iter().fold(f64::MAX, f64::min)
+                };
+                return Some(CalcValue::Num(value));
+            }
+            if word.eq_ignore_ascii_case("SUMIFS") {
+                let matched = self.ifs_values(env)?;
+                let sum = matched.iter().sum::<f64>();
+                if !sum.is_finite() {
+                    return None;
+                }
+                return Some(CalcValue::Num(sum));
+            }
+            if word.eq_ignore_ascii_case("AVERAGEIFS") {
+                let matched = self.ifs_values(env)?;
+                if matched.is_empty() {
+                    return None;
+                }
+                let average = matched.iter().sum::<f64>() / matched.len() as f64;
+                if !average.is_finite() {
+                    return None;
+                }
+                return Some(CalcValue::Num(average));
+            }
+            if word.eq_ignore_ascii_case("CEILING.MATH") || word.eq_ignore_ascii_case("FLOOR.MATH")
+            {
+                let floor = word.eq_ignore_ascii_case("FLOOR.MATH");
+                let number = calc_num(self.compare(env)?)?;
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    return math_step_excel(number, 1.0, 0.0, floor).map(CalcValue::Num);
+                }
+                self.require_comma()?;
+                let significance = calc_num(self.compare(env)?)?;
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    return math_step_excel(number, significance, 0.0, floor).map(CalcValue::Num);
+                }
+                self.require_comma()?;
+                let mode = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return math_step_excel(number, significance, mode, floor).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CONCAT") || word.eq_ignore_ascii_case("CONCATENATE") {
+                return self.concat_args(env).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("ROMAN") {
+                let number = calc_num(self.compare(env)?)?;
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    return roman_excel(number).map(CalcValue::Text);
+                }
+                self.require_comma()?;
+                let form = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !form.is_finite() || form != 0.0 {
+                    return None;
+                }
+                return roman_excel(number).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("ARABIC") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return arabic_excel(&text).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("DATE") {
+                let year = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let month = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let day = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return date_excel(year, month, day)
+                    .and_then(|serial| from_1900(serial, env.date1904))
+                    .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("YEAR")
+                || word.eq_ignore_ascii_case("MONTH")
+                || word.eq_ignore_ascii_case("DAY")
+            {
+                let part = word.to_ascii_uppercase();
+                let serial = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                let serial = as_1900(serial, env.date1904)?;
+                let (year, month, day) = excel_parts(serial)?;
+                let value = if part == "YEAR" {
+                    year
+                } else if part == "MONTH" {
+                    month
+                } else {
+                    day
+                };
+                return Some(CalcValue::Num(f64::from(value)));
+            }
+            if word.eq_ignore_ascii_case("DEC2BIN")
+                || word.eq_ignore_ascii_case("DEC2HEX")
+                || word.eq_ignore_ascii_case("DEC2OCT")
+            {
+                let kind = word.to_ascii_uppercase();
+                let number = calc_num(self.compare(env)?)?;
+                self.skip();
+                let places = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    None
+                } else {
+                    self.require_comma()?;
+                    let places = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    Some(places)
+                };
+                let (radix, bits) = if kind == "DEC2BIN" {
+                    (2, 10)
+                } else if kind == "DEC2HEX" {
+                    (16, 40)
+                } else {
+                    (8, 30)
+                };
+                return complement_text(number, radix, bits, places).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("BIN2DEC")
+                || word.eq_ignore_ascii_case("HEX2DEC")
+                || word.eq_ignore_ascii_case("OCT2DEC")
+            {
+                let kind = word.to_ascii_uppercase();
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                let (radix, bits) = if kind == "BIN2DEC" {
+                    (2, 10)
+                } else if kind == "HEX2DEC" {
+                    (16, 40)
+                } else {
+                    (8, 30)
+                };
+                return from_complement(&text, radix, bits).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("BASE") {
+                let number = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let radix = calc_num(self.compare(env)?)?;
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    return base_excel(number, radix, None).map(CalcValue::Text);
+                }
+                self.require_comma()?;
+                let length = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return base_excel(number, radix, Some(length)).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("DECIMAL") {
+                let text = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let radix = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return decimal_excel(&text, radix).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("BESSELJ") || word.eq_ignore_ascii_case("BESSELI") {
+                let modified = word.eq_ignore_ascii_case("BESSELI");
+                let x = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let order = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return bessel_excel(x, order, modified).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("MDETERM") {
+                let (cells, rows, cols) = self.cell_block(env)?;
+                self.close_paren()?;
+                if rows != cols || rows == 0 || rows > 10 {
+                    return None;
+                }
+                let n = rows as usize;
+                let mut values = Vec::with_capacity(n * n);
+                for address in cells {
+                    match self.cell_value(&address, env) {
+                        None => values.push(0.0),
+                        Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
+                        _ => return None,
+                    }
+                }
+                return mdeterm_excel(&values, n).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("INDEX") {
+                let (cells, rows, cols) = self.cell_block(env)?;
+                self.require_comma()?;
+                let row = calc_num(self.compare(env)?)?;
+                self.skip();
+                let col = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    if cols != 1 {
+                        return None;
+                    }
+                    1.0
+                } else {
+                    self.require_comma()?;
+                    let col = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    col
+                };
+                if !row.is_finite() || !col.is_finite() {
+                    return None;
+                }
+                let row = row.trunc();
+                let col = col.trunc();
+                if row < 1.0 || col < 1.0 || row > f64::from(rows) || col > f64::from(cols) {
+                    return None;
+                }
+                let index = ((row as u32 - 1) * cols + (col as u32 - 1)) as usize;
+                let address = cells.get(index)?;
+                return match self.cell_value(address, env) {
+                    None => Some(CalcValue::Num(0.0)),
+                    Some(CalcValue::Num(number)) if number.is_finite() => {
+                        Some(CalcValue::Num(number))
+                    }
+                    Some(CalcValue::Text(text)) => Some(CalcValue::Text(text)),
+                    _ => None,
+                };
+            }
+            if word.eq_ignore_ascii_case("XLOOKUP") {
+                return self.xlookup(env);
+            }
+            if word.eq_ignore_ascii_case("XMATCH") {
+                return self.xmatch(env).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("MATCH") {
+                let lookup = self.compare(env)?;
+                self.require_comma()?;
+                let (cells, rows, cols) = self.cell_block(env)?;
+                self.skip();
+                let kind = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    1.0
+                } else {
+                    self.require_comma()?;
+                    let kind = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    kind
+                };
+                if !kind.is_finite() || (rows != 1 && cols != 1) {
+                    return None;
+                }
+                let kind = kind.trunc();
+                if kind == 0.0 {
+                    for (index, address) in cells.iter().enumerate() {
+                        let cell = self.cell_value(address, env);
+                        if exact_lookup(&lookup, cell.as_ref()) {
+                            return Some(CalcValue::Num((index + 1) as f64));
+                        }
+                    }
+                    return None;
+                }
+                if kind != 1.0 && kind != -1.0 {
+                    return None;
+                }
+                let mut keys = Vec::new();
+                for address in &cells {
+                    keys.push(self.cell_value(address, env));
+                }
+                let Some(found) = approximate_index(&keys, &lookup, kind < 0.0) else {
+                    return None;
+                };
+                return Some(CalcValue::Num((found + 1) as f64));
+            }
+            if word.eq_ignore_ascii_case("VLOOKUP") || word.eq_ignore_ascii_case("HLOOKUP") {
+                let horizontal = word.eq_ignore_ascii_case("HLOOKUP");
+                let lookup = self.compare(env)?;
+                self.require_comma()?;
+                let (cells, rows, cols) = self.cell_block(env)?;
+                self.require_comma()?;
+                let index = calc_num(self.compare(env)?)?;
+                self.skip();
+                let range_lookup = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    1.0
+                } else {
+                    self.require_comma()?;
+                    let range_lookup = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    range_lookup
+                };
+                if !index.is_finite() || !range_lookup.is_finite() || rows == 0 || cols == 0 {
+                    return None;
+                }
+                let index = index.trunc();
+                let limit = if horizontal { rows } else { cols };
+                if index < 1.0 || index > f64::from(limit) {
+                    return None;
+                }
+                let index = index as u32;
+                let key_count = if horizontal { cols } else { rows };
+                let mut keys = Vec::new();
+                for key in 0..key_count {
+                    let at = if horizontal {
+                        key as usize
+                    } else {
+                        (key * cols) as usize
+                    };
+                    keys.push(self.cell_value(&cells[at], env));
+                }
+                let found = if range_lookup.trunc() == 0.0 {
+                    keys.iter()
+                        .position(|cell| exact_lookup(&lookup, cell.as_ref()))
+                } else {
+                    approximate_index(&keys, &lookup, false)
+                };
+                let Some(found) = found else {
+                    return None;
+                };
+                let found = found as u32;
+                let at = if horizontal {
+                    ((index - 1) * cols + found) as usize
+                } else {
+                    (found * cols + (index - 1)) as usize
+                };
+                let address = cells.get(at)?;
+                return match self.cell_value(address, env) {
+                    None => Some(CalcValue::Num(0.0)),
+                    Some(CalcValue::Num(number)) if number.is_finite() => {
+                        Some(CalcValue::Num(number))
+                    }
+                    Some(CalcValue::Text(text)) => Some(CalcValue::Text(text)),
+                    _ => None,
+                };
+            }
+            if word.eq_ignore_ascii_case("BETA.DIST") {
+                let x = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let alpha = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let beta = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let cumulative = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !cumulative.is_finite() {
+                    return None;
+                }
+                let value = if cumulative == 0.0 {
+                    beta_pdf(x, alpha, beta)
+                } else {
+                    beta_cdf(x, alpha, beta)
+                };
+                return value.map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("T.DIST.RT")
+                || word.eq_ignore_ascii_case("T.DIST.2T")
+                || word.eq_ignore_ascii_case("T.DIST")
+                || word.eq_ignore_ascii_case("TDIST")
+            {
+                let kind = word.to_ascii_uppercase();
+                let x = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let df = calc_num(self.compare(env)?)?;
+                let cumulative = if kind == "T.DIST" {
+                    self.require_comma()?;
+                    let cumulative = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    Some(cumulative)
+                } else if kind == "TDIST" {
+                    self.require_comma()?;
+                    let tails = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    Some(tails)
+                } else {
+                    self.close_paren()?;
+                    None
+                };
+                if kind == "T.DIST" {
+                    let cumulative = cumulative?;
+                    if !cumulative.is_finite() {
+                        return None;
+                    }
+                    let value = if cumulative == 0.0 {
+                        t_pdf(x, df)
+                    } else {
+                        t_cdf(x, df)
+                    };
+                    return value.map(CalcValue::Num);
+                }
+                if x < 0.0 {
+                    return None;
+                }
+                let cdf = t_cdf(x, df)?;
+                let value = if kind == "T.DIST.RT" {
+                    1.0 - cdf
+                } else if kind == "T.DIST.2T" {
+                    2.0 * (1.0 - cdf)
+                } else {
+                    let tails = cumulative?;
+                    if !tails.is_finite() {
+                        return None;
+                    }
+                    let tails = tails.trunc();
+                    if tails == 1.0 {
+                        1.0 - cdf
+                    } else if tails == 2.0 {
+                        2.0 * (1.0 - cdf)
+                    } else {
+                        return None;
+                    }
+                };
+                return if value.is_finite() {
+                    Some(CalcValue::Num(value))
+                } else {
+                    None
+                };
+            }
+            if word.eq_ignore_ascii_case("F.DIST.RT")
+                || word.eq_ignore_ascii_case("F.DIST")
+                || word.eq_ignore_ascii_case("FDIST")
+            {
+                let kind = word.to_ascii_uppercase();
+                let x = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let df1 = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let df2 = calc_num(self.compare(env)?)?;
+                let cumulative = if kind == "F.DIST" {
+                    self.require_comma()?;
+                    let cumulative = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    Some(cumulative)
+                } else {
+                    self.close_paren()?;
+                    None
+                };
+                if kind == "F.DIST" {
+                    let cumulative = cumulative?;
+                    if !cumulative.is_finite() {
+                        return None;
+                    }
+                    let value = if cumulative == 0.0 {
+                        f_pdf(x, df1, df2)
+                    } else {
+                        f_cdf(x, df1, df2)
+                    };
+                    return value.map(CalcValue::Num);
+                }
+                let cdf = f_cdf(x, df1, df2)?;
+                let value = 1.0 - cdf;
+                return if value.is_finite() {
+                    Some(CalcValue::Num(value))
+                } else {
+                    None
+                };
+            }
+            if word.eq_ignore_ascii_case("T.TEST") || word.eq_ignore_ascii_case("TTEST") {
+                let left_cells = self.cell_range(env)?;
+                self.require_comma()?;
+                let right_cells = self.cell_range(env)?;
+                self.require_comma()?;
+                let tails = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let kind = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !kind.is_finite() {
+                    return None;
+                }
+                let value = if kind.trunc() == 1.0 {
+                    if left_cells.len() != right_cells.len() {
+                        return None;
+                    }
+                    let mut diffs = Vec::new();
+                    for (left, right) in left_cells.iter().zip(&right_cells) {
+                        let Some(CalcValue::Num(left)) = self.cell_value(left, env) else {
+                            continue;
+                        };
+                        let Some(CalcValue::Num(right)) = self.cell_value(right, env) else {
+                            continue;
+                        };
+                        if left.is_finite() && right.is_finite() {
+                            diffs.push(left - right);
+                        }
+                    }
+                    paired_t_test(&diffs, tails)
+                } else {
+                    let left = self.range_numbers(&left_cells, env);
+                    let right = self.range_numbers(&right_cells, env);
+                    t_test_excel(&left, &right, tails, kind)
+                };
+                return value.map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("F.TEST") || word.eq_ignore_ascii_case("FTEST") {
+                let left_cells = self.cell_range(env)?;
+                self.require_comma()?;
+                let right_cells = self.cell_range(env)?;
+                self.close_paren()?;
+                let left = self.range_numbers(&left_cells, env);
+                let right = self.range_numbers(&right_cells, env);
+                return f_test_excel(&left, &right).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CONFIDENCE.T") {
+                let alpha = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let stdev = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let size = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return confidence_t_excel(alpha, stdev, size).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PMT") {
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let nper = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let pv = calc_num(self.compare(env)?)?;
+                let extra = self.rest_numbers(env, 2)?;
+                let fv = extra.first().copied().unwrap_or(0.0);
+                let typ = extra.get(1).copied().unwrap_or(0.0);
+                return pmt_excel(rate, nper, pv, fv, typ).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("FV") {
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let nper = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let pmt = calc_num(self.compare(env)?)?;
+                let extra = self.rest_numbers(env, 2)?;
+                let pv = extra.first().copied().unwrap_or(0.0);
+                let typ = extra.get(1).copied().unwrap_or(0.0);
+                return fv_excel(rate, nper, pmt, pv, typ).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PV") {
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let nper = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let pmt = calc_num(self.compare(env)?)?;
+                let extra = self.rest_numbers(env, 2)?;
+                let fv = extra.first().copied().unwrap_or(0.0);
+                let typ = extra.get(1).copied().unwrap_or(0.0);
+                return pv_excel(rate, nper, pmt, fv, typ).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NPER") {
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let pmt = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let pv = calc_num(self.compare(env)?)?;
+                let extra = self.rest_numbers(env, 2)?;
+                let fv = extra.first().copied().unwrap_or(0.0);
+                let typ = extra.get(1).copied().unwrap_or(0.0);
+                return nper_excel(rate, pmt, pv, fv, typ).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("RATE") {
+                let nper = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let pmt = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let pv = calc_num(self.compare(env)?)?;
+                let extra = self.rest_numbers(env, 3)?;
+                let fv = extra.first().copied().unwrap_or(0.0);
+                let typ = extra.get(1).copied().unwrap_or(0.0);
+                let guess = extra.get(2).copied().unwrap_or(0.1);
+                return rate_excel(nper, pmt, pv, fv, typ, guess).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NPV") {
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let values = self.arg_list(env)?;
+                return npv_excel(rate, &values).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("IRR") {
+                let cells = self.cell_range(env)?;
+                self.skip();
+                let guess = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    0.1
+                } else {
+                    self.require_comma()?;
+                    let guess = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    guess
+                };
+                let mut values = Vec::new();
+                for address in cells {
+                    match self.cell_value(&address, env) {
+                        None => values.push(0.0),
+                        Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
+                        _ => return None,
+                    }
+                }
+                return irr_excel(&values, guess).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("IPMT") || word.eq_ignore_ascii_case("PPMT") {
+                let principal = word.eq_ignore_ascii_case("PPMT");
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let per = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let nper = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let pv = calc_num(self.compare(env)?)?;
+                let extra = self.rest_numbers(env, 2)?;
+                let fv = extra.first().copied().unwrap_or(0.0);
+                let typ = extra.get(1).copied().unwrap_or(0.0);
+                let value = if principal {
+                    ppmt_excel(rate, per, nper, pv, fv, typ)
+                } else {
+                    ipmt_excel(rate, per, nper, pv, fv, typ)
+                };
+                return value.map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CUMIPMT") || word.eq_ignore_ascii_case("CUMPRINC") {
+                let principal = word.eq_ignore_ascii_case("CUMPRINC");
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let nper = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let pv = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let start = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let end = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let typ = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return cumulative_payment(rate, nper, pv, start, end, typ, principal)
+                    .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("XNPV") {
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let values = self.finite_range(env)?;
+                self.require_comma()?;
+                let dates = self.finite_range(env)?;
+                self.close_paren()?;
+                return xnpv_excel(rate, &values, &dates).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("XIRR") {
+                let values = self.finite_range(env)?;
+                self.require_comma()?;
+                let dates = self.finite_range(env)?;
+                self.skip();
+                let guess = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    0.1
+                } else {
+                    self.require_comma()?;
+                    let guess = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    guess
+                };
+                return xirr_excel(&values, &dates, guess).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("MIRR") {
+                let values = self.finite_range(env)?;
+                self.require_comma()?;
+                let finance = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let reinvest = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return mirr_excel(&values, finance, reinvest).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("ODDFPRICE")
+                || word.eq_ignore_ascii_case("ODDFYIELD")
+                || word.eq_ignore_ascii_case("ODDLPRICE")
+                || word.eq_ignore_ascii_case("ODDLYIELD")
+            {
+                let kind = word.to_ascii_uppercase();
+                let first = kind.starts_with("ODDF");
+                let yield_call = kind.ends_with("YIELD");
+                let settlement = bond_serial(calc_num(self.compare(env)?)?, env.date1904)?;
+                self.require_comma()?;
+                let maturity = bond_serial(calc_num(self.compare(env)?)?, env.date1904)?;
+                self.require_comma()?;
+                let anchor = bond_serial(calc_num(self.compare(env)?)?, env.date1904)?;
+                let first_coupon = if first {
+                    self.require_comma()?;
+                    bond_serial(calc_num(self.compare(env)?)?, env.date1904)?
+                } else {
+                    0.0
+                };
+                self.require_comma()?;
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let second = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let redemption = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let frequency = bond_frequency(calc_num(self.compare(env)?)?)?;
+                self.skip();
+                let basis = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    0.0
+                } else {
+                    self.require_comma()?;
+                    let basis = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    basis
+                };
+                if !basis.is_finite() || !(0.0..=4.0).contains(&basis.trunc()) {
+                    return None;
+                }
+                let basis = basis.trunc() as i32;
+                let value = if yield_call {
+                    if first {
+                        odd_yield(second, frequency, |yld| {
+                            oddf_price(
+                                settlement,
+                                maturity,
+                                anchor,
+                                first_coupon,
+                                rate,
+                                yld,
+                                redemption,
+                                frequency,
+                                basis,
+                            )
+                        })
+                    } else {
+                        odd_yield(second, frequency, |yld| {
+                            oddl_price(
+                                settlement, maturity, anchor, rate, yld, redemption, frequency,
+                                basis,
+                            )
+                        })
+                    }
+                } else if first {
+                    oddf_price(
+                        settlement,
+                        maturity,
+                        anchor,
+                        first_coupon,
+                        rate,
+                        second,
+                        redemption,
+                        frequency,
+                        basis,
+                    )
+                } else {
+                    oddl_price(
+                        settlement, maturity, anchor, rate, second, redemption, frequency, basis,
+                    )
+                };
+                return value.map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("PRICE")
+                || word.eq_ignore_ascii_case("YIELD")
+                || word.eq_ignore_ascii_case("DURATION")
+                || word.eq_ignore_ascii_case("MDURATION")
+            {
+                let kind = word.to_ascii_uppercase();
+                let settlement = bond_serial(calc_num(self.compare(env)?)?, env.date1904)?;
+                self.require_comma()?;
+                let maturity = bond_serial(calc_num(self.compare(env)?)?, env.date1904)?;
+                self.require_comma()?;
+                let rate = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let second = calc_num(self.compare(env)?)?;
+                let redemption = if kind == "DURATION" || kind == "MDURATION" {
+                    100.0
+                } else {
+                    self.require_comma()?;
+                    calc_num(self.compare(env)?)?
+                };
+                self.require_comma()?;
+                let frequency = bond_frequency(calc_num(self.compare(env)?)?)?;
+                self.skip();
+                let basis = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    0.0
+                } else {
+                    self.require_comma()?;
+                    let basis = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    basis
+                };
+                if !basis.is_finite() {
+                    return None;
+                }
+                let basis = basis.trunc();
+                if !(0.0..=4.0).contains(&basis) {
+                    return None;
+                }
+                let basis = basis as i32;
+                let value = match kind.as_str() {
+                    "PRICE" => price_excel(
+                        settlement, maturity, rate, second, redemption, frequency, basis,
+                    ),
+                    "YIELD" => yield_excel(
+                        settlement, maturity, rate, second, redemption, frequency, basis,
+                    ),
+                    "DURATION" => {
+                        duration_excel(settlement, maturity, rate, second, frequency, basis)
+                    }
+                    "MDURATION" => {
+                        duration_excel(settlement, maturity, rate, second, frequency, basis)
+                            .map(|years| years / (1.0 + second / f64::from(frequency)))
+                    }
+                    _ => None,
+                }?;
+                if value.is_finite() {
+                    return Some(CalcValue::Num(value));
+                }
+                return None;
+            }
+            if word.eq_ignore_ascii_case("WEEKDAY") {
+                let serial = calc_num(self.compare(env)?)?;
+                self.skip();
+                let kind = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    1.0
+                } else {
+                    self.require_comma()?;
+                    let kind = calc_num(self.compare(env)?)?;
+                    self.close_paren()?;
+                    kind
+                };
+                if !serial.is_finite() || !kind.is_finite() {
+                    return None;
+                }
+                let serial = as_weekday_serial(serial, env.date1904)?;
+                return weekday_code(serial.trunc() as i64, kind.trunc() as i64)
+                    .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("EDATE") || word.eq_ignore_ascii_case("EOMONTH") {
+                let end = word.eq_ignore_ascii_case("EOMONTH");
+                let serial = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let months = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                let serial = as_1900(serial, env.date1904)?;
+                return shift_months(serial, months, end)
+                    .and_then(|serial| from_1900(serial, env.date1904))
+                    .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("DATEDIF") {
+                let start = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let end = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let unit = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                let start = as_1900(start, env.date1904)?;
+                let end = as_1900(end, env.date1904)?;
+                return datedif_excel(start, end, &unit).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NETWORKDAYS") {
+                let start = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let end = calc_num(self.compare(env)?)?;
+                self.skip();
+                let holidays = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    Vec::new()
+                } else {
+                    self.require_comma()?;
+                    let cells = self.cell_range(env)?;
+                    self.close_paren()?;
+                    if cells.len() > 512 {
+                        return None;
+                    }
+                    let mut holidays = Vec::new();
+                    for address in cells {
+                        if let Some(CalcValue::Num(number)) = self.cell_value(&address, env) {
+                            if number.is_finite() {
+                                holidays.push(number);
+                            }
+                        }
+                    }
+                    holidays
+                };
+                let start = as_weekday_serial(start, env.date1904)?;
+                let end = as_weekday_serial(end, env.date1904)?;
+                let holidays: Vec<f64> = holidays
+                    .iter()
+                    .filter_map(|number| as_weekday_serial(*number, env.date1904))
+                    .collect();
+                return networkdays_excel(start, end, &holidays).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("GOALSEEK") {
+                return self.goal_seek(env).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("WORKDAY") {
+                let start = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let days = calc_num(self.compare(env)?)?;
+                let holidays = self.optional_holidays(env)?;
+                let start = as_weekday_serial(start, env.date1904)?;
+                let holidays: Vec<f64> = holidays
+                    .iter()
+                    .filter_map(|number| as_weekday_serial(*number, env.date1904))
+                    .collect();
+                return workday_excel(start, days, &holidays, &WEEKEND_SAT_SUN)
+                    .and_then(|serial| from_weekday_serial(serial, env.date1904))
+                    .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("WORKDAY.INTL") {
+                let start = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let days = calc_num(self.compare(env)?)?;
+                self.skip();
+                let (weekend, holidays) = if self.bytes.get(self.index) == Some(&b')') {
+                    self.index += 1;
+                    (WEEKEND_SAT_SUN, Vec::new())
+                } else {
+                    self.require_comma()?;
+                    let weekend = match self.compare(env)? {
+                        CalcValue::Text(text) => weekend_mask(&text)?,
+                        CalcValue::Num(_) => return None,
+                    };
+                    let holidays = self.optional_holidays(env)?;
+                    (weekend, holidays)
+                };
+                let start = as_weekday_serial(start, env.date1904)?;
+                let holidays: Vec<f64> = holidays
+                    .iter()
+                    .filter_map(|number| as_weekday_serial(*number, env.date1904))
+                    .collect();
+                return workday_excel(start, days, &holidays, &weekend)
+                    .and_then(|serial| from_weekday_serial(serial, env.date1904))
+                    .map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("TEXTJOIN") {
+                let delim = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let ignore = calc_num(self.compare(env)?)?;
+                if !ignore.is_finite() {
+                    return None;
+                }
+                self.skip();
+                let parts = match self.bytes.get(self.index) {
+                    Some(&b')') => {
+                        self.index += 1;
+                        Vec::new()
+                    }
+                    Some(&b',') => {
+                        self.index += 1;
+                        self.join_parts(env)?
+                    }
+                    _ => return None,
+                };
+                return text_join(&delim, ignore != 0.0, &parts).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("LEN") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Num(text.chars().count() as f64));
+            }
+            if word.eq_ignore_ascii_case("UPPER") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Text(text.to_uppercase()));
+            }
+            if word.eq_ignore_ascii_case("LOWER") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Text(text.to_lowercase()));
+            }
+            if word.eq_ignore_ascii_case("TEXTBEFORE") || word.eq_ignore_ascii_case("TEXTAFTER") {
+                let after = word.eq_ignore_ascii_case("TEXTAFTER");
+                let text = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let delim = calc_text(&self.compare(env)?);
+                let instance = self.text_instance(env)?;
+                let result = if after {
+                    text_after(&text, &delim, instance)
+                } else {
+                    text_before(&text, &delim, instance)
+                };
+                return result.map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("LEFT") {
+                let text = calc_text(&self.compare(env)?);
+                let count = self.comma_number(env)?;
+                return slice_text(&text, 0, count).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("RIGHT") {
+                let text = calc_text(&self.compare(env)?);
+                let count = self.comma_number(env)?;
+                let count = text_count(count)?;
+                let chars: Vec<char> = text.chars().collect();
+                let start = chars.len().saturating_sub(count);
+                return Some(CalcValue::Text(chars[start..].iter().collect()));
+            }
+            if word.eq_ignore_ascii_case("MID") {
+                let text = calc_text(&self.compare(env)?);
+                self.skip();
+                if self.bytes.get(self.index) != Some(&b',') {
+                    return None;
+                }
+                self.index += 1;
+                let start = calc_num(self.compare(env)?)?;
+                let count = self.comma_number(env)?;
+                return slice_mid(&text, start, count).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("TRIM") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Text(trim_spaces(&text)));
+            }
+            if word.eq_ignore_ascii_case("EXACT") {
+                let left = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let right = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return Some(CalcValue::Num(if left == right { 1.0 } else { 0.0 }));
+            }
+            if word.eq_ignore_ascii_case("REPT") {
+                let text = calc_text(&self.compare(env)?);
+                let count = self.comma_number(env)?;
+                return rept_text(&text, count).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("FIND") || word.eq_ignore_ascii_case("SEARCH") {
+                let ignore_ascii_case = word.eq_ignore_ascii_case("SEARCH");
+                let needle = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let haystack = calc_text(&self.compare(env)?);
+                let start = self.optional_number(env, 1.0)?;
+                let found = if ignore_ascii_case
+                    && needle.chars().any(|ch| matches!(ch, '*' | '?' | '~'))
+                {
+                    search_wildcard(&haystack, &needle, start)
+                } else {
+                    find_scalar(&haystack, &needle, start, ignore_ascii_case)
+                };
+                return found.map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("SUBSTITUTE") {
+                let text = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let old = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let new = calc_text(&self.compare(env)?);
+                let instance = self.optional_number(env, f64::NAN)?;
+                let instance = if instance.is_nan() {
+                    None
+                } else {
+                    Some(instance)
+                };
+                return substitute_text(&text, &old, &new, instance).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("REPLACE") {
+                let text = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let start = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let count = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let new = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return replace_span(&text, start, count, &new).map(CalcValue::Text);
+            }
+            if word.eq_ignore_ascii_case("VALUE") {
+                let text = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return value_excel(&text).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("CONVERT") {
+                let number = calc_num(self.compare(env)?)?;
+                self.require_comma()?;
+                let from = calc_text(&self.compare(env)?);
+                self.require_comma()?;
+                let to = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return convert_excel(number, &from, &to).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("TEXT") {
+                let value = self.compare(env)?;
+                self.require_comma()?;
+                let format = calc_text(&self.compare(env)?);
+                self.close_paren()?;
+                return text_excel(value, &format, env.date1904);
+            }
+            if word.eq_ignore_ascii_case("T") {
+                let value = self.compare(env)?;
+                self.close_paren()?;
+                let text = match value {
+                    CalcValue::Text(text) => text,
+                    CalcValue::Num(_) => String::new(),
+                };
+                return Some(CalcValue::Text(text));
+            }
+            if word.eq_ignore_ascii_case("N") {
+                let value = self.compare(env)?;
+                self.close_paren()?;
+                let number = match value {
+                    CalcValue::Num(number) if number.is_finite() => number,
+                    CalcValue::Num(_) => return None,
+                    CalcValue::Text(_) => 0.0,
+                };
+                return Some(CalcValue::Num(number));
+            }
+            if word.eq_ignore_ascii_case("ISNUMBER") || word.eq_ignore_ascii_case("ISTEXT") {
+                let want_text = word.eq_ignore_ascii_case("ISTEXT");
+                let value = self.compare(env)?;
+                self.close_paren()?;
+                let flag = match value {
+                    CalcValue::Num(number) if number.is_finite() => !want_text,
+                    CalcValue::Num(_) => return None,
+                    CalcValue::Text(_) => want_text,
+                };
+                return Some(CalcValue::Num(if flag { 1.0 } else { 0.0 }));
+            }
+            if word.eq_ignore_ascii_case("SUBTOTAL") {
+                return self.subtotal_call(env).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("NOT") {
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                return Some(CalcValue::Num(if number == 0.0 { 1.0 } else { 0.0 }));
+            }
+            if word.eq_ignore_ascii_case("AND") || word.eq_ignore_ascii_case("OR") {
+                let any = word.eq_ignore_ascii_case("OR");
+                let args = self.logic_args(env)?;
+                let flag = if any {
+                    args.iter().any(|number| *number != 0.0)
+                } else {
+                    args.iter().all(|number| *number != 0.0)
+                };
+                return Some(CalcValue::Num(if flag { 1.0 } else { 0.0 }));
+            }
+            if word.eq_ignore_ascii_case("XOR") {
+                let args = self.logic_args(env)?;
+                let odds = args.iter().filter(|number| **number != 0.0).count();
+                return Some(CalcValue::Num(if odds % 2 == 1 { 1.0 } else { 0.0 }));
+            }
+            if word.eq_ignore_ascii_case("BITAND")
+                || word.eq_ignore_ascii_case("BITOR")
+                || word.eq_ignore_ascii_case("BITXOR")
+            {
+                let and = word.eq_ignore_ascii_case("BITAND");
+                let xor = word.eq_ignore_ascii_case("BITXOR");
+                let left = calc_num(self.compare(env)?)?;
+                let right = self.comma_number(env)?;
+                return bit_excel(left, right, and, xor).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("BITLSHIFT") || word.eq_ignore_ascii_case("BITRSHIFT") {
+                let right = word.eq_ignore_ascii_case("BITRSHIFT");
+                let number = calc_num(self.compare(env)?)?;
+                let shift = self.comma_number(env)?;
+                return bit_shift(number, shift, right).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("LARGE") || word.eq_ignore_ascii_case("SMALL") {
+                let small = word.eq_ignore_ascii_case("SMALL");
+                let mut args = self.arg_list(env)?;
+                let Some(rank) = args.pop() else {
+                    return None;
+                };
+                return ranked_excel(&mut args, rank, small).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("COUNTA") || word.eq_ignore_ascii_case("COUNTBLANK") {
+                let blanks = word.eq_ignore_ascii_case("COUNTBLANK");
+                let (present, blank) = self.tally_args(env)?;
+                return Some(CalcValue::Num(if blanks { blank } else { present }));
+            }
+            if word.eq_ignore_ascii_case("TRIMMEAN") {
+                let cells = self.cell_range(env)?;
+                self.require_comma()?;
+                let percent = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                let mut values = Vec::new();
+                for address in cells {
+                    if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                        values.push(value);
+                    }
+                }
+                return trimmean_excel(&mut values, percent).map(CalcValue::Num);
+            }
+            if word.eq_ignore_ascii_case("AVERAGEA")
+                || word.eq_ignore_ascii_case("MINA")
+                || word.eq_ignore_ascii_case("MAXA")
+                || word.eq_ignore_ascii_case("STDEVA")
+                || word.eq_ignore_ascii_case("VARA")
+            {
+                let name = word.to_ascii_uppercase();
+                let args = self.a_list(env)?;
+                return match name.as_str() {
+                    "AVERAGEA" if !args.is_empty() => {
+                        let value = args.iter().sum::<f64>() / args.len() as f64;
+                        if value.is_finite() {
+                            Some(CalcValue::Num(value))
+                        } else {
+                            None
+                        }
+                    }
+                    "MINA" => Some(CalcValue::Num(
+                        args.into_iter().reduce(f64::min).unwrap_or(0.0),
+                    )),
+                    "MAXA" => Some(CalcValue::Num(
+                        args.into_iter().reduce(f64::max).unwrap_or(0.0),
+                    )),
+                    "STDEVA" => stdev_excel(&args, true).map(CalcValue::Num),
+                    "VARA" => var_excel(&args, true).map(CalcValue::Num),
+                    _ => None,
+                };
+            }
+            let args = self.arg_list(env)?;
+            return match word.to_ascii_uppercase().as_str() {
+                "SUM" => Some(CalcValue::Num(args.iter().sum())),
+                "PRODUCT" => {
+                    let value = if args.is_empty() {
+                        0.0
+                    } else {
+                        args.iter().product()
+                    };
+                    if value.is_finite() {
+                        Some(CalcValue::Num(value))
+                    } else {
+                        None
+                    }
+                }
+                "MEDIAN" => {
+                    if args.is_empty() || args.iter().any(|number| !number.is_finite()) {
+                        None
+                    } else {
+                        let mut sorted = args;
+                        sorted.sort_by(|left, right| left.total_cmp(right));
+                        let mid = sorted.len() / 2;
+                        let value = if sorted.len() % 2 == 1 {
+                            sorted[mid]
+                        } else {
+                            (sorted[mid - 1] + sorted[mid]) / 2.0
+                        };
+                        if value.is_finite() {
+                            Some(CalcValue::Num(value))
+                        } else {
+                            None
+                        }
+                    }
+                }
+                "GCD" => gcd_excel(&args).map(CalcValue::Num),
+                "LCM" => lcm_excel(&args).map(CalcValue::Num),
+                "AVERAGE" if !args.is_empty() => {
+                    Some(CalcValue::Num(args.iter().sum::<f64>() / args.len() as f64))
+                }
+                "MIN" => args.into_iter().reduce(f64::min).map(CalcValue::Num),
+                "MAX" => args.into_iter().reduce(f64::max).map(CalcValue::Num),
+                "COUNT" => Some(CalcValue::Num(args.len() as f64)),
+                "SUMSQ" => {
+                    let value = args.iter().map(|number| number * number).sum::<f64>();
+                    if value.is_finite() {
+                        Some(CalcValue::Num(value))
+                    } else {
+                        None
+                    }
+                }
+                "STDEV" | "STDEV.S" => stdev_excel(&args, true).map(CalcValue::Num),
+                "STDEVP" | "STDEV.P" => stdev_excel(&args, false).map(CalcValue::Num),
+                "VAR" | "VAR.S" => var_excel(&args, true).map(CalcValue::Num),
+                "VARP" | "VAR.P" => var_excel(&args, false).map(CalcValue::Num),
+                "AVEDEV" => avedev_excel(&args).map(CalcValue::Num),
+                "DEVSQ" => devsq_excel(&args).map(CalcValue::Num),
+                "GEOMEAN" => geomean_excel(&args).map(CalcValue::Num),
+                "HARMEAN" => harmean_excel(&args).map(CalcValue::Num),
+                "SKEW" => skew_excel(&args, false).map(CalcValue::Num),
+                "SKEW.P" => skew_excel(&args, true).map(CalcValue::Num),
+                "KURT" => kurt_excel(&args).map(CalcValue::Num),
+                "MULTINOMIAL" => multinomial_excel(&args).map(CalcValue::Num),
+                _ => None,
+            };
+        }
+        if self.bytes.get(self.index) == Some(&b'!') {
+            return self.foreign_cell(&word, env);
+        }
+        if !is_cell_address(&word) {
+            if let Some(value) = env.let_names.get(&word.to_ascii_lowercase()) {
+                return Some(value.clone());
+            }
+            if !env.hide_book_names {
+                if let Some(defined) = env.names.get(env.sheet, &word.to_ascii_lowercase()) {
+                    if let Some(formula) = &defined.formula {
+                        return eval_name_formula(formula, env);
+                    }
+                    if defined.cells.len() != 1 {
+                        return None;
+                    }
+                    let address = named_addresses(defined, env);
+                    return self.cell_value(&address[0], env);
+                }
+            }
+        }
+        self.cell_value(&word, env)
+    }
+
+    fn let_call(&mut self, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+        let saved_names = env.let_names.clone();
+        let saved_hide = env.hide_book_names;
+        env.hide_book_names = true;
+        let result = self.let_body(env);
+        env.let_names = saved_names;
+        env.hide_book_names = saved_hide;
+        result
+    }
+
+    fn let_body(&mut self, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+        let mut bindings = 0u32;
+        loop {
+            self.skip();
+            let name_at = self.index;
+            let Some(name) = self.word() else {
+                let value = self.compare(env)?;
+                self.close_paren()?;
+                return kept_calc(value);
+            };
+            self.skip();
+            if self.bytes.get(self.index) != Some(&b',') || !let_name_ok(&name) || bindings >= 8 {
+                self.index = name_at;
+                let value = self.compare(env)?;
+                self.close_paren()?;
+                return kept_calc(value);
+            }
+            self.index += 1;
+            let value = kept_calc(self.compare(env)?)?;
+            env.let_names.insert(name.to_ascii_lowercase(), value);
+            bindings += 1;
+            self.skip();
+            if self.bytes.get(self.index) != Some(&b',') {
+                return None;
+            }
+            self.index += 1;
+        }
+    }
+
+    fn text_instance(&mut self, env: &mut CalcEnv<'_>) -> Option<usize> {
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(1);
+        }
+        self.require_comma()?;
+        let number = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        if !number.is_finite() {
+            return None;
+        }
+        let number = number.trunc();
+        if number < 1.0 || number > 16.0 {
+            return None;
+        }
+        Some(number as usize)
+    }
+
+    fn text_split_call(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<String>> {
+        let text = calc_text(&self.compare(env)?);
+        self.require_comma()?;
+        let delim = calc_text(&self.compare(env)?);
+        self.close_paren()?;
+        split_column(&text, &delim)
+    }
+
+    fn comma_number(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b',') {
+            return None;
+        }
+        self.index += 1;
+        let number = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        Some(number)
+    }
+
+    fn rest_numbers(&mut self, env: &mut CalcEnv<'_>, count: usize) -> Option<Vec<f64>> {
+        let mut values = Vec::new();
+        for _ in 0..count {
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                return Some(values);
+            }
+            self.require_comma()?;
+            values.push(calc_num(self.compare(env)?)?);
+        }
+        self.close_paren()?;
+        Some(values)
+    }
+
+    fn close_paren(&mut self) -> Option<()> {
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b')') {
+            return None;
+        }
+        self.index += 1;
+        Some(())
+    }
+
+    fn require_comma(&mut self) -> Option<()> {
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b',') {
+            return None;
+        }
+        self.index += 1;
+        Some(())
+    }
+
+    /// A following comma reads one number. `missing` is used when the call ends at `)`.
+    fn optional_number(&mut self, env: &mut CalcEnv<'_>, missing: f64) -> Option<f64> {
+        self.skip();
+        match self.bytes.get(self.index) {
+            Some(&b')') => {
+                self.index += 1;
+                Some(missing)
+            }
+            Some(&b',') => {
+                self.index += 1;
+                let number = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                Some(number)
+            }
+            _ => None,
+        }
+    }
+
+    fn subtotal_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let kind = calc_num(self.compare(env)?)?;
+        if !kind.is_finite() {
+            return None;
+        }
+        let kind = kind.trunc();
+        let skip_hidden = if (1.0..=11.0).contains(&kind) {
+            false
+        } else if (101.0..=111.0).contains(&kind) {
+            true
+        } else {
+            return None;
+        };
+        let kind = if skip_hidden { kind - 100.0 } else { kind } as i32;
+        self.require_comma()?;
+        let mut numbers = Vec::new();
+        let mut counted = 0.0;
+        let mut seen = 0usize;
+        let mut args = 0usize;
+        loop {
+            args += 1;
+            if args > 16 {
+                return None;
+            }
+            self.subtotal_arg(&mut numbers, &mut counted, &mut seen, skip_hidden, env)?;
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => self.index += 1,
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        match kind {
+            1 if !numbers.is_empty() => {
+                let value = numbers.iter().sum::<f64>() / numbers.len() as f64;
+                value.is_finite().then_some(value)
+            }
+            2 => Some(numbers.len() as f64),
+            3 => Some(counted),
+            4 => numbers.into_iter().reduce(f64::max),
+            5 => numbers.into_iter().reduce(f64::min),
+            6 => {
+                let value = if numbers.is_empty() {
+                    0.0
+                } else {
+                    numbers.iter().product()
+                };
+                value.is_finite().then_some(value)
+            }
+            7 => stdev_excel(&numbers, true),
+            8 => stdev_excel(&numbers, false),
+            9 => Some(numbers.iter().sum()),
+            10 => var_excel(&numbers, true),
+            11 => var_excel(&numbers, false),
+            _ => None,
+        }
+    }
+
+    fn subtotal_arg(
+        &mut self,
+        numbers: &mut Vec<f64>,
+        counted: &mut f64,
+        seen: &mut usize,
+        skip_hidden: bool,
+        env: &mut CalcEnv<'_>,
+    ) -> Option<()> {
+        let saved = self.index;
+        if let Some((cells, rows, cols)) = self.cell_block(env) {
+            self.skip();
+            if matches!(self.bytes.get(self.index).copied(), Some(b',') | Some(b')')) {
+                self.subtotal_cells(&cells, rows, cols, numbers, counted, seen, skip_hidden, env)?;
+                return Some(());
+            }
+        }
+        self.index = saved;
+        self.skip();
+        if let Some(address) = self.cell_token() {
+            self.skip();
+            if matches!(self.bytes.get(self.index).copied(), Some(b',') | Some(b')')) {
+                self.subtotal_cells(&[address], 1, 1, numbers, counted, seen, skip_hidden, env)?;
+                return Some(());
+            }
+        }
+        self.index = saved;
+        let number = calc_num(self.compare(env)?)?;
+        if !number.is_finite() {
+            return None;
+        }
+        numbers.push(number);
+        *counted += 1.0;
+        Some(())
+    }
+
+    fn subtotal_cells(
+        &mut self,
+        cells: &[String],
+        rows: u32,
+        cols: u32,
+        numbers: &mut Vec<f64>,
+        counted: &mut f64,
+        seen: &mut usize,
+        skip_hidden: bool,
+        env: &mut CalcEnv<'_>,
+    ) -> Option<()> {
+        if rows == 0
+            || cols == 0
+            || rows.saturating_mul(cols) > 1024
+            || cells.len() != (rows * cols) as usize
+        {
+            return None;
+        }
+        *seen += cells.len();
+        if *seen > 4096 {
+            return None;
+        }
+        for address in cells {
+            let address = address.to_ascii_uppercase();
+            if env
+                .formulas
+                .get(&address)
+                .is_some_and(|formula| is_subtotal_formula(formula))
+            {
+                continue;
+            }
+            if skip_hidden
+                && split_address(&address).is_some_and(|(_, row)| env.hidden_rows.contains(&row))
+            {
+                continue;
+            }
+            match self.cell_value(&address, env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => {
+                    numbers.push(number);
+                    *counted += 1.0;
+                }
+                Some(CalcValue::Text(text)) if !text.is_empty() => *counted += 1.0,
+                Some(CalcValue::Num(_)) => return None,
+                _ => {}
+            }
+        }
+        Some(())
+    }
+
+    fn logic_args(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
+        let mut values = Vec::new();
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            return None;
+        }
+        loop {
+            self.push_logic(&mut values, env)?;
+            if values.len() > 256 {
+                return None;
+            }
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => self.index += 1,
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        if values.is_empty() {
+            None
+        } else {
+            Some(values)
+        }
+    }
+
+    fn push_logic(&mut self, values: &mut Vec<f64>, env: &mut CalcEnv<'_>) -> Option<()> {
+        let saved = self.index;
+        if let Some((cells, rows, cols)) = self.cell_block(env) {
+            self.skip();
+            if matches!(self.bytes.get(self.index).copied(), Some(b',') | Some(b')')) {
+                if rows == 0
+                    || cols == 0
+                    || rows.saturating_mul(cols) > 256
+                    || cells.len() != (rows * cols) as usize
+                {
+                    return None;
+                }
+                let before = values.len();
+                for address in cells {
+                    match self.cell_value(&address, env) {
+                        Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
+                        Some(CalcValue::Num(_)) => return None,
+                        _ => {}
+                    }
+                }
+                if values.len() == before {
+                    return None;
+                }
+                return Some(());
+            }
+        }
+        self.index = saved;
+        let number = calc_num(self.compare(env)?)?;
+        if !number.is_finite() {
+            return None;
+        }
+        values.push(number);
+        Some(())
+    }
+
+    fn quoted(&mut self) -> Option<String> {
+        if self.bytes.get(self.index) != Some(&b'"') {
+            return None;
+        }
+        self.index += 1;
+        let mut raw = Vec::new();
+        while let Some(byte) = self.bytes.get(self.index).copied() {
+            self.index += 1;
+            if byte == b'"' {
+                if self.bytes.get(self.index) == Some(&b'"') {
+                    self.index += 1;
+                    raw.push(b'"');
+                    continue;
+                }
+                return String::from_utf8(raw).ok();
+            }
+            raw.push(byte);
+        }
+        None
+    }
+
+    fn arg_list(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
+        let mut values = Vec::new();
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(values);
+        }
+        loop {
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                break;
+            }
+            match self.array_constant() {
+                ArrayConst::Invalid => return None,
+                ArrayConst::Values(items) => {
+                    for item in items {
+                        if let CalcValue::Num(value) = item {
+                            values.push(value);
+                        }
+                    }
+                }
+                ArrayConst::Absent => match self.ref_call(env) {
+                    RefCall::Invalid => return None,
+                    RefCall::Cells(cells) => {
+                        for address in cells {
+                            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                                values.push(value);
+                            }
+                        }
+                    }
+                    RefCall::Absent => {
+                        let saved = self.index;
+                        if let Some(cells) = self.three_d_cells(env) {
+                            for address in cells {
+                                if let Some(CalcValue::Num(value)) = self.cell_value(&address, env)
+                                {
+                                    values.push(value);
+                                }
+                            }
+                        } else if let Some(defined) = self.take_table(env) {
+                            let cells = named_addresses(&defined, env);
+                            if cells.is_empty() || cells.len() > 4096 {
+                                return None;
+                            }
+                            for address in cells {
+                                if let Some(CalcValue::Num(value)) = self.cell_value(&address, env)
+                                {
+                                    values.push(value);
+                                }
+                            }
+                        } else {
+                            match self.name_arg(env) {
+                                NameArg::Invalid => return None,
+                                NameArg::Cells(cells) => {
+                                    for address in cells {
+                                        if let Some(CalcValue::Num(value)) =
+                                            self.cell_value(&address, env)
+                                        {
+                                            values.push(value);
+                                        }
+                                    }
+                                }
+                                NameArg::Absent => {
+                                    if let Some(start) = self.cell_token() {
+                                        self.skip();
+                                        if self.bytes.get(self.index) == Some(&b':') {
+                                            self.index += 1;
+                                            self.skip();
+                                            let Some(end) = self.cell_token() else {
+                                                return None;
+                                            };
+                                            let Some(cells) = cells_in_range(&start, &end) else {
+                                                return None;
+                                            };
+                                            for address in cells {
+                                                if let Some(CalcValue::Num(value)) =
+                                                    self.cell_value(&address, env)
+                                                {
+                                                    values.push(value);
+                                                }
+                                            }
+                                        } else {
+                                            self.index = saved;
+                                            values.push(calc_num(self.expr(env)?)?);
+                                        }
+                                    } else {
+                                        self.index = saved;
+                                        values.push(calc_num(self.expr(env)?)?);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+            }
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => self.index += 1,
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        if values.len() > 4096 {
+            None
+        } else {
+            Some(values)
+        }
+    }
+
+    fn a_scalar(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        match self.compare(env)? {
+            CalcValue::Num(value) if value.is_finite() => Some(value),
+            CalcValue::Num(_) => None,
+            CalcValue::Text(_) => Some(0.0),
+        }
+    }
+
+    fn a_list(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
+        let mut values = Vec::new();
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(values);
+        }
+        loop {
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                break;
+            }
+            match self.array_constant() {
+                ArrayConst::Invalid => return None,
+                ArrayConst::Values(items) => {
+                    for item in items {
+                        match item {
+                            CalcValue::Num(value) => {
+                                if !value.is_finite() {
+                                    return None;
+                                }
+                                values.push(value);
+                            }
+                            CalcValue::Text(_) => values.push(0.0),
+                        }
+                    }
+                }
+                ArrayConst::Absent => match self.ref_call(env) {
+                    RefCall::Invalid => return None,
+                    RefCall::Cells(cells) => {
+                        for address in cells {
+                            match self.cell_value(&address, env) {
+                                Some(CalcValue::Num(value)) => {
+                                    if !value.is_finite() {
+                                        return None;
+                                    }
+                                    values.push(value);
+                                }
+                                Some(CalcValue::Text(_)) => values.push(0.0),
+                                None => {}
+                            }
+                        }
+                    }
+                    RefCall::Absent => {
+                        let saved = self.index;
+                        if let Some(cells) = self.three_d_cells(env) {
+                            for address in cells {
+                                match self.cell_value(&address, env) {
+                                    Some(CalcValue::Num(value)) => {
+                                        if !value.is_finite() {
+                                            return None;
+                                        }
+                                        values.push(value);
+                                    }
+                                    Some(CalcValue::Text(_)) => values.push(0.0),
+                                    None => {}
+                                }
+                            }
+                        } else if let Some(defined) = self.take_table(env) {
+                            let cells = named_addresses(&defined, env);
+                            if cells.is_empty() || cells.len() > 4096 {
+                                return None;
+                            }
+                            for address in cells {
+                                match self.cell_value(&address, env) {
+                                    Some(CalcValue::Num(value)) => {
+                                        if !value.is_finite() {
+                                            return None;
+                                        }
+                                        values.push(value);
+                                    }
+                                    Some(CalcValue::Text(_)) => values.push(0.0),
+                                    None => {}
+                                }
+                            }
+                        } else {
+                            match self.name_arg(env) {
+                                NameArg::Invalid => return None,
+                                NameArg::Cells(cells) => {
+                                    for address in cells {
+                                        match self.cell_value(&address, env) {
+                                            Some(CalcValue::Num(value)) => {
+                                                if !value.is_finite() {
+                                                    return None;
+                                                }
+                                                values.push(value);
+                                            }
+                                            Some(CalcValue::Text(_)) => values.push(0.0),
+                                            None => {}
+                                        }
+                                    }
+                                }
+                                NameArg::Absent => {
+                                    if let Some(start) = self.cell_token() {
+                                        self.skip();
+                                        if self.bytes.get(self.index) == Some(&b':') {
+                                            self.index += 1;
+                                            self.skip();
+                                            let Some(end) = self.cell_token() else {
+                                                return None;
+                                            };
+                                            let Some(cells) = cells_in_range(&start, &end) else {
+                                                return None;
+                                            };
+                                            for address in cells {
+                                                match self.cell_value(&address, env) {
+                                                    Some(CalcValue::Num(value)) => {
+                                                        if !value.is_finite() {
+                                                            return None;
+                                                        }
+                                                        values.push(value);
+                                                    }
+                                                    Some(CalcValue::Text(_)) => values.push(0.0),
+                                                    None => {}
+                                                }
+                                            }
+                                        } else {
+                                            self.index = saved;
+                                            values.push(self.a_scalar(env)?);
+                                        }
+                                    } else {
+                                        self.index = saved;
+                                        values.push(self.a_scalar(env)?);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+            }
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => self.index += 1,
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        if values.len() > 4096 {
+            None
+        } else {
+            Some(values)
+        }
+    }
+
+    fn tally_args(&mut self, env: &mut CalcEnv<'_>) -> Option<(f64, f64)> {
+        let mut present = 0.0;
+        let mut blank = 0.0;
+        let mut seen = 0usize;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some((0.0, 0.0));
+        }
+        loop {
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                break;
+            }
+            match self.array_constant() {
+                ArrayConst::Invalid => return None,
+                ArrayConst::Values(items) => {
+                    for item in items {
+                        seen += 1;
+                        if seen > 4096 {
+                            return None;
+                        }
+                        note_presence(&item, &mut present, &mut blank)?;
+                    }
+                }
+                ArrayConst::Absent => match self.ref_call(env) {
+                    RefCall::Invalid => return None,
+                    RefCall::Cells(cells) => {
+                        for address in cells {
+                            seen += 1;
+                            if seen > 4096 {
+                                return None;
+                            }
+                            match self.cell_value(&address, env) {
+                                Some(value) => note_presence(&value, &mut present, &mut blank)?,
+                                None => blank += 1.0,
+                            }
+                        }
+                    }
+                    RefCall::Absent => {
+                        let saved = self.index;
+                        if let Some(cells) = self.three_d_cells(env) {
+                            for address in cells {
+                                seen += 1;
+                                if seen > 4096 {
+                                    return None;
+                                }
+                                match self.cell_value(&address, env) {
+                                    Some(value) => note_presence(&value, &mut present, &mut blank)?,
+                                    None => blank += 1.0,
+                                }
+                            }
+                        } else if let Some(defined) = self.take_table(env) {
+                            let cells = named_addresses(&defined, env);
+                            for address in cells {
+                                seen += 1;
+                                if seen > 4096 {
+                                    return None;
+                                }
+                                match self.cell_value(&address, env) {
+                                    Some(value) => note_presence(&value, &mut present, &mut blank)?,
+                                    None => blank += 1.0,
+                                }
+                            }
+                        } else {
+                            match self.name_arg(env) {
+                                NameArg::Invalid => return None,
+                                NameArg::Cells(cells) => {
+                                    for address in cells {
+                                        seen += 1;
+                                        if seen > 4096 {
+                                            return None;
+                                        }
+                                        match self.cell_value(&address, env) {
+                                            Some(value) => {
+                                                note_presence(&value, &mut present, &mut blank)?
+                                            }
+                                            None => blank += 1.0,
+                                        }
+                                    }
+                                }
+                                NameArg::Absent => {
+                                    if let Some(start) = self.cell_token() {
+                                        self.skip();
+                                        if self.bytes.get(self.index) == Some(&b':') {
+                                            self.index += 1;
+                                            self.skip();
+                                            let Some(end) = self.cell_token() else {
+                                                return None;
+                                            };
+                                            let Some(cells) = cells_in_range(&start, &end) else {
+                                                return None;
+                                            };
+                                            for address in cells {
+                                                seen += 1;
+                                                if seen > 4096 {
+                                                    return None;
+                                                }
+                                                match self.cell_value(&address, env) {
+                                                    Some(value) => note_presence(
+                                                        &value,
+                                                        &mut present,
+                                                        &mut blank,
+                                                    )?,
+                                                    None => blank += 1.0,
+                                                }
+                                            }
+                                        } else {
+                                            self.index = saved;
+                                            seen += 1;
+                                            note_presence(
+                                                &self.expr(env)?,
+                                                &mut present,
+                                                &mut blank,
+                                            )?;
+                                        }
+                                    } else {
+                                        self.index = saved;
+                                        seen += 1;
+                                        note_presence(&self.expr(env)?, &mut present, &mut blank)?;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+            }
+            if seen > 4096 {
+                return None;
+            }
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => self.index += 1,
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        Some((present, blank))
+    }
+
+    fn concat_args(&mut self, env: &mut CalcEnv<'_>) -> Option<String> {
+        let mut parts = Vec::new();
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(String::new());
+        }
+        loop {
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                break;
+            }
+            let saved = self.index;
+            if let Some(start) = self.cell_token() {
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b':') {
+                    self.index += 1;
+                    self.skip();
+                    let Some(end) = self.cell_token() else {
+                        return None;
+                    };
+                    let Some(cells) = cells_in_range(&start, &end) else {
+                        return None;
+                    };
+                    for address in cells {
+                        if let Some(value) = self.cell_value(&address, env) {
+                            parts.push(calc_text(&value));
+                        }
+                    }
+                } else {
+                    self.index = saved;
+                    parts.push(calc_text(&self.expr(env)?));
+                }
+            } else {
+                self.index = saved;
+                parts.push(calc_text(&self.expr(env)?));
+            }
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => self.index += 1,
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        if parts.len() > 4096 {
+            None
+        } else {
+            Some(parts.concat())
+        }
+    }
+
+    fn join_parts(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<String>> {
+        let mut parts = Vec::new();
+        loop {
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                break;
+            }
+            let saved = self.index;
+            if let Some(start) = self.cell_token() {
+                self.skip();
+                if self.bytes.get(self.index) == Some(&b':') {
+                    self.index += 1;
+                    self.skip();
+                    let Some(end) = self.cell_token() else {
+                        return None;
+                    };
+                    let Some(cells) = cells_in_range(&start, &end) else {
+                        return None;
+                    };
+                    for address in cells {
+                        match self.cell_value(&address, env) {
+                            Some(value) => parts.push(calc_text(&value)),
+                            None => parts.push(String::new()),
+                        }
+                    }
+                } else {
+                    self.index = saved;
+                    parts.push(calc_text(&self.expr(env)?));
+                }
+            } else {
+                self.index = saved;
+                parts.push(calc_text(&self.expr(env)?));
+            }
+            if parts.len() > 4096 {
+                return None;
+            }
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => self.index += 1,
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        Some(parts)
+    }
+
+    fn database(&mut self, env: &mut CalcEnv<'_>, kind: &str) -> Option<f64> {
+        let (cells, rows, cols) = self.cell_block(env)?;
+        if rows < 2 || cols == 0 || rows > 1024 || cells.len() != (rows as usize) * (cols as usize)
+        {
+            return None;
+        }
+        self.require_comma()?;
+        let field = self.compare(env)?;
+        self.require_comma()?;
+        let (criteria, crit_rows, crit_cols) = self.cell_block(env)?;
+        self.close_paren()?;
+        if !(2..=8).contains(&crit_rows)
+            || crit_cols == 0
+            || crit_cols > 32
+            || criteria.len() != (crit_rows as usize) * (crit_cols as usize)
+        {
+            return None;
+        }
+        let mut headers = Vec::with_capacity(cols as usize);
+        for col in 0..cols {
+            headers.push(header_label(
+                self.cell_value(&cells[col as usize], env).as_ref(),
+            ));
+        }
+        let field_col = match &field {
+            CalcValue::Num(number) if number.is_finite() => {
+                let col = number.trunc();
+                if col < 1.0 || col > f64::from(cols) {
+                    return None;
+                }
+                (col as u32) - 1
+            }
+            CalcValue::Text(text) => {
+                let want = text.trim().to_ascii_lowercase();
+                if want.is_empty() {
+                    return None;
+                }
+                headers
+                    .iter()
+                    .position(|item| item.as_deref() == Some(want.as_str()))? as u32
+            }
+            _ => return None,
+        };
+        let mut criteria_rows = Vec::new();
+        for crit_row in 1..crit_rows {
+            let mut filters = Vec::new();
+            for col in 0..crit_cols {
+                let header = header_label(self.cell_value(&criteria[col as usize], env).as_ref());
+                let Some(name) = header else {
+                    continue;
+                };
+                let value = self.cell_value(&criteria[(crit_row * crit_cols + col) as usize], env);
+                if value.as_ref().is_none_or(|item| match item {
+                    CalcValue::Text(text) => text.trim().is_empty(),
+                    CalcValue::Num(_) => false,
+                }) {
+                    continue;
+                }
+                let value = value?;
+                let Some(db_col) = headers
+                    .iter()
+                    .position(|item| item.as_deref() == Some(name.as_str()))
+                else {
+                    return None;
+                };
+                filters.push((db_col as u32, value));
+            }
+            criteria_rows.push(filters);
+        }
+        let mut numbers = Vec::new();
+        let mut counted = 0.0;
+        for row in 1..rows {
+            let mut matched = false;
+            for filters in &criteria_rows {
+                let mut row_ok = true;
+                for (col, criterion) in filters {
+                    let at = (row * cols + col) as usize;
+                    let cell = self.cell_value(&cells[at], env);
+                    if !criterion_holds(cell.as_ref(), criterion)? {
+                        row_ok = false;
+                        break;
+                    }
+                }
+                if row_ok {
+                    matched = true;
+                    break;
+                }
+            }
+            if !matched {
+                continue;
+            }
+            let at = (row * cols + field_col) as usize;
+            match self.cell_value(&cells[at], env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => {
+                    numbers.push(number);
+                    counted += 1.0;
+                }
+                Some(CalcValue::Text(text)) if !text.is_empty() => counted += 1.0,
+                _ => {}
+            }
+        }
+        let count_all = kind.eq_ignore_ascii_case("DCOUNTA");
+        if count_all {
+            return Some(counted);
+        }
+        if kind.eq_ignore_ascii_case("DCOUNT") {
+            return Some(numbers.len() as f64);
+        }
+        if kind.eq_ignore_ascii_case("DSUM") {
+            let total = numbers.iter().sum::<f64>();
+            return total.is_finite().then_some(total);
+        }
+        if numbers.is_empty() {
+            return None;
+        }
+        if kind.eq_ignore_ascii_case("DAVERAGE") {
+            let average = numbers.iter().sum::<f64>() / numbers.len() as f64;
+            return average.is_finite().then_some(average);
+        }
+        if kind.eq_ignore_ascii_case("DMIN") {
+            return numbers.into_iter().reduce(f64::min);
+        }
+        if kind.eq_ignore_ascii_case("DMAX") {
+            return numbers.into_iter().reduce(f64::max);
+        }
+        None
+    }
+
+    fn sum_if(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let total: f64 = self.if_hits(env)?.numbers.iter().sum();
+        if total.is_finite() {
+            Some(total)
+        } else {
+            None
+        }
+    }
+
+    fn if_hits(&mut self, env: &mut CalcEnv<'_>) -> Option<IfHits> {
+        self.skip();
+        let cells = self.cell_range(env)?;
+        self.require_comma()?;
+        let criteria = self.compare(env)?;
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b')') {
+            return None;
+        }
+        self.index += 1;
+        let numeric = compile_criterion(&criteria);
+        let wildcard = numeric.is_none() && criterion_is_wildcard(&criteria);
+        if numeric.is_none() && !wildcard {
+            return None;
+        }
+        let mut numbers = Vec::new();
+        let mut count = 0.0;
+        for address in cells {
+            let value = self.cell_value(&address, env);
+            let holds = if let Some((op, target)) = numeric {
+                match &value {
+                    Some(CalcValue::Num(number)) if number.is_finite() => {
+                        number_matches(*number, op, target)
+                    }
+                    _ => false,
+                }
+            } else {
+                criterion_holds(value.as_ref(), &criteria)?
+            };
+            if !holds {
+                continue;
+            }
+            count += 1.0;
+            if let Some(CalcValue::Num(number)) = value {
+                if number.is_finite() {
+                    numbers.push(number);
+                }
+            }
+        }
+        Some(IfHits { numbers, count })
+    }
+
+    fn take_table(&mut self, env: &CalcEnv<'_>) -> Option<DefinedRef> {
+        let saved = self.index;
+        self.skip();
+        let Some(table) = self.word() else {
+            self.index = saved;
+            return None;
+        };
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b'[') {
+            self.index = saved;
+            return None;
+        }
+        self.index += 1;
+        if matches!(self.bytes.get(self.index), Some(b'[' | b'#')) {
+            self.index = saved;
+            return None;
+        }
+        let start = self.index;
+        while let Some(byte) = self.bytes.get(self.index).copied() {
+            if byte == b']' {
+                break;
+            }
+            if byte == b'[' {
+                self.index = saved;
+                return None;
+            }
+            self.index += 1;
+        }
+        if self.bytes.get(self.index) != Some(&b']') {
+            self.index = saved;
+            return None;
+        }
+        let column = std::str::from_utf8(&self.bytes[start..self.index])
+            .ok()?
+            .trim();
+        if column.is_empty() || column.chars().count() > 255 {
+            self.index = saved;
+            return None;
+        }
+        self.index += 1;
+        let defined = env
+            .names
+            .tables
+            .get(&(table.to_ascii_lowercase(), column.to_ascii_lowercase()))
+            .cloned();
+        if defined.is_none() {
+            self.index = saved;
+        }
+        defined
+    }
+
+    fn take_name(&mut self, env: &CalcEnv<'_>) -> Option<DefinedRef> {
+        let saved = self.index;
+        self.skip();
+        let Some(word) = self.word() else {
+            self.index = saved;
+            return None;
+        };
+        if is_cell_address(&word) {
+            self.index = saved;
+            return None;
+        }
+        self.skip();
+        if matches!(self.bytes.get(self.index), Some(b'(' | b'!')) {
+            self.index = saved;
+            return None;
+        }
+        if env.hide_book_names {
+            self.index = saved;
+            return None;
+        }
+        let defined = env
+            .names
+            .get(env.sheet, &word.to_ascii_lowercase())
+            .cloned();
+        if defined.is_none() {
+            self.index = saved;
+        }
+        defined
+    }
+
+    fn name_arg(&mut self, env: &CalcEnv<'_>) -> NameArg {
+        let saved = self.index;
+        let Some(defined) = self.take_name(env) else {
+            return NameArg::Absent;
+        };
+        if defined.formula.is_some() {
+            self.index = saved;
+            return NameArg::Absent;
+        }
+        self.skip();
+        match self.bytes.get(self.index).copied() {
+            Some(b',' | b')') => NameArg::Cells(named_addresses(&defined, env)),
+            _ if defined.cells.len() == 1 => {
+                self.index = saved;
+                NameArg::Absent
+            }
+            _ => NameArg::Invalid,
+        }
+    }
+
+    fn three_d_cells(&mut self, env: &CalcEnv<'_>) -> Option<Vec<String>> {
+        let saved = self.index;
+        match self.parse_three_d(env) {
+            Some(cells) => Some(cells),
+            None => {
+                self.index = saved;
+                None
+            }
+        }
+    }
+
+    fn parse_three_d(&mut self, env: &CalcEnv<'_>) -> Option<Vec<String>> {
+        self.skip();
+        let start_sheet = if self.bytes.get(self.index) == Some(&b'\'') {
+            self.quoted_sheet()?
+        } else {
+            let word = self.word()?;
+            if is_cell_address(&word) {
+                return None;
+            }
+            word
+        };
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b':') {
+            return None;
+        }
+        self.index += 1;
+        self.skip();
+        let end_sheet = if self.bytes.get(self.index) == Some(&b'\'') {
+            self.quoted_sheet()?
+        } else {
+            let word = self.word()?;
+            if is_cell_address(&word) {
+                return None;
+            }
+            word
+        };
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b'!') {
+            return None;
+        }
+        self.index += 1;
+        let start_cell = self.cell_token()?;
+        self.skip();
+        let cells = if self.bytes.get(self.index) == Some(&b':') {
+            self.index += 1;
+            let end_cell = self.cell_token()?;
+            cells_in_range(&start_cell, &end_cell)?
+        } else {
+            vec![start_cell.to_ascii_uppercase()]
+        };
+        let start = start_sheet.to_ascii_lowercase();
+        let end = end_sheet.to_ascii_lowercase();
+        let start_at = env.sheet_order.iter().position(|name| name == &start)?;
+        let end_at = env.sheet_order.iter().position(|name| name == &end)?;
+        let (low, high) = if start_at <= end_at {
+            (start_at, end_at)
+        } else {
+            (end_at, start_at)
+        };
+        if high - low + 1 > 32 {
+            return None;
+        }
+        let mut out = Vec::new();
+        for name in &env.sheet_order[low..=high] {
+            for cell in &cells {
+                out.push(format!("{name}!{cell}"));
+                if out.len() > 4096 {
+                    return None;
+                }
+            }
+        }
+        if out.is_empty() {
+            None
+        } else {
+            Some(out)
+        }
+    }
+
+    fn array_constant(&mut self) -> ArrayConst {
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b'{') {
+            return ArrayConst::Absent;
+        }
+        self.index += 1;
+        let mut values = Vec::new();
+        let mut width = None;
+        let mut cols = 0u32;
+        let mut expect = true;
+        loop {
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b'}') => {
+                    if expect || values.is_empty() {
+                        return ArrayConst::Invalid;
+                    }
+                    if let Some(expected) = width {
+                        if cols != expected {
+                            return ArrayConst::Invalid;
+                        }
+                    }
+                    self.index += 1;
+                    break;
+                }
+                _ if !expect => return ArrayConst::Invalid,
+                _ => {}
+            }
+            let Some(value) = self.array_item() else {
+                return ArrayConst::Invalid;
+            };
+            values.push(value);
+            if values.len() > 4096 {
+                return ArrayConst::Invalid;
+            }
+            cols += 1;
+            expect = false;
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b',') => {
+                    self.index += 1;
+                    expect = true;
+                }
+                Some(b';') => {
+                    if let Some(expected) = width {
+                        if cols != expected {
+                            return ArrayConst::Invalid;
+                        }
+                    } else {
+                        width = Some(cols);
+                    }
+                    cols = 0;
+                    self.index += 1;
+                    expect = true;
+                }
+                Some(b'}') => {}
+                _ => return ArrayConst::Invalid,
+            }
+        }
+        if values.is_empty() {
+            ArrayConst::Invalid
+        } else {
+            ArrayConst::Values(values)
+        }
+    }
+
+    fn array_item(&mut self) -> Option<CalcValue> {
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b'"') {
+            return self.quoted().map(CalcValue::Text);
+        }
+        if self.bytes.get(self.index) == Some(&b'{') {
+            return None;
+        }
+        let negative = if self.bytes.get(self.index) == Some(&b'-') {
+            self.index += 1;
+            self.skip();
+            true
+        } else if self.bytes.get(self.index) == Some(&b'+') {
+            self.index += 1;
+            self.skip();
+            false
+        } else {
+            false
+        };
+        let number = self.number()?;
+        if !number.is_finite() {
+            return None;
+        }
+        Some(CalcValue::Num(if negative { -number } else { number }))
+    }
+
+    fn ref_call(&mut self, env: &mut CalcEnv<'_>) -> RefCall {
+        let saved = self.index;
+        self.skip();
+        let Some(word) = self.word() else {
+            self.index = saved;
+            return RefCall::Absent;
+        };
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b'(') {
+            self.index = saved;
+            return RefCall::Absent;
+        }
+        let indirect = if word.eq_ignore_ascii_case("INDIRECT") {
+            true
+        } else if word.eq_ignore_ascii_case("OFFSET") {
+            false
+        } else {
+            self.index = saved;
+            return RefCall::Absent;
+        };
+        self.index += 1;
+        let cells = if indirect {
+            self.indirect_cells(env)
+        } else {
+            self.offset_cells(env)
+        };
+        match cells {
+            Some(cells) if !cells.is_empty() => RefCall::Cells(cells),
+            _ => RefCall::Invalid,
+        }
+    }
+
+    fn indirect_cells(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<String>> {
+        let text = calc_text(&self.compare(env)?);
+        self.close_paren()?;
+        indirect_addresses(&text)
+    }
+
+    fn offset_cells(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<String>> {
+        let (sheet, col, row, mut height, mut width) = self.offset_anchor(env)?;
+        self.require_comma()?;
+        let down = trunc_offset(calc_num(self.compare(env)?)?)?;
+        self.require_comma()?;
+        let right = trunc_offset(calc_num(self.compare(env)?)?)?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b',') {
+            self.index += 1;
+            height = positive_span(calc_num(self.compare(env)?)?)?;
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b',') {
+                self.index += 1;
+                width = positive_span(calc_num(self.compare(env)?)?)?;
+            }
+        }
+        self.close_paren()?;
+        if height > 256 || width > 256 || height.saturating_mul(width) > 4096 {
+            return None;
+        }
+        let col = shift_index(col, right, 16384)?;
+        let row = shift_index(row, down, 9_999_999)?;
+        let mut cells = Vec::new();
+        for down_row in 0..height {
+            for right_col in 0..width {
+                let cell_col = col.checked_add(right_col)?;
+                let cell_row = row.checked_add(down_row)?;
+                if cell_col > 16384 || cell_row > 9_999_999 {
+                    return None;
+                }
+                let name = column_name(cell_col);
+                if name.is_empty() || name.len() > 3 {
+                    return None;
+                }
+                let address = format!("{name}{cell_row}");
+                cells.push(match &sheet {
+                    Some(sheet) => format!("{sheet}!{address}"),
+                    None => address,
+                });
+            }
+        }
+        Some(cells)
+    }
+
+    fn offset_anchor(
+        &mut self,
+        env: &mut CalcEnv<'_>,
+    ) -> Option<(Option<String>, u32, u32, u32, u32)> {
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b'\'') {
+            let name = self.quoted_sheet()?;
+            self.skip();
+            if self.bytes.get(self.index) != Some(&b'!') {
+                return None;
+            }
+            self.index += 1;
+            return self.offset_local(Some(name.to_ascii_lowercase()));
+        }
+        let word = self.word()?;
+        self.skip();
+        if word.eq_ignore_ascii_case("INDIRECT") {
+            if self.bytes.get(self.index) != Some(&b'(') {
+                return None;
+            }
+            self.index += 1;
+            return rectangle(&self.indirect_cells(env)?);
+        }
+        if self.bytes.get(self.index) == Some(&b'!') {
+            if is_cell_address(&word) || word.chars().count() > 31 {
+                return None;
+            }
+            self.index += 1;
+            return self.offset_local(Some(word.to_ascii_lowercase()));
+        }
+        if is_cell_address(&word) {
+            return self.offset_from_cell(None, &word);
+        }
+        None
+    }
+
+    fn offset_local(
+        &mut self,
+        sheet: Option<String>,
+    ) -> Option<(Option<String>, u32, u32, u32, u32)> {
+        self.skip();
+        let start = self.cell_token()?;
+        self.offset_from_cell(sheet, &start)
+    }
+
+    fn offset_from_cell(
+        &mut self,
+        sheet: Option<String>,
+        start: &str,
+    ) -> Option<(Option<String>, u32, u32, u32, u32)> {
+        self.skip();
+        let end = if self.bytes.get(self.index) == Some(&b':') {
+            self.index += 1;
+            self.skip();
+            Some(self.cell_token()?)
+        } else {
+            None
+        };
+        let cells = if let Some(end) = end {
+            let cells = cells_in_range(start, &end)?;
+            match sheet {
+                Some(sheet) => cells
+                    .into_iter()
+                    .map(|cell| format!("{sheet}!{cell}"))
+                    .collect(),
+                None => cells,
+            }
+        } else if let Some(sheet) = sheet {
+            vec![format!("{sheet}!{start}")]
+        } else {
+            vec![start.to_string()]
+        };
+        rectangle(&cells)
+    }
+
+    fn cell_range(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<String>> {
+        match self.ref_call(env) {
+            RefCall::Invalid => return None,
+            RefCall::Cells(cells) => return Some(cells),
+            RefCall::Absent => {}
+        }
+        if let Some(cells) = self.three_d_cells(env) {
+            return Some(cells);
+        }
+        if let Some(defined) = self.take_table(env) {
+            let cells = named_addresses(&defined, env);
+            if cells.is_empty() || cells.len() > 4096 {
+                return None;
+            }
+            return Some(cells);
+        }
+        if let Some(defined) = self.take_name(env) {
+            let cells = named_addresses(&defined, env);
+            if cells.is_empty() || cells.len() > 4096 {
+                return None;
+            }
+            return Some(cells);
+        }
+        self.skip();
+        let start = self.cell_token()?;
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b':') {
+            return None;
+        }
+        self.index += 1;
+        self.skip();
+        let end = self.cell_token()?;
+        cells_in_range(&start, &end)
+    }
+
+    fn finite_range(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
+        let cells = self.cell_range(env)?;
+        if cells.len() > 128 {
+            return None;
+        }
+        let mut values = Vec::with_capacity(cells.len());
+        for address in cells {
+            let Some(CalcValue::Num(number)) = self.cell_value(&address, env) else {
+                return None;
+            };
+            if !number.is_finite() {
+                return None;
+            }
+            values.push(number);
+        }
+        Some(values)
+    }
+
+    fn cell_block(&mut self, env: &mut CalcEnv<'_>) -> Option<(Vec<String>, u32, u32)> {
+        match self.ref_call(env) {
+            RefCall::Invalid => return None,
+            RefCall::Cells(cells) => {
+                let (_sheet, _col, _row, height, width) = rectangle(&cells)?;
+                return Some((cells, height, width));
+            }
+            RefCall::Absent => {}
+        }
+        if let Some(defined) = self.take_table(env) {
+            let cells = named_addresses(&defined, env);
+            if cells.is_empty() {
+                return None;
+            }
+            return Some((cells, defined.rows, defined.cols));
+        }
+        if let Some(defined) = self.take_name(env) {
+            let cells = named_addresses(&defined, env);
+            if cells.is_empty() {
+                return None;
+            }
+            return Some((cells, defined.rows, defined.cols));
+        }
+        self.skip();
+        let start = self.cell_token()?;
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b':') {
+            return None;
+        }
+        self.index += 1;
+        self.skip();
+        let end = self.cell_token()?;
+        let (c1, r1) = split_address(&start)?;
+        let (c2, r2) = split_address(&end)?;
+        let rows = r1.abs_diff(r2) + 1;
+        let cols = c1.abs_diff(c2) + 1;
+        let cells = cells_in_range(&start, &end)?;
+        Some((cells, rows, cols))
+    }
+
+    fn rank_call(&mut self, env: &mut CalcEnv<'_>, average: bool) -> Option<f64> {
+        let number = calc_num(self.compare(env)?)?;
+        self.require_comma()?;
+        let cells = self.cell_range(env)?;
+        self.skip();
+        let ascending = match self.bytes.get(self.index) {
+            Some(&b')') => {
+                self.index += 1;
+                false
+            }
+            Some(&b',') => {
+                self.index += 1;
+                let order = calc_num(self.compare(env)?)?;
+                if !order.is_finite() {
+                    return None;
+                }
+                self.close_paren()?;
+                order != 0.0
+            }
+            _ => return None,
+        };
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        if average {
+            rank_avg_excel(number, &values, ascending)
+        } else {
+            rank_excel(number, &values, ascending)
+        }
+    }
+
+    fn percentile_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let cells = self.cell_range(env)?;
+        self.require_comma()?;
+        let k = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        percentile_inc_excel(&mut values, k)
+    }
+
+    fn percentile_exc_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let cells = self.cell_range(env)?;
+        self.require_comma()?;
+        let k = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        percentile_exc_excel(&mut values, k)
+    }
+
+    fn quartile_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let cells = self.cell_range(env)?;
+        self.require_comma()?;
+        let quart = calc_num(self.compare(env)?)?;
+        if !quart.is_finite() {
+            return None;
+        }
+        self.close_paren()?;
+        let quart = quart.trunc();
+        if !(0.0..=4.0).contains(&quart) {
+            return None;
+        }
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        percentile_inc_excel(&mut values, quart / 4.0)
+    }
+
+    fn quartile_exc_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let cells = self.cell_range(env)?;
+        self.require_comma()?;
+        let quart = calc_num(self.compare(env)?)?;
+        if !quart.is_finite() {
+            return None;
+        }
+        self.close_paren()?;
+        let quart = quart.trunc();
+        if !(1.0..=3.0).contains(&quart) {
+            return None;
+        }
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        percentile_exc_excel(&mut values, quart / 4.0)
+    }
+
+    fn mode_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let cells = self.cell_range(env)?;
+        self.close_paren()?;
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        mode_excel(&values)
+    }
+
+    fn percent_rank_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let cells = self.cell_range(env)?;
+        self.require_comma()?;
+        let x_value = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        percent_rank_inc(&mut values, x_value)
+    }
+
+    fn percent_rank_exc_call(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let cells = self.cell_range(env)?;
+        self.require_comma()?;
+        let x_value = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(value)) = self.cell_value(&address, env) {
+                if value.is_finite() {
+                    values.push(value);
+                }
+            }
+        }
+        percent_rank_exc(&mut values, x_value)
+    }
+
+    /// Y range then X range, same length. A pair is kept when both cells are finite numbers.
+    fn range_numbers(&mut self, cells: &[String], env: &mut CalcEnv<'_>) -> Vec<f64> {
+        let mut values = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(number)) = self.cell_value(address, env) {
+                if number.is_finite() {
+                    values.push(number);
+                }
+            }
+        }
+        values
+    }
+
+    fn paired_ranges(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<(f64, f64)>> {
+        let ys = self.cell_range(env)?;
+        self.require_comma()?;
+        let xs = self.cell_range(env)?;
+        if ys.len() != xs.len() {
+            return None;
+        }
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b')') {
+            return None;
+        }
+        self.index += 1;
+        let mut pairs = Vec::new();
+        for (y_address, x_address) in ys.iter().zip(xs) {
+            let Some(CalcValue::Num(y)) = self.cell_value(y_address, env) else {
+                continue;
+            };
+            let Some(CalcValue::Num(x)) = self.cell_value(&x_address, env) else {
+                continue;
+            };
+            if y.is_finite() && x.is_finite() {
+                pairs.push((y, x));
+            }
+        }
+        Some(pairs)
+    }
+
+    /// One value range, one criteria range, and one criterion. The ranges must match in size.
+    fn ifs_values(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
+        let values = self.cell_range(env)?;
+        self.require_comma()?;
+        let criteria_cells = self.cell_range(env)?;
+        if values.len() != criteria_cells.len() {
+            return None;
+        }
+        self.require_comma()?;
+        let criteria = self.compare(env)?;
+        let numeric = compile_criterion(&criteria);
+        let wildcard = numeric.is_none() && criterion_is_wildcard(&criteria);
+        if numeric.is_none() && !wildcard {
+            return None;
+        }
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b')') {
+            return None;
+        }
+        self.index += 1;
+        let mut matched = Vec::new();
+        for (value_address, criteria_address) in values.iter().zip(criteria_cells) {
+            let criterion_cell = self.cell_value(&criteria_address, env);
+            let holds = if let Some((op, target)) = numeric {
+                match &criterion_cell {
+                    Some(CalcValue::Num(number)) if number.is_finite() => {
+                        number_matches(*number, op, target)
+                    }
+                    _ => false,
+                }
+            } else {
+                criterion_holds(criterion_cell.as_ref(), &criteria)?
+            };
+            if !holds {
+                continue;
+            }
+            let Some(CalcValue::Num(number)) = self.cell_value(value_address, env) else {
+                continue;
+            };
+            if number.is_finite() {
+                matched.push(number);
+            }
+        }
+        Some(matched)
+    }
+
+    fn sum_product(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let mut ranges: Vec<Vec<f64>> = Vec::new();
+        loop {
+            self.skip();
+            if self.bytes.get(self.index) == Some(&b')') {
+                if ranges.is_empty() {
+                    return None;
+                }
+                self.index += 1;
+                break;
+            }
+            let cells = self.cell_range(env)?;
+            if ranges.len() == 8 {
+                return None;
+            }
+            if ranges
+                .first()
+                .is_some_and(|first| first.len() != cells.len())
+            {
+                return None;
+            }
+            let mut values = Vec::with_capacity(cells.len());
+            for address in cells {
+                let number = match self.cell_value(&address, env) {
+                    Some(CalcValue::Num(number)) if number.is_finite() => number,
+                    Some(CalcValue::Num(_)) => return None,
+                    _ => 0.0,
+                };
+                values.push(number);
+            }
+            ranges.push(values);
+            self.skip();
+            match self.bytes.get(self.index) {
+                Some(&b',') => self.index += 1,
+                Some(&b')') => {
+                    self.index += 1;
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        let width = ranges.first()?.len();
+        let mut total = 0.0;
+        for index in 0..width {
+            let mut product = 1.0;
+            for range in &ranges {
+                product *= range[index];
+            }
+            if !product.is_finite() {
+                return None;
+            }
+            total += product;
+        }
+        if total.is_finite() {
+            Some(total)
+        } else {
+            None
+        }
+    }
+
+    fn number(&mut self) -> Option<f64> {
+        let start = self.index;
+        while self
+            .bytes
+            .get(self.index)
+            .is_some_and(|byte| byte.is_ascii_digit() || *byte == b'.')
+        {
+            self.index += 1;
+        }
+        std::str::from_utf8(&self.bytes[start..self.index])
+            .ok()?
+            .parse()
+            .ok()
+    }
+
+    fn word(&mut self) -> Option<String> {
+        let start = self.index;
+        while let Some(byte) = self.bytes.get(self.index).copied() {
+            if byte.is_ascii_alphanumeric() || byte == b'$' || byte == b'_' {
+                self.index += 1;
+                continue;
+            }
+            if byte == b'.'
+                && self
+                    .bytes
+                    .get(self.index + 1)
+                    .is_some_and(|next| next.is_ascii_alphanumeric())
+            {
+                self.index += 1;
+                continue;
+            }
+            break;
+        }
+        if start == self.index {
+            return None;
+        }
+        Some(String::from_utf8_lossy(&self.bytes[start..self.index]).replace('$', ""))
+    }
+
+    fn cell_token(&mut self) -> Option<String> {
+        let word = self.word()?;
+        if is_cell_address(&word) {
+            Some(word)
+        } else {
+            None
+        }
+    }
+
+    fn column_numbers(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
+        let (cells, rows, cols) = self.cell_block(env)?;
+        if cols != 1 || rows == 0 || rows > 256 || cells.len() != rows as usize {
+            return None;
+        }
+        let mut values = Vec::new();
+        for address in cells {
+            match self.cell_value(&address, env) {
+                None => {}
+                Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
+                _ => return None,
+            }
+        }
+        Some(values)
+    }
+
+    fn block_numbers(&mut self, env: &mut CalcEnv<'_>) -> Option<(Vec<f64>, u32, u32)> {
+        let (cells, rows, cols) = self.cell_block(env)?;
+        if rows == 0
+            || cols == 0
+            || rows > 256
+            || cols > 16
+            || cells.len() != (rows * cols) as usize
+        {
+            return None;
+        }
+        let mut values = Vec::with_capacity(cells.len());
+        for address in cells {
+            match self.cell_value(&address, env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
+                _ => return None,
+            }
+        }
+        Some((values, rows, cols))
+    }
+
+    fn take_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let (values, rows, cols) = self.block_numbers(env)?;
+        self.require_comma()?;
+        let row_count = span_count(calc_num(self.compare(env)?)?)?;
+        self.skip();
+        let col_count = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            i64::from(cols)
+        } else {
+            self.require_comma()?;
+            let count = span_count(calc_num(self.compare(env)?)?)?;
+            self.close_paren()?;
+            count
+        };
+        let (row0, height) = take_bounds(rows, row_count)?;
+        let (col0, width) = take_bounds(cols, col_count)?;
+        if height * width > 256 {
+            return None;
+        }
+        Some(Spill {
+            values: slice_block(&values, cols, row0, height, col0, width),
+            columns: width,
+            all_or_nothing: true,
+        })
+    }
+
+    fn drop_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let (values, rows, cols) = self.block_numbers(env)?;
+        self.require_comma()?;
+        let row_count = span_count(calc_num(self.compare(env)?)?)?;
+        self.skip();
+        let col_count = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            0
+        } else {
+            self.require_comma()?;
+            let count = span_count(calc_num(self.compare(env)?)?)?;
+            self.close_paren()?;
+            count
+        };
+        let (row0, height) = drop_bounds(rows, row_count)?;
+        let (col0, width) = drop_bounds(cols, col_count)?;
+        if height == 0 || width == 0 || height * width > 256 {
+            return None;
+        }
+        Some(Spill {
+            values: slice_block(&values, cols, row0, height, col0, width),
+            columns: width,
+            all_or_nothing: true,
+        })
+    }
+
+    fn whatif_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        self.skip();
+        let formula_cell = self.cell_token()?.to_ascii_uppercase();
+        self.require_comma()?;
+        let row_input = self.cell_token()?.to_ascii_uppercase();
+        if formula_cell == row_input {
+            return None;
+        }
+        self.require_comma()?;
+        let (row_cells, row_rows, row_cols) = self.cell_block(env)?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            if row_cols != 1
+                || row_rows == 0
+                || row_rows > 16
+                || row_cells.len() != row_rows as usize
+            {
+                return None;
+            }
+            let formula = env.formulas.get(&formula_cell)?.clone();
+            let mut values = Vec::with_capacity(row_cells.len());
+            for address in row_cells {
+                let number = finite_cell(self.cell_value(&address, env))?;
+                values.push(whatif_number(env, &formula, &[(&row_input, number)])?);
+            }
+            return Some(Spill {
+                values,
+                columns: 1,
+                all_or_nothing: true,
+            });
+        }
+        self.require_comma()?;
+        let col_input = self.cell_token()?.to_ascii_uppercase();
+        if col_input == formula_cell || col_input == row_input {
+            return None;
+        }
+        self.require_comma()?;
+        let (col_cells, col_rows, col_cols) = self.cell_block(env)?;
+        self.close_paren()?;
+        if row_cols != 1 || row_rows == 0 || row_rows > 8 || row_cells.len() != row_rows as usize {
+            return None;
+        }
+        if col_rows != 1 || col_cols == 0 || col_cols > 8 || col_cells.len() != col_cols as usize {
+            return None;
+        }
+        if row_rows * col_cols > 64 {
+            return None;
+        }
+        let formula = env.formulas.get(&formula_cell)?.clone();
+        let mut row_numbers = Vec::with_capacity(row_cells.len());
+        for address in &row_cells {
+            row_numbers.push(finite_cell(self.cell_value(address, env))?);
+        }
+        let mut col_numbers = Vec::with_capacity(col_cells.len());
+        for address in &col_cells {
+            col_numbers.push(finite_cell(self.cell_value(address, env))?);
+        }
+        let mut values = Vec::with_capacity((row_rows * col_cols) as usize);
+        for row in &row_numbers {
+            for col in &col_numbers {
+                values.push(whatif_number(
+                    env,
+                    &formula,
+                    &[(&row_input, *row), (&col_input, *col)],
+                )?);
+            }
+        }
+        Some(Spill {
+            values,
+            columns: col_cols,
+            all_or_nothing: true,
+        })
+    }
+
+    fn chooserows_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let (values, rows, cols) = self.block_numbers(env)?;
+        self.require_comma()?;
+        let index = span_count(calc_num(self.compare(env)?)?)?;
+        self.close_paren()?;
+        let row = choose_index(rows, index)?;
+        let start = (row * cols) as usize;
+        Some(Spill {
+            values: values[start..start + cols as usize].to_vec(),
+            columns: cols,
+            all_or_nothing: true,
+        })
+    }
+
+    fn stack_blocks(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<(Vec<f64>, u32, u32)>> {
+        let mut blocks = Vec::new();
+        loop {
+            blocks.push(self.block_numbers(env)?);
+            if blocks.len() > 8 {
+                return None;
+            }
+            self.skip();
+            match self.bytes.get(self.index).copied() {
+                Some(b')') => {
+                    self.index += 1;
+                    break;
+                }
+                Some(b',') => self.index += 1,
+                _ => return None,
+            }
+        }
+        Some(blocks)
+    }
+
+    fn hstack_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let blocks = self.stack_blocks(env)?;
+        if !(2..=8).contains(&blocks.len()) {
+            return None;
+        }
+        let height = blocks[0].1;
+        if blocks.iter().any(|(_, rows, _)| *rows != height) {
+            return None;
+        }
+        let width: u32 = blocks.iter().map(|(_, _, cols)| *cols).sum();
+        if width == 0 || width > 16 || height.saturating_mul(width) > 256 {
+            return None;
+        }
+        let mut values = Vec::new();
+        for row in 0..height {
+            for (nums, _, cols) in &blocks {
+                for col in 0..*cols {
+                    values.push(nums[(row * *cols + col) as usize]);
+                }
+            }
+        }
+        Some(Spill {
+            values,
+            columns: width,
+            all_or_nothing: true,
+        })
+    }
+
+    fn vstack_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let blocks = self.stack_blocks(env)?;
+        if !(2..=8).contains(&blocks.len()) {
+            return None;
+        }
+        let width = blocks[0].2;
+        if blocks.iter().any(|(_, _, cols)| *cols != width) {
+            return None;
+        }
+        let height: u32 = blocks.iter().map(|(_, rows, _)| *rows).sum();
+        if height == 0 || height > 256 || height.saturating_mul(width) > 256 {
+            return None;
+        }
+        let mut values = Vec::new();
+        for (nums, _, _) in &blocks {
+            values.extend(nums.iter().copied());
+        }
+        Some(Spill {
+            values,
+            columns: width,
+            all_or_nothing: true,
+        })
+    }
+
+    fn choosecols_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let (values, rows, cols) = self.block_numbers(env)?;
+        self.require_comma()?;
+        let index = span_count(calc_num(self.compare(env)?)?)?;
+        self.close_paren()?;
+        let col = choose_index(cols, index)?;
+        let mut picked = Vec::with_capacity(rows as usize);
+        for row in 0..rows {
+            picked.push(values[(row * cols + col) as usize]);
+        }
+        Some(Spill {
+            values: picked,
+            columns: 1,
+            all_or_nothing: true,
+        })
+    }
+
+    fn optional_holidays(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<f64>> {
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(Vec::new());
+        }
+        self.require_comma()?;
+        let cells = self.cell_range(env)?;
+        self.close_paren()?;
+        if cells.len() > 512 {
+            return None;
+        }
+        let mut holidays = Vec::new();
+        for address in cells {
+            if let Some(CalcValue::Num(number)) = self.cell_value(&address, env) {
+                if number.is_finite() {
+                    holidays.push(number);
+                }
+            }
+        }
+        Some(holidays)
+    }
+
+    fn goal_seek(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let formula_cell = self.cell_token()?.to_ascii_uppercase();
+        self.require_comma()?;
+        let input_cell = self.cell_token()?.to_ascii_uppercase();
+        self.require_comma()?;
+        let target = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        if formula_cell == input_cell || env.visiting.contains(&formula_cell) {
+            return None;
+        }
+        let formula = env.formulas.get(&formula_cell)?.clone();
+        goal_seek_newton(env, &formula, &input_cell, target)
+    }
+
+    fn sort_order(&mut self, env: &mut CalcEnv<'_>) -> Option<bool> {
+        let order = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        if !order.is_finite() {
+            return None;
+        }
+        match order.trunc() {
+            1.0 => Some(false),
+            -1.0 => Some(true),
+            _ => None,
+        }
+    }
+
+    fn sort_text_column(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<String>> {
+        let (cells, rows, cols) = self.cell_block(env)?;
+        if cols != 1 || rows == 0 || rows > 256 || cells.len() != rows as usize {
+            return None;
+        }
+        self.skip();
+        let descending = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            false
+        } else {
+            self.require_comma()?;
+            self.sort_order(env)?
+        };
+        let mut values = Vec::new();
+        for address in cells {
+            match self.cell_value(&address, env) {
+                None => {}
+                Some(CalcValue::Text(text)) if !text.is_empty() => values.push(text),
+                _ => return None,
+            }
+        }
+        if values.is_empty() {
+            return None;
+        }
+        values.sort_by(|left, right| {
+            let compared = left.to_ascii_lowercase().cmp(&right.to_ascii_lowercase());
+            if descending {
+                compared.reverse()
+            } else {
+                compared
+            }
+        });
+        Some(values)
+    }
+
+    fn sort_mixed(&mut self, env: &mut CalcEnv<'_>) -> Option<(u32, Vec<GridCell>)> {
+        let (addresses, rows, cols) = self.cell_block(env)?;
+        if rows < 1
+            || cols < 2
+            || rows > 256
+            || cols > 16
+            || rows.saturating_mul(cols) > 256
+            || addresses.len() != (rows * cols) as usize
+        {
+            return None;
+        }
+        self.skip();
+        let (index, descending) = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            (0u32, false)
+        } else {
+            self.require_comma()?;
+            let index = calc_num(self.compare(env)?)?;
+            if !index.is_finite() {
+                return None;
+            }
+            let index = index.trunc();
+            if index < 1.0 || index > f64::from(cols) {
+                return None;
+            }
+            self.skip();
+            let descending = if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                false
+            } else {
+                self.require_comma()?;
+                self.sort_order(env)?
+            };
+            (index as u32 - 1, descending)
+        };
+        let mut raw = Vec::with_capacity(addresses.len());
+        for address in &addresses {
+            raw.push(self.cell_value(address, env)?);
+        }
+        let mut text_column = None;
+        for col in 0..cols {
+            let mut saw_text = false;
+            let mut saw_num = false;
+            for row in 0..rows {
+                match &raw[(row * cols + col) as usize] {
+                    CalcValue::Text(text) if !text.is_empty() => saw_text = true,
+                    CalcValue::Num(number) if number.is_finite() => saw_num = true,
+                    _ => return None,
+                }
+            }
+            if saw_text == saw_num {
+                return None;
+            }
+            if saw_text {
+                if text_column.is_some() {
+                    return None;
+                }
+                text_column = Some(col);
+            }
+        }
+        let text_column = text_column?;
+        let key_is_text = index == text_column;
+        let mut order: Vec<u32> = (0..rows).collect();
+        order.sort_by(|left, right| {
+            let left_cell = &raw[(left * cols + index) as usize];
+            let right_cell = &raw[(right * cols + index) as usize];
+            let compared = if key_is_text {
+                let CalcValue::Text(left_text) = left_cell else {
+                    return std::cmp::Ordering::Equal;
+                };
+                let CalcValue::Text(right_text) = right_cell else {
+                    return std::cmp::Ordering::Equal;
+                };
+                left_text
+                    .to_ascii_lowercase()
+                    .cmp(&right_text.to_ascii_lowercase())
+            } else {
+                let CalcValue::Num(left_num) = left_cell else {
+                    return std::cmp::Ordering::Equal;
+                };
+                let CalcValue::Num(right_num) = right_cell else {
+                    return std::cmp::Ordering::Equal;
+                };
+                left_num.total_cmp(right_num)
+            };
+            if descending {
+                compared.reverse()
+            } else {
+                compared
+            }
+        });
+        let mut cells = Vec::with_capacity(raw.len());
+        for row in order {
+            for col in 0..cols {
+                match &raw[(row * cols + col) as usize] {
+                    CalcValue::Text(text) => cells.push(GridCell::Text(text.clone())),
+                    CalcValue::Num(number) => cells.push(GridCell::Num(*number)),
+                }
+            }
+        }
+        Some((cols, cells))
+    }
+
+    fn sortby_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let (grid, rows, cols) = self.block_numbers(env)?;
+        self.require_comma()?;
+        let (keys, key_rows, key_cols) = self.cell_block(env)?;
+        if key_cols != 1 || key_rows != rows || keys.len() != rows as usize {
+            return None;
+        }
+        self.skip();
+        let descending = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            false
+        } else {
+            self.require_comma()?;
+            self.sort_order(env)?
+        };
+        let mut texts = Vec::with_capacity(keys.len());
+        for address in keys {
+            match self.cell_value(&address, env) {
+                Some(CalcValue::Text(text)) if !text.is_empty() => texts.push(text),
+                _ => return None,
+            }
+        }
+        let mut order: Vec<u32> = (0..rows).collect();
+        order.sort_by(|left, right| {
+            let compared = texts[*left as usize]
+                .to_ascii_lowercase()
+                .cmp(&texts[*right as usize].to_ascii_lowercase());
+            if descending {
+                compared.reverse()
+            } else {
+                compared
+            }
+        });
+        let mut values = Vec::with_capacity(grid.len());
+        for row in order {
+            let start = (row * cols) as usize;
+            values.extend_from_slice(&grid[start..start + cols as usize]);
+        }
+        Some(Spill {
+            values,
+            columns: cols,
+            all_or_nothing: true,
+        })
+    }
+
+    fn sort_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let (cells, rows, cols) = self.cell_block(env)?;
+        if rows == 0
+            || cols == 0
+            || rows > 256
+            || cols > 16
+            || rows.saturating_mul(cols) > 256
+            || cells.len() != (rows * cols) as usize
+        {
+            return None;
+        }
+        self.skip();
+        if cols == 1 {
+            let mut values = Vec::new();
+            for address in cells {
+                match self.cell_value(&address, env) {
+                    None => {}
+                    Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
+                    _ => return None,
+                }
+            }
+            let descending = if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                false
+            } else {
+                self.require_comma()?;
+                self.sort_order(env)?
+            };
+            if values.is_empty() {
+                return None;
+            }
+            values.sort_by(|left, right| left.total_cmp(right));
+            if descending {
+                values.reverse();
+            }
+            return Some(Spill {
+                values,
+                columns: 1,
+                all_or_nothing: true,
+            });
+        }
+        let mut grid = Vec::with_capacity(cells.len());
+        for address in cells {
+            match self.cell_value(&address, env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => grid.push(number),
+                _ => return None,
+            }
+        }
+        let (index, descending) = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            (0u32, false)
+        } else {
+            self.require_comma()?;
+            let index = calc_num(self.compare(env)?)?;
+            if !index.is_finite() {
+                return None;
+            }
+            let index = index.trunc();
+            if index < 1.0 || index > f64::from(cols) {
+                return None;
+            }
+            self.skip();
+            let descending = if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                false
+            } else {
+                self.require_comma()?;
+                self.sort_order(env)?
+            };
+            (index as u32 - 1, descending)
+        };
+        let mut order: Vec<u32> = (0..rows).collect();
+        order.sort_by(|left, right| {
+            let left = grid[(left * cols + index) as usize];
+            let right = grid[(right * cols + index) as usize];
+            let compared = left.total_cmp(&right);
+            if descending {
+                compared.reverse()
+            } else {
+                compared
+            }
+        });
+        let mut values = Vec::with_capacity(grid.len());
+        for row in order {
+            let start = (row * cols) as usize;
+            values.extend_from_slice(&grid[start..start + cols as usize]);
+        }
+        Some(Spill {
+            values,
+            columns: cols,
+            all_or_nothing: true,
+        })
+    }
+
+    fn unique_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let numbers = self.column_numbers(env)?;
+        self.close_paren()?;
+        if numbers.is_empty() {
+            return None;
+        }
+        let mut values = Vec::new();
+        for number in numbers {
+            if values.iter().any(|kept: &f64| (kept - number).abs() < 1e-9) {
+                continue;
+            }
+            values.push(number);
+        }
+        Some(Spill {
+            values,
+            columns: 1,
+            all_or_nothing: true,
+        })
+    }
+
+    fn filter_keeps(
+        &self,
+        flag: Option<&CalcValue>,
+        criteria: &CalcValue,
+        numeric: Option<(CriterionOp, f64)>,
+    ) -> Option<bool> {
+        if let Some((op, target)) = numeric {
+            return match flag {
+                Some(CalcValue::Num(number)) if number.is_finite() => {
+                    Some(number_matches(*number, op, target))
+                }
+                None => Some(false),
+                _ => None,
+            };
+        }
+        criterion_holds(flag, criteria)
+    }
+
+    fn filter_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let (data, rows, cols) = self.cell_block(env)?;
+        if rows == 0
+            || cols == 0
+            || rows > 256
+            || cols > 16
+            || rows.saturating_mul(cols) > 256
+            || data.len() != (rows * cols) as usize
+        {
+            return None;
+        }
+        self.require_comma()?;
+        let (test, test_rows, test_cols) = self.cell_block(env)?;
+        if test_cols != 1 || test_rows != rows || test.len() != rows as usize {
+            return None;
+        }
+        self.require_comma()?;
+        let criteria = self.compare(env)?;
+        let numeric = if matches!(criteria, CalcValue::Text(_)) {
+            None
+        } else {
+            Some(compile_criterion(&criteria)?)
+        };
+        self.close_paren()?;
+        if cols == 1 {
+            let mut values = Vec::new();
+            for index in 0..rows as usize {
+                let flag = self.cell_value(&test[index], env);
+                if !self.filter_keeps(flag.as_ref(), &criteria, numeric)? {
+                    continue;
+                }
+                match self.cell_value(&data[index], env) {
+                    Some(CalcValue::Num(value)) if value.is_finite() => values.push(value),
+                    None => {}
+                    _ => return None,
+                }
+            }
+            if values.is_empty() {
+                return None;
+            }
+            return Some(Spill {
+                values,
+                columns: 1,
+                all_or_nothing: true,
+            });
+        }
+        let mut grid = Vec::with_capacity(data.len());
+        for address in &data {
+            match self.cell_value(address, env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => grid.push(number),
+                _ => return None,
+            }
+        }
+        let mut values = Vec::new();
+        for index in 0..rows as usize {
+            let flag = self.cell_value(&test[index], env);
+            if !self.filter_keeps(flag.as_ref(), &criteria, numeric)? {
+                continue;
+            }
+            let start = index * cols as usize;
+            values.extend_from_slice(&grid[start..start + cols as usize]);
+        }
+        if values.is_empty() {
+            return None;
+        }
+        Some(Spill {
+            values,
+            columns: cols,
+            all_or_nothing: true,
+        })
+    }
+
+    fn vector_block(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<String>> {
+        let (cells, rows, cols) = self.cell_block(env)?;
+        if (rows != 1 && cols != 1)
+            || cells.is_empty()
+            || cells.len() > 256
+            || cells.len() != (rows as usize) * (cols as usize)
+        {
+            return None;
+        }
+        Some(cells)
+    }
+
+    fn xlookup_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let lookup = self.compare(env)?;
+        self.require_comma()?;
+        let (keys, key_rows, key_cols) = self.cell_block(env)?;
+        let column_keys =
+            key_cols == 1 && key_rows > 0 && key_rows <= 256 && keys.len() == key_rows as usize;
+        let row_keys =
+            key_rows == 1 && key_cols >= 2 && key_cols <= 256 && keys.len() == key_cols as usize;
+        if !column_keys && !row_keys {
+            return None;
+        }
+        self.require_comma()?;
+        let (block, rows, cols) = self.cell_block(env)?;
+        if block.len() != (rows * cols) as usize {
+            return None;
+        }
+        if column_keys {
+            if cols < 2 || cols > 16 || rows != key_rows {
+                return None;
+            }
+        } else if rows < 2 || rows > 16 || cols != key_cols {
+            return None;
+        }
+        self.skip();
+        let (missing, mode) = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            (None, 0)
+        } else {
+            self.require_comma()?;
+            let missing = self.compare(env)?;
+            self.skip();
+            let mode = if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                0
+            } else {
+                self.require_comma()?;
+                let mode = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !mode.is_finite() {
+                    return None;
+                }
+                mode.trunc() as i32
+            };
+            (Some(missing), mode)
+        };
+        match self.lookup_index(&lookup, &keys, env, mode) {
+            LookupHit::Bad => None,
+            LookupHit::Miss => match missing {
+                Some(CalcValue::Num(number)) if number.is_finite() => Some(Spill {
+                    values: vec![number],
+                    columns: 1,
+                    all_or_nothing: true,
+                }),
+                _ => None,
+            },
+            LookupHit::At(index) => {
+                let mut values = Vec::new();
+                let width = if column_keys {
+                    let start = index * cols as usize;
+                    let end = start + cols as usize;
+                    if end > block.len() {
+                        return None;
+                    }
+                    for address in &block[start..end] {
+                        match self.cell_value(address, env) {
+                            Some(CalcValue::Num(number)) if number.is_finite() => {
+                                values.push(number)
+                            }
+                            None => values.push(0.0),
+                            _ => return None,
+                        }
+                    }
+                    cols
+                } else {
+                    if index >= cols as usize {
+                        return None;
+                    }
+                    for row in 0..rows as usize {
+                        let address = &block[row * cols as usize + index];
+                        match self.cell_value(address, env) {
+                            Some(CalcValue::Num(number)) if number.is_finite() => {
+                                values.push(number)
+                            }
+                            None => values.push(0.0),
+                            _ => return None,
+                        }
+                    }
+                    1
+                };
+                Some(Spill {
+                    values,
+                    columns: width,
+                    all_or_nothing: true,
+                })
+            }
+        }
+    }
+
+    fn xlookup(&mut self, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+        let lookup = self.compare(env)?;
+        self.require_comma()?;
+        let keys = self.vector_block(env)?;
+        self.require_comma()?;
+        let values = self.vector_block(env)?;
+        if keys.len() != values.len() {
+            return None;
+        }
+        self.skip();
+        let (missing, mode) = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            (None, 0)
+        } else {
+            self.require_comma()?;
+            let missing = self.compare(env)?;
+            self.skip();
+            let mode = if self.bytes.get(self.index) == Some(&b')') {
+                self.index += 1;
+                0
+            } else {
+                self.require_comma()?;
+                let mode = calc_num(self.compare(env)?)?;
+                self.close_paren()?;
+                if !mode.is_finite() {
+                    return None;
+                }
+                mode.trunc() as i32
+            };
+            (Some(missing), mode)
+        };
+        match self.lookup_index(&lookup, &keys, env, mode) {
+            LookupHit::Bad => None,
+            LookupHit::Miss => missing.and_then(kept_calc),
+            LookupHit::At(index) => match self.cell_value(&values[index], env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => Some(CalcValue::Num(number)),
+                Some(CalcValue::Text(text)) => Some(CalcValue::Text(text)),
+                None => Some(CalcValue::Num(0.0)),
+                _ => None,
+            },
+        }
+    }
+
+    fn xmatch(&mut self, env: &mut CalcEnv<'_>) -> Option<f64> {
+        let lookup = self.compare(env)?;
+        self.require_comma()?;
+        let keys = self.vector_block(env)?;
+        self.skip();
+        let mode = if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            0
+        } else {
+            self.require_comma()?;
+            let mode = calc_num(self.compare(env)?)?;
+            self.close_paren()?;
+            if !mode.is_finite() {
+                return None;
+            }
+            mode.trunc() as i32
+        };
+        match self.lookup_index(&lookup, &keys, env, mode) {
+            LookupHit::At(index) => Some((index + 1) as f64),
+            LookupHit::Miss | LookupHit::Bad => None,
+        }
+    }
+
+    fn lookup_index(
+        &mut self,
+        lookup: &CalcValue,
+        keys: &[String],
+        env: &mut CalcEnv<'_>,
+        mode: i32,
+    ) -> LookupHit {
+        if mode == 0 {
+            for (index, address) in keys.iter().enumerate() {
+                let cell = self.cell_value(address, env);
+                if exact_lookup(lookup, cell.as_ref()) {
+                    return LookupHit::At(index);
+                }
+            }
+            return LookupHit::Miss;
+        }
+        if mode != 1 && mode != -1 {
+            return LookupHit::Bad;
+        }
+        if let CalcValue::Text(text) = lookup {
+            if text.chars().any(|ch| matches!(ch, '*' | '?' | '~')) {
+                return LookupHit::Bad;
+            }
+        }
+        let mut loaded = Vec::with_capacity(keys.len());
+        for address in keys {
+            loaded.push(self.cell_value(address, env));
+        }
+        match approximate_index(&loaded, lookup, mode < 0) {
+            Some(index) => LookupHit::At(index),
+            None => LookupHit::Miss,
+        }
+    }
+
+    fn frequency_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let data_cells = self.cell_range(env)?;
+        if data_cells.len() > 256 {
+            return None;
+        }
+        self.require_comma()?;
+        let bin_cells = self.cell_range(env)?;
+        if bin_cells.is_empty() || bin_cells.len() > 16 {
+            return None;
+        }
+        self.close_paren()?;
+        let mut data = Vec::new();
+        for address in data_cells {
+            match self.cell_value(&address, env) {
+                None => {}
+                Some(CalcValue::Num(number)) if number.is_finite() => data.push(number),
+                _ => return None,
+            }
+        }
+        let mut bins = Vec::new();
+        for address in &bin_cells {
+            let Some(CalcValue::Num(number)) = self.cell_value(address, env) else {
+                return None;
+            };
+            if !number.is_finite() {
+                return None;
+            }
+            if bins.last().is_some_and(|prev| number < *prev) {
+                return None;
+            }
+            bins.push(number);
+        }
+        let mut counts = vec![0.0; bins.len() + 1];
+        for value in data {
+            let mut placed = false;
+            for (index, bin) in bins.iter().enumerate() {
+                if value <= *bin {
+                    counts[index] += 1.0;
+                    placed = true;
+                    break;
+                }
+            }
+            if !placed {
+                let last = counts.len() - 1;
+                counts[last] += 1.0;
+            }
+        }
+        Some(Spill {
+            values: counts,
+            columns: 1,
+            all_or_nothing: false,
+        })
+    }
+
+    fn mode_mult_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let cells = self.cell_range(env)?;
+        if cells.len() > 256 {
+            return None;
+        }
+        self.close_paren()?;
+        let mut values = Vec::new();
+        for address in cells {
+            match self.cell_value(&address, env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
+                None | Some(CalcValue::Text(_)) => {}
+                Some(CalcValue::Num(_)) => return None,
+            }
+        }
+        Some(Spill {
+            values: modes_excel(&values)?,
+            columns: 1,
+            all_or_nothing: false,
+        })
+    }
+
+    fn line_pairs(&mut self, env: &mut CalcEnv<'_>) -> Option<Vec<(f64, f64)>> {
+        let (ys, y_rows, y_cols) = self.cell_block(env)?;
+        if ys.len() > 256 || (y_rows != 1 && y_cols != 1) {
+            return None;
+        }
+        self.require_comma()?;
+        let (xs, x_rows, x_cols) = self.cell_block(env)?;
+        if xs.len() != ys.len() || (x_rows != 1 && x_cols != 1) {
+            return None;
+        }
+        let mut pairs = Vec::new();
+        for (y_address, x_address) in ys.iter().zip(xs.iter()) {
+            match (
+                self.cell_value(y_address, env),
+                self.cell_value(x_address, env),
+            ) {
+                (Some(CalcValue::Num(y)), Some(CalcValue::Num(x)))
+                    if y.is_finite() && x.is_finite() =>
+                {
+                    pairs.push((y, x));
+                }
+                (None, _)
+                | (_, None)
+                | (Some(CalcValue::Text(_)), _)
+                | (_, Some(CalcValue::Text(_))) => {}
+                _ => return None,
+            }
+        }
+        Some(pairs)
+    }
+
+    fn linest_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let pairs = self.line_pairs(env)?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(Spill {
+                values: vec![slope_excel(&pairs)?, intercept_excel(&pairs)?],
+                columns: 2,
+                all_or_nothing: true,
+            });
+        }
+        self.require_comma()?;
+        let constant = calc_num(self.compare(env)?)?;
+        if !constant.is_finite() || constant.trunc() == 0.0 {
+            return None;
+        }
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(Spill {
+                values: vec![slope_excel(&pairs)?, intercept_excel(&pairs)?],
+                columns: 2,
+                all_or_nothing: true,
+            });
+        }
+        self.require_comma()?;
+        let stats = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        if !stats.is_finite() {
+            return None;
+        }
+        if stats.trunc() == 0.0 {
+            return Some(Spill {
+                values: vec![slope_excel(&pairs)?, intercept_excel(&pairs)?],
+                columns: 2,
+                all_or_nothing: true,
+            });
+        }
+        Some(Spill {
+            values: linest_stats(&pairs)?,
+            columns: 2,
+            all_or_nothing: true,
+        })
+    }
+
+    fn trend_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let pairs = self.line_pairs(env)?;
+        self.require_comma()?;
+        let (news, rows, cols) = self.cell_block(env)?;
+        if news.is_empty() || news.len() > 16 || (rows != 1 && cols != 1) {
+            return None;
+        }
+        self.close_paren()?;
+        let slope = slope_excel(&pairs)?;
+        let intercept = intercept_excel(&pairs)?;
+        let mut values = Vec::new();
+        for address in news {
+            let Some(CalcValue::Num(x_value)) = self.cell_value(&address, env) else {
+                return None;
+            };
+            if !x_value.is_finite() {
+                return None;
+            }
+            let y_value = intercept + slope * x_value;
+            if !y_value.is_finite() {
+                return None;
+            }
+            values.push(y_value);
+        }
+        Some(Spill {
+            values,
+            columns: 1,
+            all_or_nothing: true,
+        })
+    }
+
+    fn growth_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let pairs = log_pairs(self.line_pairs(env)?)?;
+        self.require_comma()?;
+        let (news, rows, cols) = self.cell_block(env)?;
+        if news.is_empty() || news.len() > 16 || (rows != 1 && cols != 1) {
+            return None;
+        }
+        self.close_paren()?;
+        let slope = slope_excel(&pairs)?;
+        let intercept = intercept_excel(&pairs)?;
+        let mut values = Vec::new();
+        for address in news {
+            let Some(CalcValue::Num(x_value)) = self.cell_value(&address, env) else {
+                return None;
+            };
+            if !x_value.is_finite() {
+                return None;
+            }
+            let y_value = (intercept + slope * x_value).exp();
+            if !y_value.is_finite() {
+                return None;
+            }
+            values.push(y_value);
+        }
+        Some(Spill {
+            values,
+            columns: 1,
+            all_or_nothing: true,
+        })
+    }
+
+    fn logest_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let pairs = log_pairs(self.line_pairs(env)?)?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            let two = vec![slope_excel(&pairs)?.exp(), intercept_excel(&pairs)?.exp()];
+            if two.iter().any(|value| !value.is_finite()) {
+                return None;
+            }
+            return Some(Spill {
+                values: two,
+                columns: 2,
+                all_or_nothing: true,
+            });
+        }
+        self.require_comma()?;
+        let constant = calc_num(self.compare(env)?)?;
+        if !constant.is_finite() || constant.trunc() == 0.0 {
+            return None;
+        }
+        self.skip();
+        let two = vec![slope_excel(&pairs)?.exp(), intercept_excel(&pairs)?.exp()];
+        if two.iter().any(|value| !value.is_finite()) {
+            return None;
+        }
+        if self.bytes.get(self.index) == Some(&b')') {
+            self.index += 1;
+            return Some(Spill {
+                values: two,
+                columns: 2,
+                all_or_nothing: true,
+            });
+        }
+        self.require_comma()?;
+        let stats = calc_num(self.compare(env)?)?;
+        self.close_paren()?;
+        if !stats.is_finite() {
+            return None;
+        }
+        if stats.trunc() == 0.0 {
+            return Some(Spill {
+                values: two,
+                columns: 2,
+                all_or_nothing: true,
+            });
+        }
+        let mut grid = linest_stats(&pairs)?;
+        grid[0] = grid[0].exp();
+        grid[1] = grid[1].exp();
+        if grid.iter().any(|value| !value.is_finite()) {
+            return None;
+        }
+        Some(Spill {
+            values: grid,
+            columns: 2,
+            all_or_nothing: true,
+        })
+    }
+
+    fn quoted_sheet(&mut self) -> Option<String> {
+        if self.bytes.get(self.index) != Some(&b'\'') {
+            return None;
+        }
+        self.index += 1;
+        let mut raw = Vec::new();
+        let mut closed = false;
+        while let Some(&byte) = self.bytes.get(self.index) {
+            if byte == b'\'' {
+                if self.bytes.get(self.index + 1) == Some(&b'\'') {
+                    raw.push(b'\'');
+                    self.index += 2;
+                    continue;
+                }
+                self.index += 1;
+                closed = true;
+                break;
+            }
+            raw.push(byte);
+            self.index += 1;
+            if raw.len() > 128 {
+                return None;
+            }
+        }
+        if !closed {
+            return None;
+        }
+        let name = String::from_utf8(raw).ok()?;
+        let count = name.chars().count();
+        if count == 0 || count > 31 {
+            return None;
+        }
+        Some(name)
+    }
+
+    fn foreign_cell(&mut self, sheet: &str, env: &CalcEnv<'_>) -> Option<CalcValue> {
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b'!') {
+            return None;
+        }
+        self.index += 1;
+        let address = self.cell_token()?;
+        self.skip();
+        if self.bytes.get(self.index) == Some(&b':') {
+            return None;
+        }
+        let book = env.foreign.get(&sheet.to_ascii_lowercase())?;
+        let address = address.to_ascii_uppercase();
+        if let Some(number) = book.literals.get(&address) {
+            return number.is_finite().then_some(CalcValue::Num(*number));
+        }
+        book.texts
+            .get(&address)
+            .map(|text| CalcValue::Text(text.clone()))
+    }
+
+    fn cell_value(&self, address: &str, env: &mut CalcEnv<'_>) -> Option<CalcValue> {
+        if let Some((sheet, cell)) = address.split_once('!') {
+            let book = env.foreign.get(&sheet.to_ascii_lowercase())?;
+            let cell = cell.to_ascii_uppercase();
+            if let Some(number) = book.literals.get(&cell) {
+                return number.is_finite().then_some(CalcValue::Num(*number));
+            }
+            return book
+                .texts
+                .get(&cell)
+                .map(|text| CalcValue::Text(text.clone()));
+        }
+        let address = address.to_ascii_uppercase();
+        if !env.visiting.insert(address.clone()) {
+            if env.iterate {
+                let number = env.previous.get(&address).copied().unwrap_or(0.0);
+                if number.is_finite() {
+                    return Some(CalcValue::Num(number));
+                }
+            }
+            return None;
+        }
+        let value = if let Some(formula) = env.formulas.get(&address) {
+            eval_formula(
+                formula,
+                env.formulas,
+                env.literals,
+                env.texts,
+                env.foreign,
+                env.names,
+                env.sheet_order,
+                env.sheet,
+                env.date1904,
+                env.previous,
+                env.iterate,
+                env.visiting,
+                env.hidden_rows,
+            )
+        } else if let Some(number) = env.literals.get(&address) {
+            Some(CalcValue::Num(*number))
+        } else {
+            env.texts
+                .get(&address)
+                .map(|text| CalcValue::Text(text.clone()))
+        };
+        env.visiting.remove(&address);
+        value
+    }
+}
+
+fn indirect_addresses(text: &str) -> Option<Vec<String>> {
+    let text = text.trim();
+    if text.is_empty() || text.chars().count() > 128 || text.contains('[') || text.contains(']') {
+        return None;
+    }
+    let bytes = text.as_bytes();
+    let mut index = 0usize;
+    while bytes.get(index) == Some(&b' ') {
+        index += 1;
+    }
+    let mut sheet = None;
+    if bytes.get(index) == Some(&b'\'') {
+        index += 1;
+        let mut raw = Vec::new();
+        loop {
+            let byte = *bytes.get(index)?;
+            index += 1;
+            if byte == b'\'' {
+                if bytes.get(index) == Some(&b'\'') {
+                    raw.push(b'\'');
+                    index += 1;
+                    continue;
+                }
+                break;
+            }
+            raw.push(byte);
+            if raw.len() > 128 {
+                return None;
+            }
+        }
+        let name = String::from_utf8(raw).ok()?;
+        if name.is_empty() || name.chars().count() > 31 || bytes.get(index) != Some(&b'!') {
+            return None;
+        }
+        index += 1;
+        sheet = Some(name.to_ascii_lowercase());
+    } else {
+        let start = index;
+        while bytes
+            .get(index)
+            .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'.')
+        {
+            index += 1;
+        }
+        let name_end = index;
+        while bytes.get(index) == Some(&b' ') {
+            index += 1;
+        }
+        if name_end > start && bytes.get(index) == Some(&b'!') {
+            let name = std::str::from_utf8(&bytes[start..name_end]).ok()?;
+            if is_cell_address(name) || name.chars().count() > 31 {
+                return None;
+            }
+            sheet = Some(name.to_ascii_lowercase());
+            index += 1;
+        } else {
+            index = start;
+        }
+    }
+    while bytes.get(index) == Some(&b' ') {
+        index += 1;
+    }
+    let start_cell = take_a1(bytes, &mut index)?;
+    while bytes.get(index) == Some(&b' ') {
+        index += 1;
+    }
+    let end_cell = if bytes.get(index) == Some(&b':') {
+        index += 1;
+        while bytes.get(index) == Some(&b' ') {
+            index += 1;
+        }
+        Some(take_a1(bytes, &mut index)?)
+    } else {
+        None
+    };
+    while bytes.get(index) == Some(&b' ') {
+        index += 1;
+    }
+    if index != bytes.len() {
+        return None;
+    }
+    let cells = if let Some(end) = end_cell {
+        cells_in_range(&start_cell, &end)?
+    } else {
+        vec![start_cell]
+    };
+    if cells.is_empty() || cells.len() > 4096 {
+        return None;
+    }
+    Some(match sheet {
+        Some(sheet) => cells
+            .into_iter()
+            .map(|cell| format!("{sheet}!{cell}"))
+            .collect(),
+        None => cells,
+    })
+}
+
+fn take_a1(bytes: &[u8], index: &mut usize) -> Option<String> {
+    if bytes.get(*index) == Some(&b'$') {
+        *index += 1;
+    }
+    let col_start = *index;
+    while bytes
+        .get(*index)
+        .is_some_and(|byte| byte.is_ascii_alphabetic())
+    {
+        *index += 1;
+        if *index - col_start > 3 {
+            return None;
+        }
+    }
+    if *index == col_start {
+        return None;
+    }
+    let letter_end = *index;
+    if bytes.get(*index) == Some(&b'$') {
+        *index += 1;
+    }
+    let row_start = *index;
+    while bytes.get(*index).is_some_and(|byte| byte.is_ascii_digit()) {
+        *index += 1;
+        if *index - row_start > 7 {
+            return None;
+        }
+    }
+    if *index == row_start {
+        return None;
+    }
+    let letters = std::str::from_utf8(&bytes[col_start..letter_end]).ok()?;
+    let digits = std::str::from_utf8(&bytes[row_start..*index]).ok()?;
+    let address = format!("{letters}{digits}").to_ascii_uppercase();
+    if !is_cell_address(&address) {
+        return None;
+    }
+    Some(address)
+}
+
+fn rectangle(cells: &[String]) -> Option<(Option<String>, u32, u32, u32, u32)> {
+    if cells.is_empty() || cells.len() > 4096 {
+        return None;
+    }
+    let mut sheet = None;
+    let mut first = true;
+    let mut min_col = u32::MAX;
+    let mut max_col = 0u32;
+    let mut min_row = u32::MAX;
+    let mut max_row = 0u32;
+    for cell in cells {
+        let (this_sheet, address) = match cell.split_once('!') {
+            Some((name, address)) => (Some(name), address),
+            None => (None, cell.as_str()),
+        };
+        if first {
+            sheet = this_sheet.map(str::to_string);
+            first = false;
+        } else if sheet.as_deref() != this_sheet {
+            return None;
+        }
+        let (col, row) = split_address(address)?;
+        min_col = min_col.min(col);
+        max_col = max_col.max(col);
+        min_row = min_row.min(row);
+        max_row = max_row.max(row);
+    }
+    let height = max_row - min_row + 1;
+    let width = max_col - min_col + 1;
+    if height.saturating_mul(width) != cells.len() as u32 {
+        return None;
+    }
+    Some((sheet, min_col, min_row, height, width))
+}
+
+fn trunc_offset(value: f64) -> Option<i64> {
+    if !value.is_finite() {
+        return None;
+    }
+    let value = value.trunc();
+    if value < -1_000_000.0 || value > 1_000_000.0 {
+        return None;
+    }
+    Some(value as i64)
+}
+
+fn positive_span(value: f64) -> Option<u32> {
+    if !value.is_finite() {
+        return None;
+    }
+    let value = value.trunc();
+    if value < 1.0 || value > 256.0 {
+        return None;
+    }
+    Some(value as u32)
+}
+
+fn shift_index(base: u32, delta: i64, max: u32) -> Option<u32> {
+    let next = i64::from(base) + delta;
+    if next < 1 || next > i64::from(max) {
+        return None;
+    }
+    u32::try_from(next).ok()
+}
+
+fn cells_in_range(start: &str, end: &str) -> Option<Vec<String>> {
+    let (c1, r1) = split_address(start)?;
+    let (c2, r2) = split_address(end)?;
+    let (c1, c2) = (c1.min(c2), c1.max(c2));
+    let (r1, r2) = (r1.min(r2), r1.max(r2));
+    if (c2 - c1 + 1).saturating_mul(r2 - r1 + 1) > 4096 {
+        return None;
+    }
+    let mut cells = Vec::new();
+    for row in r1..=r2 {
+        for col in c1..=c2 {
+            cells.push(format!("{}{row}", column_name(col)));
+        }
+    }
+    Some(cells)
+}
+
+fn split_address(address: &str) -> Option<(u32, u32)> {
+    let split = address.find(|ch: char| ch.is_ascii_digit())?;
+    let col = column_index(&address[..split])?;
+    let row = address[split..].parse::<u32>().ok()?;
+    Some((col, row))
+}
+
+fn column_index(letters: &str) -> Option<u32> {
+    let mut value = 0u32;
+    for ch in letters.chars() {
+        if !ch.is_ascii_alphabetic() {
+            return None;
+        }
+        value = value
+            .checked_mul(26)?
+            .checked_add(u32::from(ch.to_ascii_uppercase()) - u32::from(b'A') + 1)?;
+    }
+    Some(value)
+}
+
+fn column_name(mut index: u32) -> String {
+    let mut out = Vec::new();
+    while index > 0 {
+        index -= 1;
+        out.push(b'A' + (index % 26) as u8);
+        index /= 26;
+    }
+    out.reverse();
+    String::from_utf8(out).unwrap_or_default()
+}
+
+fn cell_element(address: &str, text: &str) -> String {
+    let trimmed = text.trim();
+    if trimmed.eq_ignore_ascii_case("true") || trimmed.eq_ignore_ascii_case("false") {
+        let bit = if trimmed.eq_ignore_ascii_case("true") {
+            "1"
+        } else {
+            "0"
+        };
+        return format!(r#"<c r="{address}" t="b"><v>{bit}</v></c>"#);
+    }
+    if is_plain_number(trimmed) {
+        return format!(r#"<c r="{address}"><v>{trimmed}</v></c>"#);
+    }
+    format!(
+        r#"<c r="{address}" t="inlineStr"><is><t>{}</t></is></c>"#,
+        escape(text)
+    )
+}
+
+fn is_plain_number(text: &str) -> bool {
+    let mut chars = text.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    let rest = if first == '-' {
+        let Some(next) = chars.next() else {
+            return false;
+        };
+        if !next.is_ascii_digit() {
+            return false;
+        }
+        chars
+    } else if first.is_ascii_digit() {
+        chars
+    } else {
+        return false;
+    };
+    let mut dot = false;
+    for ch in rest {
+        if ch == '.' {
+            if dot {
+                return false;
+            }
+            dot = true;
+        } else if !ch.is_ascii_digit() {
+            return false;
+        }
+    }
+    true
+}
+
+struct AutoFilter {
+    start_row: u32,
+    end_row: u32,
+    column: u32,
+    values: Vec<String>,
+}
+
+fn sheet_hidden_rows(xml: &str, cells: &[SheetCellRef]) -> std::collections::HashSet<u32> {
+    let mut hidden = explicit_hidden_rows(xml);
+    if let Some(filter) = auto_filter(xml) {
+        let mut texts = std::collections::HashMap::<u32, String>::new();
+        for cell in cells {
+            let Some((column, row)) = split_address(&cell.address) else {
+                continue;
+            };
+            if column == filter.column && (filter.start_row..=filter.end_row).contains(&row) {
+                texts.insert(row, filter_cell_text(cell));
+            }
+        }
+        for row in filter.start_row + 1..=filter.end_row {
+            let text = texts.get(&row).map(String::as_str).unwrap_or("");
+            let matched = filter
+                .values
+                .iter()
+                .any(|value| value.eq_ignore_ascii_case(text));
+            if !matched {
+                hidden.insert(row);
+            }
+        }
+    }
+    hidden
+}
+
+fn filter_cell_text(cell: &SheetCellRef) -> String {
+    if let Some(text) = &cell.text {
+        if !text.is_empty() {
+            return text.clone();
+        }
+    }
+    cell.value.map(format_calc).unwrap_or_default()
+}
+
+fn explicit_hidden_rows(xml: &str) -> std::collections::HashSet<u32> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut rows = std::collections::HashSet::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event)) | Ok(Event::Empty(event)) => {
+                let name = local_name(event.name().as_ref());
+                if name == "row" {
+                    let flag = attr(&event, "hidden");
+                    if flag == "1" || flag.eq_ignore_ascii_case("true") {
+                        if let Ok(row) = attr(&event, "r").parse::<u32>() {
+                            rows.insert(row);
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    rows
+}
+
+fn auto_filter(xml: &str) -> Option<AutoFilter> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut reference = String::new();
+    let mut columns = 0u32;
+    let mut column_id: Option<u32> = None;
+    let mut values = Vec::new();
+    let mut in_filters = false;
+    let mut rejected = false;
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event)) => {
+                note_filter_tag(
+                    &local_name(event.name().as_ref()),
+                    &attr(&event, "ref"),
+                    &attr(&event, "colId"),
+                    &attr(&event, "val"),
+                    false,
+                    &mut reference,
+                    &mut columns,
+                    &mut column_id,
+                    &mut values,
+                    &mut in_filters,
+                    &mut rejected,
+                );
+            }
+            Ok(Event::Empty(event)) => {
+                note_filter_tag(
+                    &local_name(event.name().as_ref()),
+                    &attr(&event, "ref"),
+                    &attr(&event, "colId"),
+                    &attr(&event, "val"),
+                    true,
+                    &mut reference,
+                    &mut columns,
+                    &mut column_id,
+                    &mut values,
+                    &mut in_filters,
+                    &mut rejected,
+                );
+            }
+            Ok(Event::End(event)) => {
+                if local_name(event.name().as_ref()) == "filters" {
+                    in_filters = false;
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    if rejected || columns != 1 || values.is_empty() || values.len() > 8 {
+        return None;
+    }
+    let column_id = column_id?;
+    let range = reference.split_whitespace().next()?.replace('$', "");
+    let (start, end) = range.split_once(':')?;
+    let (left, top) = split_address(&start.to_ascii_uppercase())?;
+    let (right, bottom) = split_address(&end.to_ascii_uppercase())?;
+    let (left, right) = (left.min(right), left.max(right));
+    let (top, bottom) = (top.min(bottom), top.max(bottom));
+    if bottom - top + 1 > 400 || column_id > right - left {
+        return None;
+    }
+    Some(AutoFilter {
+        start_row: top,
+        end_row: bottom,
+        column: left + column_id,
+        values,
+    })
+}
+
+fn note_filter_tag(
+    name: &str,
+    reference: &str,
+    column_id: &str,
+    value: &str,
+    empty: bool,
+    stored_ref: &mut String,
+    columns: &mut u32,
+    stored_column: &mut Option<u32>,
+    values: &mut Vec<String>,
+    in_filters: &mut bool,
+    rejected: &mut bool,
+) {
+    if name == "autoFilter" && !reference.is_empty() {
+        *stored_ref = reference.to_string();
+    } else if name == "filterColumn" {
+        *columns += 1;
+        if *columns == 1 {
+            *stored_column = column_id.parse().ok();
+        }
+    } else if name == "filters" && !empty {
+        *in_filters = true;
+    } else if name == "filter" && *in_filters && values.len() < 8 {
+        values.push(value.to_string());
+    } else if matches!(name, "customFilters" | "top10" | "dynamicFilter") {
+        *rejected = true;
+    }
+}
