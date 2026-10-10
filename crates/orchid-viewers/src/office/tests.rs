@@ -95,6 +95,53 @@ mod tests {
     }
 
     #[test]
+    fn sheet_preview_autofilter_columns() {
+        let both = r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Item</t></is></c><c r="B1"><v>0</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>apple</t></is></c><c r="B2"><v>20</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>apple</t></is></c><c r="B3"><v>5</v></c></row><row r="4"><c r="A4" t="inlineStr"><is><t>pear</t></is></c><c r="B4"><v>30</v></c></row></sheetData><autoFilter ref="A1:B4"><filterColumn colId="0"><filters><filter val="apple"/></filters></filterColumn><filterColumn colId="1"><customFilters><customFilter operator="greaterThan" val="10"/></customFilters></filterColumn></autoFilter></worksheet>"#;
+        let text_order = r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Item</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>apple</t></is></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>pear</t></is></c></row></sheetData><autoFilter ref="A1:A3"><filterColumn colId="0"><customFilters><customFilter operator="greaterThan" val="apple"/></customFilters></filterColumn></autoFilter></worksheet>"#;
+        let wildcard = r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Item</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>apple</t></is></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>pear</t></is></c></row></sheetData><autoFilter ref="A1:A3"><filterColumn colId="0"><filters><filter val="a*"/></filters></filterColumn></autoFilter></worksheet>"#;
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Both" sheetId="1" r:id="rId1"/><sheet name="Text" sheetId="2" r:id="rId2"/><sheet name="Wild" sheetId="3" r:id="rId3"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Target="worksheets/sheet3.xml"/></Relationships>"#,
+            ),
+            ("xl/worksheets/sheet1.xml", both),
+            ("xl/worksheets/sheet2.xml", text_order),
+            ("xl/worksheets/sheet3.xml", wildcard),
+        ]);
+        let preview = render_office(&bytes, false).unwrap();
+        let OfficePreview::Sheets(book) = preview else {
+            panic!("workbook should be a sheet table");
+        };
+        let addresses = |index: usize| -> Vec<&str> {
+            book.sheets[index]
+                .rows
+                .iter()
+                .flatten()
+                .map(|cell| cell.address.as_str())
+                .collect()
+        };
+        let both = addresses(0);
+        assert!(both.contains(&"A1"), "{both:?}");
+        assert!(both.contains(&"A2"), "{both:?}");
+        assert!(both.contains(&"B2"), "{both:?}");
+        assert!(!both.contains(&"A3"), "5 is not greater than 10 {both:?}");
+        assert!(!both.contains(&"A4"), "pear does not match {both:?}");
+        let text = addresses(1);
+        assert!(text.contains(&"A2"), "{text:?}");
+        assert!(
+            text.contains(&"A3"),
+            "a text ordering drops the filter {text:?}"
+        );
+        let wild = addresses(2);
+        assert!(wild.contains(&"A2"), "{wild:?}");
+        assert!(wild.contains(&"A3"), "a wildcard drops the filter {wild:?}");
+    }
+
+    #[test]
     fn sheet_preview_frozen_panes() {
         let sheet = |pane: &str| {
             format!(

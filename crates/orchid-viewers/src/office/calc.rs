@@ -13530,32 +13530,55 @@ fn is_plain_number(text: &str) -> bool {
     true
 }
 
+#[derive(Clone, Copy)]
+enum FilterOp {
+    Equal,
+    NotEqual,
+    Greater,
+    Less,
+    GreaterEqual,
+    LessEqual,
+}
+
+enum ColumnFilter {
+    Values(Vec<String>),
+    Compare { op: FilterOp, text: String },
+}
+
+struct FilterColumn {
+    column: u32,
+    test: ColumnFilter,
+}
+
 struct AutoFilter {
     start_row: u32,
     end_row: u32,
-    column: u32,
-    values: Vec<String>,
+    columns: Vec<FilterColumn>,
 }
 
 fn sheet_hidden_rows(xml: &str, cells: &[SheetCellRef]) -> std::collections::HashSet<u32> {
     let mut hidden = explicit_hidden_rows(xml);
     if let Some(filter) = auto_filter(xml) {
-        let mut texts = std::collections::HashMap::<u32, String>::new();
+        let mut texts = std::collections::HashMap::<(u32, u32), String>::new();
         for cell in cells {
             let Some((column, row)) = split_address(&cell.address) else {
                 continue;
             };
-            if column == filter.column && (filter.start_row..=filter.end_row).contains(&row) {
-                texts.insert(row, filter_cell_text(cell));
+            if (filter.start_row..=filter.end_row).contains(&row)
+                && filter.columns.iter().any(|item| item.column == column)
+            {
+                texts.insert((column, row), filter_cell_text(cell));
             }
         }
         for row in filter.start_row + 1..=filter.end_row {
-            let text = texts.get(&row).map(String::as_str).unwrap_or("");
-            let matched = filter
-                .values
-                .iter()
-                .any(|value| value.eq_ignore_ascii_case(text));
-            if !matched {
+            let shown = filter.columns.iter().all(|item| {
+                let text = texts
+                    .get(&(item.column, row))
+                    .map(String::as_str)
+                    .unwrap_or("");
+                column_matches(&item.test, text)
+            });
+            if !shown {
                 hidden.insert(row);
             }
         }
@@ -13598,51 +13621,53 @@ fn explicit_hidden_rows(xml: &str) -> std::collections::HashSet<u32> {
     rows
 }
 
+struct PendingFilter {
+    col_id: Option<u32>,
+    values: Vec<String>,
+    compare: Option<(FilterOp, String)>,
+}
+
 fn auto_filter(xml: &str) -> Option<AutoFilter> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
     let mut reference = String::new();
-    let mut columns = 0u32;
-    let mut column_id: Option<u32> = None;
-    let mut values = Vec::new();
+    let mut pending = Vec::new();
     let mut in_filters = false;
+    let mut in_custom = false;
     let mut rejected = false;
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(event)) => {
                 note_filter_tag(
                     &local_name(event.name().as_ref()),
-                    &attr(&event, "ref"),
-                    &attr(&event, "colId"),
-                    &attr(&event, "val"),
+                    &event,
                     false,
                     &mut reference,
-                    &mut columns,
-                    &mut column_id,
-                    &mut values,
+                    &mut pending,
                     &mut in_filters,
+                    &mut in_custom,
                     &mut rejected,
                 );
             }
             Ok(Event::Empty(event)) => {
                 note_filter_tag(
                     &local_name(event.name().as_ref()),
-                    &attr(&event, "ref"),
-                    &attr(&event, "colId"),
-                    &attr(&event, "val"),
+                    &event,
                     true,
                     &mut reference,
-                    &mut columns,
-                    &mut column_id,
-                    &mut values,
+                    &mut pending,
                     &mut in_filters,
+                    &mut in_custom,
                     &mut rejected,
                 );
             }
             Ok(Event::End(event)) => {
-                if local_name(event.name().as_ref()) == "filters" {
+                let name = local_name(event.name().as_ref());
+                if name == "filters" {
                     in_filters = false;
+                } else if name == "customFilters" {
+                    in_custom = false;
                 }
             }
             Ok(Event::Eof) | Err(_) => break,
@@ -13650,52 +13675,200 @@ fn auto_filter(xml: &str) -> Option<AutoFilter> {
         }
         buf.clear();
     }
-    if rejected || columns != 1 || values.is_empty() || values.len() > 8 {
+    if rejected || pending.is_empty() || pending.len() > 2 {
         return None;
     }
-    let column_id = column_id?;
     let range = reference.split_whitespace().next()?.replace('$', "");
     let (start, end) = range.split_once(':')?;
     let (left, top) = split_address(&start.to_ascii_uppercase())?;
     let (right, bottom) = split_address(&end.to_ascii_uppercase())?;
     let (left, right) = (left.min(right), left.max(right));
     let (top, bottom) = (top.min(bottom), top.max(bottom));
-    if bottom - top + 1 > 400 || column_id > right - left {
+    if bottom - top + 1 > 400 {
         return None;
+    }
+    let mut columns = Vec::new();
+    for column in pending {
+        let col_id = column.col_id?;
+        if col_id > right - left {
+            return None;
+        }
+        let test = match (column.values.is_empty(), column.compare) {
+            (false, None) => ColumnFilter::Values(column.values),
+            (true, Some((op, text))) => ColumnFilter::Compare { op, text },
+            _ => return None,
+        };
+        columns.push(FilterColumn {
+            column: left + col_id,
+            test,
+        });
     }
     Some(AutoFilter {
         start_row: top,
         end_row: bottom,
-        column: left + column_id,
-        values,
+        columns,
     })
 }
 
 fn note_filter_tag(
     name: &str,
-    reference: &str,
-    column_id: &str,
-    value: &str,
+    event: &quick_xml::events::BytesStart<'_>,
     empty: bool,
     stored_ref: &mut String,
-    columns: &mut u32,
-    stored_column: &mut Option<u32>,
-    values: &mut Vec<String>,
+    pending: &mut Vec<PendingFilter>,
     in_filters: &mut bool,
+    in_custom: &mut bool,
     rejected: &mut bool,
 ) {
-    if name == "autoFilter" && !reference.is_empty() {
-        *stored_ref = reference.to_string();
+    if name == "autoFilter" && !attr(event, "ref").is_empty() {
+        *stored_ref = attr(event, "ref");
     } else if name == "filterColumn" {
-        *columns += 1;
-        if *columns == 1 {
-            *stored_column = column_id.parse().ok();
+        if pending.len() >= 2 {
+            *rejected = true;
+            return;
         }
-    } else if name == "filters" && !empty {
-        *in_filters = true;
-    } else if name == "filter" && *in_filters && values.len() < 8 {
-        values.push(value.to_string());
-    } else if matches!(name, "customFilters" | "top10" | "dynamicFilter") {
+        pending.push(PendingFilter {
+            col_id: attr(event, "colId").parse().ok(),
+            values: Vec::new(),
+            compare: None,
+        });
+        *in_filters = false;
+        *in_custom = false;
+    } else if name == "filters" {
+        let Some(column) = pending.last_mut() else {
+            *rejected = true;
+            return;
+        };
+        if column.compare.is_some() {
+            *rejected = true;
+            return;
+        }
+        if !empty {
+            *in_filters = true;
+        }
+    } else if name == "filter" && *in_filters {
+        let value = attr(event, "val");
+        if filter_wildcard(&value) {
+            *rejected = true;
+            return;
+        }
+        if let Some(column) = pending.last_mut() {
+            if column.values.len() < 8 {
+                column.values.push(value);
+            }
+        }
+    } else if name == "customFilters" {
+        let Some(column) = pending.last_mut() else {
+            *rejected = true;
+            return;
+        };
+        if column.compare.is_some() || !column.values.is_empty() {
+            *rejected = true;
+            return;
+        }
+        if !empty {
+            *in_custom = true;
+        }
+    } else if name == "customFilter" && *in_custom {
+        let Some(column) = pending.last_mut() else {
+            *rejected = true;
+            return;
+        };
+        if column.compare.is_some() {
+            *rejected = true;
+            return;
+        }
+        let value = attr(event, "val");
+        if filter_wildcard(&value) {
+            *rejected = true;
+            return;
+        }
+        let Some(op) = filter_op(&attr(event, "operator")) else {
+            *rejected = true;
+            return;
+        };
+        if filter_orders(op) && filter_number(&value).is_none() {
+            *rejected = true;
+            return;
+        }
+        column.compare = Some((op, value));
+    } else if matches!(name, "top10" | "dynamicFilter") {
         *rejected = true;
+    }
+}
+
+fn filter_wildcard(text: &str) -> bool {
+    text.chars().any(|ch| matches!(ch, '*' | '?' | '~'))
+}
+
+fn filter_op(text: &str) -> Option<FilterOp> {
+    if text.is_empty() || text.eq_ignore_ascii_case("equal") {
+        Some(FilterOp::Equal)
+    } else if text.eq_ignore_ascii_case("notEqual") {
+        Some(FilterOp::NotEqual)
+    } else if text.eq_ignore_ascii_case("greaterThan") {
+        Some(FilterOp::Greater)
+    } else if text.eq_ignore_ascii_case("lessThan") {
+        Some(FilterOp::Less)
+    } else if text.eq_ignore_ascii_case("greaterThanOrEqual") {
+        Some(FilterOp::GreaterEqual)
+    } else if text.eq_ignore_ascii_case("lessThanOrEqual") {
+        Some(FilterOp::LessEqual)
+    } else {
+        None
+    }
+}
+
+fn filter_orders(op: FilterOp) -> bool {
+    matches!(
+        op,
+        FilterOp::Greater | FilterOp::Less | FilterOp::GreaterEqual | FilterOp::LessEqual
+    )
+}
+
+fn filter_number(text: &str) -> Option<f64> {
+    let text = text.trim();
+    if !is_plain_number(text) {
+        return None;
+    }
+    text.parse::<f64>().ok().filter(|number| number.is_finite())
+}
+
+fn column_matches(test: &ColumnFilter, cell: &str) -> bool {
+    match test {
+        ColumnFilter::Values(values) => values.iter().any(|value| value.eq_ignore_ascii_case(cell)),
+        ColumnFilter::Compare { op, text } => compare_filter(*op, cell, text),
+    }
+}
+
+fn compare_filter(op: FilterOp, cell: &str, expected: &str) -> bool {
+    let left = filter_number(cell);
+    let right = filter_number(expected);
+    match op {
+        FilterOp::Equal | FilterOp::NotEqual => {
+            let same = if let (Some(left), Some(right)) = (left, right) {
+                (left - right).abs() <= 1e-9
+            } else {
+                cell.eq_ignore_ascii_case(expected)
+            };
+            if matches!(op, FilterOp::Equal) {
+                same
+            } else {
+                !same
+            }
+        }
+        FilterOp::Greater | FilterOp::Less | FilterOp::GreaterEqual | FilterOp::LessEqual => {
+            let (Some(left), Some(right)) = (left, right) else {
+                return false;
+            };
+            let gap = (left - right).abs() <= 1e-9;
+            match op {
+                FilterOp::Greater => left > right,
+                FilterOp::Less => left < right,
+                FilterOp::GreaterEqual => left > right || gap,
+                FilterOp::LessEqual => left < right || gap,
+                _ => false,
+            }
+        }
     }
 }
