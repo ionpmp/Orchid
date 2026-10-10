@@ -4206,6 +4206,12 @@ enum LookupHit {
     Bad,
 }
 
+enum XlookupRect {
+    Absent,
+    Stored,
+    Spill(Spill),
+}
+
 fn exact_lookup(lookup: &CalcValue, cell: Option<&CalcValue>) -> bool {
     match (lookup, cell) {
         (CalcValue::Num(left), Some(CalcValue::Num(right))) => {
@@ -12652,7 +12658,118 @@ impl<'a> CalcParser<'a> {
         Some(cells)
     }
 
+    fn xlookup_rectangle(&mut self, env: &mut CalcEnv<'_>) -> XlookupRect {
+        let Some((lookups, rows, cols)) = self.cell_block(env) else {
+            return XlookupRect::Absent;
+        };
+        if rows == 1 && cols == 1 {
+            return XlookupRect::Absent;
+        }
+        let vertical = cols == 1 && (2..=8).contains(&rows) && lookups.len() == rows as usize;
+        let horizontal = rows == 1 && (2..=8).contains(&cols) && lookups.len() == cols as usize;
+        if !vertical && !horizontal {
+            return XlookupRect::Stored;
+        }
+        if self.require_comma().is_none() {
+            return XlookupRect::Stored;
+        }
+        let Some((keys, key_rows, key_cols)) = self.cell_block(env) else {
+            return XlookupRect::Stored;
+        };
+        let keys_ok = if vertical {
+            key_cols == 1 && key_rows > 0 && key_rows <= 256 && keys.len() == key_rows as usize
+        } else {
+            key_rows == 1 && key_cols > 0 && key_cols <= 256 && keys.len() == key_cols as usize
+        };
+        if !keys_ok || self.require_comma().is_none() {
+            return XlookupRect::Stored;
+        }
+        let Some((block, ret_rows, ret_cols)) = self.cell_block(env) else {
+            return XlookupRect::Stored;
+        };
+        if block.len() != (ret_rows * ret_cols) as usize {
+            return XlookupRect::Stored;
+        }
+        let shape_ok = if vertical {
+            ret_rows == key_rows && (1..=16).contains(&ret_cols)
+        } else {
+            ret_cols == key_cols && (1..=16).contains(&ret_rows)
+        };
+        if !shape_ok {
+            return XlookupRect::Stored;
+        }
+        self.skip();
+        if self.bytes.get(self.index) != Some(&b')') {
+            return XlookupRect::Stored;
+        }
+        self.index += 1;
+        let mut hits = Vec::with_capacity(lookups.len());
+        for address in &lookups {
+            let Some(lookup) = self.cell_value(address, env) else {
+                return XlookupRect::Stored;
+            };
+            match self.lookup_index(&lookup, &keys, env, 0) {
+                LookupHit::At(index) => hits.push(index),
+                LookupHit::Miss | LookupHit::Bad => return XlookupRect::Stored,
+            }
+        }
+        let mut values = Vec::new();
+        let width = if vertical {
+            for index in hits {
+                let start = index * ret_cols as usize;
+                let end = start + ret_cols as usize;
+                if end > block.len() {
+                    return XlookupRect::Stored;
+                }
+                if !self.push_lookup_numbers(&block[start..end], env, &mut values) {
+                    return XlookupRect::Stored;
+                }
+            }
+            ret_cols
+        } else {
+            for row in 0..ret_rows as usize {
+                for index in &hits {
+                    let at = row * ret_cols as usize + index;
+                    let Some(address) = block.get(at) else {
+                        return XlookupRect::Stored;
+                    };
+                    if !self.push_lookup_numbers(std::slice::from_ref(address), env, &mut values) {
+                        return XlookupRect::Stored;
+                    }
+                }
+            }
+            lookups.len() as u32
+        };
+        XlookupRect::Spill(Spill {
+            values,
+            columns: width,
+            all_or_nothing: true,
+        })
+    }
+
+    fn push_lookup_numbers(
+        &mut self,
+        addresses: &[String],
+        env: &mut CalcEnv<'_>,
+        values: &mut Vec<f64>,
+    ) -> bool {
+        for address in addresses {
+            match self.cell_value(address, env) {
+                Some(CalcValue::Num(number)) if number.is_finite() => values.push(number),
+                None => values.push(0.0),
+                _ => return false,
+            }
+        }
+        true
+    }
+
     fn xlookup_spill(&mut self, env: &mut CalcEnv<'_>) -> Option<Spill> {
+        let saved = self.index;
+        match self.xlookup_rectangle(env) {
+            XlookupRect::Spill(spill) => return Some(spill),
+            XlookupRect::Stored => return None,
+            XlookupRect::Absent => self.index = saved,
+        }
         let lookup = self.compare(env)?;
         self.require_comma()?;
         let (keys, key_rows, key_cols) = self.cell_block(env)?;

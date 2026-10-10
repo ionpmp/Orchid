@@ -4132,6 +4132,57 @@ mod tests {
     }
 
     #[test]
+    fn set_sheet_cell_xlookup_rectangle() {
+        let bytes = zip_bytes(&[
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="Budgets" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>apple</t></is></c><c r="B1"><v>10</v></c><c r="C1"><v>1</v></c><c r="E1" t="inlineStr"><is><t>pear</t></is></c><c r="F1"><f>XLOOKUP(E1:E2,A1:A3,B1:C3)</f><v>0</v></c><c r="G1"><v>0</v></c><c r="I1" t="inlineStr"><is><t>nope</t></is></c><c r="J1"><f>XLOOKUP(I1:I2,A1:A3,B1:C3)</f><v>6</v></c><c r="K1"><f>XLOOKUP(E1:E2,A1:A3,B1:C3,9)</f><v>4</v></c><c r="L1"><f>XLOOKUP(E1:E2,A1:A3,B1:C3)+1</f><v>5</v></c><c r="P1" t="inlineStr"><is><t>apple</t></is></c><c r="Q1"><v>10</v></c><c r="R1" t="inlineStr"><is><t>x</t></is></c><c r="S1" t="inlineStr"><is><t>apple</t></is></c><c r="T1"><f>XLOOKUP(S1:S2,P1:P2,Q1:R2)</f><v>3</v></c><c r="Z1"><v>0</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>pear</t></is></c><c r="B2"><v>20</v></c><c r="C2"><v>2</v></c><c r="E2" t="inlineStr"><is><t>apple</t></is></c><c r="F2"><v>0</v></c><c r="G2"><v>0</v></c><c r="I2" t="inlineStr"><is><t>apple</t></is></c><c r="P2" t="inlineStr"><is><t>pear</t></is></c><c r="Q2"><v>20</v></c><c r="R2"><v>2</v></c><c r="S2" t="inlineStr"><is><t>pear</t></is></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>plum</t></is></c><c r="B3"><v>30</v></c><c r="C3"><v>3</v></c></row><row r="6"><c r="A6" t="inlineStr"><is><t>apple</t></is></c><c r="B6" t="inlineStr"><is><t>pear</t></is></c><c r="C6" t="inlineStr"><is><t>plum</t></is></c><c r="E6" t="inlineStr"><is><t>pear</t></is></c><c r="F6" t="inlineStr"><is><t>apple</t></is></c><c r="G6"><f>XLOOKUP(E6:F6,A6:C6,A7:C8)</f><v>0</v></c><c r="H6"><v>0</v></c></row><row r="7"><c r="A7"><v>10</v></c><c r="B7"><v>20</v></c><c r="C7"><v>30</v></c><c r="G7"><v>0</v></c><c r="H7"><v>0</v></c></row><row r="8"><c r="A8"><v>1</v></c><c r="B8"><v>2</v></c><c r="C8"><v>3</v></c></row></sheetData></worksheet>"#,
+            ),
+        ]);
+        let saved = set_sheet_cell(&bytes, "Budgets", "Z1", "1").unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(saved)).unwrap();
+        let sheet = read_entry(&mut archive, "xl/worksheets/sheet1.xml").unwrap();
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(E1:E2,A1:A3,B1:C3)</f><v>20</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="G1"><v>2</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="F2"><v>10</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="G2"><v>1</v></c>"#), "{sheet}");
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(I1:I2,A1:A3,B1:C3)</f><v>6</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(E1:E2,A1:A3,B1:C3,9)</f><v>4</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(E1:E2,A1:A3,B1:C3)+1</f><v>5</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(S1:S2,P1:P2,Q1:R2)</f><v>3</v>"#),
+            "{sheet}"
+        );
+        assert!(
+            sheet.contains(r#"<f>XLOOKUP(E6:F6,A6:C6,A7:C8)</f><v>20</v>"#),
+            "{sheet}"
+        );
+        assert!(sheet.contains(r#"<c r="H6"><v>10</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="G7"><v>2</v></c>"#), "{sheet}");
+        assert!(sheet.contains(r#"<c r="H7"><v>1</v></c>"#), "{sheet}");
+    }
+
+    #[test]
     fn set_sheet_cell_xlookup() {
         let bytes = zip_bytes(&[
             (

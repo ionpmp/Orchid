@@ -1145,6 +1145,14 @@ release yet.
   16 rows, and every value in the matched column is a number. That column is
   written downward into existing value cells. A text cell in the matched
   column leaves the stored value. A one-row return stays a single value.
+  `XLOOKUP` can also spill a rectangle when the first argument is 2 through
+  8 cells in one column or one row. Each value is an exact match, in order.
+  A column of lookups writes each matched return row under the previous one.
+  A row of lookups writes each matched return column beside the previous one.
+  The return range has the key length on the key axis and 1 through 16 cells
+  on the other axis. A blank return cell is 0. A miss, a text cell in a
+  matched row or column, a fourth argument, or an expression around the call
+  leaves the stored value. A one-cell lookup stays the earlier single lookup.
   On a miss, a numeric fourth argument is written into
   the formula cell only, and the cells beside or below it stay as they were.
   A text fourth argument, or no fourth argument, leaves the stored value.
