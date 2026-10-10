@@ -31,9 +31,9 @@ component PreviewCell inherits Rectangle {
 
     if root.has-bar && root.bar-pct > 0 : Rectangle {
         x: 1px;
-        y: 20%;
-        height: 60%;
-        width: root.bar-pct * 1%;
+        y: parent.height * 20 / 100;
+        height: parent.height * 60 / 100;
+        width: parent.width * root.bar-pct / 100;
         background: rgb(root.bar-r, root.bar-g, root.bar-b);
     }
 
