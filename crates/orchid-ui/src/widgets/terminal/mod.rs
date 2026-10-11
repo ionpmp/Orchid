@@ -11,12 +11,11 @@
 //!   [`orchid_crypto::SecureClipboard`], used by both the terminal's
 //!   copy/paste hotkeys and the future password-manager widget.
 //!
-//! The actual Slint-side view (`ui/widgets/terminal.slint`), the controller
-//! that binds it to a live [`orchid_terminal::TerminalSession`], and the
-//! bootstrap wiring into `orchid-app` are scheduled together with the broader
-//! UI shell (theme global, startup window, app bootstrap) in a follow-up
-//! task. They need the shared Theme infrastructure which is not yet
-//! present in the workspace; see the crate README.
+//! The Slint view is `ui/widgets/terminal.slint`. `TerminalWidget` is
+//! registered from `OrchidApp::bootstrap`. `MainWindowController`
+//! (`window/main_window/terminal.rs` and `wire/terminal.rs`) binds the
+//! live [`orchid_terminal::TerminalSession`] to the grid. Theme tokens
+//! come from `orchid-ui`'s `Theme` global.
 
 pub mod clipboard;
 pub mod commands;

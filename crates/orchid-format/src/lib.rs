@@ -1,6 +1,8 @@
 //! Native `.orchid` container format (`application/vnd.orchid`).
 //!
-//! Phase 1 sealed framing: [`write_sealed_file`] / [`SealedFile`]. Spec:
+//! Phases 1–5: sealed and linked framing ([`write_sealed_file`],
+//! [`SealedFile`]), optional per-region age, C2PA provenance, a structured
+//! CRDT, and hierarchical embeddings. Spec:
 //! [`docs/ORCHID_FORMAT.md`](../../../docs/ORCHID_FORMAT.md).
 
 #![warn(missing_docs)]

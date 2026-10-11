@@ -2,14 +2,12 @@
 
 /// Replace one cell's stored value and return the new package.
 ///
-/// A formula cell is left unchanged. After a value edit, simple formulas on
-/// that sheet (`+`, `-`, `*`, `/`, comparisons, parentheses, cell references,
-/// `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `IF`, `ROUND`, `ABS`, `INT`,
-/// `&`, `CONCAT`, `LEN`, `LEFT`, `RIGHT`, `MID`, `UPPER`, and `LOWER`) are
-/// written back. A number stays in `<v>`. Text is written as an inline
-/// string. Length and slices count Unicode scalar values. An unsupported
-/// formula keeps its previous value. Other zip parts, including drawings,
-/// are copied through.
+/// A formula cell is left unchanged. After a value edit, the functions named
+/// in the spreadsheet section of `docs/user/viewers.md` are recalculated on
+/// that sheet and written back. A number stays in `<v>`. Text is written as
+/// an inline string. Length and slices count Unicode scalar values. An
+/// unsupported formula keeps its previous value. Other zip parts, including
+/// drawings, are copied through.
 pub(crate) fn set_sheet_cell(
     bytes: &[u8],
     sheet_name: &str,

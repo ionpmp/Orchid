@@ -1,12 +1,16 @@
-//! Main window controller for workspace mode (task 11B).
+//! Main window controller for the workspace shell.
+//!
+//! The type is split across this directory: one module per surface, `wire/`
+//! for Slint callbacks, and `fm/` for the file manager. Snapshots are matched
+//! on [`orchid_widgets::WidgetPayload`] in `workspace.rs`.
 //!
 //! # Invariant
 //!
-//! The Slint main thread must not block on async widget locks (e.g. by waiting
-//! on the terminal [`tokio::sync::Mutex`]). Grid data comes from the lock-free
-//! [`orchid_widgets::WidgetSnapshotCache`], which a background task in
-//! `WidgetManager` fills. Blocking the UI thread to await snapshots reintroduces
-//! the jank fixed in task 11B-Fix.
+//! The Slint main thread must not block on async widget locks (for example by
+//! waiting on the terminal [`tokio::sync::Mutex`]). Grid data comes from the
+//! lock-free [`orchid_widgets::WidgetSnapshotCache`], which a background task
+//! in `WidgetManager` fills. Blocking the UI thread to await snapshots stalls
+//! the frame.
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;

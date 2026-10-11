@@ -364,17 +364,24 @@ Repack preserves `file_uuid` and increments `generation`. Capability flag
 
 ## 7. Encryption Model
 
-### Current state (gap)
+### Two age paths
 
-Today `orchid-crypto` age encryption is **whole-file** oriented:
+File-manager encrypt and decrypt is whole-file age in `orchid-crypto`:
 
 - `Encryptor` / `Decryptor` / `Identity` in
   `crates/orchid-crypto/src/age_encryption/`
 - Sidecar `EncryptedFileMeta` (`.age.meta` /
   `.orchid-encrypted.meta`) describes one plaintext blob
 
-Phase 2 extends this to **per-region** recipients inside `.orchid` without
-abandoning age.
+A private `.orchid` region uses a second path. `prepare_region_body` and
+`decode_region_body` in `crates/orchid-format/src/crypto_region.rs` compress
+with zstd when the region asks for it, then age-encrypt that body to one
+passphrase or one X25519 identity. The TOC row is `RegionEncryptionSpec`:
+BLAKE3 of the plaintext, the identity kind, and `is_public`. An empty age
+header means the stored bytes are the full age stream. A region written
+without an identity stays plaintext. The document editor asks for the
+passphrase when it opens an encrypted `.orchid` and keeps that identity
+for the next save.
 
 ### Per-region encryption
 
@@ -652,7 +659,11 @@ saves use `document.docx`.
 
 ## 15. Phased Roadmap
 
-Each phase lists scope and a measurable **DONE** criterion.
+Phases 1–5 are in `crates/orchid-format`. Each phase below is the scope
+that landed and the **DONE** criterion it was accepted against. This is
+not a backlog. Version-history stores the generation, the parent
+generation, and that generation's chunk hashes. It does not by itself run
+`ChunkStore` garbage collection. HNSW is not part of Phase 5.
 
 ### Phase 1 — Framing
 
@@ -672,8 +683,8 @@ Clean-Text bytes bit- identically after decompress.
 
 **Scope**
 
-- Per-region age encryption (extend `Encryptor`/`Decryptor` beyond
-  whole-file; this is the known gap)
+- Per-region age encryption in `crypto_region` (whole-file age stays the
+  file-manager path)
 - Linked mode via FastCDC + `ChunkStore`
 - CAS generation chain + Version-history region
 - Sealed↔linked repack

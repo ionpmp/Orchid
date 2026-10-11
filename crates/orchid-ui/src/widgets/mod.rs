@@ -4,9 +4,9 @@
 //!
 //! * [`terminal`] — terminal-specific palette, clipboard, cell-render
 //!   helpers and a [`Widget`](orchid_widgets::Widget) implementation.
-//! * [`view`] — the renderer-agnostic [`WidgetView`] trait and
-//!   [`WidgetViewDispatcher`] that route per-type payloads to the
-//!   eventual Slint components.
+//! * [`view`] — the Slint-free [`WidgetView`] trait and
+//!   [`WidgetViewDispatcher`]. The desktop shell maps `WidgetPayload`
+//!   in `window/main_window/` and does not call the dispatcher each frame.
 
 pub mod terminal;
 pub mod view;

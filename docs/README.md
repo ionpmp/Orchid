@@ -3,7 +3,8 @@
 Docs for the [Orchid](https://github.com/ionpmp/Orchid) pre-alpha. The repository
 root [`README.md`](../README.md) is the project overview. **Shipped** behavior
 lives in the user and admin guides. **Planned** work lives only in
-[ROADMAP.md](ROADMAP.md).
+[ROADMAP.md](ROADMAP.md). Reviewed against the tree on **2026-10-11**
+(`0.1.0`, 14 crates, no tagged release).
 
 ## Start here
 

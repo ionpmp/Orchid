@@ -1,5 +1,6 @@
 //! Content viewers for Orchid: images, PDF, text with syntax
-//! highlighting, archives, media (libmpv), and thumbnails.
+//! highlighting, archives, spreadsheets, slide cards, DOCX and native
+//! `.orchid` documents, media (libmpv), HTML, and thumbnails.
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]

@@ -19,7 +19,7 @@ Every gesture has a textual command. Every command can spawn a graphical widget.
 
 - **Workspace shell** — up to nine workspaces, 16×10 widget grid, catalog, dock, tab groups, in-app window manager, cinema control kit
 - **File manager** — dual-pane, tags, virtual folders (including Managed), Photos (people / events / albums), archives (ZIP, 7z, TAR including gz / xz / bz2), encryption, managed folders (block-clone ingest), rclone mounts (RC keep-alive for list/stat), cloud sign-in for Drive / personal OneDrive / Dropbox, Find, compare and sync, hashes, links, image and metadata tools, Windows attributes / ACL / shares / previous versions / BitLocker status, **Wrap as .orchid**
-- **Viewers** — images (including tone-mapped HDR / OpenEXR and stored face boxes), PDF (pdfium, AcroForm fill, highlight, sticky notes), text (Tree-sitter), archives, HTML (WebView2 overlay), media (libmpv), spreadsheets (edit simple formulas), slide card preview, Tier-1 DOCX / native `.orchid` editor
+- **Viewers** — images (including tone-mapped HDR / OpenEXR and stored face boxes), PDF (pdfium, AcroForm fill, highlight, sticky notes), text (Tree-sitter), archives, HTML (WebView2 overlay), media (libmpv), spreadsheets (`.xlsx` / `.xlsm` preview: conditional formats, comments, merges, frozen panes, and a large formula subset with spill; the contract is the [viewers guide](docs/user/viewers.md)), slide card preview, Tier-1 DOCX / native `.orchid` editor
 - **Browser** — catalog widget with WebView2 (tabs, bookmarks, find-in-page)
 - **Mail** — IMAP/SMTP widget: account wizard, DPAPI secrets, SQLite cache, HTML reading pane, IDLE, attachments
 - **Terminal** — PowerShell, cmd, WSL, SSH; tabs and splits; built-in or Alacritty grid (Sixel, Kitty, OSC 52, OSC 7)
@@ -55,7 +55,7 @@ How to use it: [User guide](docs/user/README.md). How to deploy and configure it
 
 ## Status
 
-**Pre-alpha `0.1.0`.** There is no tagged release yet. The guides describe this tree (14 crates, reviewed 2026-10-08). Planned work (mobile companion, plugins): [`docs/ROADMAP.md`](docs/ROADMAP.md). Release notes: [`CHANGELOG.md`](CHANGELOG.md).
+**Pre-alpha `0.1.0`.** There is no tagged release yet. The guides describe this tree (14 crates, reviewed 2026-10-11). Planned work (mobile companion, plugins): [`docs/ROADMAP.md`](docs/ROADMAP.md). Release notes: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## System requirements
 

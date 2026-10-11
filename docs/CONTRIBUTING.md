@@ -162,13 +162,17 @@ template.
    - Define a model struct in `ui/workspace/defs.slint` if the widget needs
      typed fields beyond generic text rows.
    - Wire the component into `ui/workspace/widget-frame.slint`.
-   - In `MainWindowController` (`src/window/main_window.rs`):
-     - add a `build_<name>_model` helper,
-     - include the type in `is_known_widget_type` and `dock_types_vec`,
-     - handle any widget-specific callbacks.
-   - *(Optional)* Implement `WidgetView` and register it on a
-     `WidgetViewDispatcher` when the default `SlintPayload::from_widget`
-     conversion is not enough (see `TerminalWidgetView`).
+   - In `MainWindowController` (`src/window/main_window/`, one module per
+     surface):
+     - match the payload when building the workspace row
+       (`workspace.rs`),
+     - include the type in `is_known_widget_type` and `dock_types_vec`
+       (`catalog.rs`),
+     - put Slint callbacks in `wire/`.
+   - `WidgetViewDispatcher` is a Slint-free adapter. The desktop window
+     does not call it. Add a `WidgetView` only when a host other than
+     `MainWindowController` needs one (`TerminalWidgetView` is the
+     existing example).
 
 4. **Tests** — add or extend integration tests under
    `crates/orchid-ui/tests/` and `crates/orchid-widgets/tests/` as appropriate.

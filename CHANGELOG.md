@@ -9,7 +9,7 @@ tree on [`main`](https://github.com/ionpmp/Orchid).
 
 ## [Unreleased]
 
-Pre-alpha snapshot as of **2026-10-08** (`0.1.0` workspace version). No tagged
+Pre-alpha snapshot as of **2026-10-11** (`0.1.0` workspace version). No tagged
 release yet.
 
 ### Added
@@ -1643,6 +1643,12 @@ release yet.
   builds write Start Menu `Orchid.lnk` with AppUserModelID `IonPmp.Orchid`.
 
 ### Documentation
+- Reviewed the guides, crate READMEs, and architecture notes against the
+  tree on 2026-10-11 (14 crates). Overview pages describe the spreadsheet
+  preview and formula subset. The behavioral contract stays in the viewers
+  guide. Contributor notes point at `window/main_window/` for the desktop
+  shell, which maps widget payloads itself. The `.orchid` spec describes
+  per-region age as implemented; version-history remains a generation stub.
 - The libmpv playback session documents its public frame, transport, and
   command fields.
 - Guides, crate READMEs, and the backup manifest now match this tree:

@@ -4,7 +4,7 @@ Legend: `[~]` in progress · `[ ]` not started.
 
 This file lists **planned** work only. Shipped behavior is in the
 [user guide](user/README.md), [admin guide](admin/README.md), and
-[`CHANGELOG.md`](../CHANGELOG.md). Last reviewed **2026-10-08** (`0.1.0`
+[`CHANGELOG.md`](../CHANGELOG.md). Last reviewed **2026-10-11** (`0.1.0`
 pre-alpha, no tagged release).
 
 `.orchid` spec (implemented Phases 1–5): [`ORCHID_FORMAT.md`](ORCHID_FORMAT.md).
@@ -13,7 +13,8 @@ pre-alpha, no tagged release).
 
 The desktop binary already includes the workspace shell, cinema control kit,
 file manager (Photos, cloud sign-in, managed-folder clone), viewers (DOCX,
-spreadsheets, PDF forms, native `.orchid`), WebView2 HTML/Browser/Mail,
+spreadsheet preview and formula subset, PDF forms, native `.orchid`),
+WebView2 HTML/Browser/Mail,
 terminal (built-in and Alacritty grids), hybrid search, the agent, mail,
 calendar (CalDAV), contacts (CardDAV), Optimize, Protection, the password
 vault, encryption, rclone (RC keep-alive + CLI transfers), audio/video

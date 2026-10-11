@@ -1,4 +1,4 @@
-//! Widget framework for Orchid (work in progress).
+//! Widget framework for Orchid.
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]

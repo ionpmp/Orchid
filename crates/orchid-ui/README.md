@@ -49,8 +49,9 @@ strings from [`Strings`] (populated from `orchid-i18n`).
 
 ## Window controllers
 
-- **`MainWindowController`** — owns the generated `MainWindow` handle, wires
-  every Slint callback, drives drag / resize state machines, rebuilds the
+- **`MainWindowController`** — `window/main_window/` (one module per
+  surface, `wire/` for callbacks, `fm/` for the file manager). It owns the
+  generated `MainWindow` handle, drives drag / resize, rebuilds the
   workspace model from `WidgetSnapshotCache`, and syncs terminal raster output.
 - **`StartupWindowController`** — thin wrapper around the same `MainWindow`
   Slint type; applies `Theme` / `Strings` / `AppState` once for the
@@ -59,9 +60,10 @@ strings from [`Strings`] (populated from `orchid-i18n`).
 ## Widget integration
 
 - **`widgets::view`** — [`WidgetView`] / [`WidgetViewDispatcher`] convert a
-  [`orchid_widgets::WidgetSnapshot`] into a renderer-facing [`SlintPayload`].
-  Most types use the default [`SlintPayload::from_widget`] path; specialised
-  views (e.g. terminal) override [`WidgetView::render`].
+  [`orchid_widgets::WidgetSnapshot`] into a renderer-facing [`SlintPayload`]
+  without a window. The desktop shell does not call the dispatcher. It
+  matches [`orchid_widgets::WidgetPayload`] in `window/main_window/workspace.rs`
+  and fills typed Slint models.
 - **`widgets::terminal`** — full terminal stack:
   - `TerminalWidget` — `orchid_widgets::Widget` implementation wrapping an
     `orchid_terminal::TerminalSession`.
@@ -69,9 +71,8 @@ strings from [`Strings`] (populated from `orchid-i18n`).
   - `TerminalWidgetView` — dispatcher adapter.
   - Helpers — `palette_from_theme`, `snapshot_to_cells`, `ArboardClipboard`.
 
-The controller also maps framework payloads into typed Slint models
-(`WeatherModel`, `FileManagerModel`, …) defined in `ui/workspace/defs.slint`
-and rendered inside `WidgetFrame`.
+Those models (`WeatherModel`, `FileManagerModel`, …) are defined in
+`ui/workspace/defs.slint` and rendered inside `WidgetFrame`.
 
 ## Theming
 

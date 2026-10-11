@@ -1,16 +1,14 @@
 //! Renderer-agnostic bridge between [`orchid_widgets::WidgetSnapshot`] and
 //! the UI layer.
 //!
-//! Every built-in widget registers a [`WidgetView`] with the [`WidgetViewDispatcher`].
-//! The Slint shell (added in a follow-up task) calls
-//! [`WidgetViewDispatcher::render`] once per instance per frame to obtain the
-//! concrete payload it should push into the corresponding Slint component.
+//! [`WidgetViewDispatcher`] can turn a snapshot into a [`SlintPayload`]
+//! without linking a window. The desktop shell does not call it.
+//! `MainWindowController` matches [`orchid_widgets::WidgetPayload`] and fills
+//! Slint models in `window/main_window/`.
 //!
-//! This module intentionally stops short of touching Slint types — the
-//! dispatcher speaks only to [`SlintPayload`], a Slint-shaped mirror of
-//! [`orchid_widgets::WidgetPayload`]. The final adapter that turns
-//! [`SlintPayload::Terminal`] cells into a `slint::Model` lives alongside the
-//! Slint component once the UI shell lands.
+//! This module stays free of Slint types. [`SlintPayload`] mirrors
+//! [`orchid_widgets::WidgetPayload`]. Terminal cells become a `slint::Model`
+//! in `widgets/terminal` and `window/main_window/terminal.rs`.
 
 use std::collections::HashMap;
 

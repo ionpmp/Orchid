@@ -80,7 +80,8 @@ These are implemented today and should stay consistent with the principles above
   catalog (including Mail, Contacts, Agent, Optimize, Protection)
 - **In-app window manager** — floating overlays (soft cap 8), edge snap,
   taskbar, Ctrl+Tab
-- **Viewers** — images, PDF, text, archives, spreadsheets, slide cards,
+- **Viewers** — images, PDF, text, archives, spreadsheets (preview and
+  formula subset in [user/viewers.md](user/viewers.md)), slide cards,
   media, HTML (WebView2), DOCX / `.orchid`
 - **Browser and Mail** — WebView2 (browser chrome, and HTML message bodies)
 - **Terminal** — built-in VT grid or the optional Alacritty grid

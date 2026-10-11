@@ -1,6 +1,7 @@
 # Orchid admin guide
 
-Operator docs for the current pre-alpha binary. End-user how-to:
+Operator docs for the current pre-alpha binary (reviewed 2026-10-11,
+workspace `0.1.0`, no tagged release). End-user how-to:
 [user guide](../user/README.md). Planned work: [roadmap](../ROADMAP.md).
 
 There is no management server. `policy.toml` beside `config.toml` can lock

@@ -6,7 +6,7 @@ overlays. Planned systems (WASM plugins, mobile companion) are not in the
 tree — see [ROADMAP.md](ROADMAP.md). A local `policy.toml` can lock settings;
 it is not a management server.
 
-Reviewed against the tree on **2026-10-08** (`0.1.0` pre-alpha, no tagged
+Reviewed against the tree on **2026-10-11** (`0.1.0` pre-alpha, no tagged
 release).
 
 ## High-level diagram
@@ -96,6 +96,11 @@ not need the file-system stack. The desktop bootstrap registers those plus
 terminal, mail (`MailEngine`), passwords, viewer, file manager, and recent
 files. Mail is not in `register_all` because it needs a `MailEngine`.
 
+`MainWindowController` is the directory
+`crates/orchid-ui/src/window/main_window/`. It matches `WidgetPayload` and
+fills Slint models. `WidgetViewDispatcher` is a Slint-free adapter in
+`widgets/view.rs`; the desktop window does not call it each frame.
+
 ## Persistence (Windows, typical)
 
 | Store | Path | Contents |
@@ -151,6 +156,18 @@ The ANN snapshot is named from that model id.
 Other universal-search sources are commands, settings, calculator (`=`),
 agent (`?`), calendar, and Jyotish. File Manager Find is a separate walk
 (Windows Search, then Tantivy) and is not the hybrid overlay.
+
+## Spreadsheets
+
+`.xlsx` and `.xlsm` open in `orchid-viewers` (`office`). The preview is the
+first 400 rows and 32 columns. It can draw a bounded set of conditional
+formats, color scales, data bars, icon-set digits, comments, merges, column
+widths, row heights, frozen panes, and a short list of number formats.
+Enter or Save writes the selected value cell. A formula cell is left
+unchanged. Recalculation is the function set and the limits in
+[user/viewers.md](user/viewers.md), including spill for the calls named
+there. `.xlsb` stays in the archive browser. PowerPoint (`.pptx`, `.pptm`,
+`.ppsx`) is a read-only HTML card per slide.
 
 ## Network FS and mail
 

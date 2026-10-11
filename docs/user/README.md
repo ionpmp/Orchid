@@ -1,13 +1,14 @@
 # Orchid user guide
 
-This guide describes **what the current pre-alpha binary does**. Features
-that are not built yet live in the [roadmap](../ROADMAP.md), not here.
+This guide describes **what the current pre-alpha binary does** (reviewed
+2026-10-11, workspace `0.1.0`, no tagged release). Features that are not
+built yet live in the [roadmap](../ROADMAP.md), not here.
 
 | Chapter | Contents |
 |---------|----------|
 | [Workspace](workspace.md) | Canvas, dock, catalog, groups, floating windows |
 | [File manager](file-manager.md) | Panes, virtual folders, archives, encryption, network, Tools, `.orchid` wrap |
-| [Viewers](viewers.md) | Images, PDF, text, archives, media, HTML, DOCX / `.orchid` |
+| [Viewers](viewers.md) | Images, PDF, text, archives, spreadsheets, media, HTML, DOCX / `.orchid` |
 | [Widgets](widgets.md) | Catalog types including Browser, Mail, Contacts, Agent, Optimize, Protection |
 | [Mail](mail.md) | IMAP/SMTP account wizard, reading, attachments |
 | [Terminal](terminal.md) | Shells, tabs, splits |

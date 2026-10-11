@@ -47,16 +47,15 @@ Product how-to: [`docs/user/widgets.md`](../../docs/user/widgets.md).
 
 ## Stability
 
-The crate is source-compatible with the rest of the workspace as of the
-widget-framework task: `orchid-core` provides the event bus and the
-action system, `orchid-storage` stores widget and workspace rows, and
-`orchid-ui` consumes `WidgetSnapshot` through the
-`WidgetViewDispatcher` (see the `orchid-ui` README).
+`orchid-core` provides the event bus and the action system.
+`orchid-storage` stores widget and workspace rows. The desktop shell in
+`orchid-ui` (`window/main_window/`) reads `WidgetSnapshot` and matches
+`WidgetPayload` into Slint models. `WidgetViewDispatcher` is a separate
+Slint-free adapter; the window does not call it each frame.
 
-The Slint workspace dashboard — drag / resize / dock / switcher — is a
-downstream concern; the crate's responsibilities stop at shipping the
-`WidgetPayload`, `LayoutSnapshot`, and command/event surface the UI
-shell can bind to.
+This crate stops at the `WidgetPayload`, `LayoutSnapshot`, and
+command/event surface. Drag, resize, dock, and the workspace switcher
+live in `orchid-ui`.
 
 ## Example
 
